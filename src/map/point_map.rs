@@ -1,0 +1,80 @@
+use crate::map::point::*;
+use crate::map::direction::*;
+
+const MIN_SIZE:u8 = 3;
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct PointMap {
+    odd_if_hex: bool,
+    point_validity: Vec<Vec<bool>>,
+}
+
+impl PointMap {
+    pub fn new(width: u8, height: u8, odd_if_hex: bool) -> Self {
+        PointMap {
+            odd_if_hex: false,
+            point_validity: vec![vec![true; width as usize]; height as usize],
+        }
+    }
+    pub fn width(&self) -> u8 {
+        self.point_validity[0].len() as u8
+    }
+    pub fn height(&self) -> u8 {
+        self.point_validity.len() as u8
+    }
+    pub fn odd_if_hex(&self) -> bool {
+        self.odd_if_hex
+    }
+    /**
+     * removes columns and rows from the sides that contain no valid points
+     */
+    pub fn crop(&mut self, is_hex: bool) {
+        // from bottom
+        while self.height() > MIN_SIZE && !self.point_validity[self.height() as usize - 1].iter().any(|b| *b) {
+            self.point_validity.pop();
+        }
+        // from top
+        while self.height() > MIN_SIZE && !self.point_validity[0].iter().any(|b| *b) {
+            self.point_validity.remove(0);
+            self.odd_if_hex = !self.odd_if_hex;
+        }
+        // from left
+        while self.width() > MIN_SIZE && !self.point_validity.iter().any(|b| b[0]) {
+            for row in &mut self.point_validity {
+                row.remove(0);
+            }
+        }
+        // from right
+        while self.width() > MIN_SIZE && !self.point_validity.iter().any(|b| b[self.width() as usize - 1]) {
+            for row in &mut self.point_validity {
+                row.pop();
+            }
+        }
+    }
+    pub fn is_inside(&self, point: &Point) -> bool {
+        point.x() < self.width() &&
+        point.y() < self.height()
+    }
+    pub fn is_point_valid(&self, point: &Point) -> bool {
+        self.is_inside(point) &&
+        self.point_validity[point.y() as usize][point.x() as usize]
+    }
+    pub fn set_valid(&mut self, point: &Point, value: bool) {
+        if self.is_inside(point) {
+            self.point_validity[point.y() as usize][point.x() as usize] = value;
+        }
+    }
+    pub fn get_valid_points(&self) -> Vec<Point> {
+        let mut result = vec![];
+        for x in 0..self.width() {
+            for y in 0..self.height() {
+                let p = Point::new(x, y);
+                if self.is_point_valid(&p) {
+                    result.push(p);
+                }
+            }
+        }
+        result
+    }
+}
+
