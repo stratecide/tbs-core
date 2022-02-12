@@ -1,4 +1,4 @@
-mod map;
+pub mod map;
 
 #[cfg(test)]
 mod tests {
@@ -23,33 +23,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn no_wrapping() -> Result<(), TransformationError<Direction4>> {
-        let builder = WrappingMapBuilder::<Direction4>::new(PointMap::new(4, 8, false), vec![]);
-        builder.check_transformations()?;
-        Ok(())
-    }
-
-    #[test]
-    fn simple_wrapping() -> Result<(), TransformationError<Direction4>> {
-        let builder = WrappingMapBuilder::<Direction4>::new(PointMap::new(5, 4, false), vec![
-            Transformation::new((false, Direction4::D0), Direction4::D0.translation(-5))
-        ]);
-        let transformations = builder.check_transformations()?;
-        assert_eq!(transformations.len(), 25);
-
-        Ok(())
-    }
-
-    #[test]
-    fn rotated_wrapping() -> Result<(), TransformationError<Direction4>> {
-        let builder = WrappingMapBuilder::<Direction4>::new(PointMap::new(5, 4, false), vec![
-            Transformation::new((false, Direction4::D90), Direction4::D0.translation(5))
-        ]);
-        let transformations = builder.check_transformations()?;
-        println!("{:?}", transformations);
-        assert_eq!(transformations.len(), 4);
-        
-        Ok(())
-    }
 }

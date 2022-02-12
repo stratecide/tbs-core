@@ -2,13 +2,15 @@ use std::fmt;
 use std::hash::Hash;
 //use num::{CheckedAdd, CheckedSub, Integer};
 use crate::map::point::*;
+//use crate::map::point_map::*;
 
 pub trait Direction: Eq + Copy + Hash + fmt::Debug {
-    type T: Translation<Self> + Clone + PartialEq + fmt::Debug;
+    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug;
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
     fn list() -> Vec<Box<Self>>;
     fn mirror_vertically(&self) -> Self;
+    //fn rotate_point_map(&self, map: &PointMap) -> PointMap;
     //fn get_neighbor<T: CheckedAdd + CheckedSub + Integer, P: Position<T>>(&self, point: &P) -> Option<P>;
     fn rotate_around_center<P: Position<i16>>(&self, point: &P, center: &P, odd_if_hex: bool) -> P {
         let trans = Self::T::between(center, point, odd_if_hex);
@@ -19,20 +21,20 @@ pub trait Direction: Eq + Copy + Hash + fmt::Debug {
         let list = Self::list();
         list.iter().position(|d| self == d.as_ref()).expect("Unable to find Direction in list of all Directions")
     }
-    /*fn rotate_clockwise(&self) -> Self {
+    fn rotate_counter_clockwise(&self) -> Self {
         let list = Self::list();
         let index = self.list_index();
         *list[(index + 1) % list.len()]
     }
-    fn rotate_counter_clockwise(&self) -> Self {
+    fn rotate_clockwise(&self) -> Self {
         let list = Self::list();
         if self == list[0].as_ref() {
             return **list.last().unwrap();
         }
         let index = self.list_index();
         *list[index - 1]
-    }*/
-    fn rotate_by(&self, other: Self) -> Self {
+    }
+    fn rotate_by(&self, other: &Self) -> Self {
         let list = Self::list();
         let index = self.list_index();
         let index2 = other.list_index();
@@ -80,6 +82,27 @@ impl Direction for Direction4 {
             _ => self.clone()
         }
     }
+    /*fn rotate_point_map(&self, map: &PointMap) -> PointMap {
+        let mut result = match self {
+            Self::D0 => PointMap::new(map.width(), map.height(), false),
+            Self::D90 => PointMap::new(map.height(), map.width(), false),
+            Self::D180 => PointMap::new(map.width(), map.height(), false),
+            Self::D270 => PointMap::new(map.height(), map.width(), false),
+        };
+        for x in 0..map.width() {
+            for y in 0..map.height() {
+                let origin = Point::new(x, y);
+                let destination = match self {
+                    Self::D0 => Point::new(origin.x(), origin.y()),
+                    Self::D90 => Point::new(origin.y(), map.width() - 1 - origin.x()),
+                    Self::D180 => Point::new(map.width() - 1 - origin.x(), map.height() - 1 - origin.y()),
+                    Self::D270 => Point::new(map.height() - 1 - origin.y(), origin.x()),
+                };
+                result.set_valid(&destination, map.is_point_valid(&origin));
+            }
+        }
+        result
+    }*/
     /*fn get_neighbor<T: CheckedAdd + CheckedSub + Integer, P: Position<T>>(&self, point: &P) -> Option<P> {
         match self {
             Direction4::D0 => point.x().checked_add(&T::one()).map(|x| {P::new(x, point.y())}),
@@ -137,6 +160,27 @@ impl Direction for Direction6 {
             Self::D300 => Self::D240,
         }
     }
+    /*fn rotate_point_map(&self, map: &PointMap) -> PointMap {
+        let mut result = match self {
+            Self::D0 => PointMap::new(map.width(), map.height(), map.odd_if_hex()),
+            Self::D90 => PointMap::new(map.height(), map.width(), false),
+            Self::D180 => PointMap::new(map.width(), map.height(), map.odd_if_hex() == (map.height() % 2 == 0)),
+            Self::D270 => PointMap::new(map.height(), map.width(), false),
+        };
+        for x in 0..map.width() {
+            for y in 0..map.height() {
+                let origin = Point::new(x, y);
+                let destination = match self {
+                    Self::D0 => Point::new(origin.x(), origin.y()),
+                    Self::D90 => Point::new(origin.y(), map.width() - 1 - origin.x()),
+                    Self::D180 => Point::new(map.width() - 1 - origin.x(), map.height() - 1 - origin.y()),
+                    Self::D270 => Point::new(map.height() - 1 - origin.y(), origin.x()),
+                };
+                result.set_valid(&destination, map.is_point_valid(&origin));
+            }
+        }
+        result
+    }*/
     /*fn get_neighbor<T: CheckedAdd + CheckedSub + Integer, P: Position<T>>(&self, point: &P) -> Option<P> {
         match (self, point.y().is_even()) {
             (Direction6::D0, _) => point.x().checked_add(&T::one()).map(|x| {P::new(x, point.y())}),
@@ -171,7 +215,11 @@ where D: Direction {
     fn len(&self) -> u16;
     fn between<P: Position<i16>>(from: &P, to: &P, odd_if_hex: bool) -> Self;
     fn plus(&self, other: &Self) -> Self;
+    fn minus(&self, other: &Self) -> Self;
+    fn is_parallel(&self, other: &Self) -> bool;
+    fn screen_coordinates(&self) -> (f32, f32);
     fn rotate_by(&self, angle: &D) -> Self;
+    fn mirror_vertically(&self) -> Self;
     fn translate_point<P: Position<i16>>(&self, p: &P, odd_if_hex: bool) -> P;
 }
 
@@ -204,6 +252,26 @@ impl Translation<Direction4> for Translation4 {
             y: self.y + other.y,
         }
     }
+    fn minus(&self, other: &Self) -> Self {
+        Translation4 {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
+    }
+    fn is_parallel(&self, other: &Self) -> bool {
+        if self == other {
+            true
+        } else if (self.x == 0) != (other.x == 0) || (self.y == 0) != (other.y == 0) {
+            false
+        } else if self.x == 0 {
+            self.y % other.y == 0 || other.y % self.y == 0
+        } else {
+            self.x % other.x == 0 && self.x / other.x * other.y == self.y || other.x % self.x == 0 && other.x / self.x * self.y == other.y
+        }
+    }
+    fn screen_coordinates(&self) -> (f32, f32) {
+        (self.x as f32, self.y as f32)
+    }
     fn rotate_by(&self, angle: &Direction4) -> Self {
         match angle {
             Direction4::D0 => self.clone(),
@@ -211,6 +279,9 @@ impl Translation<Direction4> for Translation4 {
             Direction4::D180 => Translation4 {x: -self.x, y: -self.y},
             Direction4::D270 => Translation4 {x: -self.y, y: self.x},
         }
+    }
+    fn mirror_vertically(&self) -> Self {
+        Translation4 {x: -self.x, y: self.y}
     }
     fn translate_point<P: Position<i16>>(&self, p: &P, _: bool) -> P {
         P::new(p.x() + self.x, p.y() + self.y)
@@ -258,6 +329,26 @@ impl Translation<Direction6> for Translation6 {
             d60: self.d60 + other.d60,
         }
     }
+    fn minus(&self, other: &Self) -> Self {
+        Translation6 {
+            d0: self.d0 - other.d0,
+            d60: self.d60 - other.d60,
+        }
+    }
+    fn is_parallel(&self, other: &Self) -> bool {
+        if self == other {
+            true
+        } else if (self.d0 == 0) != (other.d0 == 0) || (self.d60 == 0) != (other.d60 == 0) {
+            false
+        } else if self.d0 == 0 {
+            self.d60 % other.d60 == 0 || other.d60 % self.d60 == 0
+        } else {
+            self.d0 % other.d0 == 0 && self.d0 / other.d0 * other.d60 == self.d60 || other.d0 % self.d0 == 0 && other.d0 / self.d0 * self.d60 == other.d60
+        }
+    }
+    fn screen_coordinates(&self) -> (f32, f32) {
+        (self.d0 as f32 + (self.d60 as f32) / 2., -self.d60 as f32)
+    }
     fn rotate_by(&self, angle: &Direction6) -> Self {
         match angle {
             Direction6::D0 => self.clone(),
@@ -267,6 +358,9 @@ impl Translation<Direction6> for Translation6 {
             Direction6::D240 => Translation6 {d0: self.d60, d60: -self.d0 - self.d60},
             Direction6::D300 => Translation6 {d0: self.d0 + self.d60, d60: -self.d0},
         }
+    }
+    fn mirror_vertically(&self) -> Self {
+        Translation6 {d0: -self.d0 - self.d60, d60: self.d60}
     }
     fn translate_point<P: Position<i16>>(&self, p: &P, odd_if_hex: bool) -> P {
         let mut x = p.x() + self.d0 + self.d60 / 2;

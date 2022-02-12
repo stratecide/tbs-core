@@ -2,6 +2,7 @@ use crate::map::point::*;
 use crate::map::direction::*;
 
 const MIN_SIZE:u8 = 3;
+const MAX_SIZE:u8 = 50;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct PointMap {
@@ -11,9 +12,12 @@ pub struct PointMap {
 
 impl PointMap {
     pub fn new(width: u8, height: u8, odd_if_hex: bool) -> Self {
+        Self::filled(width, height, odd_if_hex, true)
+    }
+    fn filled(width: u8, height: u8, odd_if_hex: bool, value: bool) -> Self {
         PointMap {
-            odd_if_hex: false,
-            point_validity: vec![vec![true; width as usize]; height as usize],
+            odd_if_hex: odd_if_hex,
+            point_validity: vec![vec![value; width as usize]; height as usize],
         }
     }
     pub fn width(&self) -> u8 {
@@ -28,7 +32,7 @@ impl PointMap {
     /**
      * removes columns and rows from the sides that contain no valid points
      */
-    pub fn crop(&mut self, is_hex: bool) {
+    pub fn crop(&mut self) {
         // from bottom
         while self.height() > MIN_SIZE && !self.point_validity[self.height() as usize - 1].iter().any(|b| *b) {
             self.point_validity.pop();

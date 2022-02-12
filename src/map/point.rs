@@ -5,7 +5,7 @@ pub trait Position<T> {
     fn y(&self) -> T;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
     x: u8,
     y: u8,

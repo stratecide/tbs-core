@@ -4,7 +4,7 @@ use crate::map::point::*;
 use std::collections::{HashSet, HashMap};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct GlobalPoint {
+pub struct GlobalPoint {
     x: i16,
     y: i16,
 }
@@ -21,10 +21,10 @@ impl Position<i16> for GlobalPoint {
     }
 }
 
-type Distortion<D: Direction> = (bool, D);
-type AreaPoint<D: Direction> = (Transformation<D>, Point);
+type Distortion<D> = (bool, D);
+type AreaPoint<D> = (Transformation<D>, Point);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Transformation<D>
 where D: Direction {
     distortion: Distortion<D>,
@@ -36,35 +36,58 @@ where D: Direction {
     pub fn new(distortion: Distortion<D>, translate_by: D::T) -> Self {
         Transformation {distortion, translate_by}
     }
+    pub fn distortion(&self) -> &Distortion<D> {
+        &self.distortion
+    }
+    pub fn translate_by(&self) -> &D::T {
+        &self.translate_by
+    }
     fn opposite(&self) -> Self {
-        let angle = self.distortion.1.opposite_angle();
+        let mut translate_by = self.translate_by.rotate_by(&self.distortion.1.opposite_angle().opposite_direction());
+        let angle = if self.distortion.0 {
+            translate_by = translate_by.mirror_vertically();
+            self.distortion.1
+        } else {
+            self.distortion.1.opposite_angle()
+        };
         Transformation {
             distortion: (self.distortion.0, angle),
-            translate_by: self.translate_by.rotate_by(&angle.opposite_direction()),
+            translate_by: translate_by,
         }
     }
     fn add(&self, other: &Self) -> Self {
+        let mut translate_by = other.translate_by;
+        let mut angle = other.distortion.1;
+        if self.distortion.0 {
+            angle = angle.opposite_angle();
+            translate_by = translate_by.mirror_vertically();
+        }
         Transformation{
-            distortion: (self.distortion.0 != other.distortion.0, self.distortion.1.rotate_by(other.distortion.1)),
-            translate_by: self.translate_by.plus(&other.translate_by.rotate_by(&self.distortion.1)),
+            distortion: (self.distortion.0 != other.distortion.0, self.distortion.1.rotate_by(&angle)),
+            translate_by: self.translate_by.plus(&translate_by.rotate_by(&self.distortion.1)),
+        }
+    }
+    fn subtract(&self, other: &Self) -> Self {
+        let mut translate_by = self.translate_by.minus(&other.translate_by).rotate_by(&other.distortion.1.opposite_angle());
+        let mut angle = self.distortion.1.rotate_by(&other.distortion.1.opposite_angle());
+        if other.distortion.0 {
+            angle = angle.opposite_angle();
+            translate_by = translate_by.mirror_vertically();
+        }
+        Transformation{
+            distortion: (self.distortion.0 != other.distortion.0, angle),
+            translate_by: translate_by,
         }
     }
 }
 
-/*#[derive(Clone)]
-struct MultiTransformation<D, T>
-where D: Direction,
-    T: Translation<D>
-{
-    distortion: Distortion<D, T>,
-    position: GlobalPoint,
-    history: HashSet<Distortion<D, T>>,
-}*/
 #[derive(Debug)]
 pub enum TransformationError<D>
 where D: Direction {
-    Collision(AreaPoint<D>),
-    Disconnected
+    Collision(AreaPoint<D>, Transformation<D>),
+    Disconnected,
+    TooMany,
+    Mirroring,
 }
 
 pub struct WrappingMapBuilder<D>
@@ -73,64 +96,135 @@ where D: Direction
     map: PointMap,
     map_center: Point,
     seed_transformations: Vec<Transformation<D>>,
-    /*adjacent_transformations: Vec<Transformation<D>>,
-    transformations: HashMap<(Distortion<D>, GlobalPoint), HashSet<Distortion<D>>>,
-    area: HashMap<GlobalPoint, AreaPoint<D>>,*/
+    adjacent_transformations: Vec<Transformation<D>>, // all transformations that neighbor the center, that can be constructed from the seed_transformations
+    wrapped_neighbors: HashMap<(Point, D), OrientedPoint<D>>,
+    screen_wrap_options: HashMap<Distortion<D>, Vec<D::T>>, // TODO: pack into a feature called smth like "screen_aware"?
+    error: Option<TransformationError<D>>,
 }
 impl<D> WrappingMapBuilder<D>
 where D: Direction
 {
     pub fn new(map: PointMap, seed_transformations: Vec<Transformation<D>>) -> Self {
+        // remove transformations that can't possibly be connected to the center
         let seed_transformations = seed_transformations.into_iter().filter(|trans| {
             trans.translate_by.len() < 256
         }).collect();
-        let map_center = Point::new(map.width() / 2, map.height() / 2);
-        WrappingMapBuilder {
+        let mut result = WrappingMapBuilder {
+            map_center: Point::new(map.width() / 2, map.height() / 2),
             map,
-            map_center,
             seed_transformations,
+            adjacent_transformations: vec![],
+            wrapped_neighbors: HashMap::new(),
+            screen_wrap_options: HashMap::new(),
+            error: None,
+        };
+        if result.seed_transformations.len() > 4 { // TODO: maybe 4 isn't even possible
+            result.error = Some(TransformationError::TooMany);
+        } else {
+            // check if the given transformations are valid and calculate wrapped_neighbors
+            let mut area: HashMap<GlobalPoint, AreaPoint<D>> = HashMap::new();
+            result.error = result.check_seed_transformations(&mut area)
+            .and_then(|_| result.check_transformations(&mut area))
+            .and_then(|_| result.search_wrapped_neighbors(&area))
+            .err();
+        }
+
+        result
+    }
+    pub fn map(&self) -> &PointMap {
+        &self.map
+    }
+    pub fn seed_transformations(&self) -> &Vec<Transformation<D>> {
+        &self.seed_transformations
+    }
+    pub fn adjacent_transformations(&self) -> &Vec<Transformation<D>> {
+        &self.adjacent_transformations
+    }
+    pub fn screen_wrap_vectors(&self) -> Vec<(f32, f32)> {
+        let mut wrap1: Option<D::T> = None;
+        let mut wrap2: Option<D::T> = None;
+        for list in self.screen_wrap_options.values() {
+            for i in 0..list.len() {
+                for j in (i + 1)..list.len() {
+                    let difference = list[i].minus(&list[j]);
+                    if let Some(w1) = wrap1 {
+                        if difference.is_parallel(&w1) {
+                            if difference.len() < w1.len() {
+                                wrap1 = Some(difference)
+                            }
+                        } else if let Some(w2) = wrap2 {
+                            if difference.len() < w2.len() {
+                                wrap2 = Some(difference)
+                            }
+                        } else {
+                            wrap2 = Some(difference)
+                        }
+                    } else {
+                        wrap1 = Some(difference);
+                    }
+                }
+            }
+        }
+        let mut result = vec![];
+        if let Some(w1) = wrap1 {
+            result.push(w1.screen_coordinates());
+            if let Some(w2) = wrap2 {
+                result.push(w2.screen_coordinates());
+            }
+        }
+        result
+    }
+    pub fn err(&self) -> &Option<TransformationError<D>> {
+        &self.error
+    }
+    pub fn build(self) -> Result<WrappingMap<D>, TransformationError<D>> {
+        if let Some(err) = self.error {
+            Err(err)
+        } else {
+            Ok(WrappingMap::new(self.map, self.seed_transformations, self.wrapped_neighbors))
         }
     }
-    pub fn odd_if_hex(&self) -> bool {
+    fn odd_if_hex(&self) -> bool {
         self.map.odd_if_hex() == (self.map_center.y() % 2 == 0)
     }
-    // returns false if any seed transformation either overlaps the center or isn't neighboring any of the center's points
-    pub fn are_seed_transformations_adjacent_to_center(&self) -> Result<(), TransformationError<D>> {
-        let mut area: HashMap<GlobalPoint, AreaPoint<D>> = HashMap::new();
-        self.add_points(&mut area, &Transformation {
+    fn check_seed_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<(), TransformationError<D>> {
+        self.add_points(area, &Transformation {
             distortion: (false, D::angle_0()),
             translate_by: D::angle_0().translation(0),
-        });
+        })?;
         for tran in &self.seed_transformations {
-            let mut is_neigbor = false;
             for p in self.map.get_valid_points().iter() {
                 let gp = self.transform_point(p, tran);
                 if let Some(ap) = area.get(&gp) {
                     // transformation overlaps center
-                    return Err(TransformationError::Collision(ap.clone()));
-                }
-                if !is_neigbor {
-                    for d in D::list() {
-                        let neighbor = d.translation(1).translate_point(&gp, self.odd_if_hex());
-                        if area.contains_key(&neighbor) {
-                            is_neigbor = true;
-                            break;
-                        }
-                    }
+                    return Err(TransformationError::Collision(ap.clone(), tran.clone()));
                 }
             }
-            if !is_neigbor {
+            if self.find_neighbors(area, tran).len() == 0 {
                 // transformation not connected to center
                 return Err(TransformationError::Disconnected);
             }
         }
         Ok(())
     }
+    fn find_neighbors(&self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>, transformation: &Transformation<D>) -> HashSet<Transformation<D>> {
+        let mut result = HashSet::new();
+        for p in self.map.get_valid_points().iter() {
+            let gp = self.transform_point(p, transformation);
+            for d in D::list() {
+                let neighbor = d.translation(1).translate_point(&gp, self.odd_if_hex());
+                if let Some(ap) = area.get(&neighbor) {
+                    result.insert(ap.0.clone());
+                }
+            }
+        }
+        result
+    }
     fn add_points(&self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>, transformation: &Transformation<D>) -> Result<(), TransformationError<D>> {
         for p in self.map.get_valid_points().iter() {
             let gp = self.transform_point(p, transformation);
             if let Some(result) = area.get(&gp) {
-                return Err(TransformationError::Collision(result.clone()));
+                return Err(TransformationError::Collision(result.clone(), transformation.clone()));
             }
             area.insert(gp, (transformation.clone(), p.clone()));
         }
@@ -151,96 +245,86 @@ where D: Direction
         let p = transformation.translate_by.translate_point(&p, self.odd_if_hex());
         p
     }
-    pub fn check_transformations(&self) -> Result<Vec<Transformation<D>>, TransformationError<D>> {
-        let mut area: HashMap<GlobalPoint, AreaPoint<D>> = HashMap::new();
-        let mut transformed = vec![
+    fn check_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<Vec<(Transformation<D>, HashSet<(bool, D)>)>, TransformationError<D>> {
+        let mut transformations = vec![
             (Transformation {
                 distortion: (false, D::angle_0()),
                 translate_by: D::angle_0().translation(0),
-            }, 0)
+            }, HashSet::new())
         ];
-        self.add_points(&mut area, &transformed[0].0)?;
-        let mut transformations = vec![];
         for tran in &self.seed_transformations {
-            transformations.push(tran.clone());
-            transformations.push(tran.opposite());
+            self.adjacent_transformations.push(tran.clone());
+            self.adjacent_transformations.push(tran.opposite());
         }
-        let mut next_index = 0;
-        while next_index < transformed.len() {
-            let step = transformed[next_index].1;
-            if step >= 12 {
-                break;
-            }
-            for t in &transformations {
-                let new_tran = transformed[next_index].0.add(t);
+        self.screen_wrap_options.insert(transformations[0].0.distortion, vec![transformations[0].0.translate_by]);
+        let mut i = 0;
+        while i < transformations.len() {
+            let mut at = 0;
+            let mut found_new_seed = false;
+            while at < self.adjacent_transformations.len() {
+                let transformation = &transformations[i];
+                let history = &transformation.1;
+                if history.contains(&transformation.0.distortion) {
+                    break;
+                }
+                let new_tran = transformation.0.add(&self.adjacent_transformations[at]);
                 //println!("{:?} + {:?} = {:?}", &transformed[next_index].0, &t, &new_tran);
-                match self.add_points(&mut area, &new_tran) {
+                match self.add_points(area, &new_tran) {
                     Ok(_) => {
-                        transformed.push((new_tran, step + 1));
-                        // TODO: check if new transformation is connected to center, thus creating new entry for "transformations"
+                        let mut history = history.clone();
+                        history.insert(transformation.0.distortion);
+                        // check if new transformation is connected to center, thus creating new entry for "transformations"
+                        for neighbor in self.find_neighbors(area, &new_tran) {
+                            let new_seed = new_tran.subtract(&neighbor);
+                            if new_seed != transformations[0].0 && !self.adjacent_transformations.iter().any(|t| t == &new_seed) {
+                                println!("found new implied neighbor: {:?}", new_seed);
+                                println!("calculated as {:?} - {:?}", new_tran, neighbor);
+                                //self.seed_transformations.push(new_seed.clone());
+                                self.adjacent_transformations.push(new_seed.opposite());
+                                self.adjacent_transformations.push(new_seed);
+                                found_new_seed = true;
+                            }
+                        }
+                        if !self.screen_wrap_options.contains_key(&new_tran.distortion) {
+                            self.screen_wrap_options.insert(new_tran.distortion, vec![]);
+                        }
+                        self.screen_wrap_options.get_mut(&new_tran.distortion).unwrap().push(new_tran.translate_by);
+                        transformations.push((new_tran, history));
                     },
-                    Err(TransformationError::Collision(ap)) => {
+                    Err(TransformationError::Collision(ap, t)) => {
                         if new_tran != ap.0 {
-                            return Err(TransformationError::Collision(ap))
+                            return Err(TransformationError::Collision(ap, t))
                         } else {
                             // found another way to get the same transformation. ignore the new one
-                            // TODO: should keep the one with lower step
+                            // TODO: should histories be combined?
                         }
                     },
                     Err(e) => return Err(e),
                 }
+                at += 1;
             }
-            next_index += 1;
-        }
-        Ok(transformed.into_iter().map(|(tran, _)| {
-            tran
-        }).collect())
-    }
-    /*fn update(&mut self) {
-        self.transformations = HashMap::new();
-        self.adjacent_transformations = self.seed_transformations.clone();
-        self.area = HashMap::new();
-
-        if self.seed_transformations.len() == 0 {
-            return;
-        }
-        self.add_transformation(
-            MultiTransformation{
-                distortion: (false, D::axis_x()),
-                position: GlobalPoint::new(0, 0),
-                history: HashSet::new(),
+            i += 1;
+            if found_new_seed {
+                i = 0;
             }
-        );
-    }
-    fn add_transformation(&mut self, t: MultiTransformation<D>) {
-        let key = (t.distortion, t.position);
-        if self.transformations.contains_key(&key) {
-            return;
         }
-        self.transformations.insert(key, t.history);
+        Ok(transformations)
     }
-    fn add_area_point(&mut self, x: i16, y: i16, data: AreaPoint<D>) {
-
-    }
-    fn apply_distortion(&self, original: MultiTransformation<D>, by: &Transformation<D, T>) -> MultiTransformation<D> {
-        let distortion:Distortion<D> = (
-            original.distortion.0 == by.distortion.0,
-            original.distortion.1.rotate_by(by.distortion.1),
-        );
-
-        let mut position = by.translate_by.translate_point(&original.position, self.offset_y % 2 != 0);
-
-        let mut history = original.history.clone();
-        history.insert(distortion);
-        MultiTransformation{
-            distortion,
-            position,
-            history,
+    fn search_wrapped_neighbors(&mut self, area: &HashMap<GlobalPoint, AreaPoint<D>>) -> Result<(), TransformationError<D>> {
+        for p in self.map.get_valid_points() {
+            let gp = GlobalPoint::new(p.x() as i16, p.y() as i16);
+            for d in D::list() {
+                let neighbor = d.translation(1).translate_point(&gp, self.odd_if_hex());
+                if let Some(ap) = area.get(&neighbor) {
+                    self.wrapped_neighbors.insert((p, *d), OrientedPoint::new(ap.1, ap.0.distortion.0, ap.0.distortion.1));
+                }
+            }
         }
-    }*/
+        Ok(())
+    }
 }
 
-/*#[derive(Clone)]
+#[derive(Clone)]
 pub struct OrientedPoint<D>
 where D: Direction {
     point: Point,
@@ -252,9 +336,9 @@ where D: Direction {
     pub fn new(point: Point, mirrored: bool, direction: D) -> Self {
         OrientedPoint{point, mirrored, direction}
     }
-}*/
+}
 
-/*pub struct WrappingMap<D>
+pub struct WrappingMap<D>
 where D: Direction {
     point_map: PointMap,
     // only needed to save and load the wrapped_neighbors
@@ -264,7 +348,14 @@ where D: Direction {
 
 impl<D> WrappingMap<D>
 where D: Direction {
-    pub fn get_neighbor(&self, point: &Point, direction: &D) -> Option<OrientedPoint<D>> {
+    pub fn new(point_map: PointMap, seed_transformations: Vec<Transformation<D>>, wrapped_neighbors: HashMap<(Point, D), OrientedPoint<D>>) -> Self {
+        WrappingMap {
+            point_map,
+            seed_transformations,
+            wrapped_neighbors,
+        }
+    }
+    /*pub fn get_neighbor(&self, point: &Point, direction: &D) -> Option<OrientedPoint<D>> {
         if !self.point_map.is_point_valid(point) {
             None
         } else {
@@ -281,61 +372,106 @@ where D: Direction {
                 Some(OrientedPoint::new(point, false, *direction))
             })
         }
-    }
-}*/
+    }*/
+}
 
-/*impl WMap<Direction4> for WrappingMap<Direction4> {
-    fn follow_rotated_point(&self, point: &Point, rotate_right_to: &Direction4) -> Point {
-        match rotate_right_to {
-            Direction4::RIGHT => Point::new(point.x(), point.y()),
-            Direction4::UP => Point::new(point.y(), self.point_map.width() - point.x()),
-            Direction4::LEFT => Point::new(self.point_map.width() - point.x(), self.point_map.height() - point.y()),
-            Direction4::DOWN => Point::new(self.point_map.height() - point.y(), point.x()),
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::map::point_map::PointMap;
+
+    #[test]
+    fn transformations1() {
+        let transformations = vec![
+            Transformation::new((false, Direction4::D0), Direction4::D0.translation(0)),
+            Transformation::new((false, Direction4::D0), Direction4::D0.translation(5)),
+            Transformation::new((true, Direction4::D90), Direction4::D180.translation(6)),
+            Transformation::new((false, Direction4::D90), Direction4::D90.translation(7)),
+            Transformation::new((true, Direction4::D180), Direction4::D0.translation(8)),
+            Transformation::new((true, Direction4::D0), Direction4::D0.translation(9).plus(&Direction4::D90.translation(7))),
+        ];
+        for t in transformations.iter() {
+            println!("{:?}", &t);
+            println!("{:?}", &t.opposite());
+            assert_eq!(t, &transformations[0].add(&t));
+            assert_eq!(t, &t.opposite().opposite());
+            assert_eq!(transformations[0], t.subtract(&t));
         }
-    }
-    fn rotated_point_map(&self, rotate_right_to: &Direction4) -> PointMap {
-        let mut result = match rotate_right_to {
-            Direction4::RIGHT => PointMap::new(self.point_map.width(), self.point_map.height()),
-            Direction4::LEFT => PointMap::new(self.point_map.width(), self.point_map.height()),
-            Direction4::UP => PointMap::new(self.point_map.height(), self.point_map.width()),
-            Direction4::DOWN => PointMap::new(self.point_map.height(), self.point_map.width()),
-        };
-        for x in 0..self.point_map.width() {
-            for y in 0..self.point_map.height() {
-                let origin = Point::new(x, y);
-                let destination = self.follow_rotated_point(&origin, &rotate_right_to);
-                result.set_valid(&destination, self.point_map.is_point_valid(&origin));
+        for t in transformations.iter() {
+            for t2 in transformations.iter() {
+                println!("{:?}", &t);
+                println!("{:?}", &t2);
+                println!("{:?}", &t.subtract(&t2));
+                assert_eq!(t, &t2.add(&t.subtract(&t2)));
             }
         }
-        result
+    }
+
+    #[test]
+    fn transformations2() {
+        assert_eq!(Transformation::new((true, Direction4::D0), Direction4::D0.translation(8).plus(&Direction4::D90.translation(7))).opposite(),
+                Transformation::new((true, Direction4::D0), Direction4::D0.translation(8).plus(&Direction4::D90.translation(-7))));
+        assert_eq!(Transformation::new((true, Direction4::D90), Direction4::D0.translation(5).plus(&Direction4::D90.translation(-6))).opposite(),
+                Transformation::new((true, Direction4::D90), Direction4::D0.translation(-6).plus(&Direction4::D90.translation(5))));
+        println!("{:?}", Transformation::new((true, Direction4::D0), Direction4::D0.translation(-994).plus(&Direction4::D90.translation(-20))).opposite());
+        assert_eq!(Transformation::new((false, Direction4::D0), Direction4::D0.translation(-990))
+                    .subtract(&Transformation::new((true, Direction4::D0), Direction4::D0.translation(-994).plus(&Direction4::D90.translation(-20)))),
+                Transformation::new((true, Direction4::D0), Direction4::D0.translation(-4).plus(&Direction4::D90.translation(20))));
+    }
+
+    #[test]
+    fn no_wrapping() -> Result<(), TransformationError<Direction4>> {
+        let builder = WrappingMapBuilder::<Direction4>::new(PointMap::new(4, 8, false), vec![]);
+        builder.build()?;
+        Ok(())
+    }
+
+    #[test]
+    fn no_wrapping_hex() -> Result<(), TransformationError<Direction6>> {
+        let builder = WrappingMapBuilder::<Direction6>::new(PointMap::new(4, 8, false), vec![]);
+        builder.build()?;
+        Ok(())
+    }
+
+    #[test]
+    fn simple_wrapping() -> Result<(), TransformationError<Direction4>> {
+        let mut builder = WrappingMapBuilder::<Direction4>::new(PointMap::new(5, 4, false), vec![
+            Transformation::new((false, Direction4::D0), Direction4::D0.translation(-5))
+        ]);
+        let mut area: HashMap<GlobalPoint, AreaPoint<Direction4>> = HashMap::new();
+        builder.check_seed_transformations(&mut area)?;
+        let transformations = builder.check_transformations(&mut area)?;
+        assert_eq!(transformations.len(), 3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn rotated_wrapping() -> Result<(), TransformationError<Direction4>> {
+        let mut builder = WrappingMapBuilder::<Direction4>::new(PointMap::new(5, 4, false), vec![
+            Transformation::new((false, Direction4::D90), Direction4::D0.translation(5))
+        ]);
+        let mut area: HashMap<GlobalPoint, AreaPoint<Direction4>> = HashMap::new();
+        builder.check_seed_transformations(&mut area)?;
+        let transformations = builder.check_transformations(&mut area)?;
+        println!("{:?}", transformations);
+        assert_eq!(transformations.len(), 4);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn double_wrapping() -> Result<(), TransformationError<Direction4>> {
+        let mut builder = WrappingMapBuilder::<Direction4>::new(PointMap::new(5, 4, false), vec![
+            Transformation::new((false, Direction4::D0), Direction4::D0.translation(-5).plus(&Direction4::D90.translation(2))),
+            Transformation::new((false, Direction4::D0), Direction4::D0.translation(-5).plus(&Direction4::D90.translation(-2))),
+        ]);
+        let mut area: HashMap<GlobalPoint, AreaPoint<Direction4>> = HashMap::new();
+        builder.check_seed_transformations(&mut area)?;
+        let transformations = builder.check_transformations(&mut area)?;
+        assert_eq!(transformations.len(), 7);
+
+        Ok(())
     }
 }
-impl WMap<Direction6> for WrappingMap<Direction6> {
-    fn follow_rotated_point(&self, point: &Point, rotate_right_to: &Direction6) -> Point {
-        match rotate_right_to {
-            Direction6::RIGHT => Point::new(point.x(), point.y()),
-            Direction6::UP => Point::new(point.y(), self.point_map.width() - point.x()),
-            Direction6::LEFT => Point::new(self.point_map.width() - point.x(), self.point_map.height() - point.y()),
-            Direction6::DOWN => Point::new(self.point_map.height() - point.y(), point.x()),
-        }
-        Point::new(point.x(), point.y())
-    }
-    fn rotated_point_map(&self, rotate_right_to: &Direction6) -> PointMap {
-        let mut result = match rotate_right_to {
-            Direction6::RIGHT => PointMap::new(self.point_map.width(), self.point_map.height()),
-            Direction6::LEFT => PointMap::new(self.point_map.width(), self.point_map.height()),
-            Direction6::UP => PointMap::new(self.point_map.height(), self.point_map.width()),
-            Direction6::DOWN => PointMap::new(self.point_map.height(), self.point_map.width()),
-        };
-        for x in 0..self.point_map.width() {
-            for y in 0..self.point_map.height() {
-                let origin = Point::new(x, y);
-                let destination = self.follow_rotated_point(&origin, &rotate_right_to);
-                result.set_valid(&destination, self.point_map.is_point_valid(&origin));
-            }
-        }
-        result
-        PointMap::new(self.point_map.width(), self.point_map.height())
-    }
-}*/
-
