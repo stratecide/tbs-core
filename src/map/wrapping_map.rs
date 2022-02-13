@@ -3,7 +3,7 @@ use crate::map::point_map::*;
 use crate::map::point::*;
 use std::collections::{HashSet, HashMap};
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct GlobalPoint {
     x: i16,
     y: i16,
@@ -118,18 +118,23 @@ where D: Direction
             screen_wrap_options: HashMap::new(),
             error: None,
         };
-        if result.seed_transformations.len() > 4 { // TODO: maybe 4 isn't even possible
-            result.error = Some(TransformationError::TooMany);
+        result.check_validity();
+        result
+    }
+    fn check_validity(&mut self) {
+        self.adjacent_transformations = vec![];
+        self.wrapped_neighbors = HashMap::new();
+        self.screen_wrap_options = HashMap::new();
+        if self.seed_transformations.len() > 4 { // TODO: maybe 4 isn't even possible
+            self.error = Some(TransformationError::TooMany);
         } else {
             // check if the given transformations are valid and calculate wrapped_neighbors
             let mut area: HashMap<GlobalPoint, AreaPoint<D>> = HashMap::new();
-            result.error = result.check_seed_transformations(&mut area)
-            .and_then(|_| result.check_transformations(&mut area))
-            .and_then(|_| result.search_wrapped_neighbors(&area))
+            self.error = self.check_seed_transformations(&mut area)
+            .and_then(|_| self.check_transformations(&mut area))
+            .and_then(|_| self.search_wrapped_neighbors(&area))
             .err();
         }
-
-        result
     }
     pub fn map(&self) -> &PointMap {
         &self.map
@@ -187,6 +192,24 @@ where D: Direction
     fn odd_if_hex(&self) -> bool {
         self.map.odd_if_hex() == (self.map_center.y() % 2 == 0)
     }
+    pub fn update_transformation(&mut self, index: usize, transformation: Transformation<D>) {
+        if self.seed_transformations.len() > index {
+            self.seed_transformations[index] = transformation;
+            self.check_validity();
+        }
+    }
+    pub fn remove_transformation(&mut self, index: usize) {
+        if self.seed_transformations.len() > index {
+            self.seed_transformations.remove(index);
+            self.check_validity();
+        }
+    }
+    pub fn add_transformation(&mut self, transformation: Transformation<D>) {
+        if self.seed_transformations.len() < 4 {
+            self.seed_transformations.push(transformation);
+            self.check_validity();
+        }
+    }
     fn check_seed_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<(), TransformationError<D>> {
         self.add_points(area, &Transformation {
             distortion: (false, D::angle_0()),
@@ -219,6 +242,14 @@ where D: Direction
             }
         }
         result
+    }
+    pub fn is_point_in_transformation(&self, point: &GlobalPoint, transformation: &Transformation<D>) -> bool {
+        for p in self.map.get_valid_points().iter() {
+            if point == &self.transform_point(p, transformation) {
+                return true;
+            }
+        }
+        false
     }
     fn add_points(&self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>, transformation: &Transformation<D>) -> Result<(), TransformationError<D>> {
         for p in self.map.get_valid_points().iter() {
