@@ -2,6 +2,7 @@ use crate::map::direction::*;
 use crate::map::point_map::*;
 use crate::map::point::*;
 use std::collections::{HashSet, HashMap};
+use std::time::{Instant, Duration};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct GlobalPoint {
@@ -88,6 +89,7 @@ where D: Direction {
     Disconnected,
     TooMany,
     Mirroring,
+    DuplicateSeed,
 }
 
 pub struct WrappingMapBuilder<D>
@@ -95,6 +97,7 @@ where D: Direction
 {
     map: PointMap,
     map_center: Point,
+    missing_map_neighbor_points: Vec<GlobalPoint>,
     seed_transformations: Vec<Transformation<D>>,
     adjacent_transformations: Vec<Transformation<D>>, // all transformations that neighbor the center, that can be constructed from the seed_transformations
     wrapped_neighbors: HashMap<(Point, D), OrientedPoint<D>>,
@@ -112,12 +115,16 @@ where D: Direction
         let mut result = WrappingMapBuilder {
             map_center: Point::new(map.width() / 2, map.height() / 2),
             map,
+            missing_map_neighbor_points: vec![],
             seed_transformations,
             adjacent_transformations: vec![],
             wrapped_neighbors: HashMap::new(),
             screen_wrap_options: HashMap::new(),
             error: None,
         };
+        let mut area: HashMap<GlobalPoint, AreaPoint<D>> = HashMap::new();
+        result.add_points(&mut area, &Transformation::new((false, D::angle_0()), D::angle_0().translation(0))).unwrap();
+        result.generate_map_neighbor_points(&area);
         result.check_validity();
         result
     }
@@ -130,6 +137,7 @@ where D: Direction
         } else {
             // check if the given transformations are valid and calculate wrapped_neighbors
             let mut area: HashMap<GlobalPoint, AreaPoint<D>> = HashMap::new();
+            self.add_points(&mut area, &Transformation::new((false, D::angle_0()), D::angle_0().translation(0))).unwrap();
             self.error = self.check_seed_transformations(&mut area)
             .and_then(|_| self.check_transformations(&mut area))
             .and_then(|_| self.search_wrapped_neighbors(&area))
@@ -210,14 +218,30 @@ where D: Direction
             self.check_validity();
         }
     }
+    fn generate_map_neighbor_points(&mut self, area: &HashMap<GlobalPoint, AreaPoint<D>>) {
+        let transformation = Transformation::new((false, D::angle_0()), D::angle_0().translation(0));
+        for p in self.map.get_valid_points().iter() {
+            let gp = self.transform_point(p.x() as i16, p.y() as i16, &transformation);
+            for d in D::list() {
+                let neighbor = d.translation(1).translate_point(&gp, self.odd_if_hex());
+                if let None = area.get(&neighbor) {
+                    self.missing_map_neighbor_points.push(neighbor);
+                }
+            }
+        }
+        println!("interesting neighbor #: {}", self.missing_map_neighbor_points.len());
+    }
     fn check_seed_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<(), TransformationError<D>> {
-        self.add_points(area, &Transformation {
-            distortion: (false, D::angle_0()),
-            translate_by: D::angle_0().translation(0),
-        })?;
+        for i in 0..self.seed_transformations.len() {
+            for j in i+1..self.seed_transformations.len() {
+                if self.seed_transformations[i] == self.seed_transformations[j] || self.seed_transformations[i] == self.seed_transformations[j].opposite() {
+                    return Err(TransformationError::DuplicateSeed)
+                }
+            }
+        }
         for tran in &self.seed_transformations {
             for p in self.map.get_valid_points().iter() {
-                let gp = self.transform_point(p, tran);
+                let gp = self.transform_point(p.x() as i16, p.y() as i16, tran);
                 if let Some(ap) = area.get(&gp) {
                     // transformation overlaps center
                     return Err(TransformationError::Collision(ap.clone(), tran.clone()));
@@ -231,39 +255,40 @@ where D: Direction
         Ok(())
     }
     fn find_neighbors(&self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>, transformation: &Transformation<D>) -> HashSet<Transformation<D>> {
+        let now = Instant::now();
         let mut result = HashSet::new();
-        for p in self.map.get_valid_points().iter() {
-            let gp = self.transform_point(p, transformation);
-            for d in D::list() {
-                let neighbor = d.translation(1).translate_point(&gp, self.odd_if_hex());
-                if let Some(ap) = area.get(&neighbor) {
-                    result.insert(ap.0.clone());
-                }
+        for p in &self.missing_map_neighbor_points {
+            let gp = self.transform_point(p.x() + self.map_center.x() as i16, p.y() + self.map_center.y() as i16, transformation);
+            if let Some(ap) = area.get(&gp) {
+                result.insert(ap.0.clone());
             }
         }
+        //println!("searched neighbors for {:.2?}", now.elapsed());
         result
     }
     pub fn is_point_in_transformation(&self, point: &GlobalPoint, transformation: &Transformation<D>) -> bool {
         for p in self.map.get_valid_points().iter() {
-            if point == &self.transform_point(p, transformation) {
+            if point == &self.transform_point(p.x() as i16, p.y() as i16, transformation) {
                 return true;
             }
         }
         false
     }
     fn add_points(&self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>, transformation: &Transformation<D>) -> Result<(), TransformationError<D>> {
+        let now = Instant::now();
         for p in self.map.get_valid_points().iter() {
-            let gp = self.transform_point(p, transformation);
+            let gp = self.transform_point(p.x() as i16, p.y() as i16, transformation);
             if let Some(result) = area.get(&gp) {
                 return Err(TransformationError::Collision(result.clone(), transformation.clone()));
             }
             area.insert(gp, (transformation.clone(), p.clone()));
         }
+        //println!("adding points took {:.2?}", now.elapsed());
         Ok(())
     }
-    fn transform_point(&self, p: &Point, transformation: &Transformation<D>) -> GlobalPoint {
-        let mut x = p.x() as i16 - self.map_center.x() as i16;
-        let y = p.y() as i16 - self.map_center.y() as i16;
+    fn transform_point(&self, x: i16, y: i16, transformation: &Transformation<D>) -> GlobalPoint {
+        let mut x = x as i16 - self.map_center.x() as i16;
+        let y = y as i16 - self.map_center.y() as i16;
         if transformation.distortion.0 {
             // mirrored
             x = -x;
@@ -277,11 +302,13 @@ where D: Direction
         p
     }
     fn check_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<Vec<(Transformation<D>, HashSet<(bool, D)>)>, TransformationError<D>> {
+        let now = Instant::now();
+        //let mut neigbor_search = Duration::new(0, 0);
         let mut transformations = vec![
             (Transformation {
                 distortion: (false, D::angle_0()),
                 translate_by: D::angle_0().translation(0),
-            }, HashSet::new())
+            }, HashSet::with_capacity(12))
         ];
         for tran in &self.seed_transformations {
             self.adjacent_transformations.push(tran.clone());
@@ -305,14 +332,19 @@ where D: Direction
                         let mut history = history.clone();
                         history.insert(transformation.0.distortion);
                         // check if new transformation is connected to center, thus creating new entry for "transformations"
-                        for neighbor in self.find_neighbors(area, &new_tran) {
+                        //let n = Instant::now();
+                        let  neighbors = self.find_neighbors(area, &new_tran);
+                        //neigbor_search += n.elapsed();
+                        for neighbor in neighbors {
                             let new_seed = new_tran.subtract(&neighbor);
                             if new_seed != transformations[0].0 && !self.adjacent_transformations.iter().any(|t| t == &new_seed) {
-                                println!("found new implied neighbor: {:?}", new_seed);
-                                println!("calculated as {:?} - {:?}", new_tran, neighbor);
-                                //self.seed_transformations.push(new_seed.clone());
-                                self.adjacent_transformations.push(new_seed.opposite());
+                                //println!("found new implied neighbor: {:?}", new_seed);
+                                //println!("calculated as {:?} - {:?}", new_tran, neighbor);
+                                let opp = new_seed.opposite();
                                 self.adjacent_transformations.push(new_seed);
+                                if !self.adjacent_transformations.iter().any(|t| t == &opp) {
+                                    self.adjacent_transformations.push(opp);
+                                }
                                 found_new_seed = true;
                             }
                         }
@@ -339,6 +371,9 @@ where D: Direction
                 i = 0;
             }
         }
+        //println!("checked {} transformations for problems", transformations.len());
+        println!("checking {} transformations took {:.2?}", i, now.elapsed());
+        //println!("neigbor_search: {:.2?}", neigbor_search);
         Ok(transformations)
     }
     fn search_wrapped_neighbors(&mut self, area: &HashMap<GlobalPoint, AreaPoint<D>>) -> Result<(), TransformationError<D>> {
@@ -471,6 +506,7 @@ mod tests {
             Transformation::new((false, Direction4::D0), Direction4::D0.translation(-5))
         ]);
         let mut area: HashMap<GlobalPoint, AreaPoint<Direction4>> = HashMap::new();
+        builder.add_points(&mut area, &Transformation::new((false, Direction4::D0), Direction4::D0.translation(0))).unwrap();
         builder.check_seed_transformations(&mut area)?;
         let transformations = builder.check_transformations(&mut area)?;
         assert_eq!(transformations.len(), 3);
@@ -484,6 +520,7 @@ mod tests {
             Transformation::new((false, Direction4::D90), Direction4::D0.translation(5))
         ]);
         let mut area: HashMap<GlobalPoint, AreaPoint<Direction4>> = HashMap::new();
+        builder.add_points(&mut area, &Transformation::new((false, Direction4::D0), Direction4::D0.translation(0))).unwrap();
         builder.check_seed_transformations(&mut area)?;
         let transformations = builder.check_transformations(&mut area)?;
         println!("{:?}", transformations);
@@ -499,6 +536,7 @@ mod tests {
             Transformation::new((false, Direction4::D0), Direction4::D0.translation(-5).plus(&Direction4::D90.translation(-2))),
         ]);
         let mut area: HashMap<GlobalPoint, AreaPoint<Direction4>> = HashMap::new();
+        builder.add_points(&mut area, &Transformation::new((false, Direction4::D0), Direction4::D0.translation(0))).unwrap();
         builder.check_seed_transformations(&mut area)?;
         let transformations = builder.check_transformations(&mut area)?;
         assert_eq!(transformations.len(), 7);
