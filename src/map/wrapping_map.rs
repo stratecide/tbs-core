@@ -292,8 +292,12 @@ where D: Direction
         if transformation.distortion.0 {
             // mirrored
             x = -x;
-            if self.map.width() % 2 == 0 {
-                x += 1;
+            if y % 2 != 0 {
+                if self.odd_if_hex() {
+                    x += 1;
+                } else {
+                    x -= 1;
+                }
             }
         }
         let p = GlobalPoint::new(x, y);
@@ -312,6 +316,8 @@ where D: Direction
         ];
         for tran in &self.seed_transformations {
             self.adjacent_transformations.push(tran.clone());
+        }
+        for tran in &self.seed_transformations {
             self.adjacent_transformations.push(tran.opposite());
         }
         self.screen_wrap_options.insert(transformations[0].0.distortion, vec![transformations[0].0.translate_by]);
@@ -371,8 +377,7 @@ where D: Direction
                 i = 0;
             }
         }
-        //println!("checked {} transformations for problems", transformations.len());
-        println!("checking {} transformations took {:.2?}", i, now.elapsed());
+        //println!("checking {} transformations took {:.2?}", i, now.elapsed());
         //println!("neigbor_search: {:.2?}", neigbor_search);
         Ok(transformations)
     }
