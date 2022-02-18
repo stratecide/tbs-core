@@ -292,7 +292,7 @@ where D: Direction
         if transformation.distortion.0 {
             // mirrored
             x = -x;
-            if y % 2 != 0 {
+            if D::list().len() == 6 && y % 2 != 0 {
                 if self.odd_if_hex() {
                     x += 1;
                 } else {
@@ -515,6 +515,20 @@ mod tests {
         builder.check_seed_transformations(&mut area)?;
         let transformations = builder.check_transformations(&mut area)?;
         assert_eq!(transformations.len(), 3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn mirrored_wrapping() -> Result<(), TransformationError<Direction4>> {
+        let mut builder = WrappingMapBuilder::<Direction4>::new(PointMap::new(5, 4, false), vec![
+            Transformation::new((true, Direction4::D0), Direction4::D0.translation(-5))
+        ]);
+        let mut area: HashMap<GlobalPoint, AreaPoint<Direction4>> = HashMap::new();
+        builder.add_points(&mut area, &Transformation::new((false, Direction4::D0), Direction4::D0.translation(0))).unwrap();
+        builder.check_seed_transformations(&mut area)?;
+        let transformations = builder.check_transformations(&mut area)?;
+        assert_eq!(transformations.len(), 2);
 
         Ok(())
     }
