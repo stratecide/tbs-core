@@ -4,24 +4,6 @@ use crate::map::point::*;
 use std::collections::{HashSet, HashMap};
 use std::time::{Instant, Duration};
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct GlobalPoint {
-    x: i16,
-    y: i16,
-}
-
-impl Position<i16> for GlobalPoint {
-    fn new(x: i16, y: i16) -> Self {
-        GlobalPoint {x, y}
-    }
-    fn x(&self) -> i16 {
-        self.x
-    }
-    fn y(&self) -> i16 {
-        self.y
-    }
-}
-
 type Distortion<D> = (bool, D);
 type AreaPoint<D> = (Transformation<D>, Point);
 
@@ -82,7 +64,7 @@ where D: Direction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TransformationError<D>
 where D: Direction {
     Collision(AreaPoint<D>, Transformation<D>),
@@ -92,6 +74,7 @@ where D: Direction {
     DuplicateSeed,
 }
 
+#[derive(Clone)]
 pub struct WrappingMapBuilder<D>
 where D: Direction
 {
@@ -407,8 +390,18 @@ where D: Direction {
     pub fn new(point: Point, mirrored: bool, direction: D) -> Self {
         OrientedPoint{point, mirrored, direction}
     }
+    pub fn point(&self) -> &Point {
+        &self.point
+    }
+    pub fn mirrored(&self) -> bool {
+        self.mirrored
+    }
+    pub fn direction(&self) -> &D {
+        &self.direction
+    }
 }
 
+#[derive(Clone)]
 pub struct WrappingMap<D>
 where D: Direction {
     point_map: PointMap,
@@ -426,11 +419,17 @@ where D: Direction {
             wrapped_neighbors,
         }
     }
-    /*pub fn get_neighbor(&self, point: &Point, direction: &D) -> Option<OrientedPoint<D>> {
+    pub fn pointmap(&self) -> &PointMap {
+        &self.point_map
+    }
+    pub fn seed_transformations(&self) -> &Vec<Transformation<D>> {
+        &self.seed_transformations
+    }
+    pub fn get_neighbor(&self, point: &Point, direction: &D) -> Option<OrientedPoint<D>> {
         if !self.point_map.is_point_valid(point) {
             None
         } else {
-            direction.get_neighbor(point)
+            direction.get_neighbor(point, self.point_map.odd_if_hex())
             .filter(|point| {
                 self.point_map.is_point_valid(&point)
             })
@@ -443,7 +442,7 @@ where D: Direction {
                 Some(OrientedPoint::new(point, false, *direction))
             })
         }
-    }*/
+    }
 }
 
 

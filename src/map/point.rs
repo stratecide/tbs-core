@@ -22,3 +22,22 @@ impl Position<u8> for Point {
         self.y
     }
 }
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct GlobalPoint {
+    x: i16,
+    y: i16,
+}
+
+impl Position<i16> for GlobalPoint {
+    fn new(x: i16, y: i16) -> Self {
+        GlobalPoint {x, y}
+    }
+    fn x(&self) -> i16 {
+        self.x
+    }
+    fn y(&self) -> i16 {
+        self.y
+    }
+}
+

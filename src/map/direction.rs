@@ -6,12 +6,20 @@ use crate::map::point::*;
 
 pub trait Direction: Eq + Copy + Hash + fmt::Debug {
     type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug;
+    fn is_hex() -> bool;
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
     fn list() -> Vec<Box<Self>>;
     fn mirror_vertically(&self) -> Self;
     //fn rotate_point_map(&self, map: &PointMap) -> PointMap;
-    //fn get_neighbor<T: CheckedAdd + CheckedSub + Integer, P: Position<T>>(&self, point: &P) -> Option<P>;
+    fn get_neighbor(&self, point: &Point, odd_if_hex: bool) -> Option<Point> {
+        let gp = self.translation(1).translate_point(&GlobalPoint::new(point.x() as i16, point.y() as i16), odd_if_hex);
+        if gp.x() >= 0 && gp.x() <= 255 && gp.y() >= 0 && gp.y() <= 255 {
+            Some(Point::new(gp.x() as u8, gp.y() as u8))
+        } else {
+            None
+        }
+    }
     fn rotate_around_center<P: Position<i16>>(&self, point: &P, center: &P, odd_if_hex: bool) -> P {
         let trans = Self::T::between(center, point, odd_if_hex);
         let trans = trans.rotate_by(self);
@@ -61,6 +69,9 @@ pub enum Direction4 {
 }
 impl Direction for Direction4 {
     type T = Translation4;
+    fn is_hex() -> bool {
+        false
+    }
     fn angle_0() -> Self {
         Self::D0
     }
@@ -134,6 +145,9 @@ pub enum Direction6 {
 }
 impl Direction for Direction6 {
     type T = Translation6;
+    fn is_hex() -> bool {
+        true
+    }
     fn angle_0() -> Self {
         Self::D0
     }
