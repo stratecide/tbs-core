@@ -2,6 +2,7 @@
 
 type Owner = Option<u8>;
 
+#[derive(Debug, PartialEq)]
 pub enum Terrain {
     Grass,
     Street,
@@ -17,6 +18,7 @@ impl Terrain {
 }
 
 
+#[derive(Debug, PartialEq)]
 pub enum Realty {
     City,
 }

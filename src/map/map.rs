@@ -38,6 +38,9 @@ where D: Direction
     pub fn all_points(&self) -> Vec<Point> {
         self.wrapping_logic.pointmap().get_valid_points()
     }
+    pub fn get_neighbor(&self, p: &Point, d: &D) -> Option<OrientedPoint<D>> {
+        self.wrapping_logic.get_neighbor(p, d)
+    }
     pub fn get_terrain(&self, p: &Point) -> Option<&Terrain> {
         self.terrain.get(p)
     }
