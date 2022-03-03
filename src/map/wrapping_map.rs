@@ -179,7 +179,7 @@ where D: Direction
             Ok(WrappingMap::new(self.map, self.seed_transformations, self.wrapped_neighbors))
         }
     }
-    fn odd_if_hex(&self) -> bool {
+    pub fn odd_if_hex(&self) -> bool {
         self.map.odd_if_hex() == (self.map_center.y() % 2 == 0)
     }
     pub fn update_transformation(&mut self, index: usize, transformation: Transformation<D>) {
@@ -411,6 +411,9 @@ where D: Direction {
     }
     pub fn pointmap(&self) -> &PointMap {
         &self.pointmap
+    }
+    pub fn odd_if_hex(&self) -> bool {
+        self.pointmap.odd_if_hex() == ((self.pointmap.height() / 2) % 2 == 0)
     }
     pub fn seed_transformations(&self) -> &Vec<Transformation<D>> {
         &self.seed_transformations
