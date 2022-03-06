@@ -83,7 +83,8 @@ where D: Direction
     seed_transformations: Vec<Transformation<D>>,
     adjacent_transformations: Vec<Transformation<D>>, // all transformations that neighbor the center, that can be constructed from the seed_transformations
     wrapped_neighbors: HashMap<(Point, D), OrientedPoint<D>>,
-    screen_wrap_options: HashMap<Distortion<D>, Vec<D::T>>, // TODO: pack into a feature called smth like "screen_aware"?
+    #[cfg(feature = "rendering")]
+    screen_wrap_options: HashMap<Distortion<D>, Vec<D::T>>,
     error: Option<TransformationError<D>>,
 }
 impl<D> WrappingMapBuilder<D>
@@ -101,6 +102,7 @@ where D: Direction
             seed_transformations,
             adjacent_transformations: vec![],
             wrapped_neighbors: HashMap::new(),
+            #[cfg(feature = "rendering")]
             screen_wrap_options: HashMap::new(),
             error: None,
         };
@@ -113,7 +115,10 @@ where D: Direction
     fn check_validity(&mut self) {
         self.adjacent_transformations = vec![];
         self.wrapped_neighbors = HashMap::new();
-        self.screen_wrap_options = HashMap::new();
+        #[cfg(feature = "rendering")]
+        {
+            self.screen_wrap_options = HashMap::new();
+        }
         if self.seed_transformations.len() > 4 { // TODO: maybe 4 isn't even possible
             self.error = Some(TransformationError::TooMany);
         } else {
@@ -135,6 +140,7 @@ where D: Direction
     pub fn adjacent_transformations(&self) -> &Vec<Transformation<D>> {
         &self.adjacent_transformations
     }
+    #[cfg(feature = "rendering")]
     pub fn screen_wrap_vectors(&self) -> Vec<(f32, f32)> {
         let mut wrap1: Option<D::T> = None;
         let mut wrap2: Option<D::T> = None;
@@ -297,6 +303,7 @@ where D: Direction
         for tran in &self.seed_transformations {
             self.adjacent_transformations.push(tran.opposite());
         }
+        #[cfg(feature = "rendering")]
         self.screen_wrap_options.insert(transformations[0].0.distortion, vec![transformations[0].0.translate_by]);
         let mut i = 0;
         while i < transformations.len() {
@@ -329,10 +336,13 @@ where D: Direction
                                 found_new_seed = true;
                             }
                         }
-                        if !self.screen_wrap_options.contains_key(&new_tran.distortion) {
-                            self.screen_wrap_options.insert(new_tran.distortion, vec![]);
+                        #[cfg(feature = "rendering")]
+                        {
+                            if !self.screen_wrap_options.contains_key(&new_tran.distortion) {
+                                self.screen_wrap_options.insert(new_tran.distortion, vec![]);
+                            }
+                            self.screen_wrap_options.get_mut(&new_tran.distortion).unwrap().push(new_tran.translate_by);
                         }
-                        self.screen_wrap_options.get_mut(&new_tran.distortion).unwrap().push(new_tran.translate_by);
                         transformations.push((new_tran, history));
                     },
                     Err(TransformationError::Collision(ap, t)) => {

@@ -19,7 +19,7 @@ where D: Direction
     pub fn new(wrapping_logic: WrappingMap<D>) -> Self {
         let mut terrain = HashMap::new();
         for p in wrapping_logic.pointmap().get_valid_points() {
-            terrain.insert(p, Terrain::Grass);
+            terrain.insert(p, Terrain::Fountain);
         }
         Map {
             wrapping_logic,

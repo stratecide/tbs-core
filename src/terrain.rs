@@ -2,11 +2,12 @@
 
 type Owner = Option<u8>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Terrain {
     Grass,
     Street,
     Realty(Realty, Owner),
+    Fountain,
 }
 impl Terrain {
     fn end_turn(&self) {
@@ -18,7 +19,7 @@ impl Terrain {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Realty {
     City,
 }

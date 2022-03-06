@@ -231,6 +231,7 @@ where D: Direction {
     fn plus(&self, other: &Self) -> Self;
     fn minus(&self, other: &Self) -> Self;
     fn is_parallel(&self, other: &Self) -> bool;
+    #[cfg(feature = "rendering")]
     fn screen_coordinates(&self) -> (f32, f32);
     fn rotate_by(&self, angle: &D) -> Self;
     fn mirror_vertically(&self) -> Self;
@@ -283,6 +284,7 @@ impl Translation<Direction4> for Translation4 {
             self.x % other.x == 0 && self.x / other.x * other.y == self.y || other.x % self.x == 0 && other.x / self.x * self.y == other.y
         }
     }
+    #[cfg(feature = "rendering")]
     fn screen_coordinates(&self) -> (f32, f32) {
         (self.x as f32, self.y as f32)
     }
@@ -360,6 +362,7 @@ impl Translation<Direction6> for Translation6 {
             self.d0 % other.d0 == 0 && self.d0 / other.d0 * other.d60 == self.d60 || other.d0 % self.d0 == 0 && other.d0 / self.d0 * self.d60 == other.d60
         }
     }
+    #[cfg(feature = "rendering")]
     fn screen_coordinates(&self) -> (f32, f32) {
         (self.d0 as f32 + (self.d60 as f32) / 2., -self.d60 as f32)
     }
