@@ -4,8 +4,8 @@ use std::hash::Hash;
 use crate::map::point::*;
 //use crate::map::point_map::*;
 
-pub trait Direction: Eq + Copy + Hash + fmt::Debug {
-    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug;
+pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send {
+    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send;
     fn is_hex() -> bool;
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
@@ -325,7 +325,7 @@ impl Translation<Direction6> for Translation6 {
     }
     fn between<P: Position<i16>>(from: &P, to: &P, odd_if_hex: bool) -> Self {
         let mut x = to.x() - from.x();
-        let mut y = to.y() - from.y();
+        let y = to.y() - from.y();
         if y % 2 != 0 {
             if y < 0 {
                 x -= 1;
@@ -381,7 +381,7 @@ impl Translation<Direction6> for Translation6 {
     }
     fn translate_point<P: Position<i16>>(&self, p: &P, odd_if_hex: bool) -> P {
         let mut x = p.x() + self.d0 + self.d60 / 2;
-        let mut y = p.y() - self.d60;
+        let y = p.y() - self.d60;
         if self.d60 % 2 != 0 {
             if self.d60 < 0 {
                 x -= 1;
