@@ -289,6 +289,74 @@ where D: Direction
         let p = transformation.translate_by.translate_point(&p, self.odd_if_hex());
         p
     }
+    #[cfg(feature = "rendering")]
+    pub fn rendered_transformations(&self) -> Vec<Transformation<D>> {
+        let mut transformations = vec![
+            Transformation {
+                distortion: (false, D::angle_0()),
+                translate_by: D::angle_0().translation(0),
+            }
+        ];
+        let adjacent_transformations = if self.error.is_none() {
+            self.adjacent_transformations.clone()
+        } else {
+            let mut adjacent_transformations = vec![];
+            for tran in &self.seed_transformations {
+                adjacent_transformations.push(tran.clone());
+            }
+            for tran in &self.seed_transformations {
+                adjacent_transformations.push(tran.opposite());
+            }
+            adjacent_transformations
+        };
+        let loop_limit = if self.seed_transformations.len() > 3 {
+            2 // if there are 4 seed transformations, no way do we need 3 loops to see a conflict
+        } else {
+            // with this, there can be at most 186 transformations:
+            // 6 in the first round
+            // 30 = 6 * 5 in the second (one of the transformations is the inverse, thus ending up where we were before)
+            // 150 = 30 * f in the third and last round
+            3
+        };
+        for i in 0..loop_limit {
+            for glob in transformations.clone() {
+                for relative in &adjacent_transformations {
+                    let new_tran = glob.add(relative);
+                    if i == 0 || transformations.iter().find(|t| *t == &new_tran).is_none() {
+                        transformations.push(new_tran);
+                    }
+                }
+            }
+        }
+        let wrapping = self.screen_wrap_vectors();
+        transformations.into_iter().enumerate().filter(|(i, tran)| {
+            if *i == 0 {
+                return false;
+            } else if *i <= self.seed_transformations.len() {
+                return true;
+            }
+            let center = tran.translate_by.screen_coordinates();
+            if wrapping.len() == 1 {
+                //wraps in only 1 direction
+                let factor = (center.0 * wrapping[0].0 + center.1 * wrapping[0].1) / (wrapping[0].0 * wrapping[0].0 + wrapping[0].1 * wrapping[0].1);
+                factor.abs() < 1.5
+            } else if wrapping.len() == 2 {
+                // wrap in 2 directions
+                let distance = (center.0 * center.0 + center.1 * center.1).sqrt();
+                let dir = (center.0 / distance, center.1 / distance);
+                let normal = (dir.1, -dir.0);
+                let factor1 = normal.0 * wrapping[1].0 + normal.1 * wrapping[1].1;
+                let factor2 = -normal.0 * wrapping[0].0 - normal.1 * wrapping[0].1;
+                let total_factor = distance / (dir.0 * (factor1 * wrapping[0].0 + factor2 * wrapping[1].0) + dir.1 * (factor1 * wrapping[0].1 + factor2 * wrapping[1].1));
+                (factor1 * total_factor).abs() < 1.5 && (factor2 * total_factor).abs() < 1.5
+            } else {
+                // no wrapping
+                true
+            }
+        }).map(|(i, tran)| {
+            tran
+        }).collect()
+    }
     fn check_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<Vec<(Transformation<D>, HashSet<(bool, D)>)>, TransformationError<D>> {
         //let mut neigbor_search = Duration::new(0, 0);
         let mut transformations = vec![
