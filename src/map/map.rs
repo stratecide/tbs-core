@@ -4,6 +4,7 @@ use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::terrain::*;
+use crate::units::*;
 
 
 pub struct Map<D>
@@ -11,6 +12,7 @@ where D: Direction
 {
     wrapping_logic: WrappingMap<D>,
     terrain: HashMap<Point, Terrain>,
+    units: HashMap<Point, UnitType>,
 }
 
 impl<D> Map<D>
@@ -24,6 +26,7 @@ where D: Direction
         Map {
             wrapping_logic,
             terrain,
+            units: HashMap::new(),
         }
     }
     pub fn wrapping_logic(&self) -> &WrappingMap<D> {
@@ -49,8 +52,24 @@ where D: Direction
     }
     pub fn set_terrain(&mut self, p: Point, t: Terrain) {
         // TODO: return a Result<(), ?>
-        if self.terrain.contains_key(&p) {
+        if self.wrapping_logic.pointmap().is_point_valid(&p) {
             self.terrain.insert(p, t);
+        }
+    }
+    pub fn get_unit(&self, p: &Point) -> Option<&UnitType> {
+        self.units.get(p)
+    }
+    pub fn get_unit_mut(&mut self, p: &Point) -> Option<&mut UnitType> {
+        self.units.get_mut(p)
+    }
+    pub fn set_unit(&mut self, p: Point, unit: Option<UnitType>) {
+        // TODO: return a Result<(), ?>
+        if let Some(unit) = unit {
+            if self.wrapping_logic.pointmap().is_point_valid(&p) {
+                self.units.insert(p, unit);
+            }
+        } else {
+            self.units.remove(&p);
         }
     }
 }

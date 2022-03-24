@@ -1,12 +1,10 @@
-//pub mod point;
-
-type Owner = Option<u8>;
+use crate::player::Owner;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Terrain {
     Grass,
     Street,
-    Realty(Realty, Owner),
+    Realty(Realty, Option<Owner>),
     Fountain,
 }
 impl Terrain {
@@ -24,7 +22,7 @@ pub enum Realty {
     City,
 }
 impl Realty {
-    fn end_turn(&self, _owner: &Owner) {
+    fn end_turn(&self, _owner: &Option<Owner>) {
 
     }
 }

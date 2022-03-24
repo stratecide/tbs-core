@@ -1,5 +1,7 @@
 pub mod map;
+pub mod player;
 pub mod terrain;
+pub mod units;
 
 #[cfg(test)]
 mod tests {

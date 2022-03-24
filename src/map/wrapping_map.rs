@@ -217,7 +217,6 @@ where D: Direction
                 }
             }
         }
-        println!("interesting neighbor #: {}", self.missing_map_neighbor_points.len());
     }
     fn check_seed_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<(), TransformationError<D>> {
         for i in 0..self.seed_transformations.len() {
