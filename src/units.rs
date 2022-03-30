@@ -19,12 +19,12 @@ pub struct NormalUnit {
     pub exhausted: bool,
 }
 impl NormalUnit {
-    pub fn new_instance(from: NormalUnits, color_id: u8) -> UnitType {
-        UnitType::Normal(NormalUnit {
+    pub fn new_instance(from: NormalUnits, color_id: u8) -> NormalUnit {
+        NormalUnit {
             typ: from,
             owner: color_id,
             hp: 100,
             exhausted: false,
-        })
+        }
     }
 }

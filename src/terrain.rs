@@ -20,6 +20,7 @@ impl Terrain {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Realty {
     City,
+    Hq,
 }
 impl Realty {
     fn end_turn(&self, _owner: &Option<Owner>) {
