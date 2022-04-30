@@ -6,9 +6,11 @@ use crate::map::point::*;
 
 pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send {
     type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send;
+    type P: PipeState<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send;
     fn is_hex() -> bool;
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
+    fn pipe_entry(&self) -> Self::P;
     fn list() -> Vec<Box<Self>>;
     fn mirror_vertically(&self) -> Self;
     //fn rotate_point_map(&self, map: &PointMap) -> PointMap;
@@ -69,6 +71,7 @@ pub enum Direction4 {
 }
 impl Direction for Direction4 {
     type T = Translation4;
+    type P = PipeState4;
     fn is_hex() -> bool {
         false
     }
@@ -77,6 +80,12 @@ impl Direction for Direction4 {
     }
     fn translation(&self, distance: i16) -> Translation4 {
         Translation4::new(self, distance)
+    }
+    fn pipe_entry(&self) -> Self::P {
+        PipeState4 {
+            d1: self.clone(),
+            d2: self.clone(),
+        }
     }
     fn list() -> Vec<Box<Self>> {
         vec![
@@ -145,6 +154,7 @@ pub enum Direction6 {
 }
 impl Direction for Direction6 {
     type T = Translation6;
+    type P = PipeState6;
     fn is_hex() -> bool {
         true
     }
@@ -153,6 +163,12 @@ impl Direction for Direction6 {
     }
     fn translation(&self, distance: i16) -> Translation6 {
         Translation6::new(self, distance)
+    }
+    fn pipe_entry(&self) -> Self::P {
+        PipeState6 {
+            d1: self.clone(),
+            d2: self.clone(),
+        }
     }
     fn list() -> Vec<Box<Self>> {
         vec![
@@ -391,5 +407,72 @@ impl Translation<Direction6> for Translation6 {
             }
         }
         P::new(x, y)
+    }
+}
+
+pub trait PipeState<D: Direction> {
+    fn is_enterable(&self) -> bool;
+    fn enterable_from(&self, d: D) -> bool;
+    fn connections(&self) -> Vec<D>;
+    fn connects_towards(&self, d: &D) -> bool;
+    fn connect_to(&mut self, d: &D); // TODO: maybe return result depending on whether it was able to connect?
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct PipeState4 {
+    d1: Direction4,
+    d2: Direction4,
+}
+impl PipeState<Direction4> for PipeState4 {
+    fn is_enterable(&self) -> bool {
+        self.d1 == self.d2
+    }
+    fn enterable_from(&self, d: Direction4) -> bool {
+        self.d1 == self.d2 && self.d1 == d
+    }
+    fn connections(&self) -> Vec<Direction4> {
+        let mut result = vec![self.d1];
+        if self.d1 != self.d2 {
+            result.push(self.d2);
+        }
+        result
+    }
+    fn connects_towards(&self, d: &Direction4) -> bool {
+        self.d1 == *d || self.d2 == *d
+    }
+    fn connect_to(&mut self, d: &Direction4) {
+        if self.is_enterable() {
+            self.d2 = d.clone();
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct PipeState6 {
+    d1: Direction6,
+    d2: Direction6,
+}
+impl PipeState<Direction6> for PipeState6 {
+    fn is_enterable(&self) -> bool {
+        self.d1 == self.d2
+    }
+    fn enterable_from(&self, d: Direction6) -> bool {
+        self.d1 == self.d2 && self.d1 == d
+    }
+    fn connections(&self) -> Vec<Direction6> {
+        let mut result = vec![self.d1];
+        if self.d1 != self.d2 {
+            result.push(self.d2);
+        }
+        result
+    }
+    fn connects_towards(&self, d: &Direction6) -> bool {
+        self.d1 == *d || self.d2 == *d
+    }
+    fn connect_to(&mut self, d: &Direction6) {
+        let angle_difference = (d.list_index() as i8 - self.d1.list_index() as i8).abs();
+        if self.is_enterable() && angle_difference > 1 && angle_difference < 5 {
+            self.d2 = d.clone();
+        }
     }
 }

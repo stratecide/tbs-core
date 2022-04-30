@@ -489,9 +489,9 @@ where D: Direction {
     pub fn pointmap(&self) -> &PointMap {
         &self.pointmap
     }
-    pub fn odd_if_hex(&self) -> bool {
+    /*pub fn odd_if_hex(&self) -> bool {
         self.pointmap.odd_if_hex() == ((self.pointmap.height() / 2) % 2 == 0)
-    }
+    }*/
     pub fn seed_transformations(&self) -> &Vec<Transformation<D>> {
         &self.seed_transformations
     }
