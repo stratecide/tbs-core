@@ -44,8 +44,45 @@ where D: Direction
     pub fn all_points(&self) -> Vec<Point> {
         self.wrapping_logic.pointmap().get_valid_points()
     }
+    /**
+     * checks the pipe at dp.point for whether it can be entered by dp.direction and if true, returns the position of the next pipe tile
+     * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
+     */
+    fn next_pipe_tile(&self, dp: &OrientedPoint<D>) -> Option<OrientedPoint<D>> {
+        match self.terrain.get(dp.point()) {
+            Some(Terrain::Pipe(pipe_state)) => {
+                if pipe_state.connects_towards(&dp.direction().opposite_direction()) || pipe_state.enterable_from(dp.direction()) {
+                    self.wrapping_logic.get_neighbor(dp.point(), &pipe_state.next_dir(dp.direction()))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
     pub fn get_neighbor(&self, p: &Point, d: &D) -> Option<OrientedPoint<D>> {
-        self.wrapping_logic.get_neighbor(p, d)
+        if let Some(n) = self.wrapping_logic.get_neighbor(p, d) {
+            match self.terrain.get(n.point()) {
+                Some(Terrain::Pipe(pipe_state)) => {
+                    if pipe_state.enterable_from(n.direction()) || pipe_state.connects_towards(&n.direction().opposite_direction()) {
+                        let mut dp = n.clone();
+                        while let Some(next) = self.next_pipe_tile(&dp) {
+                            dp = next;
+                            if dp.point() == n.point() {
+                                // infinite loop, abort
+                                return None;
+                            }
+                        }
+                        Some(dp)
+                    } else {
+                        Some(n)
+                    }
+                }
+                _ => Some(n),
+            }
+        } else {
+            None
+        }
     }
     pub fn get_terrain(&self, p: &Point) -> Option<&Terrain<D>> {
         self.terrain.get(p)

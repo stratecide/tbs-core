@@ -412,10 +412,11 @@ impl Translation<Direction6> for Translation6 {
 
 pub trait PipeState<D: Direction> {
     fn is_enterable(&self) -> bool;
-    fn enterable_from(&self, d: D) -> bool;
+    fn enterable_from(&self, d: &D) -> bool;
     fn connections(&self) -> Vec<D>;
     fn connects_towards(&self, d: &D) -> bool;
     fn connect_to(&mut self, d: &D); // TODO: maybe return result depending on whether it was able to connect?
+    fn next_dir(&self, entered_from: &D) -> D;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -427,8 +428,8 @@ impl PipeState<Direction4> for PipeState4 {
     fn is_enterable(&self) -> bool {
         self.d1 == self.d2
     }
-    fn enterable_from(&self, d: Direction4) -> bool {
-        self.d1 == self.d2 && self.d1 == d
+    fn enterable_from(&self, d: &Direction4) -> bool {
+        self.d1 == self.d2 && self.d1 == *d
     }
     fn connections(&self) -> Vec<Direction4> {
         let mut result = vec![self.d1];
@@ -445,6 +446,17 @@ impl PipeState<Direction4> for PipeState4 {
             self.d2 = d.clone();
         }
     }
+    fn next_dir(&self, entered_from: &Direction4) -> Direction4 {
+        if self.d1 == entered_from.opposite_direction() {
+            if self.is_enterable() {
+                self.d2.opposite_direction()
+            } else {
+                self.d2.clone()
+            }
+        } else {
+            self.d1.clone()
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -456,8 +468,8 @@ impl PipeState<Direction6> for PipeState6 {
     fn is_enterable(&self) -> bool {
         self.d1 == self.d2
     }
-    fn enterable_from(&self, d: Direction6) -> bool {
-        self.d1 == self.d2 && self.d1 == d
+    fn enterable_from(&self, d: &Direction6) -> bool {
+        self.d1 == self.d2 && self.d1 == *d
     }
     fn connections(&self) -> Vec<Direction6> {
         let mut result = vec![self.d1];
@@ -473,6 +485,17 @@ impl PipeState<Direction6> for PipeState6 {
         let angle_difference = (d.list_index() as i8 - self.d1.list_index() as i8).abs();
         if self.is_enterable() && angle_difference > 1 && angle_difference < 5 {
             self.d2 = d.clone();
+        }
+    }
+    fn next_dir(&self, entered_from: &Direction6) -> Direction6 {
+        if self.d1 == entered_from.opposite_direction() {
+            if self.is_enterable() {
+                self.d2.opposite_direction()
+            } else {
+                self.d2.clone()
+            }
+        } else {
+            self.d1.clone()
         }
     }
 }
