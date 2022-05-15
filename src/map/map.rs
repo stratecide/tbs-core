@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 
+use crate::game::settings;
+use crate::game::game::*;
+use crate::game::events;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
+use crate::player::Player;
 use crate::terrain::*;
 use crate::units::*;
 
-
+#[derive(Clone)]
 pub struct Map<D>
 where D: Direction
 {
@@ -60,6 +64,16 @@ where D: Direction
             _ => None,
         }
     }
+    pub fn get_direction(&self, from: &Point, to: &Point) -> Option<D> {
+        for d in D::list() {
+            if let Some(dp) = self.get_neighbor(from, &d) {
+                if dp.point() == to {
+                    return Some(*d);
+                }
+            }
+        }
+        None
+    }
     pub fn get_neighbor(&self, p: &Point, d: &D) -> Option<OrientedPoint<D>> {
         if let Some(n) = self.wrapping_logic.get_neighbor(p, d) {
             match self.terrain.get(n.point()) {
@@ -84,6 +98,15 @@ where D: Direction
             None
         }
     }
+    pub fn get_neighbors(&self, p: &Point) -> Vec<OrientedPoint<D>> {
+        let mut result = vec![];
+        for d in D::list() {
+            if let Some(neighbor) = self.get_neighbor(p, &d) {
+                result.push(neighbor);
+            }
+        }
+        result
+    }
     pub fn get_terrain(&self, p: &Point) -> Option<&Terrain<D>> {
         self.terrain.get(p)
     }
@@ -102,14 +125,16 @@ where D: Direction
     pub fn get_unit_mut(&mut self, p: &Point) -> Option<&mut UnitType> {
         self.units.get_mut(p)
     }
-    pub fn set_unit(&mut self, p: Point, unit: Option<UnitType>) {
+    pub fn set_unit(&mut self, p: Point, unit: Option<UnitType>) -> Option<UnitType> {
         // TODO: return a Result<(), ?>
         if let Some(unit) = unit {
             if self.wrapping_logic.pointmap().is_point_valid(&p) {
-                self.units.insert(p, unit);
+                self.units.insert(p, unit)
+            } else {
+                None
             }
         } else {
-            self.units.remove(&p);
+            self.units.remove(&p)
         }
     }
     pub fn validate_terrain(&mut self) -> Vec<(Point, Terrain<D>)> {
@@ -148,5 +173,24 @@ where D: Direction
             }
         }
         corrected
+    }
+    pub fn get_players(&self) -> Vec<Player> {
+        vec![
+            Player{color_id: 0, owner_id: 0},
+            Player{color_id: 1, owner_id: 1},
+        ]
+    }
+    /**
+     * returns Ok(...) if the map is playable
+     * returns Err(...) otherwise
+     */
+    pub fn settings(&self) -> Result<settings::GameSettings, settings::NotPlayable> {
+        Ok(settings::GameSettings {})
+    }
+    pub fn game_server(self, settings: &settings::GameSettings) -> (Game<D>, Vec<events::Event>) {
+        Game::new_server(self, settings)
+    }
+    pub fn game_client(self, events: &Vec<events::Event>) -> Game<D> {
+        Game::new_client(self, events)
     }
 }

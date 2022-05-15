@@ -2,7 +2,8 @@ pub type Owner = u8;
 
 #[derive(Debug, PartialEq)]
 pub struct Player {
-    color_id: u8,
+    pub color_id: u8,
+    pub owner_id: Owner,
 }
 
 impl Player {

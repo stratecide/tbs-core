@@ -437,7 +437,13 @@ where D: Direction
             for d in D::list() {
                 let neighbor = d.translation(1).translate_point(&gp, self.odd_if_hex());
                 if let Some(ap) = area.get(&neighbor) {
-                    self.wrapped_neighbors.insert((p, *d), OrientedPoint::new(ap.1, ap.0.distortion.0, ap.0.distortion.1));
+                    if ap.0.translate_by().len() > 0 {
+                        let mut direction = d.rotate_by(&ap.0.distortion.1.opposite_angle());
+                        if ap.0.distortion.0 {
+                            direction = direction.mirror_vertically();
+                        }
+                        self.wrapped_neighbors.insert((p, *d), OrientedPoint::new(ap.1, ap.0.distortion.0, direction));
+                    }
                 }
             }
         }
