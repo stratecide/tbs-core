@@ -7,6 +7,7 @@ use crate::player::{Owner, Player};
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
+use crate::map::map::NeighborMode;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum UnitType {
@@ -161,7 +162,7 @@ impl NormalUnit {
                 return Err(CommandError::InvalidPath);
             }
             // the points in the path have to neighbor each other
-            if game.get_map().get_direction(current, p).is_none() {
+            if None == game.get_map().get_neighbors(current, NeighborMode::UnitMovement).iter().find(|dp| dp.point() == p) {
                 return Err(CommandError::InvalidPath);
             }
             // no visible unit should block movement
@@ -208,7 +209,7 @@ fn width_search<D: Direction, F: FnMut(&Point, &Vec<Point>) -> bool>(movement_ty
             return true;
         }
         blocked_positions.insert(p.clone());
-        for neighbor in game.get_map().get_neighbors(p) {
+        for neighbor in game.get_map().get_neighbors(p, NeighborMode::UnitMovement) {
             if !blocked_positions.contains(neighbor.point()) {
                 if let Some(cost) = game.get_map().get_terrain(neighbor.point()).unwrap().movement_cost(movement_type) {
                     if cost_so_far + cost <= max_cost {

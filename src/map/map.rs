@@ -98,11 +98,30 @@ where D: Direction
             None
         }
     }
-    pub fn get_neighbors(&self, p: &Point) -> Vec<OrientedPoint<D>> {
+    pub fn get_neighbors(&self, p: &Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
         let mut result = vec![];
         for d in D::list() {
-            if let Some(neighbor) = self.get_neighbor(p, &d) {
-                result.push(neighbor);
+            match mode {
+                NeighborMode::Direct => {
+                    if let Some(neighbor) = self.wrapping_logic.get_neighbor(p, &d) {
+                        result.push(neighbor);
+                    }
+                }
+                NeighborMode::FollowPipes => {
+                    if let Some(neighbor) = self.get_neighbor(p, &d) {
+                        result.push(neighbor);
+                    }
+                }
+                NeighborMode::UnitMovement => {
+                    if let Some(neighbor) = self.get_neighbor(p, &d) {
+                        if self.terrain.get(p) == Some(&Terrain::Fountain) {
+                            if let Some(neighbor) = self.get_neighbor(neighbor.point(), neighbor.direction()) {
+                                result.push(neighbor);
+                            }
+                        }
+                        result.push(neighbor);
+                    }
+                }
             }
         }
         result
@@ -193,4 +212,11 @@ where D: Direction
     pub fn game_client(self, events: &Vec<events::Event>) -> Game<D> {
         Game::new_client(self, events)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum NeighborMode {
+    Direct,
+    FollowPipes,
+    UnitMovement,
 }
