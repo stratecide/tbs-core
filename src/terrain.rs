@@ -1,4 +1,4 @@
-use crate::{player::Owner, map::direction::Direction, units::MovementType};
+use crate::{player::Owner, map::direction::Direction, units::*};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Terrain<D: Direction> {
@@ -25,6 +25,16 @@ impl<D: Direction> Terrain<D> {
                 _ => None,
             }
             Self::Pipe(_) => None,
+        }
+    }
+    pub fn defense(&self, unit: &UnitType) -> f32 {
+        match unit {
+            UnitType::Normal(unit) => {
+                match (self, unit.get_movement().0) {
+                    (Self::Grass, MovementType::Foot) => 1.1,
+                    (_, _) => 1.,
+                }
+            }
         }
     }
     fn end_turn(&self) {
