@@ -647,6 +647,40 @@ impl UnitCommand {
         }
         end
     }
+    pub fn calculate_hp_after_attack<D: Direction>(game: &Game<D>, attacker: &UnitType, attacker_pos: &Point, target: &Point, events: &mut Vec<Event>) -> HashMap<Point, i16> {
+        let mut hp_values = HashMap::new();
+        match attacker {
+            UnitType::Normal(attacker) => {
+                if let Some(defender) = game.get_map().get_unit(target) {
+                    let damage = defender.calculate_attack_damage(game, target, &attacker.typ, attacker.hp, game.get_owning_player(&attacker.owner), false);
+                    if let Some(damage) = damage {
+                        let hp: i16 = *hp_values.get(target).unwrap_or(&(defender.get_hp() as i16));
+                        if hp > 0 {
+                            events.push(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8)));
+                        }
+                        hp_values.insert(target.clone(), hp - damage as i16);
+                    }
+                }
+            }
+        }
+        // counter attack
+        let counter_hp = *hp_values.get(target).unwrap_or(&0);
+        if counter_hp > 0 {
+            match game.get_map().get_unit(target).unwrap() {
+                UnitType::Normal(counter_attacker) => {
+                    let damage = attacker.calculate_attack_damage(game, attacker_pos, &counter_attacker.typ, counter_hp as u8, game.get_owning_player(&counter_attacker.owner), true);
+                    if let Some(damage) = damage {
+                        let hp: i16 = *hp_values.get(attacker_pos).unwrap_or(&(attacker.get_hp() as i16));
+                        if hp > 0 {
+                            events.push(Event::UnitHpChange(attacker_pos.clone(), -(damage.min(hp as u16) as i8)));
+                        }
+                        hp_values.insert(attacker_pos.clone(), hp - damage as i16);
+                    }
+                }
+            }
+        }
+        hp_values
+    }
     pub fn apply<D: Direction>(self, game: &Game<D>) -> Vec<Event> {
         let mut result = vec![];
         match self {
@@ -657,37 +691,7 @@ impl UnitCommand {
                     // no fog trap
                     // the attacker hasn't actually been moved on the board yet.
                     if let Some(unit) = game.get_map().get_unit(&start) {
-                        let mut hp_values = HashMap::new();
-                        match unit {
-                            UnitType::Normal(attacker) => {
-                                if let Some(defender) = game.get_map().get_unit(&target) {
-                                    let damage = defender.calculate_attack_damage(game, &target, &attacker.typ, attacker.hp, game.get_owning_player(&attacker.owner), false);
-                                    if let Some(damage) = damage {
-                                        let hp: i16 = *hp_values.get(&target).unwrap_or(&(defender.get_hp() as i16));
-                                        if hp > 0 {
-                                            result.push(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8)));
-                                        }
-                                        hp_values.insert(target.clone(), hp - damage as i16);
-                                    }
-                                }
-                            }
-                        }
-                        // counter attack
-                        let counter_hp = *hp_values.get(&target).unwrap_or(&0);
-                        if counter_hp > 0 {
-                            match game.get_map().get_unit(&target).unwrap() {
-                                UnitType::Normal(attacker) => {
-                                    let damage = unit.calculate_attack_damage(game, &end, &attacker.typ, counter_hp as u8, game.get_owning_player(&attacker.owner), true);
-                                    if let Some(damage) = damage {
-                                        let hp: i16 = *hp_values.get(&end).unwrap_or(&(unit.get_hp() as i16));
-                                        if hp > 0 {
-                                            result.push(Event::UnitHpChange(end.clone(), -(damage.min(hp as u16) as i8)));
-                                        }
-                                        hp_values.insert(end.clone(), hp - damage as i16);
-                                    }
-                                }
-                            }
-                        }
+                        let hp_values = Self::calculate_hp_after_attack(game, unit, &end, &target, &mut result);
                         for (point, hp) in hp_values.into_iter() {
                             if hp <= 0 {
                                 let unit = game.get_map().get_unit(&point).expect(&format!("expected a unit at {:?} to die!", point));
