@@ -54,14 +54,13 @@ impl<D: Direction> Game<D> {
     pub fn get_owning_player(&self, owner: &Owner) -> Option<&Player> {
         self.players.iter().find(|player| &player.owner_id == owner)
     }
-    pub fn has_vision_at(&self, _player: &Player, _at: &Point) -> bool {
+    pub fn has_vision_at(&self, _player: Option<&Player>, _at: &Point) -> bool {
         // todo
         true
     }
 
-    pub fn handle_command(&mut self, command: events::Command) -> Result<Vec<events::Event>, events::CommandError> {
-        command.check_validity(self)?;
-        let events = command.apply(self);
+    pub fn handle_command(&mut self, command: events::Command<D>) -> Result<Vec<events::Event>, events::CommandError> {
+        let events = command.convert(self)?;
         self.handle_events(&events);
         Ok(events)
     }

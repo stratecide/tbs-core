@@ -3,18 +3,13 @@ use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::Game;
 
-pub enum Command {
-    UnitCommand(UnitCommand),
+pub enum Command<D: Direction> {
+    UnitCommand(UnitCommand<D>),
 }
-impl Command {
-    pub fn check_validity<D: Direction>(&self, game: &Game<D>) -> Result<(), CommandError> {
+impl<D: Direction> Command<D> {
+    pub fn convert(self, game: &Game<D>) -> Result<Vec<Event>, CommandError> {
         match self {
-            Self::UnitCommand(command) => command.check_validity(game)
-        }
-    }
-    pub fn apply<D: Direction>(self, game: &mut Game<D>) -> Vec<Event> {
-        match self {
-            Self::UnitCommand(command) => command.apply(game)
+            Self::UnitCommand(command) => command.convert(game)
         }
     }
 }
