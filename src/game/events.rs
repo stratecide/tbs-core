@@ -1,15 +1,17 @@
+use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::Game;
+use super::events;
 
 pub enum Command<D: Direction> {
     UnitCommand(UnitCommand<D>),
 }
 impl<D: Direction> Command<D> {
-    pub fn convert(self, game: &Game<D>) -> Result<Vec<Event>, CommandError> {
+    pub fn convert(self, handler: &mut events::EventHandler<D>) -> Result<(), CommandError> {
         match self {
-            Self::UnitCommand(command) => command.convert(game)
+            Self::UnitCommand(command) => command.convert(handler)
         }
     }
 }
@@ -25,10 +27,11 @@ pub enum CommandError {
     InvalidTarget
 }
 
+#[derive(Debug, Clone)]
 pub enum Event {
     UnitPath(Point, Vec<Point>),
     UnitExhaust(Point),
-    UnitHpChange(Point, i8),
+    UnitHpChange(Point, i8, i16),
     UnitDeath(Point, UnitType),
 }
 impl Event {
@@ -44,7 +47,7 @@ impl Event {
                     UnitType::Normal(unit) => unit.exhausted = true,
                 }
             }
-            Self::UnitHpChange(pos, hp_change) => {
+            Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
                 match unit {
                     UnitType::Normal(unit) => unit.hp = (unit.hp as i8 + hp_change) as u8,
@@ -67,7 +70,7 @@ impl Event {
                     UnitType::Normal(unit) => unit.exhausted = false,
                 }
             }
-            Self::UnitHpChange(pos, hp_change) => {
+            Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, -hp_change));
                 match unit {
                     UnitType::Normal(unit) => unit.hp = (unit.hp as i8 - hp_change) as u8,
@@ -76,6 +79,38 @@ impl Event {
             Self::UnitDeath(pos, unit) => {
                 game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
             }
+        }
+    }
+}
+
+
+pub struct EventHandler<'a, D: Direction> {
+    events: Vec<Event>,
+    game: &'a mut Game<D>,
+}
+impl<'a, D: Direction> EventHandler<'a, D> {
+    pub fn new(game: &'a mut Game<D>) -> Self {
+        EventHandler {
+            events: vec![],
+            game,
+        }
+    }
+    pub fn get_game(&self) -> &Game<D> {
+        &self.game
+    }
+    pub fn get_map(&self) -> &Map<D> {
+        self.game.get_map()
+    }
+    pub fn add_event(&mut self, event: Event) {
+        event.apply(&mut self.game);
+        self.events.push(event);
+    }
+    pub fn accept(self) -> Vec<Event> {
+        self.events
+    }
+    pub fn cancel(mut self) {
+        while let Some(event) = self.events.pop() {
+            event.undo(&mut self.game);
         }
     }
 }

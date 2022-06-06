@@ -5,6 +5,7 @@ use crate::game::events;
 use crate::map::point::Point;
 use crate::player::*;
 
+#[derive(Clone)]
 pub struct Game<D: Direction> {
     map: Map<D>,
     current_turn: u32,
@@ -60,9 +61,14 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn handle_command(&mut self, command: events::Command<D>) -> Result<Vec<events::Event>, events::CommandError> {
-        let events = command.convert(self)?;
-        self.handle_events(&events);
-        Ok(events)
+        let mut handler = events::EventHandler::new(self);
+        match command.convert(&mut handler) {
+            Ok(()) => Ok(handler.accept()),
+            Err(err) => {
+                handler.cancel();
+                Err(err)
+            }
+        }
     }
     pub fn handle_events(&mut self, events: &Vec<events::Event>) {
         for event in events {

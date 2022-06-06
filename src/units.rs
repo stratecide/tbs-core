@@ -662,101 +662,92 @@ impl<D: Direction> UnitCommand<D> {
         Ok(())
     }
     // returns the point the unit ended on
-    fn apply_path(game: &Game<D>, start: Point, path: Vec<Point>, result: &mut Vec<Event>) -> Point {
-        let unit = game.get_map().get_unit(&start).unwrap();
+    fn apply_path(handler: &mut EventHandler<D>, start: Point, path: Vec<Point>) -> Point {
+        let unit = handler.get_map().get_unit(&start).unwrap();
         let mut path_taken = vec![];
         for p in path {
-            if !unit.can_move_to(&p, game) {
+            if !unit.can_move_to(&p, handler.get_game()) {
                 break;
             }
             path_taken.push(p);
         }
         let end = path_taken.last().unwrap_or(&start).clone();
         if path_taken.len() > 0 {
-            result.push(Event::UnitPath(start, path_taken));
+            handler.add_event(Event::UnitPath(start, path_taken));
         }
         end
     }
-    pub fn calculate_attack(game: &Game<D>, attacker: &UnitType, attacker_pos: &Point, target: &AttackInfo<D>, is_counter: bool, hp_values: &mut HashMap<Point, i16>, events: &mut Vec<Event>) -> Result<Vec<Point>, CommandError> {
-        let mut attacker_hp = *hp_values.get(attacker_pos).unwrap_or(&(attacker.get_hp() as i16));
-        if attacker_hp < 0 {
-            return Ok(vec![]);
-        } else if attacker_hp > 100 {
-            attacker_hp = 100;
-        }
-        let attacked_positions;
-        match attacker {
+    pub fn calculate_attack(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {
+        match handler.get_map().get_unit(attacker_pos).expect(&format!("calculate_attack found no unit at {:?}", attacker_pos)).clone() {
             UnitType::Normal(attacker) => {
-                attacked_positions = attacker.attack_splash(game.get_map(), attacker_pos, target)?;
-                for target in &attacked_positions {
-                    if let Some(defender) = game.get_map().get_unit(target) {
-                        let damage = defender.calculate_attack_damage(game, target, &attacker.typ, attacker_hp as u8, game.get_owning_player(&attacker.owner), is_counter);
+                let mut potential_counters = vec![];
+                for target in attacker.attack_splash(handler.get_map(), attacker_pos, target)? {
+                    if let Some(defender) = handler.get_map().get_unit(&target) {
+                        let damage = defender.calculate_attack_damage(handler.get_game(), &target, &attacker.typ, attacker.hp, handler.get_game().get_owning_player(&attacker.owner), is_counter);
                         if let Some(damage) = damage {
-                            let hp: i16 = *hp_values.get(target).unwrap_or(&(defender.get_hp() as i16));
-                            if hp > 0 {
-                                events.push(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8)));
+                            let hp = defender.get_hp();
+                            handler.add_event(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8), -(damage as i16)));
+                            if damage >= hp as u16 {
+                                handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(&target).unwrap().clone()));
+                            } else {
+                                potential_counters.push(target);
                             }
-                            hp_values.insert(target.clone(), hp - damage as i16);
                         }
                     }
                 }
+                Ok(potential_counters)
             }
         }
-        Ok(attacked_positions)
     }
-    pub fn calculate_hp_after_attack(game: &Game<D>, attacker: &UnitType, attacker_pos: &Point, target: &AttackInfo<D>, events: &mut Vec<Event>) -> Result<HashMap<Point, i16>, CommandError> {
-        let mut hp_values = HashMap::new();
-        let attacked_positions = Self::calculate_attack(game, attacker, attacker_pos, target, false, &mut hp_values, events)?;
+    pub fn handle_attack(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>) -> Result<(), CommandError> {
+        let potential_counters = Self::calculate_attack(handler, attacker_pos, target, false)?;
         // counter attack
-        for p in &attacked_positions {
-            let counter_hp = *hp_values.get(p).unwrap_or(&0);
-            if counter_hp > 0 {
-                let unit = game.get_map().get_unit(p).unwrap();
-                if !game.has_vision_at(unit.get_owner().and_then(|o| game.get_owning_player(o)), attacker_pos) {
-                    continue;
-                }
-                if !unit.is_position_targetable(game, attacker_pos) {
-                    continue;
-                }
-                let attack_info = match unit {
-                    // todo: if a straight attacker is counter-attacking another straight attacker, it should first try to reverse the direction
-                    UnitType::Normal(unit) => {
-                        if !unit.attackable_positions(game.get_map(), &p, false).contains(attacker_pos) {
-                            continue;
-                        }
-                        unit.make_attack_info(game.get_map(), p, attacker_pos).unwrap()
-                    }
-                };
-                Self::calculate_attack(game, unit, p, &attack_info, true, &mut hp_values, events)?;
+        for p in &potential_counters {
+            let unit = handler.get_map().get_unit(p).unwrap();
+            if !handler.get_game().has_vision_at(unit.get_owner().and_then(|o| handler.get_game().get_owning_player(o)), attacker_pos) {
+                continue;
             }
+            if !unit.is_position_targetable(handler.get_game(), attacker_pos) {
+                continue;
+            }
+            let attack_info = match unit {
+                // todo: if a straight attacker is counter-attacking another straight attacker, it should first try to reverse the direction
+                UnitType::Normal(unit) => {
+                    if !unit.attackable_positions(handler.get_map(), &p, false).contains(attacker_pos) {
+                        continue;
+                    }
+                    unit.make_attack_info(handler.get_map(), p, attacker_pos).unwrap()
+                }
+            };
+            // this may return an error, but we don't care about that
+            Self::calculate_attack(handler, p, &attack_info, true).ok();
         }
 
-        Ok(hp_values)
+        Ok(())
     }
-    pub fn convert(self, game: &Game<D>) -> Result<Vec<Event>, CommandError> {
-        let mut result = vec![];
+    pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         match self {
             Self::MoveAttack(start, path, target) => {
-                Self::check_unit_can_wait_after_path(game, &start, &path)?;
-                let unit = game.get_map().get_unit(&start).unwrap(); // unwrap because already checked in check_unit_can_wait_after_path
+                Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
+                let unit = handler.get_map().get_unit(&start).unwrap(); // unwrap because already checked in check_unit_can_wait_after_path
                 let intended_end = path.last().unwrap_or(&start).clone();
                 match (unit, &target) {
                     (UnitType::Normal(unit), AttackInfo::Point(target)) => {
-                        if !game.get_map().wrapping_logic().pointmap().is_point_valid(target) {
+                        if !handler.get_map().wrapping_logic().pointmap().is_point_valid(target) {
                             return Err(CommandError::InvalidPoint(target.clone()));
                         }
                         match unit.typ.get_attack_type() {
                             AttackType::Straight(_, _) => return Err(CommandError::InvalidTarget),
                             _ => {}
                         }
-                        if !game.has_vision_at(Some(game.current_player()), target) {
+                        if !handler.get_game().has_vision_at(Some(handler.get_game().current_player()), target) {
                             return Err(CommandError::NoVision);
                         }
-                        if !unit.is_position_targetable(game, target) {
+                        if !unit.is_position_targetable(handler.get_game(), target) {
                             println!("not targetable");
                             return Err(CommandError::InvalidTarget);
                         }
-                        if !unit.attackable_positions(game.get_map(), &intended_end, path.len() > 0).contains(target) {
+                        if !unit.attackable_positions(handler.get_map(), &intended_end, path.len() > 0).contains(target) {
                             println!("not in range");
                             return Err(CommandError::InvalidTarget);
                         }
@@ -768,31 +759,19 @@ impl<D: Direction> UnitCommand<D> {
                         }
                     }
                 }
-                let end = Self::apply_path(game, start, path, &mut result);
+                let end = Self::apply_path(handler, start, path);
+                // checks fog trap
                 if end == intended_end {
-                    // no fog trap
-                    // the attacker hasn't actually been moved on the board yet.
-                    if let Some(unit) = game.get_map().get_unit(&start) {
-                        let hp_values = Self::calculate_hp_after_attack(game, unit, &end, &target, &mut result)?;
-                        for (point, hp) in hp_values.into_iter() {
-                            if hp <= 0 {
-                                let unit = game.get_map().get_unit(&point).expect(&format!("expected a unit at {:?} to die!", point));
-                                let mut dead_unit = unit.clone();
-                                match &mut dead_unit {
-                                    UnitType::Normal(unit) => unit.hp = 0,
-                                }
-                                result.push(Event::UnitDeath(point, dead_unit));
-                            }
-                        }
-                    }
+                    Self::handle_attack(handler, &end, &target)?;
                 }
-                result.push(Event::UnitExhaust(end));
+                handler.add_event(Event::UnitExhaust(end));
             }
             Self::MoveWait(start, path) => {
-                let end = Self::apply_path(game, start, path, &mut result);
-                result.push(Event::UnitExhaust(end));
+                Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
+                let end = Self::apply_path(handler, start, path);
+                handler.add_event(Event::UnitExhaust(end));
             }
         }
-        Ok(result)
+        Ok(())
     }
 }
