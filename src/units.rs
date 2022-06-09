@@ -9,6 +9,7 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::map::map::{NeighborMode, Map};
+use crate::terrain::*;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum UnitType {
@@ -254,14 +255,31 @@ impl NormalUnit {
             false
         }
     }
+    pub fn can_capture(&self) -> bool {
+        match self.typ {
+            NormalUnits::Hovercraft => true,
+            _ => false,
+        }
+    }
     pub fn options_after_path<D: Direction>(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
         let mut result = vec![];
-        if path.len() == 0 || game.get_map().get_unit(path.last().unwrap()).is_none() {
-            for target in self.attackable_positions(game.get_map(), path.last().unwrap_or(start), path.len() > 0) {
+        let destination = path.last().unwrap_or(start).clone();
+        if path.len() == 0 || game.get_map().get_unit(&destination).is_none() {
+            for target in self.attackable_positions(game.get_map(), &destination, path.len() > 0) {
                 if self.is_position_targetable(game, &target) {
-                    if let Some(attack_info) = self.make_attack_info(game.get_map(), path.last().unwrap_or(start), &target) {
+                    if let Some(attack_info) = self.make_attack_info(game.get_map(), &destination, &target) {
                         result.push(UnitAction::Attack(attack_info));
                     }
+                }
+            }
+            if self.can_capture() {
+                match game.get_map().get_terrain(&destination) {
+                    Some(Terrain::Realty(_, owner)) => {
+                        if Some(game.get_owning_player(&self.owner).unwrap().team()) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team())) {
+                            result.push(UnitAction::Capture);
+                        }
+                    }
+                    _ => {}
                 }
             }
             result.push(UnitAction::Wait);
@@ -626,12 +644,14 @@ pub enum ArmorType {
 #[derive(Debug, Clone)]
 pub enum UnitAction<D: Direction> {
     Wait,
+    Capture,
     Attack(AttackInfo<D>),
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Wait => write!(f, "Wait"),
+            Self::Capture => write!(f, "Capture"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
         }
     }
@@ -645,6 +665,7 @@ pub enum AttackInfo<D: Direction> {
 
 pub enum UnitCommand<D: Direction> {
     MoveAttack(Point, Vec<Point>, AttackInfo<D>),
+    MoveCapture(Point, Vec<Point>),
     MoveWait(Point, Vec<Point>),
 }
 impl<D: Direction> UnitCommand<D> {
@@ -804,6 +825,32 @@ impl<D: Direction> UnitCommand<D> {
                 // checks fog trap
                 if end == intended_end {
                     Self::handle_attack(handler, &end, &target)?;
+                }
+                handler.add_event(Event::UnitExhaust(end));
+            }
+            Self::MoveCapture(start, path) => {
+                Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
+                let unit = match handler.get_map().get_unit(&start) {
+                    Some(UnitType::Normal(unit)) => {
+                        if !unit.can_capture() {
+                            return Err(CommandError::UnitCannotCapture)
+                        }
+                        unit.clone()
+                    },
+                    _ => return Err(CommandError::UnitCannotCapture),
+                };
+                let intended_end = path.last().unwrap_or(&start).clone();
+                let end = Self::apply_path(handler, start, path);
+                if end == intended_end {
+                    let terrain = handler.get_map().get_terrain(&end).unwrap().clone();
+                    match &terrain {
+                        Terrain::Realty(realty, owner) => {
+                            if Some(handler.get_game().get_owning_player(&unit.owner).unwrap().team()) != owner.and_then(|o| handler.get_game().get_owning_player(&o)).and_then(|p| Some(p.team())) {
+                                handler.add_event(Event::TerrainChange(end, terrain.clone(), Terrain::Realty(realty.clone(), Some(unit.owner))));
+                            }
+                        }
+                        _ => {}
+                    }
                 }
                 handler.add_event(Event::UnitExhaust(end));
             }

@@ -25,7 +25,7 @@ where D: Direction
     pub fn new(wrapping_logic: WrappingMap<D>) -> Self {
         let mut terrain = HashMap::new();
         for p in wrapping_logic.pointmap().get_valid_points() {
-            terrain.insert(p, Terrain::Fountain);
+            terrain.insert(p, Terrain::Grass);
         }
         Map {
             wrapping_logic,
@@ -204,6 +204,7 @@ where D: Direction
      * returns Err(...) containing the reason otherwise
      */
     pub fn settings(&self) -> Result<settings::GameSettings, settings::NotPlayable> {
+        // TODO: check if playable
         Ok(settings::GameSettings {
             fog_mode: FogMode::DarkRegular(3, 4, 3),
         })

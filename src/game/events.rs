@@ -54,6 +54,7 @@ pub enum CommandError {
     MissingUnit,
     NotYourUnit,
     UnitCannotMove,
+    UnitCannotCapture,
     InvalidPath,
     InvalidPoint(Point),
     InvalidTarget
@@ -69,6 +70,7 @@ pub enum Event<D:Direction> {
     UnitExhaust(Point),
     UnitHpChange(Point, i8, i16),
     UnitDeath(Point, UnitType),
+    TerrainChange(Point, Terrain<D>, Terrain<D>),
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -109,6 +111,9 @@ impl<D: Direction> Event<D> {
             Self::UnitDeath(pos, _) => {
                 game.get_map_mut().set_unit(pos.clone(), None).expect(&format!("expected a unit at {:?} to die!", pos));
             }
+            Self::TerrainChange(pos, _, terrain) => {
+                game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
+            }
         }
     }
     pub fn undo(&self, game: &mut Game<D>) {
@@ -148,6 +153,9 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitDeath(pos, unit) => {
                 game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
+            }
+            Self::TerrainChange(pos, terrain, _) => {
+                game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
             }
         }
     }
@@ -212,6 +220,19 @@ impl<D: Direction> Event<D> {
                     Some(self.clone())
                 } else {
                     None
+                }
+            }
+            Self::TerrainChange(pos, before, after) => {
+                if game.has_vision_at(*team, pos) {
+                    Some(self.clone())
+                } else {
+                    let before = before.fog_replacement();
+                    let after = after.fog_replacement();
+                    if before != after {
+                        Some(Self::TerrainChange(pos.clone(), before, after))
+                    } else {
+                        None
+                    }
                 }
             }
         }
