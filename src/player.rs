@@ -2,6 +2,8 @@ pub type Owner = u8;
 
 pub type Team = u8;
 
+pub type Perspective = Option<Team>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Player {
     pub color_id: u8,

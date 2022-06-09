@@ -93,6 +93,25 @@ impl UnitType {
             None
         }
     }
+    fn true_vision_range<D: Direction>(&self, _game: &Game<D>, _pos: &Point) -> usize {
+        1
+    }
+    fn vision_range<D: Direction>(&self, _game: &Game<D>, _pos: &Point) -> usize {
+        2
+    }
+    pub fn get_vision<D: Direction>(&self, game: &Game<D>, pos: &Point) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        result.insert(pos.clone());
+        let layers = range_in_layers(game.get_map(), pos, self.vision_range(game, pos));
+        for (i, layer) in layers.into_iter().enumerate() {
+            for (p, _, _) in layer {
+                if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(&p).unwrap().requires_true_sight() {
+                    result.insert(p);
+                }
+            }
+        }
+        result
+    }
 }
 
 pub fn get_team<D: Direction>(owner: Option<&Owner>, game: &Game<D>) -> Option<Team> {
@@ -278,46 +297,7 @@ impl NormalUnit {
             }
             AttackType::Ranged(min_range, max_range) => {
                 // each point in a layer is probably in it 2 times
-                let mut layers: Vec<HashSet<(Point, D, Option<D>)>> = vec![];
-                let mut layer = HashSet::new();
-                for dp in map.get_neighbors(position, NeighborMode::FollowPipes) {
-                    layer.insert((dp.point().clone(), dp.direction().clone(), None));
-                }
-                layers.push(layer);
-                while layers.len() < max_range as usize {
-                    let mut layer = HashSet::new();
-                    for (p, dir, dir_change) in layers.last().unwrap() {
-                        if let Some(dp) = map.get_neighbor(p, dir) {
-                            let dir_change = match (dp.mirrored(), dir_change) {
-                                (_, None) => None,
-                                (true, Some(angle)) => Some(angle.opposite_angle()),
-                                (false, Some(angle)) => Some(angle.clone()),
-                            };
-                            layer.insert((dp.point().clone(), dp.direction().clone(), dir_change));
-                        }
-                        let mut dir_changes = vec![];
-                        if let Some(dir_change) = dir_change {
-                            // if we already have 2 directions, only those 2 directions can find new points
-                            dir_changes.push(dir_change.clone());
-                        } else {
-                            // since only one direction has been used so far, try both directions that are directly neighboring
-                            let d = **D::list().last().unwrap();
-                            dir_changes.push(d.opposite_angle());
-                            dir_changes.push(d);
-                        }
-                        for dir_change in dir_changes {
-                            if let Some(dp) = map.get_neighbor(p, &dir.rotate_by(&dir_change)) {
-                                let mut dir_change = dir_change.clone();
-                                if dp.mirrored() {
-                                    dir_change = dir_change.opposite_angle();
-                                }
-                                let dir = dp.direction().rotate_by(&dir_change.opposite_angle());
-                                layer.insert((dp.point().clone(), dir, Some(dir_change)));
-                            }
-                        }
-                    }
-                    layers.push(layer);
-                }
+                let mut layers = range_in_layers(map, position, max_range as usize);
                 for _ in min_range-1..max_range {
                     for (p, _, _) in layers.pop().unwrap() {
                         result.insert(p);
@@ -387,7 +367,7 @@ impl NormalUnit {
             }
             // no visible unit should block movement
             if let Some(unit) = game.get_map().get_unit(p) {
-                if game.has_vision_at(Some(game.current_player()), p) && !self.can_move_past(game, unit) {
+                if game.has_vision_at(Some(game.current_player().team()), p) && !self.can_move_past(game, unit) {
                     return Err(CommandError::InvalidPath);
                 }
             }
@@ -437,6 +417,50 @@ impl NormalUnit {
             _ => Err(CommandError::InvalidTarget),
         }
     }
+}
+
+pub fn range_in_layers<D: Direction>(map: &Map<D>, center: &Point, range: usize) -> Vec<HashSet<(Point, D, Option<D>)>> {
+    let mut layers: Vec<HashSet<(Point, D, Option<D>)>> = vec![];
+    let mut layer = HashSet::new();
+    for dp in map.get_neighbors(center, NeighborMode::FollowPipes) {
+        layer.insert((dp.point().clone(), dp.direction().clone(), None));
+    }
+    layers.push(layer);
+    while layers.len() < range as usize {
+        let mut layer = HashSet::new();
+        for (p, dir, dir_change) in layers.last().unwrap() {
+            if let Some(dp) = map.get_neighbor(p, dir) {
+                let dir_change = match (dp.mirrored(), dir_change) {
+                    (_, None) => None,
+                    (true, Some(angle)) => Some(angle.opposite_angle()),
+                    (false, Some(angle)) => Some(angle.clone()),
+                };
+                layer.insert((dp.point().clone(), dp.direction().clone(), dir_change));
+            }
+            let mut dir_changes = vec![];
+            if let Some(dir_change) = dir_change {
+                // if we already have 2 directions, only those 2 directions can find new points
+                dir_changes.push(dir_change.clone());
+            } else {
+                // since only one direction has been used so far, try both directions that are directly neighboring
+                let d = **D::list().last().unwrap();
+                dir_changes.push(d.opposite_angle());
+                dir_changes.push(d);
+            }
+            for dir_change in dir_changes {
+                if let Some(dp) = map.get_neighbor(p, &dir.rotate_by(&dir_change)) {
+                    let mut dir_change = dir_change.clone();
+                    if dp.mirrored() {
+                        dir_change = dir_change.opposite_angle();
+                    }
+                    let dir = dp.direction().rotate_by(&dir_change.opposite_angle());
+                    layer.insert((dp.point().clone(), dir, Some(dir_change)));
+                }
+            }
+        }
+        layers.push(layer);
+    }
+    layers
 }
 
 pub enum MovementType {
@@ -625,7 +649,7 @@ pub enum UnitCommand<D: Direction> {
 }
 impl<D: Direction> UnitCommand<D> {
     fn check_unit_can_act(game: &Game<D>, at: &Point) -> Result<(), CommandError> {
-        if !game.has_vision_at(Some(game.current_player()), at) {
+        if !game.has_vision_at(Some(game.current_player().team()), at) {
             return Err(CommandError::NoVision);
         }
         if let Some(unit) = game.get_map().get_unit(at) {
@@ -654,7 +678,7 @@ impl<D: Direction> UnitCommand<D> {
         unit.check_path(game, start, path)?;
         if let Some(p) = path.last() {
             if let Some(_) = game.get_map().get_unit(p) {
-                if game.has_vision_at(Some(game.current_player()), p) {
+                if game.has_vision_at(Some(game.current_player().team()), p) {
                     return Err(CommandError::InvalidPath);
                 }
             }
@@ -663,17 +687,33 @@ impl<D: Direction> UnitCommand<D> {
     }
     // returns the point the unit ended on
     fn apply_path(handler: &mut EventHandler<D>, start: Point, path: Vec<Point>) -> Point {
-        let unit = handler.get_map().get_unit(&start).unwrap();
-        let mut path_taken = vec![];
+        let unit = handler.get_map().get_unit(&start).unwrap().clone();
+        let mut path_taken = vec![Some(start)];
         for p in path {
             if !unit.can_move_to(&p, handler.get_game()) {
                 break;
             }
-            path_taken.push(p);
+            path_taken.push(Some(p));
         }
-        let end = path_taken.last().unwrap_or(&start).clone();
+        let end = path_taken.last().unwrap().unwrap().clone();
         if path_taken.len() > 0 {
-            handler.add_event(Event::UnitPath(start, path_taken));
+            handler.add_event(Event::UnitPath(path_taken.clone(), unit.clone()));
+            let team = handler.get_game().current_player().team();
+            if Some(team) == unit.get_team(handler.get_game()) {
+                let mut vision_changes = HashSet::new();
+                for p in &path_taken {
+                    if let Some(p) = p {
+                        for p in unit.get_vision(handler.get_game(), p) {
+                            if !handler.get_game().has_vision_at(Some(team), &p) {
+                                vision_changes.insert(p);
+                            }
+                        }
+                    }
+                }
+                if vision_changes.len() > 0 {
+                    handler.add_event(Event::PureFogChange(Some(team), vision_changes));
+                }
+            }
         }
         end
     }
@@ -689,6 +729,7 @@ impl<D: Direction> UnitCommand<D> {
                             handler.add_event(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8), -(damage as i16)));
                             if damage >= hp as u16 {
                                 handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(&target).unwrap().clone()));
+                                handler.recalculate_fog(true);
                             } else {
                                 potential_counters.push(target);
                             }
@@ -704,7 +745,7 @@ impl<D: Direction> UnitCommand<D> {
         // counter attack
         for p in &potential_counters {
             let unit = handler.get_map().get_unit(p).unwrap();
-            if !handler.get_game().has_vision_at(unit.get_owner().and_then(|o| handler.get_game().get_owning_player(o)), attacker_pos) {
+            if !handler.get_game().has_vision_at(unit.get_owner().and_then(|o| handler.get_game().get_owning_player(o)).and_then(|player| Some(player.team())), attacker_pos) {
                 continue;
             }
             if !unit.is_position_targetable(handler.get_game(), attacker_pos) {
@@ -740,7 +781,7 @@ impl<D: Direction> UnitCommand<D> {
                             AttackType::Straight(_, _) => return Err(CommandError::InvalidTarget),
                             _ => {}
                         }
-                        if !handler.get_game().has_vision_at(Some(handler.get_game().current_player()), target) {
+                        if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team()), target) {
                             return Err(CommandError::NoVision);
                         }
                         if !unit.is_position_targetable(handler.get_game(), target) {

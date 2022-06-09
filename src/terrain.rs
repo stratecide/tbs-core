@@ -1,4 +1,6 @@
-use crate::{player::Owner, map::direction::Direction, units::*};
+use std::collections::HashSet;
+
+use crate::{player::*, map::{direction::Direction, point::Point}, units::*, game::game::Game};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Terrain<D: Direction> {
@@ -35,6 +37,29 @@ impl<D: Direction> Terrain<D> {
                     (_, _) => 1.,
                 }
             }
+        }
+    }
+    pub fn requires_true_sight(&self) -> bool {
+        false
+    }
+    pub fn get_vision(&self, game: &Game<D>, pos: &Point, team: Perspective) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        match self {
+            Terrain::Realty(_, owner) => {
+                if let Some(player) = owner.and_then(|owner| game.get_owning_player(&owner)) {
+                    if Some(player.team()) == team {
+                        result.insert(pos.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+        result
+    }
+    pub fn fog_replacement(&self) -> Terrain<D> {
+        match self {
+            Terrain::Realty(realty, _) => Terrain::Realty(realty.clone(), None),
+            _ => self.clone(),
         }
     }
     fn end_turn(&self) {

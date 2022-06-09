@@ -6,7 +6,7 @@ use crate::game::events;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
-use crate::player::Player;
+use crate::player::*;
 use crate::terrain::*;
 use crate::units::*;
 
@@ -201,16 +201,18 @@ where D: Direction
     }
     /**
      * returns Ok(...) if the map is playable
-     * returns Err(...) otherwise
+     * returns Err(...) containing the reason otherwise
      */
     pub fn settings(&self) -> Result<settings::GameSettings, settings::NotPlayable> {
-        Ok(settings::GameSettings {})
+        Ok(settings::GameSettings {
+            fog_mode: FogMode::DarkRegular(3, 4, 3),
+        })
     }
-    pub fn game_server(self, settings: &settings::GameSettings) -> (Game<D>, Vec<events::Event>) {
+    pub fn game_server(self, settings: &settings::GameSettings) -> (Game<D>, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {
         Game::new_server(self, settings)
     }
-    pub fn game_client(self, events: &Vec<events::Event>) -> Game<D> {
-        Game::new_client(self, events)
+    pub fn game_client(self, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Game<D> {
+        Game::new_client(self, settings, events)
     }
 }
 
