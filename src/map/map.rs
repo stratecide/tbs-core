@@ -16,7 +16,7 @@ where D: Direction
 {
     wrapping_logic: WrappingMap<D>,
     terrain: HashMap<Point, Terrain<D>>,
-    units: HashMap<Point, UnitType>,
+    units: HashMap<Point, UnitType<D>>,
 }
 
 impl<D> Map<D>
@@ -138,13 +138,13 @@ where D: Direction
             self.terrain.insert(p, t);
         }
     }
-    pub fn get_unit(&self, p: &Point) -> Option<&UnitType> {
+    pub fn get_unit(&self, p: &Point) -> Option<&UnitType<D>> {
         self.units.get(p)
     }
-    pub fn get_unit_mut(&mut self, p: &Point) -> Option<&mut UnitType> {
+    pub fn get_unit_mut(&mut self, p: &Point) -> Option<&mut UnitType<D>> {
         self.units.get_mut(p)
     }
-    pub fn set_unit(&mut self, p: Point, unit: Option<UnitType>) -> Option<UnitType> {
+    pub fn set_unit(&mut self, p: Point, unit: Option<UnitType<D>>) -> Option<UnitType<D>> {
         // TODO: return a Result<(), ?>
         if let Some(unit) = unit {
             if self.wrapping_logic.pointmap().is_point_valid(&p) {

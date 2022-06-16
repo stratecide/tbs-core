@@ -18,6 +18,7 @@ impl<D: Direction> Terrain<D> {
                 MovementType::Heli => Some(6),
                 MovementType::Hover => Some(6),
                 MovementType::Wheel => Some(9),
+                MovementType::Chess => Some(6),
             }
             Self::Street => Some(6),
             Self::Realty(_, _) => Some(6),
@@ -29,7 +30,7 @@ impl<D: Direction> Terrain<D> {
             Self::Pipe(_) => None,
         }
     }
-    pub fn defense(&self, unit: &UnitType) -> f32 {
+    pub fn defense(&self, unit: &UnitType<D>) -> f32 {
         match unit {
             UnitType::Normal(unit) => {
                 match (self, unit.get_movement().0) {
@@ -37,6 +38,13 @@ impl<D: Direction> Terrain<D> {
                     (_, _) => 1.,
                 }
             }
+            UnitType::Chess(_) => {
+                match self {
+                    Self::Grass => 1.1,
+                    _ => 1.,
+                }
+            }
+            UnitType::Structure(_) => 1.0,
         }
     }
     pub fn requires_true_sight(&self) -> bool {

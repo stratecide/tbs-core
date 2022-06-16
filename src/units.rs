@@ -1,3 +1,6 @@
+pub mod chess;
+pub mod structures;
+
 use std::collections::{BinaryHeap, HashSet, HashMap};
 use std::cmp::{Ordering, Reverse};
 use std::fmt;
@@ -10,71 +13,95 @@ use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::map::map::{NeighborMode, Map};
 use crate::terrain::*;
+use self::chess::*;
+use self::structures::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum UnitType {
+pub enum UnitType<D: Direction> {
     Normal(NormalUnit),
+    Chess(ChessUnit),
+    Structure(Structure<D>),
 }
-impl UnitType {
+impl<D: Direction> UnitType<D> {
     pub fn get_owner(&self) -> Option<&Owner> {
         match self {
             Self::Normal(unit) => Some(&unit.owner),
+            Self::Chess(unit) => Some(&unit.owner),
+            Self::Structure(unit) => unit.owner.as_ref(),
         }
     }
-    pub fn get_team<D: Direction>(&self, game: &Game<D>) -> Option<Team> {
+    pub fn get_team(&self, game: &Game<D>) -> Option<Team> {
         get_team(self.get_owner(), game)
     }
     pub fn get_hp(&self) -> u8 {
         match self {
             Self::Normal(unit) => unit.hp,
+            Self::Chess(unit) => unit.hp,
+            Self::Structure(unit) => unit.hp,
         }
     }
     pub fn can_act(&self, player: &Player) -> bool {
         match self {
             Self::Normal(unit) => !unit.exhausted && unit.owner == player.owner_id,
+            Self::Chess(unit) => !unit.exhausted && unit.owner == player.owner_id,
+            Self::Structure(_) => false,
         }
     }
-    pub fn movable_positions<D: Direction>(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>) -> HashSet<Point> {
+    pub fn movable_positions(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>) -> HashSet<Point> {
         match self {
-            Self::Normal(unit) => unit.movable_positions(game, start, path_so_far)
+            Self::Normal(unit) => unit.movable_positions(game, start, path_so_far),
+            Self::Chess(unit) => unit.movable_positions(game, start, path_so_far),
+            Self::Structure(_) => HashSet::new(),
         }
     }
-    pub fn shortest_path_to<D: Direction>(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
+    pub fn shortest_path_to(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
         match self {
-            Self::Normal(unit) => unit.shortest_path_to(game, start, path_so_far, goal)
+            Self::Normal(unit) => unit.shortest_path_to(game, start, path_so_far, goal),
+            Self::Chess(unit) => unit.shortest_path_to(game, start, path_so_far, goal),
+            Self::Structure(_) => None,
         }
     }
-    pub fn shortest_path_to_attack<D: Direction>(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
+    pub fn shortest_path_to_attack(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
         match self {
-            Self::Normal(unit) => unit.shortest_path_to_attack(game, start, path_so_far, goal)
+            Self::Normal(unit) => unit.shortest_path_to_attack(game, start, path_so_far, goal),
+            Self::Chess(unit) => None,
+            Self::Structure(_) => None,
         }
     }
-    pub fn is_position_targetable<D: Direction>(&self, game: &Game<D>, target: &Point) -> bool {
+    pub fn is_position_targetable(&self, game: &Game<D>, target: &Point) -> bool {
         match self {
-            Self::Normal(unit) => unit.is_position_targetable(game, target)
+            Self::Normal(unit) => unit.is_position_targetable(game, target),
+            Self::Chess(unit) => false,
+            Self::Structure(_) => false,
         }
     }
-    pub fn options_after_path<D: Direction>(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
+    pub fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
         match self {
-            Self::Normal(unit) => unit.options_after_path(game, start, path)
-        }
-    }
-    pub fn can_move_to<D: Direction>(&self, p: &Point, game: &Game<D>) -> bool {
-        match self {
-            Self::Normal(unit) => unit.can_move_to(p, game)
-        }
-    }
-    pub fn check_path<D: Direction>(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Result<(), CommandError> {
-        match self {
-            Self::Normal(unit) => unit.check_path(game, start, path)
+            Self::Normal(unit) => unit.options_after_path(game, start, path),
+            Self::Chess(unit) => vec![UnitAction::Wait],
+            Self::Structure(_) => vec![],
         }
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
             Self::Normal(unit) => unit.typ.get_armor(),
+            Self::Chess(unit) => unit.typ.get_armor(),
+            Self::Structure(unit) => unit.typ.get_armor(),
         }
     }
-    pub fn calculate_attack_damage<D: Direction>(&self, game: &Game<D>, pos: &Point, a_type: &NormalUnits, a_health: u8, a_player: Option<&Player>, is_counter: bool) -> Option<u16> {
+    pub fn killable_by_chess(&self, team: Team, game: &Game<D>) -> bool {
+        match self {
+            _ => self.get_team(game) != Some(team),
+        }
+    }
+    pub fn can_be_moved_through_without_stealth(&self, by: &UnitType<D>, game: &Game<D>) -> bool {
+        match self {
+            Self::Normal(unit) => self.get_team(game) == by.get_team(game),
+            Self::Chess(_) => false,
+            Self::Structure(_) => false,
+        }
+    }
+    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: &Point, a_type: &NormalUnits, a_health: u8, _a_player: Option<&Player>, _is_counter: bool) -> Option<u16> {
         let (armor_type, defense) = self.get_armor();
         let terrain_defense = if let Some(t) = game.get_map().get_terrain(pos) {
             t.defense(self)
@@ -94,13 +121,13 @@ impl UnitType {
             None
         }
     }
-    fn true_vision_range<D: Direction>(&self, _game: &Game<D>, _pos: &Point) -> usize {
+    fn true_vision_range(&self, _game: &Game<D>, _pos: &Point) -> usize {
         1
     }
-    fn vision_range<D: Direction>(&self, _game: &Game<D>, _pos: &Point) -> usize {
+    fn vision_range(&self, _game: &Game<D>, _pos: &Point) -> usize {
         2
     }
-    pub fn get_vision<D: Direction>(&self, game: &Game<D>, pos: &Point) -> HashSet<Point> {
+    pub fn get_vision(&self, game: &Game<D>, pos: &Point) -> HashSet<Point> {
         let mut result = HashSet::new();
         result.insert(pos.clone());
         let layers = range_in_layers(game.get_map(), pos, self.vision_range(game, pos));
@@ -325,10 +352,10 @@ impl NormalUnit {
         }
         result
     }
-    pub fn can_move_to<D: Direction>(&self, p: &Point, game: &Game<D>) -> bool {
+    fn can_move_to<D: Direction>(&self, p: &Point, game: &Game<D>) -> bool {
         // doesn't check terrain
         if let Some(unit) = game.get_map().get_unit(p) {
-            if !self.can_move_past(game, unit) {
+            if !self.has_stealth() && !unit.can_be_moved_through_without_stealth(&UnitType::Normal(self.clone()), game) {
                 return false
             }
         }
@@ -345,7 +372,7 @@ impl NormalUnit {
     fn has_stealth(&self) -> bool {
         false
     }
-    fn can_move_past<D: Direction>(&self, game: &Game<D>, other: &UnitType) -> bool {
+    /*fn can_move_past<D: Direction>(&self, game: &Game<D>, other: &UnitType) -> bool {
         // should be false for enemy units unless self has stealth
         if self.has_stealth() {
             true
@@ -354,12 +381,13 @@ impl NormalUnit {
             let other_team = other.get_owner().and_then(|o| game.get_owning_player(o).and_then(|p| Some(p.team)));
             self_team == other_team
         }
-    }
-    pub fn check_path<D: Direction>(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Result<(), CommandError> {
+    }*/
+    pub fn check_path<D: Direction>(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Result<Vec<Point>, CommandError> {
         let mut blocked = HashSet::new();
         blocked.insert(start.clone());
         let (movement_type, mut remaining_movement) = self.get_movement();
         let mut current = start;
+        let mut path_taken = vec![];
         for p in path {
             // no point can be travelled to twice
             if blocked.contains(p) {
@@ -385,14 +413,18 @@ impl NormalUnit {
             }
             // no visible unit should block movement
             if let Some(unit) = game.get_map().get_unit(p) {
-                if game.has_vision_at(Some(game.current_player().team()), p) && !self.can_move_past(game, unit) {
+                if game.has_vision_at(Some(game.current_player().team()), p) && !self.has_stealth() && !unit.can_be_moved_through_without_stealth(&UnitType::Normal(self.clone()), game) {
                     return Err(CommandError::InvalidPath);
                 }
             }
+            if !self.can_move_to(&p, game) {
+                break;
+            }
             current = p;
+            path_taken.push(p.clone());
             blocked.insert(p.clone());
         }
-        Ok(())
+        Ok(path_taken)
     }
     pub fn make_attack_info<D: Direction>(&self, map: &Map<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>> {
         match self.typ.get_attack_type() {
@@ -487,6 +519,7 @@ pub enum MovementType {
     Wheel,
     Treads,
     Heli,
+    Chess,
 }
 
 #[derive(PartialEq, Eq)]
@@ -524,6 +557,15 @@ fn width_search<D: Direction, F: FnMut(&Point, &Vec<Point>) -> bool>(movement_ty
                         continue;
                     }
                 }
+                /*match (unit, game.get_map().get_unit(neighbor.point())) {
+                    (Some(mover), Some(other)) => {
+                        // TODO !mover.has_stealth() && 
+                        if !other.can_be_moved_through_without_stealth(mover, game) {
+                            continue;
+                        }
+                    }
+                    (_, _) => {}
+                }*/
                 if let Some(cost) = game.get_map().get_terrain(neighbor.point()).unwrap().movement_cost(movement_type) {
                     if cost_so_far + cost <= max_cost {
                         let mut path = path_so_far.clone();
@@ -667,6 +709,7 @@ pub enum UnitCommand<D: Direction> {
     MoveAttack(Point, Vec<Point>, AttackInfo<D>),
     MoveCapture(Point, Vec<Point>),
     MoveWait(Point, Vec<Point>),
+    MoveChess(Point, ChessCommand<D>),
 }
 impl<D: Direction> UnitCommand<D> {
     fn check_unit_can_act(game: &Game<D>, at: &Point) -> Result<(), CommandError> {
@@ -685,7 +728,7 @@ impl<D: Direction> UnitCommand<D> {
             Err(CommandError::MissingUnit)
         }
     }
-    fn check_unit_can_wait_after_path(game: &Game<D>, start: &Point, path: &Vec<Point>) -> Result<(), CommandError> {
+    fn check_unit_can_wait_after_path(game: &Game<D>, start: &Point, path: &Vec<Point>) -> Result<Vec<Point>, CommandError> {
         if !game.get_map().wrapping_logic().pointmap().is_point_valid(start) {
             return Err(CommandError::InvalidPoint(start.clone()));
         }
@@ -696,38 +739,36 @@ impl<D: Direction> UnitCommand<D> {
         }
         Self::check_unit_can_act(game, start)?;
         let unit = game.get_map().get_unit(start).unwrap(); // unwrap because already checked by check_unit_can_act
-        unit.check_path(game, start, path)?;
-        if let Some(p) = path.last() {
-            if let Some(_) = game.get_map().get_unit(p) {
-                if game.has_vision_at(Some(game.current_player().team()), p) {
-                    return Err(CommandError::InvalidPath);
+        match unit {
+            UnitType::Normal(unit) => {
+                if let Some(p) = path.last() {
+                    if let Some(_) = game.get_map().get_unit(p) {
+                        if game.has_vision_at(Some(game.current_player().team()), p) {
+                            return Err(CommandError::InvalidPath);
+                        }
+                    }
                 }
+                unit.check_path(game, start, path)
+            }
+            _ => {
+                Err(CommandError::UnitTypeWrong)
             }
         }
-        Ok(())
     }
     // returns the point the unit ended on
-    fn apply_path(handler: &mut EventHandler<D>, start: Point, path: Vec<Point>) -> Point {
+    fn apply_path(handler: &mut EventHandler<D>, start: Point, path_taken: Vec<Point>) {
         let unit = handler.get_map().get_unit(&start).unwrap().clone();
-        let mut path_taken = vec![Some(start)];
-        for p in path {
-            if !unit.can_move_to(&p, handler.get_game()) {
-                break;
-            }
-            path_taken.push(Some(p));
-        }
-        let end = path_taken.last().unwrap().unwrap().clone();
         if path_taken.len() > 0 {
-            handler.add_event(Event::UnitPath(path_taken.clone(), unit.clone()));
+            let mut event_path:Vec<Option<Point>> = path_taken.iter().map(|p| Some(p.clone())).collect();
+            event_path.insert(0, Some(start.clone()));
+            handler.add_event(Event::UnitPath(event_path, unit.clone()));
             let team = handler.get_game().current_player().team();
             if Some(team) == unit.get_team(handler.get_game()) {
                 let mut vision_changes = HashSet::new();
                 for p in &path_taken {
-                    if let Some(p) = p {
-                        for p in unit.get_vision(handler.get_game(), p) {
-                            if !handler.get_game().has_vision_at(Some(team), &p) {
-                                vision_changes.insert(p);
-                            }
+                    for p in unit.get_vision(handler.get_game(), p) {
+                        if !handler.get_game().has_vision_at(Some(team), &p) {
+                            vision_changes.insert(p);
                         }
                     }
                 }
@@ -736,7 +777,6 @@ impl<D: Direction> UnitCommand<D> {
                 }
             }
         }
-        end
     }
     pub fn calculate_attack(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {
         match handler.get_map().get_unit(attacker_pos).expect(&format!("calculate_attack found no unit at {:?}", attacker_pos)).clone() {
@@ -759,6 +799,8 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 Ok(potential_counters)
             }
+            UnitType::Chess(_) => Err(CommandError::UnitTypeWrong),
+            UnitType::Structure(_) => Err(CommandError::UnitTypeWrong),
         }
     }
     pub fn handle_attack(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>) -> Result<(), CommandError> {
@@ -780,6 +822,8 @@ impl<D: Direction> UnitCommand<D> {
                     }
                     unit.make_attack_info(handler.get_map(), p, attacker_pos).unwrap()
                 }
+                UnitType::Chess(_) => return Err(CommandError::UnitTypeWrong),
+                UnitType::Structure(_) => return Err(CommandError::UnitTypeWrong),
             };
             // this may return an error, but we don't care about that
             Self::calculate_attack(handler, p, &attack_info, true).ok();
@@ -790,9 +834,9 @@ impl<D: Direction> UnitCommand<D> {
     pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         match self {
             Self::MoveAttack(start, path, target) => {
-                Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
-                let unit = handler.get_map().get_unit(&start).unwrap(); // unwrap because already checked in check_unit_can_wait_after_path
                 let intended_end = path.last().unwrap_or(&start).clone();
+                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
+                let unit = handler.get_map().get_unit(&start).unwrap(); // unwrap because already checked in check_unit_can_wait_after_path
                 match (unit, &target) {
                     (UnitType::Normal(unit), AttackInfo::Point(target)) => {
                         if !handler.get_map().wrapping_logic().pointmap().is_point_valid(target) {
@@ -820,8 +864,11 @@ impl<D: Direction> UnitCommand<D> {
                             _ => return Err(CommandError::InvalidTarget),
                         }
                     }
+                    (UnitType::Chess(_), _) => return Err(CommandError::UnitTypeWrong),
+                    (UnitType::Structure(_), _) => return Err(CommandError::UnitTypeWrong),
                 }
-                let end = Self::apply_path(handler, start, path);
+                let end = path.last().unwrap_or(&start).clone();
+                Self::apply_path(handler, start, path);
                 // checks fog trap
                 if end == intended_end {
                     Self::handle_attack(handler, &end, &target)?;
@@ -829,7 +876,8 @@ impl<D: Direction> UnitCommand<D> {
                 handler.add_event(Event::UnitExhaust(end));
             }
             Self::MoveCapture(start, path) => {
-                Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
+                let intended_end = path.last().unwrap_or(&start).clone();
+                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
                 let unit = match handler.get_map().get_unit(&start) {
                     Some(UnitType::Normal(unit)) => {
                         if !unit.can_capture() {
@@ -839,8 +887,7 @@ impl<D: Direction> UnitCommand<D> {
                     },
                     _ => return Err(CommandError::UnitCannotCapture),
                 };
-                let intended_end = path.last().unwrap_or(&start).clone();
-                let end = Self::apply_path(handler, start, path);
+                let end = path.last().unwrap_or(&start).clone();
                 if end == intended_end {
                     let terrain = handler.get_map().get_terrain(&end).unwrap().clone();
                     match &terrain {
@@ -855,9 +902,20 @@ impl<D: Direction> UnitCommand<D> {
                 handler.add_event(Event::UnitExhaust(end));
             }
             Self::MoveWait(start, path) => {
-                Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
-                let end = Self::apply_path(handler, start, path);
+                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
+                let end = path.last().unwrap_or(&start).clone();
+                Self::apply_path(handler, start, path);
                 handler.add_event(Event::UnitExhaust(end));
+            }
+            Self::MoveChess(start, chess_command) => {
+                Self::check_unit_can_act(handler.get_game(), &start)?;
+                match handler.get_map().get_unit(&start) {
+                    Some(UnitType::Chess(unit)) => {
+                        let unit = unit.clone();
+                        chess_command.convert(start, &unit, handler);
+                    },
+                    _ => return Err(CommandError::UnitTypeWrong),
+                }
             }
         }
         Ok(())

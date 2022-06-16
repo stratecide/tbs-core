@@ -25,6 +25,12 @@ impl<D: Direction> Command<D> {
                                 handler.add_event(Event::UnitExhaust(p));
                             }
                         }
+                        Some(UnitType::Chess(unit)) => {
+                            if unit.exhausted && unit.owner == handler.game.current_player().owner_id {
+                                handler.add_event(Event::UnitExhaust(p));
+                            }
+                        }
+                        Some(UnitType::Structure(_)) => {}
                         None => {}
                     }
                 }
@@ -55,6 +61,7 @@ pub enum CommandError {
     NotYourUnit,
     UnitCannotMove,
     UnitCannotCapture,
+    UnitTypeWrong,
     InvalidPath,
     InvalidPoint(Point),
     InvalidTarget
@@ -65,11 +72,11 @@ pub enum Event<D:Direction> {
     NextTurn,
     FogFlipRandom,
     PureFogChange(Perspective, HashSet<Point>),
-    FogChange(Perspective, HashMap<Point, (Terrain<D>, Option<UnitType>)>),
-    UnitPath(Vec<Option<Point>>, UnitType),
+    FogChange(Perspective, HashMap<Point, (Terrain<D>, Option<UnitType<D>>)>),
+    UnitPath(Vec<Option<Point>>, UnitType<D>),
     UnitExhaust(Point),
     UnitHpChange(Point, i8, i16),
-    UnitDeath(Point, UnitType),
+    UnitDeath(Point, UnitType<D>),
     TerrainChange(Point, Terrain<D>, Terrain<D>),
 }
 impl<D: Direction> Event<D> {
@@ -100,13 +107,18 @@ impl<D: Direction> Event<D> {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
                     UnitType::Normal(unit) => unit.exhausted = !unit.exhausted,
+                    UnitType::Chess(unit) => unit.exhausted = !unit.exhausted,
+                    UnitType::Structure(unit) => unit.exhausted = !unit.exhausted,
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
-                match unit {
-                    UnitType::Normal(unit) => unit.hp = (unit.hp as i8 + hp_change) as u8,
-                }
+                let hp: &mut u8 = match unit {
+                    UnitType::Normal(unit) => &mut unit.hp,
+                    UnitType::Chess(unit) => &mut unit.hp,
+                    UnitType::Structure(unit) => &mut unit.hp,
+                };
+                *hp = (*hp as i8 + hp_change) as u8;
             }
             Self::UnitDeath(pos, _) => {
                 game.get_map_mut().set_unit(pos.clone(), None).expect(&format!("expected a unit at {:?} to die!", pos));
@@ -143,13 +155,18 @@ impl<D: Direction> Event<D> {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
                     UnitType::Normal(unit) => unit.exhausted = !unit.exhausted,
+                    UnitType::Chess(unit) => unit.exhausted = !unit.exhausted,
+                    UnitType::Structure(unit) => unit.exhausted = !unit.exhausted,
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, -hp_change));
-                match unit {
-                    UnitType::Normal(unit) => unit.hp = (unit.hp as i8 - hp_change) as u8,
-                }
+                let hp: &mut u8 = match unit {
+                    UnitType::Normal(unit) => &mut unit.hp,
+                    UnitType::Chess(unit) => &mut unit.hp,
+                    UnitType::Structure(unit) => &mut unit.hp,
+                };
+                *hp = (*hp as i8 - hp_change) as u8;
             }
             Self::UnitDeath(pos, unit) => {
                 game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
@@ -249,7 +266,7 @@ fn flip_fog<D: Direction>(game: &mut Game<D>, team: &Perspective, positions: &Ha
         }
     }
 }
-fn apply_vision_changes<D: Direction>(game: &mut Game<D>, pos: &Point, team: &Perspective, terrain: &Terrain<D>, unit: &Option<UnitType>) {
+fn apply_vision_changes<D: Direction>(game: &mut Game<D>, pos: &Point, team: &Perspective, terrain: &Terrain<D>, unit: &Option<UnitType<D>>) {
     if game.has_vision_at(*team, pos) {
         game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
         game.get_map_mut().set_unit(pos.clone(), unit.clone());
