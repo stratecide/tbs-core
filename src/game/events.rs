@@ -25,6 +25,11 @@ impl<D: Direction> Command<D> {
                                 handler.add_event(Event::UnitExhaust(p));
                             }
                         }
+                        Some(UnitType::Mercenary(unit)) => {
+                            if unit.unit.exhausted && unit.unit.owner == handler.game.current_player().owner_id {
+                                handler.add_event(Event::UnitExhaust(p));
+                            }
+                        }
                         Some(UnitType::Chess(unit)) => {
                             if unit.exhausted && unit.owner == handler.game.current_player().owner_id {
                                 handler.add_event(Event::UnitExhaust(p));
@@ -107,17 +112,14 @@ impl<D: Direction> Event<D> {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
                     UnitType::Normal(unit) => unit.exhausted = !unit.exhausted,
+                    UnitType::Mercenary(unit) => unit.unit.exhausted = !unit.unit.exhausted,
                     UnitType::Chess(unit) => unit.exhausted = !unit.exhausted,
                     UnitType::Structure(unit) => unit.exhausted = !unit.exhausted,
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
-                let hp: &mut u8 = match unit {
-                    UnitType::Normal(unit) => &mut unit.hp,
-                    UnitType::Chess(unit) => &mut unit.hp,
-                    UnitType::Structure(unit) => &mut unit.hp,
-                };
+                let hp = unit.get_hp_mut();
                 *hp = (*hp as i8 + hp_change) as u8;
             }
             Self::UnitDeath(pos, _) => {
@@ -155,17 +157,14 @@ impl<D: Direction> Event<D> {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
                     UnitType::Normal(unit) => unit.exhausted = !unit.exhausted,
+                    UnitType::Mercenary(unit) => unit.unit.exhausted = !unit.unit.exhausted,
                     UnitType::Chess(unit) => unit.exhausted = !unit.exhausted,
                     UnitType::Structure(unit) => unit.exhausted = !unit.exhausted,
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, -hp_change));
-                let hp: &mut u8 = match unit {
-                    UnitType::Normal(unit) => &mut unit.hp,
-                    UnitType::Chess(unit) => &mut unit.hp,
-                    UnitType::Structure(unit) => &mut unit.hp,
-                };
+                let hp = unit.get_hp_mut();
                 *hp = (*hp as i8 - hp_change) as u8;
             }
             Self::UnitDeath(pos, unit) => {

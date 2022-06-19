@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use crate::{player::*, map::{direction::Direction, point::Point}, units::*, game::game::Game};
+use crate::{player::*, map::{direction::Direction, point::Point}, game::game::Game};
+use crate::units::*;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Terrain<D: Direction> {
@@ -31,20 +32,24 @@ impl<D: Direction> Terrain<D> {
         }
     }
     pub fn defense(&self, unit: &UnitType<D>) -> f32 {
-        match unit {
+        let u: &dyn NormalUnitTrait<D> = match unit {
             UnitType::Normal(unit) => {
-                match (self, unit.get_movement().0) {
-                    (Self::Grass, MovementType::Foot) => 1.1,
-                    (_, _) => 1.,
-                }
+                unit
+            }
+            UnitType::Mercenary(unit) => {
+                unit
             }
             UnitType::Chess(_) => {
-                match self {
+                return match self {
                     Self::Grass => 1.1,
                     _ => 1.,
-                }
+                };
             }
-            UnitType::Structure(_) => 1.0,
+            UnitType::Structure(_) => return 1.0,
+        };
+        match (self, u.get_movement().0) {
+            (Self::Grass, MovementType::Foot) => 1.1,
+            (_, _) => 1.,
         }
     }
     pub fn requires_true_sight(&self) -> bool {
