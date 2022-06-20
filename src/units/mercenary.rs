@@ -1,5 +1,5 @@
 use crate::map::direction::Direction;
-use crate::player::Owner;
+use crate::map::map::Map;
 
 use super::*;
 
@@ -11,12 +11,46 @@ use super::*;
 pub struct Mercenary {
     pub typ: Mercenaries,
     pub unit: NormalUnit,
+    pub charge: u8,
 }
 impl Mercenary {
     pub fn get_armor(&self) -> (ArmorType, f32) {
         let (armor_type, mut factor) = self.unit.typ.get_armor();
         factor *= 1.2;
         (armor_type, factor)
+    }
+    pub fn range(&self) -> u8 {
+        match self.typ {
+            Mercenaries::EarlGrey => 1,
+        }
+    }
+    pub fn in_range<D: Direction>(&self, map: &Map<D>, position: &Point, target: &Point) -> bool {
+        self.aura(map, position).contains(target)
+    }
+    pub fn aura<D: Direction>(&self, map: &Map<D>, position: &Point) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        result.insert(position.clone());
+        for layer in range_in_layers(map, position, self.range() as usize) {
+            for (p, _, _) in layer {
+                result.insert(p);
+            }
+        }
+        result
+    }
+    pub fn attack_bonus<D: Direction>(&self, attacker: &dyn NormalUnitTrait<D>, _is_counter: bool) -> f32 {
+        if attacker.get_owner() != &self.unit.owner {
+            return 1.0;
+        }
+        match &self.typ {
+            Mercenaries::EarlGrey => 1.3,
+            _ => 1.1,
+        }
+    }
+    pub fn defense_bonus<D: Direction>(&self, defender: &UnitType<D>, _is_counter: bool) -> f32 {
+        if defender.get_owner() != Some(&self.unit.owner) {
+            return 1.0;
+        }
+        1.1
     }
 }
 
@@ -38,6 +72,9 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
             }
             (weapon, atk * factor)
         }).collect()
+    }
+    fn get_owner(&self) -> &Owner {
+        &self.unit.owner
     }
     fn get_team(&self, game: &Game<D>) -> Option<Team> {
         self.unit.get_team(game)
@@ -65,6 +102,9 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn is_position_targetable(&self, game: &Game<D>, target: &Point) -> bool {
         self.unit.is_position_targetable(game, target)
     }
+    fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+        self.unit.can_attack_unit_type(game, target)
+    }
     fn attackable_positions(&self, map: &Map<D>, position: &Point, moved: bool) -> HashSet<Point> {
         self.unit.attackable_positions(map, position, moved)
     }
@@ -81,4 +121,10 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
 pub enum Mercenaries {
     EarlGrey,
 }
-
+impl Mercenaries {
+    pub fn max_charge(&self) -> u8 {
+        match self {
+            Self::EarlGrey => 10,
+        }
+    }
+}

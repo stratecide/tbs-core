@@ -9,6 +9,7 @@ use crate::map::point::*;
 use crate::player::*;
 use crate::terrain::*;
 use crate::units::*;
+use crate::units::mercenary::Mercenary;
 
 #[derive(Clone)]
 pub struct Map<D>
@@ -145,7 +146,7 @@ where D: Direction
         self.units.get_mut(p)
     }
     pub fn set_unit(&mut self, p: Point, unit: Option<UnitType<D>>) -> Option<UnitType<D>> {
-        // TODO: return a Result<(), ?>
+        // TODO: return a Result<(), ?>, returning an error if the point is invalid
         if let Some(unit) = unit {
             if self.wrapping_logic.pointmap().is_point_valid(&p) {
                 self.units.insert(p, unit)
@@ -155,6 +156,17 @@ where D: Direction
         } else {
             self.units.remove(&p)
         }
+    }
+    pub fn mercenary_influence_at(&self, point: &Point) -> Vec<(Point, &Mercenary)> {
+        let mut result = vec![];
+        for p in self.wrapping_logic.pointmap().get_valid_points() {
+            if let Some(UnitType::Mercenary(merc)) = self.get_unit(&p) {
+                if merc.in_range(self, &p, &point) {
+                    result.push((p.clone(), merc));
+                }
+            }
+        }
+        result
     }
     pub fn validate_terrain(&mut self) -> Vec<(Point, Terrain<D>)> {
         let mut corrected = vec![];

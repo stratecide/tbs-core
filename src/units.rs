@@ -113,7 +113,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => false,
         }
     }
-    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: &Point, attacker: &dyn NormalUnitTrait<D>, _is_counter: bool) -> Option<u16> {
+    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: &Point, attacker_pos: &Point, attacker: &dyn NormalUnitTrait<D>, is_counter: bool) -> Option<u16> {
         let (armor_type, defense) = self.get_armor();
         let terrain_defense = if let Some(t) = game.get_map().get_terrain(pos) {
             t.defense(self)
@@ -123,7 +123,13 @@ impl<D: Direction> UnitType<D> {
         let mut highest_damage: f32 = 0.;
         for (weapon, attack) in attacker.get_weapons() {
             if let Some(factor) = weapon.damage_factor(&armor_type) {
-                let damage = attacker.get_hp() as f32 * attack * factor / defense / terrain_defense;
+                let mut damage = attacker.get_hp() as f32 * attack * factor / defense / terrain_defense;
+                for (_, merc) in game.get_map().mercenary_influence_at(attacker_pos) {
+                    damage *= merc.attack_bonus(attacker, is_counter);
+                }
+                for (_, merc) in game.get_map().mercenary_influence_at(pos) {
+                    damage /= merc.defense_bonus(self, is_counter);
+                }
                 highest_damage = highest_damage.max(damage);
             }
         }
@@ -204,6 +210,7 @@ pub trait NormalUnitTrait<D: Direction> {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D>;
     fn get_hp(&self) -> u8;
     fn get_weapons(&self) -> Vec<(WeaponType, f32)>;
+    fn get_owner(&self) -> &Owner;
     fn get_team(&self, game: &Game<D>) -> Option<Team>;
     fn get_movement(&self) -> (MovementType, u8);
     fn has_stealth(&self) -> bool;
@@ -288,6 +295,7 @@ pub trait NormalUnitTrait<D: Direction> {
     }
     fn get_attack_type(&self) -> AttackType;
     fn is_position_targetable(&self, game: &Game<D>, target: &Point) -> bool;
+    fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool;
     fn attackable_positions(&self, map: &Map<D>, position: &Point, moved: bool) -> HashSet<Point>;
     // the result-vector should never contain the same point multiple times
     fn attack_splash(&self, map: &Map<D>, from: &Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError>;
@@ -342,6 +350,9 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
     fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         self.typ.get_weapons()
+    }
+    fn get_owner(&self) -> &Owner {
+        &self.owner
     }
     fn get_team(&self, game: &Game<D>) -> Option<Team> {
         get_team(Some(&self.owner), game)
@@ -425,12 +436,14 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     // ignores fog
     fn is_position_targetable(&self, game: &Game<D>, target: &Point) -> bool {
         if let Some(unit) = game.get_map().get_unit(target) {
-            // todo: consider healing allies
-            unit.get_team(game) != get_team(Some(&self.owner), game) && unit.calculate_attack_damage(game, target, self, false).is_some()
+            self.can_attack_unit_type(game, unit)
         } else {
-            // todo: some units may be able to target "empty" fields
             false
         }
+    }
+    fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+        let this: &dyn NormalUnitTrait<D> = self.as_trait();
+        target.get_team(game) != self.get_team(game) && this.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
     }
     fn attackable_positions(&self, map: &Map<D>, position: &Point, moved: bool) -> HashSet<Point> {
         let mut result = HashSet::new();
@@ -598,11 +611,6 @@ fn width_search<D: Direction, F: FnMut(&Point, &Vec<Point>) -> bool>(movement_ty
         blocked_positions.insert(p.clone());
         for neighbor in game.get_map().get_neighbors(p, NeighborMode::UnitMovement) {
             if !blocked_positions.contains(neighbor.point()) {
-                /*if let Some(unit) = game.get_map().get_unit(neighbor.point()) {
-                    if team.is_some() && unit.get_team(game) != team {
-                        continue;
-                    }
-                }*/
                 match (unit, game.get_map().get_unit(neighbor.point())) {
                     (Some(mover), Some(other)) => {
                         if !other.can_be_moved_through(mover, game) {
@@ -821,7 +829,8 @@ impl<D: Direction> UnitCommand<D> {
         }
     }
     pub fn calculate_attack(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {
-        let attacker: &dyn NormalUnitTrait<D> = match handler.get_map().get_unit(attacker_pos) {
+        let attacker = handler.get_map().get_unit(attacker_pos).and_then(|u| Some(u.clone()));
+        let attacker: &dyn NormalUnitTrait<D> = match &attacker {
             Some(UnitType::Normal(unit)) => Ok(unit.as_trait()),
             Some(UnitType::Mercenary(unit)) => Ok(unit.as_trait()),
             Some(UnitType::Chess(_)) => Err(CommandError::UnitTypeWrong),
@@ -830,15 +839,29 @@ impl<D: Direction> UnitCommand<D> {
         }?;
         let mut potential_counters = vec![];
         let mut recalculate_fog = false;
-        let mut events = vec![];
+        let mut charges = HashMap::new();
         for target in attacker.attack_splash(handler.get_map(), attacker_pos, target)? {
             if let Some(defender) = handler.get_map().get_unit(&target) {
-                let damage = defender.calculate_attack_damage(handler.get_game(), &target, attacker, is_counter);
+                let damage = defender.calculate_attack_damage(handler.get_game(), &target, attacker_pos, attacker, is_counter);
                 if let Some(damage) = damage {
                     let hp = defender.get_hp();
-                    events.push(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8), -(damage as i16)));
+                    if defender.get_owner() != Some(attacker.get_owner()) {
+                        for (p, merc) in handler.get_map().mercenary_influence_at(attacker_pos) {
+                            let merc: &dyn NormalUnitTrait<D> = merc.as_trait();
+                            if merc.get_owner() == attacker.get_owner() {
+                                charges.insert(p, charges.get(&p).unwrap_or(&0) + 2);
+                            }
+                        }
+                        for (p, merc) in handler.get_map().mercenary_influence_at(&target) {
+                            let merc: &dyn NormalUnitTrait<D> = merc.as_trait();
+                            if Some(merc.get_owner()) == defender.get_owner() {
+                                charges.insert(p, charges.get(&p).unwrap_or(&0) + 1);
+                            }
+                        }
+                    }
+                    handler.add_event(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8), -(damage as i16)));
                     if damage >= hp as u16 {
-                        events.push(Event::UnitDeath(target, handler.get_map().get_unit(&target).unwrap().clone()));
+                        handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(&target).unwrap().clone()));
                         recalculate_fog = true;
                     } else {
                         potential_counters.push(target);
@@ -846,10 +869,15 @@ impl<D: Direction> UnitCommand<D> {
                 }
             }
         }
-        for event in events {
-            handler.add_event(event);
+        for (p, change) in charges {
+            if let Some(UnitType::Mercenary(merc)) = handler.get_map().get_unit(&p) {
+                let change = change.max(-(merc.charge as i16)).min(merc.typ.max_charge() as i16 - change);
+                if change != 0 {
+                    handler.add_event(Event::MercenaryCharge(p, change as i8));
+                }
+            }
         }
-        if (recalculate_fog) {
+        if recalculate_fog {
             handler.recalculate_fog(true);
         }
         Ok(potential_counters)
@@ -907,11 +935,9 @@ impl<D: Direction> UnitCommand<D> {
                             return Err(CommandError::NoVision);
                         }
                         if !unit.is_position_targetable(handler.get_game(), target) {
-                            println!("not targetable");
                             return Err(CommandError::InvalidTarget);
                         }
                         if !unit.attackable_positions(handler.get_map(), &intended_end, path.len() > 0).contains(target) {
-                            println!("not in range");
                             return Err(CommandError::InvalidTarget);
                         }
                     }
