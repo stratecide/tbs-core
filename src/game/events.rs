@@ -8,6 +8,7 @@ use crate::terrain::Terrain;
 use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::*;
+use crate::units::mercenary::Mercenaries;
 use super::events;
 
 pub enum Command<D: Direction> {
@@ -69,7 +70,8 @@ pub enum CommandError {
     UnitTypeWrong,
     InvalidPath,
     InvalidPoint(Point),
-    InvalidTarget
+    InvalidTarget,
+    PowerNotUsable,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -83,6 +85,7 @@ pub enum Event<D:Direction> {
     UnitHpChange(Point, i8, i16),
     UnitDeath(Point, UnitType<D>),
     MercenaryCharge(Point, i8),
+    MercenaryPowerSimple(Point),
     TerrainChange(Point, Terrain<D>, Terrain<D>),
 }
 impl<D: Direction> Event<D> {
@@ -129,6 +132,15 @@ impl<D: Direction> Event<D> {
             Self::MercenaryCharge(pos, change) => {
                 if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(pos) {
                     merc.charge = (merc.charge as i8 + change).max(0).min(merc.typ.max_charge() as i8) as u8;
+                }
+            }
+            Self::MercenaryPowerSimple(pos) => {
+                if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(pos) {
+                    match &mut merc.typ {
+                        Mercenaries::EarlGrey(power_active) => {
+                            *power_active = true;
+                        }
+                    }
                 }
             }
             Self::TerrainChange(pos, _, terrain) => {
@@ -179,6 +191,15 @@ impl<D: Direction> Event<D> {
             Self::MercenaryCharge(pos, change) => {
                 if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(pos) {
                     merc.charge = (merc.charge as i8 - change).max(0).min(merc.typ.max_charge() as i8) as u8;
+                }
+            }
+            Self::MercenaryPowerSimple(pos) => {
+                if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(pos) {
+                    match &mut merc.typ {
+                        Mercenaries::EarlGrey(power_active) => {
+                            *power_active = false;
+                        }
+                    }
                 }
             }
             Self::TerrainChange(pos, terrain, _) => {
@@ -250,6 +271,13 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::MercenaryCharge(pos, _) => {
+                if game.has_vision_at(*team, pos) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::MercenaryPowerSimple(pos) => {
                 if game.has_vision_at(*team, pos) {
                     Some(self.clone())
                 } else {

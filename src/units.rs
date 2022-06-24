@@ -124,10 +124,10 @@ impl<D: Direction> UnitType<D> {
         for (weapon, attack) in attacker.get_weapons() {
             if let Some(factor) = weapon.damage_factor(&armor_type) {
                 let mut damage = attacker.get_hp() as f32 * attack * factor / defense / terrain_defense;
-                for (_, merc) in game.get_map().mercenary_influence_at(attacker_pos) {
+                for (_, merc) in game.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {
                     damage *= merc.attack_bonus(attacker, is_counter);
                 }
-                for (_, merc) in game.get_map().mercenary_influence_at(pos) {
+                for (_, merc) in game.get_map().mercenary_influence_at(pos, self.get_owner()) {
                     damage /= merc.defense_bonus(self, is_counter);
                 }
                 highest_damage = highest_damage.max(damage);
@@ -214,9 +214,52 @@ pub trait NormalUnitTrait<D: Direction> {
     fn get_team(&self, game: &Game<D>) -> Option<Team>;
     fn get_movement(&self) -> (MovementType, u8);
     fn has_stealth(&self) -> bool;
-    fn shortest_path_to(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>>;
+    fn shortest_path_to(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
+        let (blocked_positions, movement_type, max_cost) = self.consider_path_so_far(game, start, path_so_far);
+        let start = path_so_far.last().unwrap_or(start);
+        let mut result = None;
+        width_search(&movement_type, max_cost, game, start, blocked_positions, Some(self.as_trait()), |p, path| {
+            if p == goal {
+                result = Some(path.clone());
+                true
+            } else {
+                false
+            }
+        });
+        result
+    }
     fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>>;
-    fn shortest_path_to_attack(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>>;
+    fn can_stop_on(&self, p: &Point, game: &Game<D>) -> bool {
+        // doesn't check terrain
+        if let Some(unit) = game.get_map().get_unit(p) {
+            false
+        } else {
+            true
+        }
+    }
+    fn can_attack_after_moving(&self) -> bool;
+    fn shortest_path_to_attack(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
+        if !self.can_attack_after_moving() {
+            // no need to look for paths if the unit can't attack after moving
+            if path_so_far.len() == 0 && self.attackable_positions(game.get_map(), start, false).contains(goal) {
+                return Some(vec![]);
+            } else {
+                return None;
+            }
+        }
+        let (blocked_positions, movement_type, max_cost) = self.consider_path_so_far(game, start, path_so_far);
+        let current_pos = path_so_far.last().unwrap_or(start);
+        let mut result = None;
+        width_search(&movement_type, max_cost, game, current_pos, blocked_positions, Some(self.as_trait()), |p, path| {
+            if (p == start || self.can_stop_on(p, game)) && self.attackable_positions(game.get_map(), p, path.len() + path_so_far.len() > 0).contains(goal) {
+                result = Some(path.clone());
+                true
+            } else {
+                false
+            }
+        });
+        result
+    }
     fn can_move_to(&self, p: &Point, game: &Game<D>) -> bool {
         // doesn't check terrain
         if let Some(unit) = game.get_map().get_unit(p) {
@@ -318,26 +361,10 @@ impl NormalUnit {
             exhausted: false,
         }
     }
-    pub fn can_attack_after_moving(&self) -> bool {
-        match self.typ {
-            NormalUnits::Hovercraft => true,
-            NormalUnits::TransportHeli(_) => true,
-            NormalUnits::DragonHead => true,
-            NormalUnits::Artillery => false,
-        }
-    }
     pub fn can_capture(&self) -> bool {
         match self.typ {
             NormalUnits::Hovercraft => true,
             _ => false,
-        }
-    }
-    pub fn can_stop_on<D: Direction>(&self, p: &Point, game: &Game<D>) -> bool {
-        // doesn't check terrain
-        if let Some(unit) = game.get_map().get_unit(p) {
-            false
-        } else {
-            true
         }
     }
 }
@@ -369,20 +396,6 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     fn has_stealth(&self) -> bool {
         false
     }
-    fn shortest_path_to(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
-        let (blocked_positions, movement_type, max_cost) = self.consider_path_so_far(game, start, path_so_far);
-        let start = path_so_far.last().unwrap_or(start);
-        let mut result = None;
-        width_search(&movement_type, max_cost, game, start, blocked_positions, Some(self), |p, path| {
-            if p == goal {
-                result = Some(path.clone());
-                true
-            } else {
-                false
-            }
-        });
-        result
-    }
     fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
         let mut result = vec![];
         let destination = path.last().unwrap_or(start).clone();
@@ -408,27 +421,13 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         }
         result
     }
-    fn shortest_path_to_attack(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
-        if !self.can_attack_after_moving() {
-            // no need to look for paths if the unit can't attack after moving
-            if path_so_far.len() == 0 && self.attackable_positions(game.get_map(), start, false).contains(goal) {
-                return Some(vec![]);
-            } else {
-                return None;
-            }
+    fn can_attack_after_moving(&self) -> bool {
+        match self.typ {
+            NormalUnits::Hovercraft => true,
+            NormalUnits::TransportHeli(_) => true,
+            NormalUnits::DragonHead => true,
+            NormalUnits::Artillery => false,
         }
-        let (blocked_positions, movement_type, max_cost) = self.consider_path_so_far(game, start, path_so_far);
-        let current_pos = path_so_far.last().unwrap_or(start);
-        let mut result = None;
-        width_search(&movement_type, max_cost, game, current_pos, blocked_positions, Some(self), |p, path| {
-            if (p == start || self.can_stop_on(p, game)) && self.attackable_positions(game.get_map(), p, path.len() + path_so_far.len() > 0).contains(goal) {
-                result = Some(path.clone());
-                true
-            } else {
-                false
-            }
-        });
-        result
     }
     fn get_attack_type(&self) -> AttackType {
         self.typ.get_attack_type()
@@ -447,7 +446,8 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
     fn attackable_positions(&self, map: &Map<D>, position: &Point, moved: bool) -> HashSet<Point> {
         let mut result = HashSet::new();
-        if moved && !self.can_attack_after_moving() {
+        let this: &dyn NormalUnitTrait<D> = self.as_trait();
+        if moved && !this.can_attack_after_moving() {
             return result;
         }
         match self.typ.get_attack_type() {
@@ -741,6 +741,7 @@ pub enum UnitAction<D: Direction> {
     Wait,
     Capture,
     Attack(AttackInfo<D>),
+    MercenaryPowerSimple(String),
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -748,6 +749,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Wait => write!(f, "Wait"),
             Self::Capture => write!(f, "Capture"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
+            Self::MercenaryPowerSimple(name) => write!(f, "Activate \"{}\"", name),
         }
     }
 }
@@ -763,6 +765,7 @@ pub enum UnitCommand<D: Direction> {
     MoveCapture(Point, Vec<Point>),
     MoveWait(Point, Vec<Point>),
     MoveChess(Point, ChessCommand<D>),
+    MercenaryPowerSimple(Point),
 }
 impl<D: Direction> UnitCommand<D> {
     fn check_unit_can_act(game: &Game<D>, at: &Point) -> Result<(), CommandError> {
@@ -804,8 +807,7 @@ impl<D: Direction> UnitCommand<D> {
         } else {
             Err(CommandError::UnitTypeWrong)
         }
-}
-    // returns the point the unit ended on
+    }
     fn apply_path(handler: &mut EventHandler<D>, start: Point, path_taken: Vec<Point>) {
         let unit = handler.get_map().get_unit(&start).unwrap().clone();
         if path_taken.len() > 0 {
@@ -845,18 +847,14 @@ impl<D: Direction> UnitCommand<D> {
                 let damage = defender.calculate_attack_damage(handler.get_game(), &target, attacker_pos, attacker, is_counter);
                 if let Some(damage) = damage {
                     let hp = defender.get_hp();
-                    if defender.get_owner() != Some(attacker.get_owner()) {
-                        for (p, merc) in handler.get_map().mercenary_influence_at(attacker_pos) {
-                            let merc: &dyn NormalUnitTrait<D> = merc.as_trait();
-                            if merc.get_owner() == attacker.get_owner() {
-                                charges.insert(p, charges.get(&p).unwrap_or(&0) + 2);
-                            }
-                        }
-                        for (p, merc) in handler.get_map().mercenary_influence_at(&target) {
-                            let merc: &dyn NormalUnitTrait<D> = merc.as_trait();
-                            if Some(merc.get_owner()) == defender.get_owner() {
-                                charges.insert(p, charges.get(&p).unwrap_or(&0) + 1);
-                            }
+                    if !is_counter && defender.get_owner() != Some(attacker.get_owner()) {
+                        for (p, _) in handler.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {
+                            let change = if &p == attacker_pos {
+                                3
+                            } else {
+                                1
+                            };
+                            charges.insert(p, charges.get(&p).unwrap_or(&0) + change);
                         }
                     }
                     handler.add_event(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8), -(damage as i16)));
@@ -871,7 +869,7 @@ impl<D: Direction> UnitCommand<D> {
         }
         for (p, change) in charges {
             if let Some(UnitType::Mercenary(merc)) = handler.get_map().get_unit(&p) {
-                let change = change.max(-(merc.charge as i16)).min(merc.typ.max_charge() as i16 - change);
+                let change = change.min(merc.typ.max_charge() as i16 - change).max(-(merc.charge as i16));
                 if change != 0 {
                     handler.add_event(Event::MercenaryCharge(p, change as i8));
                 }
@@ -959,22 +957,17 @@ impl<D: Direction> UnitCommand<D> {
             Self::MoveCapture(start, path) => {
                 let intended_end = path.last().unwrap_or(&start).clone();
                 let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
-                let unit = match handler.get_map().get_unit(&start) {
-                    Some(UnitType::Normal(unit)) => {
-                        if !unit.can_capture() {
-                            return Err(CommandError::UnitCannotCapture)
-                        }
-                        unit.clone()
-                    },
-                    _ => return Err(CommandError::UnitCannotCapture),
-                };
+                let u = handler.get_map().get_unit(&start).ok_or_else(|| CommandError::MissingUnit)?;
+                let u = u.clone();
+                let unit: &dyn NormalUnitTrait<D> = u.as_normal_trait().ok_or_else(|| CommandError::UnitTypeWrong).clone()?;
                 let end = path.last().unwrap_or(&start).clone();
+                Self::apply_path(handler, start, path);
                 if end == intended_end {
                     let terrain = handler.get_map().get_terrain(&end).unwrap().clone();
                     match &terrain {
                         Terrain::Realty(realty, owner) => {
-                            if Some(handler.get_game().get_owning_player(&unit.owner).unwrap().team()) != owner.and_then(|o| handler.get_game().get_owning_player(&o)).and_then(|p| Some(p.team())) {
-                                handler.add_event(Event::TerrainChange(end, terrain.clone(), Terrain::Realty(realty.clone(), Some(unit.owner))));
+                            if Some(handler.get_game().get_owning_player(unit.get_owner()).unwrap().team()) != owner.and_then(|o| handler.get_game().get_owning_player(&o)).and_then(|p| Some(p.team())) {
+                                handler.add_event(Event::TerrainChange(end, terrain.clone(), Terrain::Realty(realty.clone(), Some(*unit.get_owner()))));
                             }
                         }
                         _ => {}
@@ -994,6 +987,26 @@ impl<D: Direction> UnitCommand<D> {
                     Some(UnitType::Chess(unit)) => {
                         let unit = unit.clone();
                         chess_command.convert(start, &unit, handler)?;
+                    },
+                    _ => return Err(CommandError::UnitTypeWrong),
+                }
+            }
+            Self::MercenaryPowerSimple(pos) => {
+                if !handler.get_map().wrapping_logic().pointmap().is_point_valid(&pos) {
+                    return Err(CommandError::InvalidPoint(pos));
+                }
+                if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), &pos) {
+                    return Err(CommandError::NoVision);
+                }
+                match handler.get_map().get_unit(&pos) {
+                    Some(UnitType::Mercenary(merc)) => {
+                        if merc.can_use_simple_power(handler.get_game(), &pos) {
+                            let change = -(merc.charge as i8);
+                            handler.add_event(Event::MercenaryCharge(pos, change));
+                            handler.add_event(Event::MercenaryPowerSimple(pos));
+                        } else {
+                            return Err(CommandError::PowerNotUsable);
+                        }
                     },
                     _ => return Err(CommandError::UnitTypeWrong),
                 }

@@ -157,11 +157,11 @@ where D: Direction
             self.units.remove(&p)
         }
     }
-    pub fn mercenary_influence_at(&self, point: &Point) -> Vec<(Point, &Mercenary)> {
+    pub fn mercenary_influence_at(&self, point: &Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenary)> {
         let mut result = vec![];
         for p in self.wrapping_logic.pointmap().get_valid_points() {
             if let Some(UnitType::Mercenary(merc)) = self.get_unit(&p) {
-                if merc.in_range(self, &p, &point) {
+                if (owner.is_none() || owner == Some(&merc.unit.owner)) && merc.in_range(self, &p, &point) {
                     result.push((p.clone(), merc));
                 }
             }

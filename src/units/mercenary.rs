@@ -21,7 +21,7 @@ impl Mercenary {
     }
     pub fn range(&self) -> u8 {
         match self.typ {
-            Mercenaries::EarlGrey => 1,
+            Mercenaries::EarlGrey(_) => 1,
         }
     }
     pub fn in_range<D: Direction>(&self, map: &Map<D>, position: &Point, target: &Point) -> bool {
@@ -42,7 +42,8 @@ impl Mercenary {
             return 1.0;
         }
         match &self.typ {
-            Mercenaries::EarlGrey => 1.3,
+            Mercenaries::EarlGrey(false) => 1.3,
+            Mercenaries::EarlGrey(true) => 1.5,
             _ => 1.1,
         }
     }
@@ -51,6 +52,17 @@ impl Mercenary {
             return 1.0;
         }
         1.1
+    }
+    pub fn power_active(&self) -> bool {
+        match self.typ {
+            Mercenaries::EarlGrey(power_active) => power_active,
+        }
+    }
+    pub fn can_use_simple_power<D: Direction>(&self, game: &Game<D>, pos: &Point) -> bool {
+        match self.typ {
+            Mercenaries::EarlGrey(true) => false,
+            Mercenaries::EarlGrey(false) => self.charge >= self.typ.max_charge(),
+        }
     }
 }
 
@@ -66,8 +78,11 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
         u.get_weapons().into_iter().map(|(weapon, atk)| {
             let mut factor = 1.2;
             match (&self.typ, &weapon) {
-                (Mercenaries::EarlGrey, _) => {
+                (Mercenaries::EarlGrey(false), _) => {
                     factor += 0.3;
+                }
+                (Mercenaries::EarlGrey(true), _) => {
+                    factor += 0.8;
                 }
             }
             (weapon, atk * factor)
@@ -81,20 +96,32 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     }
     fn get_movement(&self) -> (MovementType, u8) {
         let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        u.get_movement()
+        let (movement_type, mut range) = u.get_movement();
+        match self.typ {
+            Mercenaries::EarlGrey(true) => range += 6,
+            _ => {}
+        }
+        (movement_type, range)
     }
     fn has_stealth(&self) -> bool {
         let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
         u.has_stealth()
     }
-    fn shortest_path_to(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
-        self.unit.shortest_path_to(game, start, path_so_far, goal)
-    }
     fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
-        self.unit.options_after_path(game, start, path)
+        let mut options = self.unit.options_after_path(game, start, path);
+        match self.typ {
+            Mercenaries::EarlGrey(false) => {
+                if path.len() == 0 && self.charge >= self.typ.max_charge() {
+                    options.insert(0, UnitAction::MercenaryPowerSimple("Bone Rush".to_string()));
+                }
+            }
+            _ => {}
+        }
+        options
     }
-    fn shortest_path_to_attack(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
-        self.unit.shortest_path_to_attack(game, start, path_so_far, goal)
+    fn can_attack_after_moving(&self) -> bool {
+        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
+        u.can_attack_after_moving()
     }
     fn get_attack_type(&self) -> AttackType {
         self.unit.typ.get_attack_type()
@@ -119,12 +146,13 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Mercenaries {
-    EarlGrey,
+    EarlGrey(bool),
 }
 impl Mercenaries {
     pub fn max_charge(&self) -> u8 {
         match self {
-            Self::EarlGrey => 10,
+            Self::EarlGrey(false) => 10,
+            Self::EarlGrey(true) => 0,
         }
     }
 }
