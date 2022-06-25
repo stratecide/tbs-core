@@ -26,8 +26,8 @@ impl<D: Direction> Command<D> {
                                 handler.add_event(Event::UnitExhaust(p));
                             }
                         }
-                        Some(UnitType::Mercenary(unit)) => {
-                            if unit.unit.exhausted && unit.unit.owner == handler.game.current_player().owner_id {
+                        Some(UnitType::Mercenary(merc)) => {
+                            if merc.unit.exhausted && merc.unit.owner == handler.game.current_player().owner_id {
                                 handler.add_event(Event::UnitExhaust(p));
                             }
                         }
@@ -41,6 +41,19 @@ impl<D: Direction> Command<D> {
                     }
                 }
                 handler.add_event(Event::NextTurn);
+                for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
+                    match handler.get_map().get_unit(&p) {
+                        Some(UnitType::Mercenary(merc)) => {
+                            if merc.unit.owner == handler.game.current_player().owner_id {
+                                match &merc.typ {
+                                    Mercenaries::EarlGrey(true) => handler.add_event(Event::MercenaryPowerSimple(p)),
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 match handler.get_game().get_fog_mode() {
                     FogMode::Random(value, offset, to_bright_chance, to_dark_chance) => {
                         if handler.get_game().current_turn() >= *offset as u32 {
@@ -138,7 +151,7 @@ impl<D: Direction> Event<D> {
                 if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(pos) {
                     match &mut merc.typ {
                         Mercenaries::EarlGrey(power_active) => {
-                            *power_active = true;
+                            *power_active = !*power_active;
                         }
                     }
                 }
@@ -197,7 +210,7 @@ impl<D: Direction> Event<D> {
                 if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(pos) {
                     match &mut merc.typ {
                         Mercenaries::EarlGrey(power_active) => {
-                            *power_active = false;
+                            *power_active = !*power_active;
                         }
                     }
                 }
