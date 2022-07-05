@@ -37,7 +37,7 @@ where D: Direction {
             translate_by: translate_by,
         }
     }
-    fn add(&self, other: &Self) -> Self {
+    pub fn add(&self, other: &Self) -> Self {
         let mut translate_by = other.translate_by;
         let mut angle = other.distortion.1;
         if self.distortion.0 {
