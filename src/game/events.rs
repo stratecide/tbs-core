@@ -244,7 +244,7 @@ impl<D: Direction> Event<D> {
                 let mut visible_path = vec![];
                 for (i, p) in path.iter().enumerate() {
                     // since this is only called on events that haven't been replaced with a fog version, all points in the path are non-null
-                    if game.has_vision_at(*team, &p.unwrap()) {
+                    if game.has_vision_at(*team, &p.unwrap()) || unit.get_team(&game) == *team {
                         visible_path.push(p.clone());
                     } else if i > 0 && game.has_vision_at(*team, &path[i - 1].unwrap()) {
                         visible_path.push(p.clone());
