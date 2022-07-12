@@ -323,7 +323,7 @@ pub trait NormalUnitTrait<D: Direction> {
             }
             // no visible unit should block movement
             if let Some(unit) = game.get_map().get_unit(p) {
-                if game.has_vision_at(Some(game.current_player().team()), p) && !unit.can_be_moved_through(self.as_trait(), game) {
+                if game.has_vision_at(Some(game.current_player().team), p) && !unit.can_be_moved_through(self.as_trait(), game) {
                     return Err(CommandError::InvalidPath);
                 }
             }
@@ -410,7 +410,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             if self.can_capture() {
                 match game.get_map().get_terrain(&destination) {
                     Some(Terrain::Realty(_, owner)) => {
-                        if Some(game.get_owning_player(&self.owner).unwrap().team()) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team())) {
+                        if Some(game.get_owning_player(&self.owner).unwrap().team) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team)) {
                             result.push(UnitAction::Capture);
                         }
                     }
@@ -769,7 +769,7 @@ pub enum UnitCommand<D: Direction> {
 }
 impl<D: Direction> UnitCommand<D> {
     fn check_unit_can_act(game: &Game<D>, at: &Point) -> Result<(), CommandError> {
-        if !game.has_vision_at(Some(game.current_player().team()), at) {
+        if !game.has_vision_at(Some(game.current_player().team), at) {
             return Err(CommandError::NoVision);
         }
         if let Some(unit) = game.get_map().get_unit(at) {
@@ -798,7 +798,7 @@ impl<D: Direction> UnitCommand<D> {
         if let Some(unit) = unit.as_normal_trait() {
             if let Some(p) = path.last() {
                 if let Some(_) = game.get_map().get_unit(p) {
-                    if game.has_vision_at(Some(game.current_player().team()), p) {
+                    if game.has_vision_at(Some(game.current_player().team), p) {
                         return Err(CommandError::InvalidPath);
                     }
                 }
@@ -814,7 +814,7 @@ impl<D: Direction> UnitCommand<D> {
             let mut event_path:Vec<Option<Point>> = path_taken.iter().map(|p| Some(p.clone())).collect();
             event_path.insert(0, Some(start.clone()));
             handler.add_event(Event::UnitPath(event_path, unit.clone()));
-            let team = handler.get_game().current_player().team();
+            let team = handler.get_game().current_player().team;
             if Some(team) == unit.get_team(handler.get_game()) {
                 let mut vision_changes = HashSet::new();
                 for p in &path_taken {
@@ -929,7 +929,7 @@ impl<D: Direction> UnitCommand<D> {
                             AttackType::Straight(_, _) => return Err(CommandError::InvalidTarget),
                             _ => {}
                         }
-                        if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team()), target) {
+                        if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), target) {
                             return Err(CommandError::NoVision);
                         }
                         if !unit.is_position_targetable(handler.get_game(), target) {
@@ -966,7 +966,7 @@ impl<D: Direction> UnitCommand<D> {
                     let terrain = handler.get_map().get_terrain(&end).unwrap().clone();
                     match &terrain {
                         Terrain::Realty(realty, owner) => {
-                            if Some(handler.get_game().get_owning_player(unit.get_owner()).unwrap().team()) != owner.and_then(|o| handler.get_game().get_owning_player(&o)).and_then(|p| Some(p.team())) {
+                            if Some(handler.get_game().get_owning_player(unit.get_owner()).unwrap().team) != owner.and_then(|o| handler.get_game().get_owning_player(&o)).and_then(|p| Some(p.team)) {
                                 handler.add_event(Event::TerrainChange(end, terrain.clone(), Terrain::Realty(realty.clone(), Some(*unit.get_owner()))));
                             }
                         }

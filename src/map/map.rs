@@ -207,8 +207,8 @@ where D: Direction
     }
     pub fn get_players(&self) -> Vec<Player> {
         vec![
-            Player{color_id: 0, owner_id: 0, team: 0},
-            Player{color_id: 1, owner_id: 1, team: 1},
+            Player::new(0, 0, 100, 333),
+            Player::new(1, 1, 144, 210),
         ]
     }
     /**

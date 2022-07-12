@@ -60,7 +60,7 @@ impl<D: Direction> Terrain<D> {
         match self {
             Terrain::Realty(_, owner) => {
                 if let Some(player) = owner.and_then(|owner| game.get_owning_player(&owner)) {
-                    if Some(player.team()) == team {
+                    if Some(player.team) == team {
                         result.insert(pos.clone());
                     }
                 }
@@ -75,12 +75,12 @@ impl<D: Direction> Terrain<D> {
             _ => self.clone(),
         }
     }
-    fn end_turn(&self) {
+    /*fn end_turn(&self) {
         match self {
             Terrain::Realty(realty, owner) => realty.end_turn(owner),
             _ => {}, // do nothin by default
         }
-    }
+    }*/
 }
 
 
@@ -90,7 +90,10 @@ pub enum Realty {
     Hq,
 }
 impl Realty {
-    fn end_turn(&self, _owner: &Option<Owner>) {
-
+    pub fn income_factor(&self) -> i16 {
+        match self {
+            Self::City => 1,
+            _ => 0,
+        }
     }
 }

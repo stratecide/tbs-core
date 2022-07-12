@@ -19,6 +19,7 @@ impl<D: Direction> Command<D> {
     pub fn convert(self, handler: &mut events::EventHandler<D>) -> Result<(), CommandError> {
         match self {
             Self::EndTurn => {
+                // un-exhaust units
                 for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
                     match handler.get_map().get_unit(&p) {
                         Some(UnitType::Normal(unit)) => {
@@ -40,7 +41,40 @@ impl<D: Direction> Command<D> {
                         None => {}
                     }
                 }
+                let was_foggy = handler.get_game().is_foggy();
+
                 handler.add_event(Event::NextTurn);
+                
+                // update fog manually if it's random
+                match handler.get_game().get_fog_mode() {
+                    FogMode::Random(value, offset, to_bright_chance, to_dark_chance) => {
+                        if handler.get_game().current_turn() >= *offset as u32 {
+                            let random_value:f32 = rand::random();
+                            if *value && random_value < *to_bright_chance || !*value && random_value < *to_dark_chance {
+                                handler.add_event(Event::FogFlipRandom);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                // hide / reveal player funds if fog started / ended
+                if was_foggy != handler.get_game().is_foggy() {
+                    // usually events have to be added immediately, but this list of events can't influence each other
+                    let mut events: Vec<Event<D>> = vec![];
+                    if was_foggy {
+                        for player in &handler.get_game().players {
+                            events.push(Event::RevealFunds(player.owner_id, player.funds));
+                        }
+                    } else {
+                        for player in &handler.get_game().players {
+                            events.push(Event::HideFunds(player.owner_id, player.funds));
+                        }
+                    }
+                    for event in events {
+                        handler.add_event(event);
+                    }
+                }
+                // end merc powers
                 for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
                     match handler.get_map().get_unit(&p) {
                         Some(UnitType::Mercenary(merc)) => {
@@ -54,18 +88,23 @@ impl<D: Direction> Command<D> {
                         _ => {}
                     }
                 }
-                match handler.get_game().get_fog_mode() {
-                    FogMode::Random(value, offset, to_bright_chance, to_dark_chance) => {
-                        if handler.get_game().current_turn() >= *offset as u32 {
-                            let random_value:f32 = rand::random();
-                            if *value && random_value < *to_bright_chance || !*value && random_value < *to_dark_chance {
-                                handler.add_event(Event::FogFlipRandom);
+
+                handler.recalculate_fog(false);
+
+                // income from properties
+                let mut income_factor = 0;
+                for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
+                    match handler.get_map().get_terrain(&p) {
+                        Some(Terrain::Realty(realty, owner)) => {
+                            if *owner == Some(handler.game.current_player().owner_id) {
+                                income_factor += realty.income_factor();
                             }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
-                handler.recalculate_fog(false);
+                handler.add_event(Event::MoneyChange(handler.game.current_player().owner_id, handler.game.current_player().income * income_factor));
+
                 Ok(())
             }
             Self::UnitCommand(command) => command.convert(handler)
@@ -100,6 +139,9 @@ pub enum Event<D:Direction> {
     MercenaryCharge(Point, i8),
     MercenaryPowerSimple(Point),
     TerrainChange(Point, Terrain<D>, Terrain<D>),
+    MoneyChange(Owner, i16),
+    HideFunds(Owner, i32), // when fog starts
+    RevealFunds(Owner, i32), // when fog ends
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -158,6 +200,17 @@ impl<D: Direction> Event<D> {
             }
             Self::TerrainChange(pos, _, terrain) => {
                 game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
+            }
+            Self::MoneyChange(owner, change) => {
+                if let Some(player) = game.get_owning_player_mut(owner) {
+                    player.funds += *change as i32;
+                }
+            }
+            Self::HideFunds(owner, _) => {}
+            Self::RevealFunds(owner, value) => {
+                if let Some(player) = game.get_owning_player_mut(owner) {
+                    player.funds = *value;
+                }
             }
         }
     }
@@ -218,6 +271,17 @@ impl<D: Direction> Event<D> {
             Self::TerrainChange(pos, terrain, _) => {
                 game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
             }
+            Self::MoneyChange(owner, change) => {
+                if let Some(player) = game.get_owning_player_mut(owner) {
+                    player.funds -= *change as i32;
+                }
+            }
+            Self::HideFunds(owner, value) => {
+                if let Some(player) = game.get_owning_player_mut(owner) {
+                    player.funds = *value;
+                }
+            }
+            Self::RevealFunds(owner, _) => {}
         }
     }
     fn fog_replacement(&self, game: &Game<D>, team: &Perspective) -> Option<Event<D>> {
@@ -310,6 +374,27 @@ impl<D: Direction> Event<D> {
                     }
                 }
             }
+            Self::MoneyChange(owner, _) => {
+                if !game.is_foggy() || *team == game.get_owning_player(owner).and_then(|p| Some(p.team)) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::HideFunds(owner, _) => {
+                if *team != game.get_owning_player(owner).and_then(|p| Some(p.team)) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::RevealFunds(owner, _) => {
+                if *team != game.get_owning_player(owner).and_then(|p| Some(p.team)) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -381,7 +466,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn recalculate_fog(&mut self, keep_current_team: bool) {
         let mut teams:HashSet<Option<Team>> = self.game.get_teams().into_iter().map(|team| Some(team)).collect();
         if keep_current_team {
-            teams.remove(&Some(self.game.current_player().team()));
+            teams.remove(&Some(self.game.current_player().team));
         }
         teams.insert(None);
         for team in teams {

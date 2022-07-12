@@ -12,7 +12,7 @@ pub struct Game<D: Direction> {
     map: Map<D>,
     pub current_turn: u32,
     ended: bool,
-    players: Vec<Player>,
+    pub players: Vec<Player>,
     fog_mode: FogMode,
     fog: HashMap<Option<Team>, HashSet<Point>>,
 }
@@ -22,7 +22,7 @@ impl<D: Direction> Game<D> {
         let mut fog = HashMap::new();
         let neutral_fog = HashSet::new();
         for player in &players {
-            fog.insert(Some(player.team().clone()), neutral_fog.clone());
+            fog.insert(Some(player.team.clone()), neutral_fog.clone());
         }
         fog.insert(None, neutral_fog);
         Game {
@@ -73,7 +73,7 @@ impl<D: Direction> Game<D> {
                     fog.remove(&p);
                 }
                 if let Some(unit) = self.get_map().get_unit(&p) {
-                    if perspective.is_some() && perspective == unit.get_owner().and_then(|owner| self.get_owning_player(owner)).and_then(|player| Some(player.team())) {
+                    if perspective.is_some() && perspective == unit.get_owner().and_then(|owner| self.get_owning_player(owner)).and_then(|player| Some(player.team)) {
                         for p in unit.get_vision(self, &p) {
                             fog.remove(&p);
                         }
@@ -108,6 +108,9 @@ impl<D: Direction> Game<D> {
     }
     pub fn get_owning_player(&self, owner: &Owner) -> Option<&Player> {
         self.players.iter().find(|player| &player.owner_id == owner)
+    }
+    pub fn get_owning_player_mut(&mut self, owner: &Owner) -> Option<&mut Player> {
+        self.players.iter_mut().find(|player| &player.owner_id == owner)
     }
 
     pub fn is_foggy(&self) -> bool {
