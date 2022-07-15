@@ -146,17 +146,22 @@ impl<D: Direction> UnitType<D> {
         2
     }
     pub fn get_vision(&self, game: &Game<D>, pos: &Point) -> HashSet<Point> {
-        let mut result = HashSet::new();
-        result.insert(pos.clone());
-        let layers = range_in_layers(game.get_map(), pos, self.vision_range(game, pos));
-        for (i, layer) in layers.into_iter().enumerate() {
-            for (p, _, _) in layer {
-                if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(&p).unwrap().requires_true_sight() {
-                    result.insert(p);
+        match self {
+            Self::Chess(unit) => unit.get_vision(game, pos),
+            _ => {
+                let mut result = HashSet::new();
+                result.insert(pos.clone());
+                let layers = range_in_layers(game.get_map(), pos, self.vision_range(game, pos));
+                for (i, layer) in layers.into_iter().enumerate() {
+                    for (p, _, _) in layer {
+                        if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(&p).unwrap().requires_true_sight() {
+                            result.insert(p);
+                        }
+                    }
                 }
+                result
             }
         }
-        result
     }
 }
 
@@ -231,7 +236,7 @@ pub trait NormalUnitTrait<D: Direction> {
     fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>>;
     fn can_stop_on(&self, p: &Point, game: &Game<D>) -> bool {
         // doesn't check terrain
-        if let Some(unit) = game.get_map().get_unit(p) {
+        if let Some(_) = game.get_map().get_unit(p) {
             false
         } else {
             true

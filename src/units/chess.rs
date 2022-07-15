@@ -18,37 +18,40 @@ impl<D: Direction> ChessCommand<D> {
         let team = super::get_team(Some(&unit.owner), handler.get_game()).unwrap();
         match (self, &unit.typ) {
             (Self::Rook(dir, distance), ChessUnits::Rook(_)) => {
-                let mut events = vec![];
+                let mut path = None;
                 straight_search(handler.get_game(), &start, &dir, max_cost, HashSet::new(), get_team(Some(&unit.owner), handler.get_game()), |p, path_so_far| {
-                    let mut path:Vec<Option<Point>> = path_so_far.iter().map(|p| Some(p.clone())).collect();
-                    path.insert(0, Some(start.clone()));
                     if let Some(other) = handler.get_map().get_unit(p) {
                         if other.killable_by_chess(team, handler.get_game()) {
-                            events.push(Event::UnitDeath(p.clone(), other.clone()));
-                            events.push(Event::UnitPath(path, UnitType::Chess::<D>(unit.clone())));
-                            events.push(Event::UnitExhaust(p.clone()));
+                            path = Some(path_so_far.clone());
                             true
                         } else if !handler.get_game().has_vision_at(Some(team), p) {
-                            path.pop();
-                            let p = path.last().unwrap().unwrap().clone();
-                            events.push(Event::UnitPath(path, UnitType::Chess::<D>(unit.clone())));
-                            events.push(Event::UnitExhaust(p));
+                            path = Some(path_so_far.clone());
+                            path.as_mut().unwrap().pop();
                             true
                         } else {
                             true
                         }
                     } else if path_so_far.len() == distance as usize {
-                        events.push(Event::UnitPath(path, UnitType::Chess::<D>(unit.clone())));
-                        events.push(Event::UnitExhaust(p.clone()));
+                        path = Some(path_so_far.clone());
                         true
                     } else {
                         false
                     }
                 });
-                if events.len() > 0 {
-                    for e in events {
-                        handler.add_event(e);
+                if let Some(mut path) = path {
+                    path.insert(0, start.clone());
+                    let p = path.last().unwrap().clone();
+                    if let Some(other) = handler.get_map().get_unit(&p) {
+                        handler.add_event(Event::UnitDeath(p.clone(), other.clone()));
                     }
+                    handler.add_event(Event::UnitPath(path.into_iter().map(|p| Some(p)).collect(), UnitType::Chess::<D>(unit.clone())));
+                    let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &p).into_iter().filter(|p| {
+                        !handler.get_game().has_vision_at(Some(team), &p)
+                    }).collect();
+                    if vision_changes.len() > 0 {
+                        handler.add_event(Event::PureFogChange(Some(team), vision_changes));
+                    }
+                    handler.add_event(Event::UnitExhaust(p));
                     Ok(())
                 } else {
                     Err(CommandError::InvalidPath)
@@ -131,6 +134,40 @@ impl ChessUnit {
                 result
             }
         }
+    }
+    fn true_vision_range<D: Direction>(&self, _game: &Game<D>, _pos: &Point) -> usize {
+        1
+    }
+    fn vision_range<D: Direction>(&self, _game: &Game<D>, _pos: &Point) -> usize {
+        match self.typ {
+            ChessUnits::Rook(_) => 8,
+        }
+    }
+    pub fn get_vision<D: Direction>(&self, game: &Game<D>, pos: &Point) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        match self.typ {
+            ChessUnits::Rook(_) => {
+                for d in D::list() {
+                    let mut current = OrientedPoint::new(pos.clone(), false, *d);
+                    for i in 0..self.vision_range(game, pos) {
+                        if let Some(dp) = game.get_map().get_neighbor(current.point(), current.direction()) {
+                            let terrain = game.get_map().get_terrain(current.point()).unwrap();
+                            if i >= self.true_vision_range(game, pos) && terrain.requires_true_sight() {
+                                break;
+                            }
+                            current = dp;
+                            result.insert(current.point().clone());
+                            if terrain.movement_cost(&MovementType::Chess).is_none() {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        result
     }
 }
 
