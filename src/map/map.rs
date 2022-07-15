@@ -221,8 +221,8 @@ where D: Direction
             fog_mode: FogMode::DarkRegular(3, 4, 3),
         })
     }
-    pub fn game_server(self, settings: &settings::GameSettings) -> (Game<D>, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {
-        Game::new_server(self, settings)
+    pub fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {
+        Game::new_server(self, settings, random)
     }
     pub fn game_client(self, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Game<D> {
         Game::new_client(self, settings, events)

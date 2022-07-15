@@ -34,9 +34,9 @@ impl<D: Direction> Game<D> {
             fog,
         }
     }
-    pub fn new_server(map: Map<D>, settings: &settings::GameSettings) -> (Self, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {
+    pub fn new_server<R: Fn() -> f32>(map: Map<D>, settings: &settings::GameSettings, random: R) -> (Self, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {
         let mut this = Self::new(map, settings);
-        let events = this.start_server();
+        let events = this.start_server(random);
         (this, events)
     }
     pub fn new_client(map: Map<D>, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Self {
@@ -44,7 +44,7 @@ impl<D: Direction> Game<D> {
         this.handle_events(events);
         this
     }
-    fn start_server(&mut self) -> HashMap<Option<Perspective>, Vec<events::Event<D>>> {
+    fn start_server<R: Fn() -> f32>(&mut self, _random: R) -> HashMap<Option<Perspective>, Vec<events::Event<D>>> {
         let mut handler = events::EventHandler::new(self);
         if handler.get_game().is_foggy() {
             handler.recalculate_fog(false);
@@ -126,9 +126,9 @@ impl<D: Direction> Game<D> {
         !self.fog.get(&team).unwrap().contains(at)
     }
 
-    pub fn handle_command(&mut self, command: events::Command<D>) -> Result<HashMap<Option<Perspective>, Vec<events::Event<D>>>, events::CommandError> {
+    pub fn handle_command<R: Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<HashMap<Option<Perspective>, Vec<events::Event<D>>>, events::CommandError> {
         let mut handler = events::EventHandler::new(self);
-        match command.convert(&mut handler) {
+        match command.convert(&mut handler, random) {
             Ok(()) => Ok(handler.accept()),
             Err(err) => {
                 handler.cancel();

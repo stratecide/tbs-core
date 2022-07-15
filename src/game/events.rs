@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use rand;
 
 use crate::map::map::Map;
 use crate::map::point::Point;
@@ -16,7 +15,7 @@ pub enum Command<D: Direction> {
     UnitCommand(UnitCommand<D>),
 }
 impl<D: Direction> Command<D> {
-    pub fn convert(self, handler: &mut events::EventHandler<D>) -> Result<(), CommandError> {
+    pub fn convert<R: Fn() -> f32>(self, handler: &mut events::EventHandler<D>, random: R) -> Result<(), CommandError> {
         match self {
             Self::EndTurn => {
                 // un-exhaust units
@@ -49,7 +48,7 @@ impl<D: Direction> Command<D> {
                 match handler.get_game().get_fog_mode() {
                     FogMode::Random(value, offset, to_bright_chance, to_dark_chance) => {
                         if handler.get_game().current_turn() >= *offset as u32 {
-                            let random_value:f32 = rand::random();
+                            let random_value:f32 = random();
                             if *value && random_value < *to_bright_chance || !*value && random_value < *to_dark_chance {
                                 handler.add_event(Event::FogFlipRandom);
                             }

@@ -9,4 +9,3 @@ edition = "2021"
 rendering = []
 
 [dependencies]
-rand = "0.8"
