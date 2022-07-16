@@ -352,7 +352,7 @@ where D: Direction
                 // no wrapping
                 true
             }
-        }).map(|(i, tran)| {
+        }).map(|(_, tran)| {
             tran
         }).collect()
     }

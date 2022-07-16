@@ -46,9 +46,7 @@ impl<D: Direction> Game<D> {
     }
     fn start_server<R: Fn() -> f32>(&mut self, _random: R) -> HashMap<Option<Perspective>, Vec<events::Event<D>>> {
         let mut handler = events::EventHandler::new(self);
-        if handler.get_game().is_foggy() {
-            handler.recalculate_fog(false);
-        }
+        handler.start_turn();
         handler.accept()
     }
     pub fn get_fog_mode(&self) -> &FogMode {

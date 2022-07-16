@@ -176,6 +176,11 @@ pub enum ChessUnits {
     Rook(bool),
 }
 impl ChessUnits {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Rook(_) => "Rook",
+        }
+    }
     pub fn get_movement(&self) -> u8 {
         match self {
             Self::Rook(_) => 8 * 6,

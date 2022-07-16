@@ -86,14 +86,32 @@ impl<D: Direction> Terrain<D> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Realty {
-    City,
     Hq,
+    City,
+    Factory(u8),
 }
 impl Realty {
     pub fn income_factor(&self) -> i16 {
         match self {
             Self::City => 1,
             _ => 0,
+        }
+    }
+    pub fn buildable_units<D: Direction>(&self, _game: &Game<D>, owner: Owner) -> Vec<(UnitType<D>, u16)> {
+        match self {
+            Self::Factory(built_this_turn) => {
+                let units = vec![
+                    NormalUnits::Hovercraft,
+                    NormalUnits::DragonHead,
+                    NormalUnits::Artillery,
+                ];
+                units.into_iter().map(|u| {
+                    let value = u.value() + 300 * *built_this_turn as u16;
+                    let unit = UnitType::Normal(NormalUnit::new_instance(u, owner));
+                    (unit, value)
+                }).collect()
+            }
+            _ => vec![],
         }
     }
 }

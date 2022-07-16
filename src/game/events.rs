@@ -13,26 +13,28 @@ use super::events;
 pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand<D>),
+    BuyUnit(Point, u8),
 }
 impl<D: Direction> Command<D> {
     pub fn convert<R: Fn() -> f32>(self, handler: &mut events::EventHandler<D>, random: R) -> Result<(), CommandError> {
+        let owner_id = handler.game.current_player().owner_id;
         match self {
             Self::EndTurn => {
                 // un-exhaust units
                 for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
                     match handler.get_map().get_unit(&p) {
                         Some(UnitType::Normal(unit)) => {
-                            if unit.exhausted && unit.owner == handler.game.current_player().owner_id {
+                            if unit.exhausted && unit.owner == owner_id {
                                 handler.add_event(Event::UnitExhaust(p));
                             }
                         }
                         Some(UnitType::Mercenary(merc)) => {
-                            if merc.unit.exhausted && merc.unit.owner == handler.game.current_player().owner_id {
+                            if merc.unit.exhausted && merc.unit.owner == owner_id {
                                 handler.add_event(Event::UnitExhaust(p));
                             }
                         }
                         Some(UnitType::Chess(unit)) => {
-                            if unit.exhausted && unit.owner == handler.game.current_player().owner_id {
+                            if unit.exhausted && unit.owner == owner_id {
                                 handler.add_event(Event::UnitExhaust(p));
                             }
                         }
@@ -77,7 +79,7 @@ impl<D: Direction> Command<D> {
                 for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
                     match handler.get_map().get_unit(&p) {
                         Some(UnitType::Mercenary(merc)) => {
-                            if merc.unit.owner == handler.game.current_player().owner_id {
+                            if merc.unit.owner == owner_id {
                                 match &merc.typ {
                                     Mercenaries::EarlGrey(true) => handler.add_event(Event::MercenaryPowerSimple(p)),
                                     _ => {}
@@ -88,25 +90,48 @@ impl<D: Direction> Command<D> {
                     }
                 }
 
-                handler.recalculate_fog(false);
-
-                // income from properties
-                let mut income_factor = 0;
-                for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
-                    match handler.get_map().get_terrain(&p) {
-                        Some(Terrain::Realty(realty, owner)) => {
-                            if *owner == Some(handler.game.current_player().owner_id) {
-                                income_factor += realty.income_factor();
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                handler.add_event(Event::MoneyChange(handler.game.current_player().owner_id, handler.game.current_player().income * income_factor));
+                handler.start_turn();
 
                 Ok(())
             }
-            Self::UnitCommand(command) => command.convert(handler)
+            Self::UnitCommand(command) => command.convert(handler),
+            Self::BuyUnit(pos, index) => {
+                let team = Some(handler.get_game().current_player().team);
+                if !handler.get_game().has_vision_at(team, &pos) {
+                    Err(CommandError::NoVision)
+                } else if let Some(_) = handler.get_map().get_unit(&pos) {
+                    Err(CommandError::Blocked(pos))
+                } else {
+                    // TODO: bubble
+                    if let Some(Terrain::Realty(realty, owner)) = handler.get_map().get_terrain(&pos) {
+                        if owner == &Some(owner_id) {
+                            let options = realty.buildable_units(handler.get_game(), owner_id);
+                            if let Some((unit, cost)) = options.get(index as usize) {
+                                if *cost as i32 <= handler.get_game().current_player().funds {
+                                    handler.add_event(Event::MoneyChange(owner_id, -(*cost as i16)));
+                                    let mut u = unit.clone();
+                                    u.set_exhausted(true);
+                                    let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &pos).into_iter().filter(|p| !handler.get_game().has_vision_at(team, &p)).collect();
+                                    handler.add_event(Event::UnitCreation(pos, u)); 
+                                    if vision_changes.len() > 0 {
+                                        handler.add_event(Event::PureFogChange(team, vision_changes));
+                                    }
+                                    // TODO: increment counter for that realty
+                                    Ok(())
+                                } else {
+                                    Err(CommandError::NotEnoughMoney)
+                                }
+                            } else {
+                                Err(CommandError::InvalidIndex)
+                            }
+                        } else {
+                            Err(CommandError::NotYourRealty)
+                        }
+                    } else {
+                        Err(CommandError::NotYourRealty)
+                    }
+                }
+            }
         }
     }
 }
@@ -122,7 +147,11 @@ pub enum CommandError {
     InvalidPath,
     InvalidPoint(Point),
     InvalidTarget,
+    InvalidIndex,
     PowerNotUsable,
+    Blocked(Point),
+    NotEnoughMoney,
+    NotYourRealty,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -134,6 +163,7 @@ pub enum Event<D:Direction> {
     UnitPath(Vec<Option<Point>>, UnitType<D>),
     UnitExhaust(Point),
     UnitHpChange(Point, i8, i16),
+    UnitCreation(Point, UnitType<D>),
     UnitDeath(Point, UnitType<D>),
     MercenaryCharge(Point, i8),
     MercenaryPowerSimple(Point),
@@ -179,6 +209,9 @@ impl<D: Direction> Event<D> {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
                 let hp = unit.get_hp_mut();
                 *hp = (*hp as i8 + hp_change) as u8;
+            }
+            Self::UnitCreation(pos, unit) => {
+                game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
             }
             Self::UnitDeath(pos, _) => {
                 game.get_map_mut().set_unit(pos.clone(), None).expect(&format!("expected a unit at {:?} to die!", pos));
@@ -249,6 +282,9 @@ impl<D: Direction> Event<D> {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, -hp_change));
                 let hp = unit.get_hp_mut();
                 *hp = (*hp as i8 - hp_change) as u8;
+            }
+            Self::UnitCreation(pos, unit) => {
+                game.get_map_mut().set_unit(pos.clone(), None).expect(&format!("expected a unit at {:?} to die!", pos));
             }
             Self::UnitDeath(pos, unit) => {
                 game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
@@ -333,6 +369,13 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::UnitHpChange(pos, _, _) => {
+                if game.has_vision_at(*team, pos) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitCreation(pos, _) => {
                 if game.has_vision_at(*team, pos) {
                     Some(self.clone())
                 } else {
@@ -462,6 +505,23 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
+    pub fn start_turn(&mut self) {
+        self.recalculate_fog(false);
+
+        // income from properties
+        let mut income_factor = 0;
+        for p in self.get_map().wrapping_logic().pointmap().get_valid_points() {
+            match self.get_map().get_terrain(&p) {
+                Some(Terrain::Realty(realty, owner)) => {
+                    if *owner == Some(self.game.current_player().owner_id) {
+                        income_factor += realty.income_factor();
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.add_event(Event::MoneyChange(self.game.current_player().owner_id, self.game.current_player().income * income_factor));
+    }
     pub fn recalculate_fog(&mut self, keep_current_team: bool) {
         let mut teams:HashSet<Option<Team>> = self.game.get_teams().into_iter().map(|team| Some(team)).collect();
         if keep_current_team {

@@ -149,6 +149,11 @@ pub enum Mercenaries {
     EarlGrey(bool),
 }
 impl Mercenaries {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::EarlGrey(_) => "Earl Grey",
+        }
+    }
     pub fn max_charge(&self) -> u8 {
         match self {
             Self::EarlGrey(false) => 10,

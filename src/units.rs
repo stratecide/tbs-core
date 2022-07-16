@@ -33,6 +33,14 @@ impl<D: Direction> UnitType<D> {
             _ => None,
         }
     }
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Normal(unit) => unit.typ.name(),
+            Self::Mercenary(merc) => merc.typ.name(),
+            Self::Chess(unit) => unit.typ.name(),
+            Self::Structure(unit) => unit.typ.name(),
+        }
+    }
     pub fn get_owner(&self) -> Option<&Owner> {
         match self {
             Self::Normal(unit) => Some(&unit.owner),
@@ -58,6 +66,14 @@ impl<D: Direction> UnitType<D> {
             Self::Mercenary(unit) => &mut unit.unit.hp,
             Self::Chess(unit) => &mut unit.hp,
             Self::Structure(unit) => &mut unit.hp,
+        }
+    }
+    pub fn set_exhausted(&mut self, exhausted: bool) {
+        match self {
+            Self::Normal(unit) => unit.exhausted = exhausted,
+            Self::Mercenary(merc) => merc.unit.exhausted = exhausted,
+            Self::Chess(unit) => unit.exhausted = exhausted,
+            Self::Structure(_) => {},
         }
     }
     pub fn can_act(&self, player: &Player) -> bool {
@@ -184,6 +200,14 @@ pub enum NormalUnits {
     Artillery,
 }
 impl NormalUnits {
+    pub fn name(&self) -> &'static str {
+        match self {
+            NormalUnits::Hovercraft => "Hovercraft",
+            NormalUnits::TransportHeli(_) => "Transport Helicopter",
+            NormalUnits::DragonHead => "Dragon Head",
+            NormalUnits::Artillery => "Artillery",
+        }
+    }
     pub fn get_attack_type(&self) -> AttackType {
         match self {
             NormalUnits::Hovercraft => AttackType::Adjacent,
@@ -206,6 +230,14 @@ impl NormalUnits {
             NormalUnits::TransportHeli(_) => (ArmorType::Heli, 1.5),
             NormalUnits::DragonHead => (ArmorType::Light, 1.5),
             NormalUnits::Artillery => (ArmorType::Light, 1.5),
+        }
+    }
+    pub fn value(&self) -> u16 {
+        match self {
+            NormalUnits::Hovercraft => 100,
+            NormalUnits::TransportHeli(_) => 500,
+            NormalUnits::DragonHead => 400,
+            NormalUnits::Artillery => 600,
         }
     }
 }

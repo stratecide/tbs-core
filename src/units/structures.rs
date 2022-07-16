@@ -19,6 +19,11 @@ pub enum Structures<D: Direction> {
     Cannon(D),
 }
 impl<D: Direction> Structures<D> {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Cannon(_) => "Cannon",
+        }
+    }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
             Self::Cannon(_) => (ArmorType::Heavy, 2.5),

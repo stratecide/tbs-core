@@ -1,5 +1,4 @@
 use crate::map::point::*;
-use crate::map::direction::*;
 
 const MIN_SIZE:u8 = 3;
 const MAX_SIZE:u8 = 50;
