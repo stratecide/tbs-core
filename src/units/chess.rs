@@ -44,7 +44,7 @@ impl<D: Direction> ChessCommand<D> {
                     if let Some(other) = handler.get_map().get_unit(&p) {
                         handler.add_event(Event::UnitDeath(p.clone(), other.clone()));
                     }
-                    handler.add_event(Event::UnitPath(path.into_iter().map(|p| Some(p)).collect(), UnitType::Chess::<D>(unit.clone())));
+                    handler.add_event(Event::UnitPath(None, path.into_iter().map(|p| Some(p)).collect(), UnitType::Chess::<D>(unit.clone())));
                     let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &p).into_iter().filter(|p| {
                         !handler.get_game().has_vision_at(Some(team), &p)
                     }).collect();
@@ -169,6 +169,23 @@ impl ChessUnit {
         }
         result
     }
+}
+
+pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: &Point) -> Result<(), CommandError> {
+    if !game.has_vision_at(Some(game.current_player().team), at) {
+        return Err(CommandError::NoVision);
+    }
+    let unit = match game.get_map().get_unit(&at).ok_or(CommandError::MissingUnit)? {
+        UnitType::Chess(unit) => unit,
+        _ => return Err(CommandError::UnitTypeWrong),
+    };
+    if game.current_player().owner_id != unit.owner {
+        return Err(CommandError::NotYourUnit);
+    }
+    if unit.exhausted {
+        return Err(CommandError::UnitCannotMove);
+    }
+    Ok(())
 }
 
 #[derive(Debug, PartialEq, Clone)]

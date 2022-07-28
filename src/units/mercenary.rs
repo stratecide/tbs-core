@@ -94,6 +94,10 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn get_team(&self, game: &Game<D>) -> Option<Team> {
         self.unit.get_team(game)
     }
+    fn can_act(&self, player: &Player) -> bool {
+        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
+        u.can_act(player)
+    }
     fn get_movement(&self) -> (MovementType, u8) {
         let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
         let (movement_type, mut range) = u.get_movement();

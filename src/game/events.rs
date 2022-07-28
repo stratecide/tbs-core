@@ -140,6 +140,7 @@ impl<D: Direction> Command<D> {
 pub enum CommandError {
     NoVision,
     MissingUnit,
+    MissingBoardedUnit,
     NotYourUnit,
     UnitCannotMove,
     UnitCannotCapture,
@@ -160,7 +161,7 @@ pub enum Event<D:Direction> {
     FogFlipRandom,
     PureFogChange(Perspective, HashSet<Point>),
     FogChange(Perspective, HashMap<Point, (Terrain<D>, Option<UnitType<D>>)>),
-    UnitPath(Vec<Option<Point>>, UnitType<D>),
+    UnitPath(Option<u8>, Vec<Option<Point>>, UnitType<D>),
     UnitExhaust(Point),
     UnitHpChange(Point, i8, i16),
     UnitCreation(Point, UnitType<D>),
@@ -188,9 +189,15 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::NextTurn => game.current_turn += 1,
-            Self::UnitPath(path, unit) => {
+            Self::UnitPath(unload_index, path, unit) => {
                 if let Some(p) = path.first().unwrap() {
-                    game.get_map_mut().set_unit(p.clone(), None);
+                    if let Some(index) = unload_index {
+                        if let Some(unit) = game.get_map_mut().get_unit_mut(p) {
+                            unit.unboard(*index);
+                        }
+                    } else {
+                        game.get_map_mut().set_unit(p.clone(), None);
+                    }
                 }
                 if let Some(p) = path.last().unwrap() {
                     game.get_map_mut().set_unit(p.clone(), Some(unit.clone()));
@@ -261,12 +268,18 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::NextTurn => game.current_turn -= 1,
-            Self::UnitPath(path, unit) => {
+            Self::UnitPath(unload_index, path, unit) => {
                 if let Some(p) = path.last().unwrap() {
                     game.get_map_mut().set_unit(p.clone(), None);
                 }
                 if let Some(p) = path.first().unwrap() {
-                    game.get_map_mut().set_unit(p.clone(), Some(unit.clone()));
+                    if let Some(index) = unload_index {
+                        if let (Some(u), Some(b)) = (game.get_map_mut().get_unit_mut(p), unit.clone().as_transportable()) {
+                            u.board(*index, b);
+                        }
+                    } else {
+                        game.get_map_mut().set_unit(p.clone(), Some(unit.clone()));
+                    }
                 }
             }
             Self::UnitExhaust(pos) => {
@@ -339,7 +352,7 @@ impl<D: Direction> Event<D> {
                 panic!("FogChange should only ever be created as replacement for PureFogChange. It shouldn't be replaced itself!");
             }
             Self::NextTurn => Some(Self::NextTurn),
-            Self::UnitPath(path, unit) => {
+            Self::UnitPath(unload_index, path, unit) => {
                 let mut visible_path = vec![];
                 for (i, p) in path.iter().enumerate() {
                     // since this is only called on events that haven't been replaced with a fog version, all points in the path are non-null
@@ -356,7 +369,12 @@ impl<D: Direction> Event<D> {
                     }
                 }
                 if visible_path.len() > 0 {
-                    Some(Self::UnitPath(visible_path, unit.clone()))
+                    let unload_index = if visible_path[0].is_some() {
+                        *unload_index
+                    } else {
+                        None
+                    };
+                    Some(Self::UnitPath(unload_index, visible_path, unit.clone()))
                 } else {
                     None
                 }

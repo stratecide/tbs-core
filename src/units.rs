@@ -7,7 +7,7 @@ use std::cmp::{Ordering, Reverse};
 use std::fmt;
 
 use crate::game::events::*;
-use crate::map::wrapping_map::OrientedPoint;
+use crate::map::wrapping_map::{OrientedPoint};
 use crate::player::*;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -30,6 +30,13 @@ impl<D: Direction> UnitType<D> {
         match self {
             Self::Normal(unit) => Some(unit.as_trait()),
             Self::Mercenary(merc) => Some(merc.as_trait()),
+            _ => None,
+        }
+    }
+    pub fn as_transportable(self) -> Option<TransportableTypes> {
+        match self {
+            Self::Normal(u) => Some(TransportableTypes::Normal(u)),
+            Self::Mercenary(u) => Some(TransportableTypes::Mercenary(u)),
             _ => None,
         }
     }
@@ -77,11 +84,34 @@ impl<D: Direction> UnitType<D> {
         }
     }
     pub fn can_act(&self, player: &Player) -> bool {
+        let u: &dyn NormalUnitTrait<D> = match self {
+            Self::Normal(unit) => unit.as_trait(),
+            Self::Mercenary(unit) => unit.as_trait(),
+            Self::Chess(unit) => return !unit.exhausted && unit.owner == player.owner_id,
+            Self::Structure(_) => return false,
+        };
+        u.can_act(player)
+    }
+    pub fn get_boarded(&self) -> Vec<&TransportableTypes> {
         match self {
-            Self::Normal(unit) => !unit.exhausted && unit.owner == player.owner_id,
-            Self::Mercenary(unit) => !unit.unit.exhausted && unit.unit.owner == player.owner_id,
-            Self::Chess(unit) => !unit.exhausted && unit.owner == player.owner_id,
-            Self::Structure(_) => false,
+            Self::Normal(unit) => unit.typ.get_boarded(),
+            Self::Mercenary(merc) => merc.unit.typ.get_boarded(),
+            Self::Chess(_) => vec![],
+            Self::Structure(_struc) => vec![],
+        }
+    }
+    pub fn unboard(&mut self, index: u8) {
+        match self {
+            Self::Normal(unit) => unit.typ.unboard(index),
+            Self::Mercenary(merc) => merc.unit.typ.unboard(index),
+            _ => {}
+        }
+    }
+    pub fn board(&mut self, index: u8, unit: TransportableTypes) {
+        match self {
+            Self::Normal(u) => u.typ.board(index, unit),
+            Self::Mercenary(merc) => merc.unit.typ.board(index, unit),
+            _ => {}
         }
     }
     pub fn movable_positions(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>) -> HashSet<Point> {
@@ -191,6 +221,20 @@ pub enum TransportableTypes {
     Normal(NormalUnit),
     Mercenary(Mercenary),
 }
+impl TransportableTypes {
+    pub fn as_unit<D: Direction>(self) -> UnitType<D> {
+        match self {
+            Self::Normal(u) => UnitType::Normal(u),
+            Self::Mercenary(u) => UnitType::Mercenary(u),
+        }
+    }
+    pub fn as_trait<D: Direction>(&self) -> &dyn NormalUnitTrait<D> {
+        match self {
+            Self::Normal(u) => u.as_trait(),
+            Self::Mercenary(u) => u.as_trait(),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum NormalUnits {
@@ -206,6 +250,30 @@ impl NormalUnits {
             NormalUnits::TransportHeli(_) => "Transport Helicopter",
             NormalUnits::DragonHead => "Dragon Head",
             NormalUnits::Artillery => "Artillery",
+        }
+    }
+    pub fn get_boarded(&self) -> Vec<&TransportableTypes> {
+        match self {
+            NormalUnits::TransportHeli(units) => units.iter().collect(),
+            _ => vec![],
+        }
+    }
+    pub fn unboard(&mut self, index: u8) {
+        let mut units = match self {
+            NormalUnits::TransportHeli(units) => units,
+            _ => return,
+        };
+        if units.len() > index as usize {
+            units.remove(index as usize);
+        }
+    }
+    pub fn board(&mut self, index: u8, unit: TransportableTypes) {
+        let mut units = match self {
+            NormalUnits::TransportHeli(units) => units,
+            _ => return,
+        };
+        if units.len() >= index as usize {
+            units.insert(index as usize, unit);
         }
     }
     pub fn get_attack_type(&self) -> AttackType {
@@ -249,6 +317,7 @@ pub trait NormalUnitTrait<D: Direction> {
     fn get_weapons(&self) -> Vec<(WeaponType, f32)>;
     fn get_owner(&self) -> &Owner;
     fn get_team(&self, game: &Game<D>) -> Option<Team>;
+    fn can_act(&self, player: &Player) -> bool;
     fn get_movement(&self) -> (MovementType, u8);
     fn has_stealth(&self) -> bool;
     fn shortest_path_to(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
@@ -421,6 +490,9 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     fn get_team(&self, game: &Game<D>) -> Option<Team> {
         get_team(Some(&self.owner), game)
     }
+    fn can_act(&self, player: &Player) -> bool {
+        !self.exhausted && player.owner_id == self.owner
+    }
     fn get_movement(&self) -> (MovementType, u8) {
         let factor = 6;
         match self.typ {
@@ -564,6 +636,24 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
 }
 
+fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: &Point, unload_index: Option<u8>) -> Result<(), CommandError> {
+    if !game.has_vision_at(Some(game.current_player().team), at) {
+        return Err(CommandError::NoVision);
+    }
+    let unit = game.get_map().get_unit(&at).ok_or(CommandError::MissingUnit)?;
+    let unit: &dyn NormalUnitTrait<D> = if let Some(index) = unload_index {
+        unit.get_boarded().get(index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
+    } else {
+        unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
+    };
+    if &game.current_player().owner_id != unit.get_owner() {
+        return Err(CommandError::NotYourUnit);
+    }
+    if !unit.can_act(game.current_player()) {
+        return Err(CommandError::UnitCannotMove);
+    }
+    Ok(())
+}
 
 pub fn range_in_layers<D: Direction>(map: &Map<D>, center: &Point, range: usize) -> Vec<HashSet<(Point, D, Option<D>)>> {
     let mut layers: Vec<HashSet<(Point, D, Option<D>)>> = vec![];
@@ -798,30 +888,14 @@ pub enum AttackInfo<D: Direction> {
 }
 
 pub enum UnitCommand<D: Direction> {
-    MoveAttack(Point, Vec<Point>, AttackInfo<D>),
-    MoveCapture(Point, Vec<Point>),
-    MoveWait(Point, Vec<Point>),
+    MoveAttack(Point, Option<u8>, Vec<Point>, AttackInfo<D>),
+    MoveCapture(Point, Option<u8>, Vec<Point>),
+    MoveWait(Point, Option<u8>, Vec<Point>),
     MoveChess(Point, ChessCommand<D>),
-    MercenaryPowerSimple(Point),
+    MercenaryPowerSimple(Point, Option<u8>),
 }
 impl<D: Direction> UnitCommand<D> {
-    fn check_unit_can_act(game: &Game<D>, at: &Point) -> Result<(), CommandError> {
-        if !game.has_vision_at(Some(game.current_player().team), at) {
-            return Err(CommandError::NoVision);
-        }
-        if let Some(unit) = game.get_map().get_unit(at) {
-            if Some(&game.current_player().owner_id) != unit.get_owner() {
-                return Err(CommandError::NotYourUnit);
-            }
-            if !unit.can_act(game.current_player()) {
-                return Err(CommandError::UnitCannotMove);
-            }
-            Ok(())
-        } else {
-            Err(CommandError::MissingUnit)
-        }
-    }
-    fn check_unit_can_wait_after_path(game: &Game<D>, start: &Point, path: &Vec<Point>) -> Result<Vec<Point>, CommandError> {
+    fn check_unit_can_wait_after_path(game: &Game<D>, start: &Point, unload_index: Option<u8>, path: &Vec<Point>) -> Result<Vec<Point>, CommandError> {
         if !game.get_map().wrapping_logic().pointmap().is_point_valid(start) {
             return Err(CommandError::InvalidPoint(start.clone()));
         }
@@ -830,27 +904,31 @@ impl<D: Direction> UnitCommand<D> {
                 return Err(CommandError::InvalidPoint(p.clone()));
             }
         }
-        Self::check_unit_can_act(game, start)?;
-        let unit = game.get_map().get_unit(start).unwrap(); // unwrap because already checked by check_unit_can_act
-        if let Some(unit) = unit.as_normal_trait() {
-            if let Some(p) = path.last() {
-                if let Some(_) = game.get_map().get_unit(p) {
-                    if game.has_vision_at(Some(game.current_player().team), p) {
-                        return Err(CommandError::InvalidPath);
-                    }
+        check_normal_unit_can_act(game, start, unload_index)?;
+        let unit = game.get_map().get_unit(&start).ok_or(CommandError::MissingUnit)?;
+        let unit: &dyn NormalUnitTrait<D> = if let Some(index) = unload_index {
+            unit.get_boarded().get(index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
+        } else {
+            unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
+        };
+        if let Some(p) = path.last() {
+            if let Some(_) = game.get_map().get_unit(p) {
+                if game.has_vision_at(Some(game.current_player().team), p) {
+                    return Err(CommandError::InvalidPath);
                 }
             }
-            unit.check_path(game, start, path)
-        } else {
-            Err(CommandError::UnitTypeWrong)
         }
+        unit.check_path(game, start, path)
     }
-    fn apply_path(handler: &mut EventHandler<D>, start: Point, path_taken: Vec<Point>) {
-        let unit = handler.get_map().get_unit(&start).unwrap().clone();
+    fn apply_path(handler: &mut EventHandler<D>, start: Point, unload_index: Option<u8>, path_taken: Vec<Point>) {
+        let mut unit = handler.get_map().get_unit(&start).unwrap().clone();
+        if let Some(index) = unload_index {
+            unit = unit.get_boarded()[index as usize].clone().as_unit();
+        }
         if path_taken.len() > 0 {
             let mut event_path:Vec<Option<Point>> = path_taken.iter().map(|p| Some(p.clone())).collect();
             event_path.insert(0, Some(start.clone()));
-            handler.add_event(Event::UnitPath(event_path, unit.clone()));
+            handler.add_event(Event::UnitPath(unload_index, event_path, unit.clone()));
             let team = handler.get_game().current_player().team;
             if Some(team) == unit.get_team(handler.get_game()) {
                 let mut vision_changes = HashSet::new();
@@ -947,16 +1025,15 @@ impl<D: Direction> UnitCommand<D> {
     }
     pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         match self {
-            Self::MoveAttack(start, path, target) => {
+            Self::MoveAttack(start, unload_index, path, target) => {
                 let intended_end = path.last().unwrap_or(&start).clone();
-                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
-                let unit: &dyn NormalUnitTrait<D> = match handler.get_map().get_unit(&start) {
-                    Some(UnitType::Normal(unit)) => Ok(unit.as_trait()),
-                    Some(UnitType::Mercenary(unit)) => Ok(unit.as_trait()),
-                    Some(UnitType::Chess(_)) => Err(CommandError::UnitTypeWrong),
-                    Some(UnitType::Structure(_)) => Err(CommandError::UnitTypeWrong),
-                    None => Err(CommandError::MissingUnit),
-                }?;
+                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, unload_index, &path)?;
+                let unit = handler.get_map().get_unit(&start).ok_or(CommandError::MissingUnit)?;
+                let unit: &dyn NormalUnitTrait<D> = if let Some(index) = unload_index {
+                    unit.get_boarded().get(index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
+                } else {
+                    unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
+                };
                 match &target {
                     AttackInfo::Point(target) => {
                         if !handler.get_map().wrapping_logic().pointmap().is_point_valid(target) {
@@ -984,22 +1061,23 @@ impl<D: Direction> UnitCommand<D> {
                     }
                 }
                 let end = path.last().unwrap_or(&start).clone();
-                Self::apply_path(handler, start, path);
+                Self::apply_path(handler, start, unload_index, path);
                 // checks fog trap
                 if end == intended_end {
                     Self::handle_attack(handler, &end, &target)?;
                 }
-                handler.add_event(Event::UnitExhaust(end));
+                if handler.get_game().get_map().get_unit(&end).is_some() {
+                    // ensured that the unit didn't die from counter attack
+                    handler.add_event(Event::UnitExhaust(end));
+                }
             }
-            Self::MoveCapture(start, path) => {
+            Self::MoveCapture(start, unload_index, path) => {
                 let intended_end = path.last().unwrap_or(&start).clone();
-                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
-                let u = handler.get_map().get_unit(&start).ok_or_else(|| CommandError::MissingUnit)?;
-                let u = u.clone();
-                let unit: &dyn NormalUnitTrait<D> = u.as_normal_trait().ok_or_else(|| CommandError::UnitTypeWrong).clone()?;
+                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, unload_index, &path)?;
                 let end = path.last().unwrap_or(&start).clone();
-                Self::apply_path(handler, start, path);
+                Self::apply_path(handler, start, unload_index, path);
                 if end == intended_end {
+                    let unit = handler.get_map().get_unit(&end).unwrap().as_normal_trait().ok_or(CommandError::UnitTypeWrong)?;
                     let terrain = handler.get_map().get_terrain(&end).unwrap().clone();
                     match &terrain {
                         Terrain::Realty(realty, owner) => {
@@ -1012,14 +1090,20 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 handler.add_event(Event::UnitExhaust(end));
             }
-            Self::MoveWait(start, path) => {
-                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, &path)?;
+            Self::MoveWait(start, unload_index, path) => {
+                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, unload_index, &path)?;
                 let end = path.last().unwrap_or(&start).clone();
-                Self::apply_path(handler, start, path);
+                let unit = handler.get_map().get_unit(&start).ok_or(CommandError::MissingUnit)?;
+                if let Some(index) = unload_index {
+                    unit.get_boarded().get(index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
+                } else {
+                    unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
+                };
+                Self::apply_path(handler, start, unload_index, path);
                 handler.add_event(Event::UnitExhaust(end));
             }
             Self::MoveChess(start, chess_command) => {
-                Self::check_unit_can_act(handler.get_game(), &start)?;
+                check_chess_unit_can_act(handler.get_game(), &start)?;
                 match handler.get_map().get_unit(&start) {
                     Some(UnitType::Chess(unit)) => {
                         let unit = unit.clone();
@@ -1028,7 +1112,7 @@ impl<D: Direction> UnitCommand<D> {
                     _ => return Err(CommandError::UnitTypeWrong),
                 }
             }
-            Self::MercenaryPowerSimple(pos) => {
+            Self::MercenaryPowerSimple(pos, unload_index) => {
                 if !handler.get_map().wrapping_logic().pointmap().is_point_valid(&pos) {
                     return Err(CommandError::InvalidPoint(pos));
                 }
