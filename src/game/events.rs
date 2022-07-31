@@ -22,24 +22,22 @@ impl<D: Direction> Command<D> {
             Self::EndTurn => {
                 // un-exhaust units
                 for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
-                    match handler.get_map().get_unit(&p) {
-                        Some(UnitType::Normal(unit)) => {
-                            if unit.exhausted && unit.owner == owner_id {
-                                handler.add_event(Event::UnitExhaust(p));
+                    let unit = handler.get_map().get_unit(&p);
+                    if let Some(unit) = unit {
+                        if unit.get_owner() == Some(&owner_id) {
+                            let mut events = vec![];
+                            if unit.is_exhausted() {
+                                events.push(Event::UnitExhaust(p.clone()));
+                            }
+                            for (index, u) in unit.get_boarded().iter().enumerate() {
+                                if u.is_exhausted() {
+                                    events.push(Event::UnitExhaustBoarded(p.clone(), index as u8));
+                                }
+                            }
+                            for event in events {
+                                handler.add_event(event);
                             }
                         }
-                        Some(UnitType::Mercenary(merc)) => {
-                            if merc.unit.exhausted && merc.unit.owner == owner_id {
-                                handler.add_event(Event::UnitExhaust(p));
-                            }
-                        }
-                        Some(UnitType::Chess(unit)) => {
-                            if unit.exhausted && unit.owner == owner_id {
-                                handler.add_event(Event::UnitExhaust(p));
-                            }
-                        }
-                        Some(UnitType::Structure(_)) => {}
-                        None => {}
                     }
                 }
                 let was_foggy = handler.get_game().is_foggy();
@@ -144,6 +142,7 @@ pub enum CommandError {
     NotYourUnit,
     UnitCannotMove,
     UnitCannotCapture,
+    UnitCannotBeBoarded,
     UnitTypeWrong,
     InvalidPath,
     InvalidPoint(Point),
@@ -162,7 +161,9 @@ pub enum Event<D:Direction> {
     PureFogChange(Perspective, HashSet<Point>),
     FogChange(Perspective, HashMap<Point, (Terrain<D>, Option<UnitType<D>>)>),
     UnitPath(Option<u8>, Vec<Option<Point>>, UnitType<D>),
+    UnitPathInto(Option<u8>, Vec<Option<Point>>, UnitType<D>),
     UnitExhaust(Point),
+    UnitExhaustBoarded(Point, u8),
     UnitHpChange(Point, i8, i16),
     UnitCreation(Point, UnitType<D>),
     UnitDeath(Point, UnitType<D>),
@@ -203,6 +204,19 @@ impl<D: Direction> Event<D> {
                     game.get_map_mut().set_unit(p.clone(), Some(unit.clone()));
                 }
             }
+            Self::UnitPathInto(unload_index, path, unit) => {
+                if let Some(p) = path.first().unwrap() {
+                    if let Some(index) = unload_index {
+                        if let Some(unit) = game.get_map_mut().get_unit_mut(p) {
+                            unit.unboard(*index);
+                        }
+                    } else {
+                        game.get_map_mut().set_unit(p.clone(), None);
+                    }
+                }
+                let transporter = game.get_map_mut().get_unit_mut(&path.last().unwrap().unwrap()).unwrap();
+                transporter.board(transporter.get_boarded().len() as u8, unit.clone().as_transportable().unwrap());
+            }
             Self::UnitExhaust(pos) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
@@ -210,6 +224,15 @@ impl<D: Direction> Event<D> {
                     UnitType::Mercenary(unit) => unit.unit.exhausted = !unit.unit.exhausted,
                     UnitType::Chess(unit) => unit.exhausted = !unit.exhausted,
                     UnitType::Structure(unit) => unit.exhausted = !unit.exhausted,
+                }
+            }
+            Self::UnitExhaustBoarded(pos, index) => {
+                let transporter = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
+                let mut transported = transporter.get_boarded_mut();
+                match transported.get_mut(*index as usize) {
+                    Some(TransportableTypes::Normal(u)) => u.exhausted = !u.exhausted,
+                    Some(TransportableTypes::Mercenary(m)) => m.unit.exhausted = !m.unit.exhausted,
+                    None => {}
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
@@ -245,7 +268,7 @@ impl<D: Direction> Event<D> {
                     player.funds += *change as i32;
                 }
             }
-            Self::HideFunds(owner, _) => {}
+            Self::HideFunds(_owner, _) => {}
             Self::RevealFunds(owner, value) => {
                 if let Some(player) = game.get_owning_player_mut(owner) {
                     player.funds = *value;
@@ -282,6 +305,19 @@ impl<D: Direction> Event<D> {
                     }
                 }
             }
+            Self::UnitPathInto(unload_index, path, unit) => {
+                let transporter = game.get_map_mut().get_unit_mut(&path.last().unwrap().unwrap()).unwrap();
+                transporter.unboard(transporter.get_boarded().len() as u8 - 1);
+                if let Some(p) = path.first().unwrap() {
+                    if let Some(index) = unload_index {
+                        if let (Some(u), Some(b)) = (game.get_map_mut().get_unit_mut(p), unit.clone().as_transportable()) {
+                            u.board(*index, b);
+                        }
+                    } else {
+                        game.get_map_mut().set_unit(p.clone(), Some(unit.clone()));
+                    }
+                }
+            }
             Self::UnitExhaust(pos) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
@@ -291,12 +327,21 @@ impl<D: Direction> Event<D> {
                     UnitType::Structure(unit) => unit.exhausted = !unit.exhausted,
                 }
             }
+            Self::UnitExhaustBoarded(pos, index) => {
+                let transporter = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
+                let mut transported = transporter.get_boarded_mut();
+                match transported.get_mut(*index as usize) {
+                    Some(TransportableTypes::Normal(u)) => u.exhausted = !u.exhausted,
+                    Some(TransportableTypes::Mercenary(m)) => m.unit.exhausted = !m.unit.exhausted,
+                    None => {}
+                }
+            }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, -hp_change));
                 let hp = unit.get_hp_mut();
                 *hp = (*hp as i8 - hp_change) as u8;
             }
-            Self::UnitCreation(pos, unit) => {
+            Self::UnitCreation(pos, _) => {
                 game.get_map_mut().set_unit(pos.clone(), None).expect(&format!("expected a unit at {:?} to die!", pos));
             }
             Self::UnitDeath(pos, unit) => {
@@ -329,7 +374,7 @@ impl<D: Direction> Event<D> {
                     player.funds = *value;
                 }
             }
-            Self::RevealFunds(owner, _) => {}
+            Self::RevealFunds(_owner, _) => {}
         }
     }
     fn fog_replacement(&self, game: &Game<D>, team: &Perspective) -> Option<Event<D>> {
@@ -353,21 +398,11 @@ impl<D: Direction> Event<D> {
             }
             Self::NextTurn => Some(Self::NextTurn),
             Self::UnitPath(unload_index, path, unit) => {
-                let mut visible_path = vec![];
-                for (i, p) in path.iter().enumerate() {
-                    // since this is only called on events that haven't been replaced with a fog version, all points in the path are non-null
-                    if game.has_vision_at(*team, &p.unwrap()) || unit.get_team(&game) == *team {
-                        visible_path.push(p.clone());
-                    } else if i > 0 && game.has_vision_at(*team, &path[i - 1].unwrap()) {
-                        visible_path.push(p.clone());
-                        visible_path.push(None);
-                    } else if i < path.len() - 1 && game.has_vision_at(*team, &path[i + 1].unwrap()) {
-                        if i == 0 { // otherwise the previous case (i > 0 && ...) already added a None
-                            visible_path.push(None);
-                        }
-                        visible_path.push(p.clone());
-                    }
-                }
+                let visible_path: Vec<Option<Point>> = if unit.get_team(game) == *team {
+                    path.clone()
+                } else {
+                    build_visible_path(game, path, team)
+                };
                 if visible_path.len() > 0 {
                     let unload_index = if visible_path[0].is_some() {
                         *unload_index
@@ -379,7 +414,35 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
+            Self::UnitPathInto(unload_index, path, unit) => {
+                let visible_path: Vec<Option<Point>> = if unit.get_team(game) == *team {
+                    path.clone()
+                } else {
+                    build_visible_path(game, path, team)
+                };
+                if visible_path.len() > 0 {
+                    let unload_index = if visible_path[0].is_some() {
+                        *unload_index
+                    } else {
+                        None
+                    };
+                    if game.has_vision_at(*team, &path.last().unwrap().unwrap()) {
+                        Some(Self::UnitPathInto(unload_index, visible_path, unit.clone()))
+                    } else {
+                        Some(Self::UnitPath(unload_index, visible_path, unit.clone()))
+                    }
+                } else {
+                    None
+                }
+            }
             Self::UnitExhaust(pos) => {
+                if game.has_vision_at(*team, pos) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitExhaustBoarded(pos, _) => {
                 if game.has_vision_at(*team, pos) {
                     Some(self.clone())
                 } else {
@@ -477,6 +540,24 @@ fn apply_vision_changes<D: Direction>(game: &mut Game<D>, pos: &Point, team: &Pe
         game.get_map_mut().set_terrain(pos.clone(), terrain.fog_replacement());
         game.get_map_mut().set_unit(pos.clone(), None);
     }
+}
+fn build_visible_path<D: Direction>(game: &Game<D>, path: &Vec<Option<Point>>, team: &Perspective) -> Vec<Option<Point>> {
+    let mut visible_path = vec![];
+    for (i, p) in path.iter().enumerate() {
+        // since this is only called on events that haven't been replaced with a fog version, all points in the path are non-null
+        if game.has_vision_at(*team, &p.unwrap()) {
+            visible_path.push(p.clone());
+        } else if i > 0 && game.has_vision_at(*team, &path[i - 1].unwrap()) {
+            visible_path.push(p.clone());
+            visible_path.push(None);
+        } else if i < path.len() - 1 && game.has_vision_at(*team, &path[i + 1].unwrap()) {
+            if i == 0 { // otherwise the previous case (i > 0 && ...) already added a None
+                visible_path.push(None);
+            }
+            visible_path.push(p.clone());
+        }
+    }
+    visible_path
 }
 
 

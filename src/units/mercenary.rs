@@ -70,6 +70,9 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D> {
         self
     }
+    fn as_transportable(self) -> TransportableTypes {
+        TransportableTypes::Mercenary(self)
+    }
     fn get_hp(&self) -> u8 {
         self.unit.hp
     }
