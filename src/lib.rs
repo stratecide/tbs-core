@@ -2,6 +2,7 @@ pub mod map;
 pub mod player;
 pub mod terrain;
 pub mod units;
+pub mod field_modifiers;
 pub mod game;
 
 #[cfg(test)]

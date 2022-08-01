@@ -4,6 +4,7 @@ use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::player::*;
 use crate::terrain::Terrain;
+use crate::field_modifiers::FieldModifier;
 use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::*;
@@ -100,8 +101,41 @@ impl<D: Direction> Command<D> {
                 } else if let Some(_) = handler.get_map().get_unit(&pos) {
                     Err(CommandError::Blocked(pos))
                 } else {
-                    // TODO: bubble
-                    if let Some(Terrain::Realty(realty, owner)) = handler.get_map().get_terrain(&pos) {
+                    let mut bubble_data = None;
+                    let fms = handler.get_map().get_field_modifiers(&pos);
+                    for (index, fm) in fms.into_iter().enumerate() {
+                        match fm {
+                            FieldModifier::FactoryBubble(owner) => {
+                                if owner != owner_id {
+                                    return Err(CommandError::NotYourBubble);
+                                }
+                                bubble_data = Some((
+                                    crate::terrain::build_options_factory(handler.get_game(), owner_id, 0),
+                                    Event::RemoveFieldModifier(pos.clone(), index as u8, fm.clone())
+                                ));
+                            }
+                            _ => {}
+                        }
+                    }
+                    if let Some((options, event)) = bubble_data {
+                        if let Some((unit, cost)) = options.get(index as usize) {
+                            if *cost as i32 <= handler.get_game().current_player().funds {
+                                handler.add_event(Event::MoneyChange(owner_id, -(*cost as i16)));
+                                let u = unit.clone();
+                                let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &pos).into_iter().filter(|p| !handler.get_game().has_vision_at(team, &p)).collect();
+                                handler.add_event(Event::UnitCreation(pos, u)); 
+                                if vision_changes.len() > 0 {
+                                    handler.add_event(Event::PureFogChange(team, vision_changes));
+                                }
+                                handler.add_event(event);
+                                Ok(())
+                            } else {
+                                Err(CommandError::NotEnoughMoney)
+                            }
+                        } else {
+                            Err(CommandError::InvalidIndex)
+                        }
+                    } else if let Some(Terrain::Realty(realty, owner)) = handler.get_map().get_terrain(&pos) {
                         if owner == &Some(owner_id) {
                             let options = realty.buildable_units(handler.get_game(), owner_id);
                             if let Some((unit, cost)) = options.get(index as usize) {
@@ -152,6 +186,7 @@ pub enum CommandError {
     Blocked(Point),
     NotEnoughMoney,
     NotYourRealty,
+    NotYourBubble,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -173,6 +208,8 @@ pub enum Event<D:Direction> {
     MoneyChange(Owner, i16),
     HideFunds(Owner, i32), // when fog starts
     RevealFunds(Owner, i32), // when fog ends
+    RemoveFieldModifier(Point, u8, FieldModifier),
+    ReplaceFieldModifiers(Point, Vec<FieldModifier>, Vec<FieldModifier>),
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -273,6 +310,12 @@ impl<D: Direction> Event<D> {
                 if let Some(player) = game.get_owning_player_mut(owner) {
                     player.funds = *value;
                 }
+            }
+            Self::RemoveFieldModifier(p, index, _) => {
+                game.get_map_mut().remove_field_modifier(p, *index as usize);
+            }
+            Self::ReplaceFieldModifiers(p, _, list) => {
+                game.get_map_mut().set_field_modifiers(p.clone(), list.clone());
             }
         }
     }
@@ -375,6 +418,12 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::RevealFunds(_owner, _) => {}
+            Self::RemoveFieldModifier(p, index, fm) => {
+                game.get_map_mut().insert_field_modifier(p.clone(), *index as usize, fm.clone());
+            }
+            Self::ReplaceFieldModifiers(p, list, _) => {
+                game.get_map_mut().set_field_modifiers(p.clone(), list.clone());
+            }
         }
     }
     fn fog_replacement(&self, game: &Game<D>, team: &Perspective) -> Option<Event<D>> {
@@ -516,6 +565,41 @@ impl<D: Direction> Event<D> {
                     Some(self.clone())
                 } else {
                     None
+                }
+            }
+            Self::RemoveFieldModifier(p, index, fm) => {
+                if game.has_vision_at(*team, p) {
+                    Some(self.clone())
+                } else if let Some(fm) = fm.fog_replacement() {
+                    let mut new_index = 0;
+                    for (i, fm) in game.get_map().get_field_modifiers(p).into_iter().enumerate() {
+                        if i == *index as usize {
+                            break;
+                        }
+                        if fm.fog_replacement().is_some() {
+                            new_index += 1;
+                        }
+                    }
+                    Some(Self::RemoveFieldModifier(p.clone(), new_index, fm))
+                } else {
+                    None
+                }
+            }
+            Self::ReplaceFieldModifiers(p, old, new) => {
+                if game.has_vision_at(*team, p) {
+                    Some(self.clone())
+                } else {
+                    let old: Vec<FieldModifier> = old.iter().filter_map(|fm| {
+                        fm.fog_replacement()
+                    }).collect();
+                    let new: Vec<FieldModifier> = new.iter().filter_map(|fm| {
+                        fm.fog_replacement()
+                    }).collect();
+                    if old != new {
+                        Some(Self::ReplaceFieldModifiers(p.clone(), old, new))
+                    } else {
+                        None
+                    }
                 }
             }
         }

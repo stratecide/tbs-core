@@ -10,6 +10,7 @@ use crate::player::*;
 use crate::terrain::*;
 use crate::units::*;
 use crate::units::mercenary::Mercenary;
+use crate::field_modifiers::*;
 
 #[derive(Clone)]
 pub struct Map<D>
@@ -18,6 +19,7 @@ where D: Direction
     wrapping_logic: WrappingMap<D>,
     terrain: HashMap<Point, Terrain<D>>,
     units: HashMap<Point, UnitType<D>>,
+    field_modifiers: HashMap<Point, Vec<FieldModifier>>,
 }
 
 impl<D> Map<D>
@@ -32,6 +34,7 @@ where D: Direction
             wrapping_logic,
             terrain,
             units: HashMap::new(),
+            field_modifiers: HashMap::new(),
         }
     }
     pub fn odd_if_hex(&self) -> bool {
@@ -156,6 +159,35 @@ where D: Direction
         } else {
             self.units.remove(&p)
         }
+    }
+    pub fn get_field_modifiers(&self, p: &Point) -> Vec<FieldModifier> {
+        self.field_modifiers.get(p).and_then(|v| Some(v.clone())).unwrap_or(vec![])
+    }
+    pub fn set_field_modifiers(&mut self, p: Point, value: Vec<FieldModifier>) {
+        if self.wrapping_logic.pointmap().is_point_valid(&p) {
+            // TODO: check validity of value (not too many, maybe reorder, ...)
+            self.field_modifiers.insert(p, value);
+        }
+    }
+    pub fn add_field_modifier(&mut self, p: Point, value: FieldModifier) {
+        let mut list: Vec<FieldModifier> = self.get_field_modifiers(&p).into_iter().map(|f| f.clone()).collect();
+        list.push(value);
+        self.set_field_modifiers(p, list);
+    }
+    pub fn insert_field_modifier(&mut self, p: Point, index: usize, value: FieldModifier) {
+        let mut list: Vec<FieldModifier> = self.get_field_modifiers(&p).into_iter().map(|f| f.clone()).collect();
+        if index <= list.len() {
+            list.insert(index, value);
+            self.set_field_modifiers(p, list);
+        }
+    }
+    pub fn remove_field_modifier(&mut self, p: &Point, index: usize) -> Option<FieldModifier> {
+        if let Some(list) = self.field_modifiers.get_mut(p) {
+            if list.len() > index {
+                return Some(list.remove(index));
+            }
+        }
+        None
     }
     pub fn mercenary_influence_at(&self, point: &Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenary)> {
         let mut result = vec![];

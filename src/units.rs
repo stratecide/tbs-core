@@ -6,6 +6,7 @@ use std::collections::{BinaryHeap, HashSet, HashMap};
 use std::cmp::{Ordering, Reverse};
 use std::fmt;
 
+use crate::field_modifiers::FieldModifier;
 use crate::game::events::*;
 use crate::map::wrapping_map::{OrientedPoint};
 use crate::player::*;
@@ -966,6 +967,46 @@ pub enum AttackInfo<D: Direction> {
     Direction(D)
 }
 
+pub fn on_path_field_modifiers<D: Direction>(handler: &mut EventHandler<D>, path_taken: &Vec<Point>, unit: &UnitType<D>) {
+    for p in path_taken {
+        let old_fms = handler.get_map().get_field_modifiers(p);
+        let fms: Vec<FieldModifier> = old_fms.clone().into_iter().filter(|fm| {
+            match fm {
+                FieldModifier::Coins1 => {
+                    if let Some(owner) = unit.get_owner() {
+                        if let Some(player) = handler.get_game().get_owning_player(owner) {
+                            handler.add_event(Event::MoneyChange(*owner, player.income / 2));
+                        }
+                    }
+                    false
+                }
+                FieldModifier::Coins2 => {
+                    if let Some(owner) = unit.get_owner() {
+                        if let Some(player) = handler.get_game().get_owning_player(owner) {
+                            handler.add_event(Event::MoneyChange(*owner, player.income));
+                        }
+                    }
+                    false
+                }
+                FieldModifier::Coins4 => {
+                    if let Some(owner) = unit.get_owner() {
+                        if let Some(player) = handler.get_game().get_owning_player(owner) {
+                            handler.add_event(Event::MoneyChange(*owner, player.income * 2));
+                        }
+                    }
+                    false
+                }
+                FieldModifier::FactoryBubble(owner) => {
+                    Some(owner) == unit.get_owner()
+                }
+            }
+        }).collect();
+        if fms != old_fms {
+            handler.add_event(Event::ReplaceFieldModifiers(p.clone(), old_fms, fms));
+        }
+    }
+}
+
 pub enum UnitCommand<D: Direction> {
     MoveAttack(Point, Option<u8>, Vec<Point>, AttackInfo<D>),
     MoveCapture(Point, Option<u8>, Vec<Point>),
@@ -1029,6 +1070,7 @@ impl<D: Direction> UnitCommand<D> {
                 }
             }
         }
+        on_path_field_modifiers(handler, &path_taken, &unit);
     }
     fn apply_path(handler: &mut EventHandler<D>, start: Point, unload_index: Option<u8>, path_taken: Vec<Point>) {
         Self::apply_path_with_event(handler, start, unload_index, path_taken, |unit, path| {

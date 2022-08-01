@@ -97,21 +97,23 @@ impl Realty {
             _ => 0,
         }
     }
-    pub fn buildable_units<D: Direction>(&self, _game: &Game<D>, owner: Owner) -> Vec<(UnitType<D>, u16)> {
+    pub fn buildable_units<D: Direction>(&self, game: &Game<D>, owner: Owner) -> Vec<(UnitType<D>, u16)> {
         match self {
-            Self::Factory(built_this_turn) => {
-                let units = vec![
-                    NormalUnits::Hovercraft,
-                    NormalUnits::DragonHead,
-                    NormalUnits::Artillery,
-                ];
-                units.into_iter().map(|u| {
-                    let value = u.value() + 300 * *built_this_turn as u16;
-                    let unit = UnitType::Normal(NormalUnit::new_instance(u, owner));
-                    (unit, value)
-                }).collect()
-            }
+            Self::Factory(built_this_turn) => build_options_factory(game, owner, *built_this_turn),
             _ => vec![],
         }
     }
+}
+
+pub fn build_options_factory<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
+    let units = vec![
+        NormalUnits::Hovercraft,
+        NormalUnits::DragonHead,
+        NormalUnits::Artillery,
+    ];
+    units.into_iter().map(|u| {
+        let value = u.value() + 300 * built_this_turn as u16;
+        let unit = UnitType::Normal(NormalUnit::new_instance(u, owner));
+        (unit, value)
+    }).collect()
 }

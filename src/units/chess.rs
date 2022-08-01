@@ -44,13 +44,14 @@ impl<D: Direction> ChessCommand<D> {
                     if let Some(other) = handler.get_map().get_unit(&p) {
                         handler.add_event(Event::UnitDeath(p.clone(), other.clone()));
                     }
-                    handler.add_event(Event::UnitPath(None, path.into_iter().map(|p| Some(p)).collect(), UnitType::Chess::<D>(unit.clone())));
+                    handler.add_event(Event::UnitPath(None, path.iter().map(|p| Some(p.clone())).collect(), UnitType::Chess::<D>(unit.clone())));
                     let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &p).into_iter().filter(|p| {
                         !handler.get_game().has_vision_at(Some(team), &p)
                     }).collect();
                     if vision_changes.len() > 0 {
                         handler.add_event(Event::PureFogChange(Some(team), vision_changes));
                     }
+                    super::on_path_field_modifiers(handler, &path, &UnitType::Chess::<D>(unit.clone()));
                     handler.add_event(Event::UnitExhaust(p));
                     Ok(())
                 } else {
