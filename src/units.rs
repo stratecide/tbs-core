@@ -1013,7 +1013,7 @@ pub enum UnitCommand<D: Direction> {
     MoveWait(Point, Option<u8>, Vec<Point>),
     MoveAboard(Point, Option<u8>, Vec<Point>),
     MoveChess(Point, ChessCommand<D>),
-    MercenaryPowerSimple(Point, Option<u8>),
+    MercenaryPowerSimple(Point),
 }
 impl<D: Direction> UnitCommand<D> {
     fn check_unit_path(game: &Game<D>, start: &Point, unload_index: Option<u8>, path: &Vec<Point>) -> Result<Vec<Point>, CommandError> {
@@ -1267,7 +1267,7 @@ impl<D: Direction> UnitCommand<D> {
                     _ => return Err(CommandError::UnitTypeWrong),
                 }
             }
-            Self::MercenaryPowerSimple(pos, unload_index) => {
+            Self::MercenaryPowerSimple(pos) => {
                 if !handler.get_map().wrapping_logic().pointmap().is_point_valid(&pos) {
                     return Err(CommandError::InvalidPoint(pos));
                 }

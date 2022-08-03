@@ -447,10 +447,10 @@ impl<D: Direction> Event<D> {
             }
             Self::NextTurn => Some(Self::NextTurn),
             Self::UnitPath(unload_index, path, unit) => {
-                let visible_path: Vec<Option<Point>> = if unit.get_team(game) == *team {
-                    path.clone()
-                } else {
+                let visible_path: Vec<Option<Point>> = if unit.get_team(game) != *team {
                     build_visible_path(game, path, team)
+                } else {
+                    path.clone()
                 };
                 if visible_path.len() > 0 {
                     let unload_index = if visible_path[0].is_some() {
@@ -464,10 +464,10 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::UnitPathInto(unload_index, path, unit) => {
-                let visible_path: Vec<Option<Point>> = if unit.get_team(game) == *team {
-                    path.clone()
-                } else {
+                let visible_path: Vec<Option<Point>> = if unit.get_team(game) != *team {
                     build_visible_path(game, path, team)
+                } else {
+                    path.clone()
                 };
                 if visible_path.len() > 0 {
                     let unload_index = if visible_path[0].is_some() {
