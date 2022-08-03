@@ -51,7 +51,7 @@ impl<D: Direction> ChessCommand<D> {
                     if vision_changes.len() > 0 {
                         handler.add_event(Event::PureFogChange(Some(team), vision_changes));
                     }
-                    super::on_path_field_modifiers(handler, &path, &UnitType::Chess::<D>(unit.clone()));
+                    super::on_path_details(handler, &path, &UnitType::Chess::<D>(unit.clone()));
                     handler.add_event(Event::UnitExhaust(p));
                     Ok(())
                 } else {

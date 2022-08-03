@@ -4,7 +4,7 @@ use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::player::*;
 use crate::terrain::Terrain;
-use crate::field_modifiers::FieldModifier;
+use crate::details::Detail;
 use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::*;
@@ -102,16 +102,16 @@ impl<D: Direction> Command<D> {
                     Err(CommandError::Blocked(pos))
                 } else {
                     let mut bubble_data = None;
-                    let fms = handler.get_map().get_field_modifiers(&pos);
-                    for (index, fm) in fms.into_iter().enumerate() {
-                        match fm {
-                            FieldModifier::FactoryBubble(owner) => {
+                    let details = handler.get_map().get_details(&pos);
+                    for (index, detail) in details.into_iter().enumerate() {
+                        match detail {
+                            Detail::FactoryBubble(owner) => {
                                 if owner != owner_id {
                                     return Err(CommandError::NotYourBubble);
                                 }
                                 bubble_data = Some((
                                     crate::terrain::build_options_factory(handler.get_game(), owner_id, 0),
-                                    Event::RemoveFieldModifier(pos.clone(), index as u8, fm.clone())
+                                    Event::RemoveDetail(pos.clone(), index as u8, detail.clone())
                                 ));
                             }
                             _ => {}
@@ -208,8 +208,8 @@ pub enum Event<D:Direction> {
     MoneyChange(Owner, i16),
     HideFunds(Owner, i32), // when fog starts
     RevealFunds(Owner, i32), // when fog ends
-    RemoveFieldModifier(Point, u8, FieldModifier),
-    ReplaceFieldModifiers(Point, Vec<FieldModifier>, Vec<FieldModifier>),
+    RemoveDetail(Point, u8, Detail),
+    ReplaceDetail(Point, Vec<Detail>, Vec<Detail>),
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -311,11 +311,11 @@ impl<D: Direction> Event<D> {
                     player.funds = *value;
                 }
             }
-            Self::RemoveFieldModifier(p, index, _) => {
-                game.get_map_mut().remove_field_modifier(p, *index as usize);
+            Self::RemoveDetail(p, index, _) => {
+                game.get_map_mut().remove_detail(p, *index as usize);
             }
-            Self::ReplaceFieldModifiers(p, _, list) => {
-                game.get_map_mut().set_field_modifiers(p.clone(), list.clone());
+            Self::ReplaceDetail(p, _, list) => {
+                game.get_map_mut().set_details(p.clone(), list.clone());
             }
         }
     }
@@ -418,11 +418,11 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::RevealFunds(_owner, _) => {}
-            Self::RemoveFieldModifier(p, index, fm) => {
-                game.get_map_mut().insert_field_modifier(p.clone(), *index as usize, fm.clone());
+            Self::RemoveDetail(p, index, detail) => {
+                game.get_map_mut().insert_detail(p.clone(), *index as usize, detail.clone());
             }
-            Self::ReplaceFieldModifiers(p, list, _) => {
-                game.get_map_mut().set_field_modifiers(p.clone(), list.clone());
+            Self::ReplaceDetail(p, list, _) => {
+                game.get_map_mut().set_details(p.clone(), list.clone());
             }
         }
     }
@@ -567,36 +567,36 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::RemoveFieldModifier(p, index, fm) => {
+            Self::RemoveDetail(p, index, detail) => {
                 if game.has_vision_at(*team, p) {
                     Some(self.clone())
-                } else if let Some(fm) = fm.fog_replacement() {
+                } else if let Some(detail) = detail.fog_replacement() {
                     let mut new_index = 0;
-                    for (i, fm) in game.get_map().get_field_modifiers(p).into_iter().enumerate() {
+                    for (i, detail) in game.get_map().get_details(p).into_iter().enumerate() {
                         if i == *index as usize {
                             break;
                         }
-                        if fm.fog_replacement().is_some() {
+                        if detail.fog_replacement().is_some() {
                             new_index += 1;
                         }
                     }
-                    Some(Self::RemoveFieldModifier(p.clone(), new_index, fm))
+                    Some(Self::RemoveDetail(p.clone(), new_index, detail))
                 } else {
                     None
                 }
             }
-            Self::ReplaceFieldModifiers(p, old, new) => {
+            Self::ReplaceDetail(p, old, new) => {
                 if game.has_vision_at(*team, p) {
                     Some(self.clone())
                 } else {
-                    let old: Vec<FieldModifier> = old.iter().filter_map(|fm| {
-                        fm.fog_replacement()
+                    let old: Vec<Detail> = old.iter().filter_map(|detail| {
+                        detail.fog_replacement()
                     }).collect();
-                    let new: Vec<FieldModifier> = new.iter().filter_map(|fm| {
-                        fm.fog_replacement()
+                    let new: Vec<Detail> = new.iter().filter_map(|detail| {
+                        detail.fog_replacement()
                     }).collect();
                     if old != new {
-                        Some(Self::ReplaceFieldModifiers(p.clone(), old, new))
+                        Some(Self::ReplaceDetail(p.clone(), old, new))
                     } else {
                         None
                     }

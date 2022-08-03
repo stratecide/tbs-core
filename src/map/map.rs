@@ -10,7 +10,7 @@ use crate::player::*;
 use crate::terrain::*;
 use crate::units::*;
 use crate::units::mercenary::Mercenary;
-use crate::field_modifiers::*;
+use crate::details::*;
 
 #[derive(Clone)]
 pub struct Map<D>
@@ -19,7 +19,7 @@ where D: Direction
     wrapping_logic: WrappingMap<D>,
     terrain: HashMap<Point, Terrain<D>>,
     units: HashMap<Point, UnitType<D>>,
-    field_modifiers: HashMap<Point, Vec<FieldModifier>>,
+    details: HashMap<Point, Vec<Detail>>,
 }
 
 impl<D> Map<D>
@@ -34,7 +34,7 @@ where D: Direction
             wrapping_logic,
             terrain,
             units: HashMap::new(),
-            field_modifiers: HashMap::new(),
+            details: HashMap::new(),
         }
     }
     pub fn odd_if_hex(&self) -> bool {
@@ -160,29 +160,47 @@ where D: Direction
             self.units.remove(&p)
         }
     }
-    pub fn get_field_modifiers(&self, p: &Point) -> Vec<FieldModifier> {
-        self.field_modifiers.get(p).and_then(|v| Some(v.clone())).unwrap_or(vec![])
+    pub fn get_details(&self, p: &Point) -> Vec<Detail> {
+        self.details.get(p).and_then(|v| Some(v.clone())).unwrap_or(vec![])
     }
-    pub fn set_field_modifiers(&mut self, p: Point, value: Vec<FieldModifier>) {
+    pub fn set_details(&mut self, p: Point, value: Vec<Detail>) {
         if self.wrapping_logic.pointmap().is_point_valid(&p) {
-            // TODO: check validity of value (not too many, maybe reorder, ...)
-            self.field_modifiers.insert(p, value);
+            // remove Detail from value that conflict with other Detail
+            // starting from the back, so add_detail can be used by the editor to overwrite previous data
+            let mut bubble = false;
+            let mut coin = false;
+            let value: Vec<Detail> = value.into_iter().rev().filter(|detail| {
+                let remove;
+                match detail {
+                    Detail::FactoryBubble(_) => {
+                        remove = bubble;
+                        bubble = true;
+                    }
+                    Detail::Coins1 | Detail::Coins2 | Detail::Coins4 => {
+                        remove = coin;
+                        coin = true;
+                    }
+                }
+                !remove
+            }).take(MAX_STACK_SIZE).collect();
+            let value = value.into_iter().rev().collect();
+            self.details.insert(p, value);
         }
     }
-    pub fn add_field_modifier(&mut self, p: Point, value: FieldModifier) {
-        let mut list: Vec<FieldModifier> = self.get_field_modifiers(&p).into_iter().map(|f| f.clone()).collect();
+    pub fn add_detail(&mut self, p: Point, value: Detail) {
+        let mut list: Vec<Detail> = self.get_details(&p).into_iter().map(|f| f.clone()).collect();
         list.push(value);
-        self.set_field_modifiers(p, list);
+        self.set_details(p, list);
     }
-    pub fn insert_field_modifier(&mut self, p: Point, index: usize, value: FieldModifier) {
-        let mut list: Vec<FieldModifier> = self.get_field_modifiers(&p).into_iter().map(|f| f.clone()).collect();
+    pub fn insert_detail(&mut self, p: Point, index: usize, value: Detail) {
+        let mut list: Vec<Detail> = self.get_details(&p).into_iter().map(|f| f.clone()).collect();
         if index <= list.len() {
             list.insert(index, value);
-            self.set_field_modifiers(p, list);
+            self.set_details(p, list);
         }
     }
-    pub fn remove_field_modifier(&mut self, p: &Point, index: usize) -> Option<FieldModifier> {
-        if let Some(list) = self.field_modifiers.get_mut(p) {
+    pub fn remove_detail(&mut self, p: &Point, index: usize) -> Option<Detail> {
+        if let Some(list) = self.details.get_mut(p) {
             if list.len() > index {
                 return Some(list.remove(index));
             }
