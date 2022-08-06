@@ -52,39 +52,7 @@ impl CommonMovement {
             path,
         }
     }
-    fn intended_end(&self) -> Point {
-        self.path.last().unwrap_or(&self.start).clone()
-    }
-    fn check_without_wait<D: Direction>(&self, game: &Game<D>) -> Result<Vec<Point>, CommandError> {
-        if !game.get_map().is_point_valid(&self.start) {
-            return Err(CommandError::InvalidPoint(self.start.clone()));
-        }
-        for p in &self.path {
-            if !game.get_map().is_point_valid(p) {
-                return Err(CommandError::InvalidPoint(p.clone()));
-            }
-        }
-        check_normal_unit_can_act(game, &self.start, self.unload_index)?;
-        let unit = game.get_map().get_unit(&self.start).ok_or(CommandError::MissingUnit)?;
-        let unit: &dyn NormalUnitTrait<D> = if let Some(index) = self.unload_index {
-            unit.get_boarded().get(index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
-        } else {
-            unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
-        };
-        unit.check_path(game, &self.start, &self.path)
-    }
-
-    fn check_with_wait<D: Direction>(&self, game: &Game<D>) -> Result<Vec<Point>, CommandError> {
-        let result = self.check_without_wait(game);
-        if let Some(p) = &self.path.last() {
-            if let Some(_) = game.get_map().get_unit(p) {
-                if game.has_vision_at(Some(game.current_player().team), p) {
-                    return Err(CommandError::InvalidPath);
-                }
-            }
-        }
-        result
-    }
+    
     fn get_unit<'a, D: Direction>(&self, map: &'a Map<D>) -> Result<&'a dyn NormalUnitTrait<D>, CommandError> {
         let unit = map.get_unit(&self.start).ok_or(CommandError::MissingUnit)?;
         let unit: &'a dyn NormalUnitTrait<D> = if let Some(index) = self.unload_index {
@@ -94,6 +62,90 @@ impl CommonMovement {
         };
         Ok(unit)
     }
+
+    fn intended_end(&self) -> Point {
+        self.path.last().unwrap_or(&self.start).clone()
+    }
+
+    fn validate_input<D: Direction>(&self, game: &Game<D>) -> Result<(), CommandError> {
+        if !game.get_map().is_point_valid(&self.start) {
+            return Err(CommandError::InvalidPoint(self.start.clone()));
+        }
+        for p in &self.path {
+            if !game.get_map().is_point_valid(p) {
+                return Err(CommandError::InvalidPoint(p.clone()));
+            }
+        }
+        check_normal_unit_can_act(game, &self.start, self.unload_index)?;
+        if self.unload_index.is_some() && self.path.len() == 0 {
+            return Err(CommandError::InvalidPath);
+        }
+        let unit = self.get_unit(game.get_map())?;
+        unit.check_path(game, &self.start, &self.path)
+    }
+    
+    // returns the point the unit ends on unless it is stopped by a fog trap
+    fn apply_with_custom<D, F>(self, handler: &mut EventHandler<D>, f: F) -> Option<Point> where
+        D: Direction,
+        F: FnOnce(&mut EventHandler<D>, UnitType<D>, Vec<Option<Point>>)
+        {
+        let unit = self.get_unit(handler.get_map()).expect("Unit command applied without unit, although it should be checked already");
+        let intended_end = self.intended_end();
+        let mut path_taken = vec![self.start.clone()];
+        for p in self.path {
+            if !unit.can_move_to(&p, handler.get_game()) {
+                // the unit is blocked by a fog trap
+                // first make sure no other unit is overwritten
+                while path_taken.len() > 1 && handler.get_map().get_unit(path_taken.last().unwrap()).is_some() {
+                    path_taken.pop();
+                }
+                // no event for the path is necessary if the unit is unable to move at all
+                if path_taken.len() > 1 {
+                    let unit = unit.as_unit();
+                    handler.add_event(Event::UnitPath(self.unload_index, path_taken.iter().map(|p| Some(p.clone())).collect(), unit.clone()));
+                    after_path(handler, &path_taken, &unit);
+                }
+                // special case of a unit being unable to move that's loaded in a transport
+                if path_taken.len() == 1 && self.unload_index.is_some() {
+                    handler.add_event(Event::UnitExhaustBoarded(self.start, self.unload_index.unwrap()));
+                } else {
+                    handler.add_event(Event::UnitExhaust(path_taken.last().unwrap().clone()));
+                }
+                return None;
+            }
+            path_taken.push(p);
+        }
+        if path_taken.len() > 1 {
+            let unit = unit.as_unit();
+            f(handler, unit.clone(), path_taken.iter().map(|p| Some(p.clone())).collect());
+            after_path(handler, &path_taken, &unit);
+        }
+        Some(intended_end)
+    }
+    fn apply_without_boarding<D: Direction>(self, handler: &mut EventHandler<D>) -> Option<Point> {
+        let unload_index = self.unload_index;
+        self.apply_with_custom(handler, |handler, unit, path| {
+            handler.add_event(Event::UnitPath(unload_index, path, unit));
+        })
+    }
+}
+
+fn after_path<D: Direction>(handler: &mut EventHandler<D>, path: &Vec<Point>, unit: &UnitType<D>) {
+    let team = handler.get_game().current_player().team;
+    if Some(team) == unit.get_team(handler.get_game()) {
+        let mut vision_changes = HashSet::new();
+        for p in path {
+            for p in unit.get_vision(handler.get_game(), p) {
+                if !handler.get_game().has_vision_at(Some(team), &p) {
+                    vision_changes.insert(p);
+                }
+            }
+        }
+        if vision_changes.len() > 0 {
+            handler.add_event(Event::PureFogChange(Some(team), vision_changes));
+        }
+    }
+    on_path_details(handler, &path, &unit);
 }
 
 pub enum UnitCommand<D: Direction> {
@@ -111,7 +163,7 @@ impl<D: Direction> UnitCommand<D> {
         match self {
             Self::MoveAttack(cm, target) => {
                 let intended_end = cm.intended_end();
-                let path = cm.check_with_wait(handler.get_game())?;
+                cm.validate_input(handler.get_game())?;
                 let unit = cm.get_unit(handler.get_map())?;
                 match &target {
                     AttackInfo::Point(target) => {
@@ -125,7 +177,7 @@ impl<D: Direction> UnitCommand<D> {
                         if !handler.get_game().has_vision_at(Some(team), target) {
                             return Err(CommandError::NoVision);
                         }
-                        if !unit.attackable_positions(handler.get_map(), &intended_end, path.len() > 0).contains(target) {
+                        if !unit.attackable_positions(handler.get_map(), &intended_end, cm.path.len() > 0).contains(target) {
                             return Err(CommandError::InvalidTarget);
                         }
                         let target_unit = handler.get_map().get_unit(target).ok_or(CommandError::MissingUnit)?;
@@ -135,25 +187,25 @@ impl<D: Direction> UnitCommand<D> {
                     }
                     AttackInfo::Direction(_) => {
                         match unit.get_attack_type() {
-                            AttackType::Straight(_, _) => {},
+                            AttackType::Straight(_, _) => {
+                                // TODO: check if this direction is a valid option
+                                // can't use options_after_path here, because the direction might be blocked by something hidden in fog
+                            },
                             _ => return Err(CommandError::InvalidTarget),
                         }
                     }
                 }
-                let end = path.last().unwrap_or(&cm.start).clone();
-                apply_path(handler, cm.start, cm.unload_index, path);
-                // checks fog trap
-                if end == intended_end {
+                if let Some(end) = cm.apply_without_boarding(handler) {
                     handle_attack(handler, &end, &target)?;
-                }
-                if handler.get_game().get_map().get_unit(&end).is_some() {
-                    // ensured that the unit didn't die from counter attack
-                    handler.add_event(Event::UnitExhaust(end));
+                    if handler.get_game().get_map().get_unit(&end).is_some() {
+                        // ensured that the unit didn't die from counter attack
+                        handler.add_event(Event::UnitExhaust(end));
+                    }
                 }
             }
             Self::MovePull(cm, dir) => {
                 let intended_end = cm.intended_end();
-                let path = cm.check_with_wait(handler.get_game())?;
+                cm.validate_input(handler.get_game())?;
                 let unit = cm.get_unit(handler.get_map())?;
                 if !unit.can_pull() {
                     return Err(CommandError::UnitCannotPull);
@@ -187,64 +239,62 @@ impl<D: Direction> UnitCommand<D> {
                         }
                     }
                 }
-                let end = path.last().unwrap_or(&cm.start).clone();
-                apply_path(handler, cm.start, cm.unload_index, path);
-                if intended_end == end && !blocked {
-                    let pull_start = pull_path.remove(0);
-                    apply_path(handler, pull_start, None, pull_path);
+                if let Some(end) = cm.apply_without_boarding(handler) {
+                    if !blocked {
+                        let unit = handler.get_map().get_unit(&pull_path.first().unwrap()).unwrap().clone();
+                        handler.add_event(Event::UnitPath(None, pull_path.iter().map(|p| Some(p.clone())).collect(), unit.clone()));
+                        after_path(handler, &pull_path, &unit);
+                    }
+                    handler.add_event(Event::UnitExhaust(end));
                 }
-                handler.add_event(Event::UnitExhaust(end));
             }
             Self::MoveCapture(cm) => {
                 let intended_end = cm.intended_end();
-                let path = cm.check_with_wait(handler.get_game())?;
+                cm.validate_input(handler.get_game())?;
                 let unit = cm.get_unit(handler.get_map())?;
                 if !unit.can_capture() {
                     return Err(CommandError::UnitCannotCapture);
                 }
-                let end = path.last().unwrap_or(&cm.start).clone();
-                apply_path(handler, cm.start, cm.unload_index, path);
-                if end == intended_end {
-                    let terrain = handler.get_map().get_terrain(&end).unwrap().clone();
-                    match &terrain {
-                        Terrain::Realty(realty, owner) => {
-                            if Some(team) != handler.get_game().get_team(owner.as_ref()) {
-                                handler.add_event(Event::TerrainChange(end, terrain.clone(), Terrain::Realty(realty.clone(), Some(handler.get_game().current_player().owner_id))));
-                            }
+                let realty = match handler.get_map().get_terrain(&intended_end) {
+                    Some(Terrain::Realty(realty, owner)) => {
+                        if Some(team) != handler.get_game().get_team(owner.as_ref()) {
+                            realty.clone()
+                        } else {
+                            return Err(CommandError::CannotCaptureHere);
                         }
-                        _ => {}
                     }
+                    _ => {
+                        return Err(CommandError::CannotCaptureHere);
+                    }
+                };
+                if let Some(end) = cm.apply_without_boarding(handler) {
+                    handler.add_event(Event::TerrainChange(end, handler.get_map().get_terrain(&end).unwrap().clone(), Terrain::Realty(realty, Some(handler.get_game().current_player().owner_id))));
+                    handler.add_event(Event::UnitExhaust(end));
                 }
-                handler.add_event(Event::UnitExhaust(end));
             }
             Self::MoveWait(cm) => {
-                let path = cm.check_with_wait(handler.get_game())?;
-                let end = path.last().unwrap_or(&cm.start).clone();
-                apply_path(handler, cm.start, cm.unload_index, path);
-                handler.add_event(Event::UnitExhaust(end));
+                cm.validate_input(handler.get_game())?;
+                if let Some(end) = cm.apply_without_boarding(handler) {
+                    handler.add_event(Event::UnitExhaust(end));
+                }
             }
             Self::MoveAboard(cm) => {
                 let intended_end = cm.intended_end();
-                let path = cm.check_without_wait(handler.get_game())?;
+                cm.validate_input(handler.get_game())?;
                 if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), &intended_end) {
                     return Err(CommandError::NoVision);
                 }
-                let end = path.last().unwrap_or(&cm.start).clone();
-                if end == intended_end {
-                    let unit = cm.get_unit(handler.get_map())?;
-                    let transporter = handler.get_map().get_unit(&end).ok_or(CommandError::MissingUnit)?;
-                    if !transporter.boardable_by(&unit.as_transportable()) {
-                        return Err(CommandError::UnitCannotBeBoarded);
-                    }
-                    let load_index = transporter.get_boarded().len() as u8;
-                    apply_path_with_event(handler, cm.start, cm.unload_index, path, |handler, unit, path| {
-                        handler.add_event(Event::UnitPathInto(cm.unload_index, path, unit));
-                    });
+                let unit = cm.get_unit(handler.get_map())?;
+                let transporter = handler.get_map().get_unit(&intended_end).ok_or(CommandError::MissingUnit)?;
+                if !transporter.boardable_by(&unit.as_transportable()) {
+                    return Err(CommandError::UnitCannotBeBoarded);
+                }
+                let unload_index = cm.unload_index;
+                let load_index = transporter.get_boarded().len() as u8;
+                if let Some(end) = cm.apply_with_custom(handler, |handler, unit, path| {
+                    handler.add_event(Event::UnitPathInto(unload_index, path, unit));
+                }) {
                     handler.add_event(Event::UnitExhaustBoarded(end, load_index));
-                } else {
-                    // stopped by fog, so the unit doesn't get aboard the transport
-                    apply_path(handler, cm.start, cm.unload_index, path);
-                    handler.add_event(Event::UnitExhaust(end));
                 }
             }
             Self::MoveChess(start, chess_command) => {
@@ -320,39 +370,6 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
             handler.add_event(Event::ReplaceDetail(p.clone(), old_details, details));
         }
     }
-}
-
-fn apply_path_with_event<D: Direction, F: FnOnce(&mut EventHandler<D>, UnitType<D>, Vec<Option<Point>>)>(handler: &mut EventHandler<D>, start: Point, unload_index: Option<u8>, path_taken: Vec<Point>, f: F) {
-    let mut unit = handler.get_map().get_unit(&start).unwrap().clone();
-    if let Some(index) = unload_index {
-        unit = unit.get_boarded()[index as usize].clone().as_unit();
-    }
-    if path_taken.len() > 0 {
-        let mut event_path:Vec<Option<Point>> = path_taken.iter().map(|p| Some(p.clone())).collect();
-        event_path.insert(0, Some(start.clone()));
-        f(handler, unit.clone(), event_path);
-        let team = handler.get_game().current_player().team;
-        if Some(team) == unit.get_team(handler.get_game()) {
-            let mut vision_changes = HashSet::new();
-            for p in &path_taken {
-                for p in unit.get_vision(handler.get_game(), p) {
-                    if !handler.get_game().has_vision_at(Some(team), &p) {
-                        vision_changes.insert(p);
-                    }
-                }
-            }
-            if vision_changes.len() > 0 {
-                handler.add_event(Event::PureFogChange(Some(team), vision_changes));
-            }
-        }
-    }
-    on_path_details(handler, &path_taken, &unit);
-}
-
-fn apply_path<D: Direction>(handler: &mut EventHandler<D>, start: Point, unload_index: Option<u8>, path_taken: Vec<Point>) {
-    apply_path_with_event(handler, start, unload_index, path_taken, |handler, unit, path| {
-        handler.add_event(Event::UnitPath(unload_index, path, unit));
-    })
 }
 
 pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {

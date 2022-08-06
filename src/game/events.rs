@@ -188,6 +188,7 @@ pub enum CommandError {
     Blocked(Point),
     NotEnoughMoney,
     NotYourRealty,
+    CannotCaptureHere,
     NotYourBubble,
 }
 

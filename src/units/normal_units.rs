@@ -43,6 +43,9 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D> {
         self
     }
+    fn as_unit(&self) -> UnitType<D> {
+        UnitType::Normal(self.clone())
+    }
     fn as_transportable(&self) -> TransportableTypes {
         TransportableTypes::Normal(self.clone())
     }

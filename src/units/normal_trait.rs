@@ -10,6 +10,7 @@ use super::*;
 
 pub trait NormalUnitTrait<D: Direction> {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D>;
+    fn as_unit(&self) -> UnitType<D>;
     fn as_transportable(&self) -> TransportableTypes;
     fn get_hp(&self) -> u8;
     fn get_weapons(&self) -> Vec<(WeaponType, f32)>;
@@ -96,12 +97,11 @@ pub trait NormalUnitTrait<D: Direction> {
         });
         result
     }
-    fn check_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Result<Vec<Point>, CommandError> {
+    fn check_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Result<(), CommandError> {
         let mut blocked = HashSet::new();
         blocked.insert(start.clone());
         let (movement_type, mut remaining_movement) = self.get_movement();
         let mut current = start;
-        let mut path_taken = vec![];
         for p in path {
             // no point can be travelled to twice
             if blocked.contains(p) {
@@ -131,14 +131,10 @@ pub trait NormalUnitTrait<D: Direction> {
                     return Err(CommandError::InvalidPath);
                 }
             }
-            if !self.can_move_to(&p, game) {
-                break;
-            }
             current = p;
-            path_taken.push(p.clone());
             blocked.insert(p.clone());
         }
-        Ok(path_taken)
+        Ok(())
     }
     fn get_attack_type(&self) -> AttackType;
     fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool;

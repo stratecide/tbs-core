@@ -70,6 +70,9 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D> {
         self
     }
+    fn as_unit(&self) -> UnitType<D> {
+        UnitType::Mercenary(self.clone())
+    }
     fn as_transportable(&self) -> TransportableTypes {
         TransportableTypes::Mercenary(self.clone())
     }
