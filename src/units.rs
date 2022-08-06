@@ -241,6 +241,9 @@ impl<D: Direction> UnitType<D> {
             }
         }
     }
+    pub fn can_be_pulled(&self, _map: &Map<D>, _pos: &Point) -> bool {
+        true
+    }
 }
 
 pub fn get_team<D: Direction>(owner: Option<&Owner>, game: &Game<D>) -> Option<Team> {
@@ -286,14 +289,16 @@ pub enum NormalUnits {
     TransportHeli(Vec<TransportableTypes>),
     DragonHead,
     Artillery,
+    Magnet,
 }
 impl NormalUnits {
     pub fn name(&self) -> &'static str {
         match self {
-            NormalUnits::Hovercraft => "Hovercraft",
-            NormalUnits::TransportHeli(_) => "Transport Helicopter",
-            NormalUnits::DragonHead => "Dragon Head",
-            NormalUnits::Artillery => "Artillery",
+            Self::Hovercraft => "Hovercraft",
+            Self::TransportHeli(_) => "Transport Helicopter",
+            Self::DragonHead => "Dragon Head",
+            Self::Artillery => "Artillery",
+            Self::Magnet => "Magnet",
         }
     }
     pub fn get_boarded(&self) -> Vec<&TransportableTypes> {
@@ -345,34 +350,38 @@ impl NormalUnits {
     }
     pub fn get_attack_type(&self) -> AttackType {
         match self {
-            NormalUnits::Hovercraft => AttackType::Adjacent,
-            NormalUnits::TransportHeli(_) => AttackType::None,
-            NormalUnits::DragonHead => AttackType::Straight(1, 2),
-            NormalUnits::Artillery => AttackType::Ranged(2, 3),
+            Self::Hovercraft => AttackType::Adjacent,
+            Self::TransportHeli(_) => AttackType::None,
+            Self::DragonHead => AttackType::Straight(1, 2),
+            Self::Artillery => AttackType::Ranged(2, 3),
+            Self::Magnet => AttackType::Straight(2, 2),
         }
     }
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         match self {
-            NormalUnits::Hovercraft => vec![(WeaponType::MachineGun, 1.)],
-            NormalUnits::TransportHeli(_) => vec![],
-            NormalUnits::DragonHead => vec![(WeaponType::Flame, 1.)],
-            NormalUnits::Artillery => vec![(WeaponType::SurfaceMissiles, 1.)],
+            Self::Hovercraft => vec![(WeaponType::MachineGun, 1.)],
+            Self::TransportHeli(_) => vec![],
+            Self::DragonHead => vec![(WeaponType::Flame, 1.)],
+            Self::Artillery => vec![(WeaponType::SurfaceMissiles, 1.)],
+            Self::Magnet => vec![],
         }
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
-            NormalUnits::Hovercraft => (ArmorType::Infantry, 1.5),
-            NormalUnits::TransportHeli(_) => (ArmorType::Heli, 1.5),
-            NormalUnits::DragonHead => (ArmorType::Light, 1.5),
-            NormalUnits::Artillery => (ArmorType::Light, 1.5),
+            Self::Hovercraft => (ArmorType::Infantry, 1.5),
+            Self::TransportHeli(_) => (ArmorType::Heli, 1.5),
+            Self::DragonHead => (ArmorType::Light, 1.5),
+            Self::Artillery => (ArmorType::Light, 1.5),
+            Self::Magnet => (ArmorType::Light, 1.5),
         }
     }
     pub fn value(&self) -> u16 {
         match self {
-            NormalUnits::Hovercraft => 100,
-            NormalUnits::TransportHeli(_) => 500,
-            NormalUnits::DragonHead => 400,
-            NormalUnits::Artillery => 600,
+            Self::Hovercraft => 100,
+            Self::TransportHeli(_) => 500,
+            Self::DragonHead => 400,
+            Self::Artillery => 600,
+            Self::Magnet => 500,
         }
     }
 }
@@ -511,12 +520,12 @@ pub trait NormalUnitTrait<D: Direction> {
         Ok(path_taken)
     }
     fn get_attack_type(&self) -> AttackType;
-    fn is_position_targetable(&self, game: &Game<D>, target: &Point) -> bool;
     fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool;
     fn attackable_positions(&self, map: &Map<D>, position: &Point, moved: bool) -> HashSet<Point>;
     // the result-vector should never contain the same point multiple times
     fn attack_splash(&self, map: &Map<D>, from: &Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError>;
-    fn make_attack_info(&self, map: &Map<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>>;
+    fn make_attack_info(&self, game: &Game<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>>;
+    fn can_pull(&self) -> bool;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -538,6 +547,12 @@ impl NormalUnit {
     pub fn can_capture(&self) -> bool {
         match self.typ {
             NormalUnits::Hovercraft => true,
+            _ => false,
+        }
+    }
+    fn can_pull(&self) -> bool {
+        match self.typ {
+            NormalUnits::Magnet => true,
             _ => false,
         }
     }
@@ -571,6 +586,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             NormalUnits::TransportHeli(_) => (MovementType::Heli, 6 * factor),
             NormalUnits::DragonHead => (MovementType::Wheel, 6 * factor),
             NormalUnits::Artillery => (MovementType::Treads, 5 * factor),
+            NormalUnits::Magnet => (MovementType::Wheel, 7 * factor),
         }
     }
     fn has_stealth(&self) -> bool {
@@ -581,9 +597,16 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         let destination = path.last().unwrap_or(start).clone();
         if path.len() == 0 || game.get_map().get_unit(&destination).is_none() {
             for target in self.attackable_positions(game.get_map(), &destination, path.len() > 0) {
-                if self.is_position_targetable(game, &target) {
-                    if let Some(attack_info) = self.make_attack_info(game.get_map(), &destination, &target) {
+                if let Some(attack_info) = self.make_attack_info(game, &destination, &target) {
+                    if !self.can_pull() {
                         result.push(UnitAction::Attack(attack_info));
+                    } else {
+                        match self.make_attack_info(game, &destination, &target) {
+                            Some(AttackInfo::Direction(d)) => {
+                                result.push(UnitAction::Pull(d));
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -614,19 +637,13 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             NormalUnits::TransportHeli(_) => true,
             NormalUnits::DragonHead => true,
             NormalUnits::Artillery => false,
+            NormalUnits::Magnet => true,
         }
     }
     fn get_attack_type(&self) -> AttackType {
         self.typ.get_attack_type()
     }
     // ignores fog
-    fn is_position_targetable(&self, game: &Game<D>, target: &Point) -> bool {
-        if let Some(unit) = game.get_map().get_unit(target) {
-            self.can_attack_unit_type(game, unit)
-        } else {
-            false
-        }
-    }
     fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
         let this: &dyn NormalUnitTrait<D> = self.as_trait();
         target.get_team(game) != self.get_team(game) && this.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
@@ -651,6 +668,8 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                         if let Some(dp) = map.get_neighbor(&current_pos.and_then(|dp: OrientedPoint<D>| Some(dp.point().clone())).unwrap_or(*position), &d) {
                             if i + 1 >= min_range {
                                 result.insert(dp.point().clone());
+                            } else if map.get_unit(dp.point()).is_some() {
+                                break;
                             }
                             current_pos = Some(dp);
                         } else {
@@ -691,15 +710,34 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             _ => Err(CommandError::InvalidTarget),
         }
     }
-    fn make_attack_info(&self, map: &Map<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>> {
+    // returns Some(...) if the target position can be attacked from pos
+    // returns None otherwise
+    fn make_attack_info(&self, game: &Game<D>, pos: &Point, target: &Point) -> Option<AttackInfo<D>> {
+        let unit = match game.get_map().get_unit(target) {
+            None => return None,
+            Some(unit) => unit,
+        };
+        if self.can_pull() {
+            if !unit.can_be_pulled(game.get_map(), target) {
+                return None;
+            }
+        } else {
+            if !self.can_attack_unit_type(game, unit) {
+                return None;
+            }
+        }
         match self.typ.get_attack_type() {
             AttackType::Straight(min, max) => {
                 for d in D::list() {
-                    let mut current = OrientedPoint::new(*from, false, *d);
+                    let mut current = OrientedPoint::new(*pos, false, *d);
                     for i in 0..max {
-                        if let Some(dp) = map.get_neighbor(current.point(), current.direction()) {
+                        if let Some(dp) = game.get_map().get_neighbor(current.point(), current.direction()) {
                             current = dp;
-                            if i >= min - 1 && current.point() == to {
+                            if i < min - 1 {
+                                if game.get_map().get_unit(current.point()).is_some() {
+                                    break;
+                                }
+                            } else if current.point() == target {
                                 return Some(AttackInfo::Direction(*d));
                             }
                         } else {
@@ -709,7 +747,13 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                 }
                 None
             }
-            _ => Some(AttackInfo::Point(*to)),
+            _ => Some(AttackInfo::Point(*target)),
+        }
+    }
+    fn can_pull(&self) -> bool {
+        match self.typ {
+            NormalUnits::Magnet => true,
+            _ => false,
         }
     }
 }
@@ -947,6 +991,7 @@ pub enum UnitAction<D: Direction> {
     Enter,
     Capture,
     Attack(AttackInfo<D>),
+    Pull(D),
     MercenaryPowerSimple(String),
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
@@ -956,12 +1001,13 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Enter => write!(f, "Enter"),
             Self::Capture => write!(f, "Capture"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
+            Self::Pull(_) => write!(f, "Pull"),
             Self::MercenaryPowerSimple(name) => write!(f, "Activate \"{}\"", name),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AttackInfo<D: Direction> {
     Point(Point),
     Direction(D)
@@ -1009,6 +1055,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
 
 pub enum UnitCommand<D: Direction> {
     MoveAttack(Point, Option<u8>, Vec<Point>, AttackInfo<D>),
+    MovePull(Point, Option<u8>, Vec<Point>, D),
     MoveCapture(Point, Option<u8>, Vec<Point>),
     MoveWait(Point, Option<u8>, Vec<Point>),
     MoveAboard(Point, Option<u8>, Vec<Point>),
@@ -1045,7 +1092,7 @@ impl<D: Direction> UnitCommand<D> {
         }
         result
     }
-    fn apply_path_with_event<F: FnOnce(UnitType<D>, Vec<Option<Point>>) -> Event<D>>(handler: &mut EventHandler<D>, start: Point, unload_index: Option<u8>, path_taken: Vec<Point>, f: F) {
+    fn apply_path_with_event<F: FnOnce(&mut EventHandler<D>, UnitType<D>, Vec<Option<Point>>)>(handler: &mut EventHandler<D>, start: Point, unload_index: Option<u8>, path_taken: Vec<Point>, f: F) {
         let mut unit = handler.get_map().get_unit(&start).unwrap().clone();
         if let Some(index) = unload_index {
             unit = unit.get_boarded()[index as usize].clone().as_unit();
@@ -1053,8 +1100,7 @@ impl<D: Direction> UnitCommand<D> {
         if path_taken.len() > 0 {
             let mut event_path:Vec<Option<Point>> = path_taken.iter().map(|p| Some(p.clone())).collect();
             event_path.insert(0, Some(start.clone()));
-            let event = f(unit.clone(), event_path);
-            handler.add_event(event);
+            f(handler, unit.clone(), event_path);
             let team = handler.get_game().current_player().team;
             if Some(team) == unit.get_team(handler.get_game()) {
                 let mut vision_changes = HashSet::new();
@@ -1073,8 +1119,8 @@ impl<D: Direction> UnitCommand<D> {
         on_path_details(handler, &path_taken, &unit);
     }
     fn apply_path(handler: &mut EventHandler<D>, start: Point, unload_index: Option<u8>, path_taken: Vec<Point>) {
-        Self::apply_path_with_event(handler, start, unload_index, path_taken, |unit, path| {
-            Event::UnitPath(unload_index, path, unit)
+        Self::apply_path_with_event(handler, start, unload_index, path_taken, |handler, unit, path| {
+            handler.add_event(Event::UnitPath(unload_index, path, unit));
         })
     }
     pub fn calculate_attack(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {
@@ -1141,14 +1187,11 @@ impl<D: Direction> UnitCommand<D> {
             if !handler.get_game().has_vision_at(unit.get_team(handler.get_game()), attacker_pos) {
                 continue;
             }
-            if !unit.is_position_targetable(handler.get_game(), attacker_pos) {
-                continue;
-            }
             if !unit.attackable_positions(handler.get_map(), &p, false).contains(attacker_pos) {
                 continue;
             }
             // todo: if a straight attacker is counter-attacking another straight attacker, it should first try to reverse the direction
-            let attack_info = unit.make_attack_info(handler.get_map(), p, attacker_pos).unwrap();
+            let attack_info = unit.make_attack_info(handler.get_game(), p, attacker_pos).ok_or(CommandError::InvalidTarget)?;
             // this may return an error, but we don't care about that
             Self::calculate_attack(handler, p, &attack_info, true).ok();
         }
@@ -1156,6 +1199,7 @@ impl<D: Direction> UnitCommand<D> {
         Ok(())
     }
     pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
+        let team = handler.get_game().current_player().team;
         match self {
             Self::MoveAttack(start, unload_index, path, target) => {
                 let intended_end = path.last().unwrap_or(&start).clone();
@@ -1175,13 +1219,14 @@ impl<D: Direction> UnitCommand<D> {
                             AttackType::Straight(_, _) => return Err(CommandError::InvalidTarget),
                             _ => {}
                         }
-                        if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), target) {
+                        if !handler.get_game().has_vision_at(Some(team), target) {
                             return Err(CommandError::NoVision);
                         }
-                        if !unit.is_position_targetable(handler.get_game(), target) {
+                        if !unit.attackable_positions(handler.get_map(), &intended_end, path.len() > 0).contains(target) {
                             return Err(CommandError::InvalidTarget);
                         }
-                        if !unit.attackable_positions(handler.get_map(), &intended_end, path.len() > 0).contains(target) {
+                        let target_unit = handler.get_map().get_unit(target).ok_or(CommandError::MissingUnit)?;
+                        if !unit.can_attack_unit_type(handler.get_game(), target_unit) {
                             return Err(CommandError::InvalidTarget);
                         }
                     }
@@ -1202,6 +1247,55 @@ impl<D: Direction> UnitCommand<D> {
                     // ensured that the unit didn't die from counter attack
                     handler.add_event(Event::UnitExhaust(end));
                 }
+            }
+            Self::MovePull(start, unload_index, path, dir) => {
+                let intended_end = path.last().unwrap_or(&start).clone();
+                let path = Self::check_unit_can_wait_after_path(handler.get_game(), &start, unload_index, &path)?;
+                let unit = handler.get_map().get_unit(&start).ok_or(CommandError::MissingUnit)?;
+                let unit: &dyn NormalUnitTrait<D> = if let Some(index) = unload_index {
+                    unit.get_boarded().get(index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
+                } else {
+                    unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
+                };
+                if !unit.can_pull() {
+                    return Err(CommandError::UnitCannotPull);
+                }
+                let (min_dist, max_dist) = match unit.get_attack_type() {
+                    AttackType::Straight(min_dist, max_dist) => (min_dist, max_dist),
+                    _ => {
+                        return Err(CommandError::UnitCannotPull);
+                    }
+                };
+                let mut blocked = false;
+                let mut pull_path = vec![];
+                let mut dp = OrientedPoint::new(intended_end.clone(), false, dir);
+                for i in 0..max_dist {
+                    if let Some(next_dp) = handler.get_map().get_neighbor(dp.point(), dp.direction()) {
+                        dp = next_dp;
+                        pull_path.insert(0, dp.point().clone());
+                        if let Some(unit) = handler.get_map().get_unit(dp.point()) {
+                            if handler.get_game().has_vision_at(Some(team), dp.point()) {
+                                if i < min_dist - 1 || !unit.can_be_pulled(handler.get_map(), dp.point()) {
+                                    // can't pull if the target is already next to the unit
+                                    return Err(CommandError::InvalidTarget);
+                                } else {
+                                    // found a valid target, so no need to continue looping
+                                    break;
+                                }
+                            } else {
+                                // the pull is blocked by a unit that isn't visible to the player
+                                blocked = true;
+                            }
+                        }
+                    }
+                }
+                let end = path.last().unwrap_or(&start).clone();
+                Self::apply_path(handler, start, unload_index, path);
+                if intended_end == end && !blocked {
+                    let pull_start = pull_path.remove(0);
+                    Self::apply_path(handler, pull_start, None, pull_path);
+                }
+                handler.add_event(Event::UnitExhaust(end));
             }
             Self::MoveCapture(start, unload_index, path) => {
                 let intended_end = path.last().unwrap_or(&start).clone();
@@ -1247,8 +1341,8 @@ impl<D: Direction> UnitCommand<D> {
                         return Err(CommandError::UnitCannotBeBoarded);
                     }
                     let load_index = transporter.get_boarded().len() as u8;
-                    Self::apply_path_with_event(handler, start, unload_index, path, |unit, path| {
-                        Event::UnitPathInto(unload_index, path, unit)
+                    Self::apply_path_with_event(handler, start, unload_index, path, |handler, unit, path| {
+                        handler.add_event(Event::UnitPathInto(unload_index, path, unit));
                     });
                     handler.add_event(Event::UnitExhaustBoarded(end, load_index));
                 } else {

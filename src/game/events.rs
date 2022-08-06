@@ -177,6 +177,7 @@ pub enum CommandError {
     UnitCannotMove,
     UnitCannotCapture,
     UnitCannotBeBoarded,
+    UnitCannotPull,
     UnitTypeWrong,
     InvalidPath,
     InvalidPoint(Point),

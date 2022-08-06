@@ -133,9 +133,6 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn get_attack_type(&self) -> AttackType {
         self.unit.typ.get_attack_type()
     }
-    fn is_position_targetable(&self, game: &Game<D>, target: &Point) -> bool {
-        self.unit.is_position_targetable(game, target)
-    }
     fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
         self.unit.can_attack_unit_type(game, target)
     }
@@ -145,8 +142,12 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn attack_splash(&self, map: &Map<D>, from: &Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
         self.unit.attack_splash(map, from, to)
     }
-    fn make_attack_info(&self, map: &Map<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>> {
-        self.unit.make_attack_info(map, from, to)
+    fn make_attack_info(&self, game: &Game<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>> {
+        self.unit.make_attack_info(game, from, to)
+    }
+    fn can_pull(&self) -> bool {
+        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
+        u.can_pull()
     }
 }
 
