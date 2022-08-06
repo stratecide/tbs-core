@@ -9,7 +9,8 @@ use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::units::mercenary::Mercenaries;
-use super::events;
+use crate::units::commands::UnitCommand;
+use crate::units::transportable::TransportableTypes;
 
 pub enum Command<D: Direction> {
     EndTurn,
@@ -17,12 +18,12 @@ pub enum Command<D: Direction> {
     BuyUnit(Point, u8),
 }
 impl<D: Direction> Command<D> {
-    pub fn convert<R: Fn() -> f32>(self, handler: &mut events::EventHandler<D>, random: R) -> Result<(), CommandError> {
+    pub fn convert<R: Fn() -> f32>(self, handler: &mut EventHandler<D>, random: R) -> Result<(), CommandError> {
         let owner_id = handler.game.current_player().owner_id;
         match self {
             Self::EndTurn => {
                 // un-exhaust units
-                for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
+                for p in handler.get_map().all_points() {
                     let unit = handler.get_map().get_unit(&p);
                     if let Some(unit) = unit {
                         if unit.get_owner() == Some(&owner_id) {
@@ -75,7 +76,7 @@ impl<D: Direction> Command<D> {
                     }
                 }
                 // end merc powers
-                for p in handler.get_map().wrapping_logic().pointmap().get_valid_points() {
+                for p in handler.get_map().all_points() {
                     match handler.get_map().get_unit(&p) {
                         Some(UnitType::Mercenary(merc)) => {
                             if merc.unit.owner == owner_id {
@@ -694,7 +695,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
         // income from properties
         let mut income_factor = 0;
-        for p in self.get_map().wrapping_logic().pointmap().get_valid_points() {
+        for p in self.get_map().all_points() {
             match self.get_map().get_terrain(&p) {
                 Some(Terrain::Realty(realty, owner)) => {
                     if *owner == Some(self.game.current_player().owner_id) {

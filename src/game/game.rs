@@ -63,10 +63,10 @@ impl<D: Direction> Game<D> {
     pub fn recalculate_fog(&self, perspective: Perspective) -> HashSet<Point> {
         let mut fog = HashSet::new();
         if self.is_foggy() {
-            for p in self.get_map().wrapping_logic().pointmap().get_valid_points() {
+            for p in self.get_map().all_points() {
                 fog.insert(p);
             }
-            for p in self.get_map().wrapping_logic().pointmap().get_valid_points() {
+            for p in self.get_map().all_points() {
                 for p in self.get_map().get_terrain(&p).unwrap().get_vision(self, &p, perspective) {
                     fog.remove(&p);
                 }
@@ -109,6 +109,9 @@ impl<D: Direction> Game<D> {
     }
     pub fn get_owning_player_mut(&mut self, owner: &Owner) -> Option<&mut Player> {
         self.players.iter_mut().find(|player| &player.owner_id == owner)
+    }
+    pub fn get_team(&self, owner: Option<&Owner>) -> Option<Team> {
+        owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(p.team))
     }
 
     pub fn is_foggy(&self) -> bool {

@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
 use crate::{player::*, map::{direction::Direction, point::Point}, game::game::Game};
-use crate::units::*;
+use crate::units::normal_units::{NormalUnits, NormalUnit};
+use crate::units::movement::MovementType;
+use crate::units::UnitType;
+use crate::units::normal_trait::NormalUnitTrait;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Terrain<D: Direction> {

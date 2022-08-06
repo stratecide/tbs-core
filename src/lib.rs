@@ -7,10 +7,8 @@ pub mod game;
 
 #[cfg(test)]
 mod tests {
-    use super::map::wrapping_map::*;
     use super::map::point_map::PointMap;
     use super::map::point::*;
-    use super::map::direction::*;
 
     #[test]
     fn filled_point_map() {

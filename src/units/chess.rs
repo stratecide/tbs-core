@@ -15,11 +15,11 @@ pub enum ChessCommand<D: Direction> {
 impl<D: Direction> ChessCommand<D> {
     pub fn convert(self, start: Point, unit: &ChessUnit, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         let max_cost = unit.typ.get_movement();
-        let team = super::get_team(Some(&unit.owner), handler.get_game()).unwrap();
+        let team = handler.get_game().get_team(Some(&unit.owner)).unwrap();
         match (self, &unit.typ) {
             (Self::Rook(dir, distance), ChessUnits::Rook(_)) => {
                 let mut path = None;
-                straight_search(handler.get_game(), &start, &dir, max_cost, HashSet::new(), get_team(Some(&unit.owner), handler.get_game()), |p, path_so_far| {
+                straight_search(handler.get_game(), &start, &dir, max_cost, HashSet::new(), Some(team), |p, path_so_far| {
                     if let Some(other) = handler.get_map().get_unit(p) {
                         if other.killable_by_chess(team, handler.get_game()) {
                             path = Some(path_so_far.clone());
@@ -104,7 +104,7 @@ impl ChessUnit {
                 blocked_positions.insert(start.clone());
                 let directions = Self::rook_directions(game, start, path_so_far);
                 for d in directions {
-                    straight_search(game, start, &d, max_cost, blocked_positions.clone(), get_team(Some(&self.owner), game), |p, _| {
+                    straight_search(game, start, &d, max_cost, blocked_positions.clone(), game.get_team(Some(&self.owner)), |p, _| {
                         result.insert(p.clone());
                         false
                     });
@@ -122,7 +122,7 @@ impl ChessUnit {
                 let directions = Self::rook_directions(game, start, path_so_far);
                 let mut result: Option<Vec<Point>> = None;
                 for d in directions {
-                    straight_search(game, start, &d, max_cost, blocked_positions.clone(), get_team(Some(&self.owner), game), |_, path| {
+                    straight_search(game, start, &d, max_cost, blocked_positions.clone(), game.get_team(Some(&self.owner)), |_, path| {
                         if path.last() == Some(goal) {
                             // TODO: should actually compare cost instead of length
                             if result.is_none() || result.as_ref().unwrap().len() > path.len() {

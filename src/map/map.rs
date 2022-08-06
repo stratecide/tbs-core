@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::game::settings;
 use crate::game::game::*;
@@ -51,6 +51,9 @@ where D: Direction
     }
     pub fn all_points(&self) -> Vec<Point> {
         self.wrapping_logic.pointmap().get_valid_points()
+    }
+    pub fn is_point_valid(&self, point: &Point) -> bool {
+        self.wrapping_logic.pointmap().is_point_valid(point)
     }
     /**
      * checks the pipe at dp.point for whether it can be entered by dp.direction and if true, returns the position of the next pipe tile
@@ -138,7 +141,7 @@ where D: Direction
     }
     pub fn set_terrain(&mut self, p: Point, t: Terrain<D>) {
         // TODO: return a Result<(), ?>
-        if self.wrapping_logic.pointmap().is_point_valid(&p) {
+        if self.is_point_valid(&p) {
             self.terrain.insert(p, t);
         }
     }
@@ -151,7 +154,7 @@ where D: Direction
     pub fn set_unit(&mut self, p: Point, unit: Option<UnitType<D>>) -> Option<UnitType<D>> {
         // TODO: return a Result<(), ?>, returning an error if the point is invalid
         if let Some(unit) = unit {
-            if self.wrapping_logic.pointmap().is_point_valid(&p) {
+            if self.is_point_valid(&p) {
                 self.units.insert(p, unit)
             } else {
                 None
@@ -164,7 +167,7 @@ where D: Direction
         self.details.get(p).and_then(|v| Some(v.clone())).unwrap_or(vec![])
     }
     pub fn set_details(&mut self, p: Point, value: Vec<Detail>) {
-        if self.wrapping_logic.pointmap().is_point_valid(&p) {
+        if self.is_point_valid(&p) {
             // remove Detail from value that conflict with other Detail
             // starting from the back, so add_detail can be used by the editor to overwrite previous data
             let mut bubble = false;
@@ -207,9 +210,52 @@ where D: Direction
         }
         None
     }
+    pub fn range_in_layers(&self, center: &Point, range: usize) -> Vec<HashSet<(Point, D, Option<D>)>> {
+        let mut layers: Vec<HashSet<(Point, D, Option<D>)>> = vec![];
+        let mut layer = HashSet::new();
+        for dp in self.get_neighbors(center, NeighborMode::FollowPipes) {
+            layer.insert((dp.point().clone(), dp.direction().clone(), None));
+        }
+        layers.push(layer);
+        while layers.len() < range {
+            let mut layer = HashSet::new();
+            for (p, dir, dir_change) in layers.last().unwrap() {
+                if let Some(dp) = self.get_neighbor(p, dir) {
+                    let dir_change = match (dp.mirrored(), dir_change) {
+                        (_, None) => None,
+                        (true, Some(angle)) => Some(angle.opposite_angle()),
+                        (false, Some(angle)) => Some(angle.clone()),
+                    };
+                    layer.insert((dp.point().clone(), dp.direction().clone(), dir_change));
+                }
+                let mut dir_changes = vec![];
+                if let Some(dir_change) = dir_change {
+                    // if we already have 2 directions, only those 2 directions can find new points
+                    dir_changes.push(dir_change.clone());
+                } else {
+                    // since only one direction has been used so far, try both directions that are directly neighboring
+                    let d = **D::list().last().unwrap();
+                    dir_changes.push(d.opposite_angle());
+                    dir_changes.push(d);
+                }
+                for dir_change in dir_changes {
+                    if let Some(dp) = self.get_neighbor(p, &dir.rotate_by(&dir_change)) {
+                        let mut dir_change = dir_change.clone();
+                        if dp.mirrored() {
+                            dir_change = dir_change.opposite_angle();
+                        }
+                        let dir = dp.direction().rotate_by(&dir_change.opposite_angle());
+                        layer.insert((dp.point().clone(), dir, Some(dir_change)));
+                    }
+                }
+            }
+            layers.push(layer);
+        }
+        layers
+    }
     pub fn mercenary_influence_at(&self, point: &Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenary)> {
         let mut result = vec![];
-        for p in self.wrapping_logic.pointmap().get_valid_points() {
+        for p in self.all_points() {
             if let Some(UnitType::Mercenary(merc)) = self.get_unit(&p) {
                 if (owner.is_none() || owner == Some(&merc.unit.owner)) && merc.in_range(self, &p, &point) {
                     result.push((p.clone(), merc));
@@ -220,7 +266,7 @@ where D: Direction
     }
     pub fn validate_terrain(&mut self) -> Vec<(Point, Terrain<D>)> {
         let mut corrected = vec![];
-        for p in self.wrapping_logic.pointmap().get_valid_points() {
+        for p in self.all_points() {
             match self.get_terrain(&p).unwrap() {
                 Terrain::Pipe(state) => {
                     let mut is_valid = true;

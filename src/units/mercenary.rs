@@ -30,7 +30,7 @@ impl Mercenary {
     pub fn aura<D: Direction>(&self, map: &Map<D>, position: &Point) -> HashSet<Point> {
         let mut result = HashSet::new();
         result.insert(position.clone());
-        for layer in range_in_layers(map, position, self.range() as usize) {
+        for layer in map.range_in_layers(position, self.range() as usize) {
             for (p, _, _) in layer {
                 result.insert(p);
             }
@@ -70,8 +70,8 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D> {
         self
     }
-    fn as_transportable(self) -> TransportableTypes {
-        TransportableTypes::Mercenary(self)
+    fn as_transportable(&self) -> TransportableTypes {
+        TransportableTypes::Mercenary(self.clone())
     }
     fn get_hp(&self) -> u8 {
         self.unit.hp
@@ -144,6 +144,10 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     }
     fn make_attack_info(&self, game: &Game<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>> {
         self.unit.make_attack_info(game, from, to)
+    }
+    fn can_capture(&self) -> bool {
+        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
+        u.can_capture()
     }
     fn can_pull(&self) -> bool {
         let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
