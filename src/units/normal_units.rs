@@ -32,7 +32,7 @@ impl NormalUnit {
             _ => false,
         }
     }
-    fn can_pull(&self) -> bool {
+    pub fn can_pull(&self) -> bool {
         match self.typ {
             NormalUnits::Magnet => true,
             _ => false,
@@ -239,10 +239,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         self.can_capture()
     }
     fn can_pull(&self) -> bool {
-        match self.typ {
-            NormalUnits::Magnet => true,
-            _ => false,
-        }
+        self.can_pull()
     }
 }
 

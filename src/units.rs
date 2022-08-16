@@ -170,6 +170,14 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => None,
         }
     }
+    pub fn shortest_path_to_attack(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
+        match self {
+            Self::Normal(unit) => unit.shortest_path_to_attack(game, start, path_so_far, goal),
+            Self::Mercenary(unit) => unit.shortest_path_to_attack(game, start, path_so_far, goal),
+            Self::Chess(_) => None,
+            Self::Structure(_) => None,
+        }
+    }
     pub fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
         match self {
             Self::Normal(unit) => unit.options_after_path(game, start, path),
@@ -249,8 +257,30 @@ impl<D: Direction> UnitType<D> {
             }
         }
     }
+    pub fn can_pull(&self) -> bool {
+        match self {
+            Self::Normal(unit) => unit.can_pull(),
+            Self::Mercenary(merc) => merc.unit.can_pull(),
+            Self::Chess(_) => false,
+            Self::Structure(_) => false,
+        }
+    }
     pub fn can_be_pulled(&self, _map: &Map<D>, _pos: &Point) -> bool {
         true
+    }
+    pub fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+        if let Some(unit) = self.as_normal_trait() {
+            unit.can_attack_unit_type(game, target)
+        } else {
+            false
+        }
+    }
+    pub fn make_attack_info(&self, game: &Game<D>, pos: &Point, target: &Point) -> Option<AttackInfo<D>> {
+        if let Some(unit) = self.as_normal_trait() {
+            unit.make_attack_info(game, pos, target)
+        } else {
+            None
+        }
     }
 }
 
