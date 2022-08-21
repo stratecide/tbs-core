@@ -1,16 +1,20 @@
 use std::collections::HashSet;
 
+use zipper::*;
+use zipper::zipper_derive::*;
+
 use crate::{player::*, map::{direction::Direction, point::Point}, game::game::Game};
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::MovementType;
 use crate::units::UnitType;
 use crate::units::normal_trait::NormalUnitTrait;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 8)]
 pub enum Terrain<D: Direction> {
     Grass,
     Street,
-    Realty(Realty, Option<Owner>),
+    Realty(Realty, Option::<Owner>),
     Fountain,
     Pipe(D::P),
 }
@@ -87,11 +91,12 @@ impl<D: Direction> Terrain<D> {
 }
 
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 6)]
 pub enum Realty {
     Hq,
     City,
-    Factory(u8),
+    Factory(U8::<9>),
 }
 impl Realty {
     pub fn income_factor(&self) -> i16 {
@@ -102,7 +107,7 @@ impl Realty {
     }
     pub fn buildable_units<D: Direction>(&self, game: &Game<D>, owner: Owner) -> Vec<(UnitType<D>, u16)> {
         match self {
-            Self::Factory(built_this_turn) => build_options_factory(game, owner, *built_this_turn),
+            Self::Factory(built_this_turn) => build_options_factory(game, owner, **built_this_turn),
             _ => vec![],
         }
     }

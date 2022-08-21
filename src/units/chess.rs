@@ -3,14 +3,20 @@ use std::collections::HashSet;
 use crate::game::game::Game;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
+use crate::map::point_map;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::player::*;
 
 use super::*;
 
+use zipper::*;
+use zipper::zipper_derive::*;
 
+
+#[derive(Debug, Zippable)]
+#[zippable(bits = 6)]
 pub enum ChessCommand<D: Direction> {
-    Rook(D, u16),
+    Rook(D, U16::<{point_map::MAX_AREA as u16}>),
 }
 impl<D: Direction> ChessCommand<D> {
     pub fn convert(self, start: Point, unit: &ChessUnit, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
@@ -31,7 +37,7 @@ impl<D: Direction> ChessCommand<D> {
                         } else {
                             true
                         }
-                    } else if path_so_far.len() == distance as usize {
+                    } else if path_so_far.len() == *distance as usize {
                         path = Some(path_so_far.clone());
                         true
                     } else {
@@ -41,18 +47,25 @@ impl<D: Direction> ChessCommand<D> {
                 if let Some(mut path) = path {
                     path.insert(0, start.clone());
                     let p = path.last().unwrap().clone();
+                    let mut recalculate_fog = false;
                     if let Some(other) = handler.get_map().get_unit(&p) {
+                        recalculate_fog = true;
                         handler.add_event(Event::UnitDeath(p.clone(), other.clone()));
                     }
-                    handler.add_event(Event::UnitPath(None, path.iter().map(|p| Some(p.clone())).collect(), UnitType::Chess::<D>(unit.clone())));
+                    let l_path: Vec<Option<Point>> = path.iter().map(|p| Some(p.clone())).collect();
+                    handler.add_event(Event::UnitPath(None, l_path.try_into().unwrap(), UnitType::Chess::<D>(unit.clone())));
                     let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &p).into_iter().filter(|p| {
                         !handler.get_game().has_vision_at(Some(team), &p)
                     }).collect();
                     if vision_changes.len() > 0 {
-                        handler.add_event(Event::PureFogChange(Some(team), vision_changes));
+                        let vision_changes: Vec<Point> = vision_changes.into_iter().collect();
+                        handler.add_event(Event::PureFogChange(Some(team), vision_changes.try_into().unwrap()));
                     }
                     super::on_path_details(handler, &path, &UnitType::Chess::<D>(unit.clone()));
                     handler.add_event(Event::UnitExhaust(p));
+                    if recalculate_fog {
+                        handler.recalculate_fog(true);
+                    }
                     Ok(())
                 } else {
                     Err(CommandError::InvalidPath)
@@ -62,11 +75,11 @@ impl<D: Direction> ChessCommand<D> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
 pub struct ChessUnit {
     pub typ: ChessUnits,
     pub owner: Owner,
-    pub hp: u8,
+    pub hp: Hp,
     pub exhausted: bool,
 }
 impl ChessUnit {
@@ -189,7 +202,8 @@ pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: &Point) -> Res
     Ok(())
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 4)]
 pub enum ChessUnits {
     Rook(bool),
 }

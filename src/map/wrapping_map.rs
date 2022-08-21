@@ -3,13 +3,16 @@ use crate::map::point_map::*;
 use crate::map::point::*;
 use std::collections::{HashSet, HashMap};
 
-type Distortion<D> = (bool, D);
+use zipper::*;
+use zipper::zipper_derive::*;
+
+pub type Distortion<D> = (bool, D);
 type AreaPoint<D> = (Transformation<D>, Point);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Zippable)]
 pub struct Transformation<D>
 where D: Direction {
-    distortion: Distortion<D>,
+    distortion: Distortion::<D>,
     translate_by: D::T,
 }
 
@@ -356,7 +359,7 @@ where D: Direction
             tran
         }).collect()
     }
-    fn check_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<Vec<(Transformation<D>, HashSet<(bool, D)>)>, TransformationError<D>> {
+    fn check_transformations(&mut self, area: &mut HashMap<GlobalPoint, AreaPoint<D>>) -> Result<Vec<(Transformation<D>, HashSet<Distortion<D>>)>, TransformationError<D>> {
         //let mut neigbor_search = Duration::new(0, 0);
         let mut transformations = vec![
             (Transformation {
@@ -474,7 +477,7 @@ where D: Direction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WrappingMap<D>
 where D: Direction {
     pointmap: PointMap,
@@ -517,6 +520,30 @@ where D: Direction {
             }, |point| {
                 Some(OrientedPoint::new(point, false, *direction))
             })
+        }
+    }
+}
+
+impl<D: Direction> Zippable for WrappingMap<D> {
+    fn export(&self, zipper: &mut Zipper) {
+        self.pointmap.export(zipper);
+        zipper.write_u8(self.seed_transformations.len() as u8, 3);
+        for trans in &self.seed_transformations {
+            trans.export(zipper);
+        }
+    }
+    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+        let pointmap = PointMap::import(unzipper)?;
+        let len = unzipper.read_u8(3)?;
+        let mut seed_transformations = vec![];
+        for _ in 0..len {
+            seed_transformations.push(Transformation::import(unzipper)?);
+        }
+        let builder = WrappingMapBuilder::new(pointmap, seed_transformations);
+        if let Ok(result) = builder.build() {
+            Ok(result)
+        } else {
+            Err(ZipperError::InconsistentData)
         }
     }
 }

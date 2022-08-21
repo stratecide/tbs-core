@@ -9,3 +9,6 @@ edition = "2021"
 rendering = []
 
 [dependencies]
+interfaces = { path = "../interfaces" }
+zipper = { path = "../../zipper" }
+zipper_derive = { path = "../../zipper/zipper_derive" }

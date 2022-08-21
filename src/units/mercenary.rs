@@ -3,15 +3,18 @@ use crate::map::map::Map;
 
 use super::*;
 
+use zipper::*;
+use zipper::zipper_derive::*;
 
 
 
+pub const MAX_CHARGE: u8 = 63;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
 pub struct Mercenary {
     pub typ: Mercenaries,
     pub unit: NormalUnit,
-    pub charge: u8,
+    pub charge: U8::<MAX_CHARGE>,
 }
 impl Mercenary {
     pub fn get_armor(&self) -> (ArmorType, f32) {
@@ -61,7 +64,7 @@ impl Mercenary {
     pub fn can_use_simple_power<D: Direction>(&self, game: &Game<D>, pos: &Point) -> bool {
         match self.typ {
             Mercenaries::EarlGrey(true) => false,
-            Mercenaries::EarlGrey(false) => self.charge >= self.typ.max_charge(),
+            Mercenaries::EarlGrey(false) => *self.charge >= self.typ.max_charge(),
         }
     }
 }
@@ -77,7 +80,7 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
         TransportableTypes::Mercenary(self.clone())
     }
     fn get_hp(&self) -> u8 {
-        self.unit.hp
+        *self.unit.hp
     }
     fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
@@ -121,8 +124,8 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
         let mut options = self.unit.options_after_path(game, start, path);
         match self.typ {
             Mercenaries::EarlGrey(false) => {
-                if path.len() == 0 && self.charge >= self.typ.max_charge() {
-                    options.insert(0, UnitAction::MercenaryPowerSimple("Bone Rush".to_string()));
+                if path.len() == 0 && *self.charge >= self.typ.max_charge() {
+                    options.insert(0, UnitAction::MercenaryPowerSimple);
                 }
             }
             _ => {}
@@ -159,7 +162,8 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
 }
 
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 6)]
 pub enum Mercenaries {
     EarlGrey(bool),
 }
@@ -169,6 +173,7 @@ impl Mercenaries {
             Self::EarlGrey(_) => "Earl Grey",
         }
     }
+    // has to be lower than 64 because charge is a U6
     pub fn max_charge(&self) -> u8 {
         match self {
             Self::EarlGrey(false) => 10,

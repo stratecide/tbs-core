@@ -2,19 +2,24 @@ use crate::map::direction::Direction;
 use crate::player::Owner;
 
 use super::ArmorType;
+use super::Hp;
+
+use zipper::*;
+use zipper::zipper_derive::*;
 
 
 
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
 pub struct Structure<D: Direction> {
-    pub typ: Structures<D>,
-    pub owner: Option<Owner>,
-    pub hp: u8,
+    pub typ: Structures::<D>,
+    pub owner: Option::<Owner>,
+    pub hp: Hp,
     pub exhausted: bool,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 4)]
 pub enum Structures<D: Direction> {
     Cannon(D),
 }

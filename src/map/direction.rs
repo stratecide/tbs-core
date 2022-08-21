@@ -1,12 +1,16 @@
 use std::fmt;
 use std::hash::Hash;
-//use num::{CheckedAdd, CheckedSub, Integer};
 use crate::map::point::*;
-//use crate::map::point_map::*;
 
-pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send {
-    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send;
-    type P: PipeState<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send;
+use zipper::*;
+use zipper::zipper_derive::*;
+
+use super::point_map;
+
+
+pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable {
+    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
+    type P: PipeState<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
     fn is_hex() -> bool;
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
@@ -62,7 +66,8 @@ pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Zippable)]
+#[zippable(bits = 2)]
 pub enum Direction4 {
     D0,
     D90,
@@ -102,35 +107,6 @@ impl Direction for Direction4 {
             _ => self.clone()
         }
     }
-    /*fn rotate_point_map(&self, map: &PointMap) -> PointMap {
-        let mut result = match self {
-            Self::D0 => PointMap::new(map.width(), map.height(), false),
-            Self::D90 => PointMap::new(map.height(), map.width(), false),
-            Self::D180 => PointMap::new(map.width(), map.height(), false),
-            Self::D270 => PointMap::new(map.height(), map.width(), false),
-        };
-        for x in 0..map.width() {
-            for y in 0..map.height() {
-                let origin = Point::new(x, y);
-                let destination = match self {
-                    Self::D0 => Point::new(origin.x(), origin.y()),
-                    Self::D90 => Point::new(origin.y(), map.width() - 1 - origin.x()),
-                    Self::D180 => Point::new(map.width() - 1 - origin.x(), map.height() - 1 - origin.y()),
-                    Self::D270 => Point::new(map.height() - 1 - origin.y(), origin.x()),
-                };
-                result.set_valid(&destination, map.is_point_valid(&origin));
-            }
-        }
-        result
-    }*/
-    /*fn get_neighbor<T: CheckedAdd + CheckedSub + Integer, P: Position<T>>(&self, point: &P) -> Option<P> {
-        match self {
-            Direction4::D0 => point.x().checked_add(&T::one()).map(|x| {P::new(x, point.y())}),
-            Direction4::D90 => point.y().checked_sub(&T::one()).map(|y| {P::new(point.x(), y)}),
-            Direction4::D180 => point.x().checked_sub(&T::one()).map(|x| {P::new(x, point.y())}),
-            Direction4::D270 => point.y().checked_add(&T::one()).map(|y| {P::new(point.x(), y)}),
-        }
-    }*/
 }
 impl fmt::Display for Direction4 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -143,7 +119,8 @@ impl fmt::Display for Direction4 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Zippable)]
+#[zippable(bits = 3)]
 pub enum Direction6 {
     D0,
     D60,
@@ -190,41 +167,6 @@ impl Direction for Direction6 {
             Self::D300 => Self::D240,
         }
     }
-    /*fn rotate_point_map(&self, map: &PointMap) -> PointMap {
-        let mut result = match self {
-            Self::D0 => PointMap::new(map.width(), map.height(), map.odd_if_hex()),
-            Self::D90 => PointMap::new(map.height(), map.width(), false),
-            Self::D180 => PointMap::new(map.width(), map.height(), map.odd_if_hex() == (map.height() % 2 == 0)),
-            Self::D270 => PointMap::new(map.height(), map.width(), false),
-        };
-        for x in 0..map.width() {
-            for y in 0..map.height() {
-                let origin = Point::new(x, y);
-                let destination = match self {
-                    Self::D0 => Point::new(origin.x(), origin.y()),
-                    Self::D90 => Point::new(origin.y(), map.width() - 1 - origin.x()),
-                    Self::D180 => Point::new(map.width() - 1 - origin.x(), map.height() - 1 - origin.y()),
-                    Self::D270 => Point::new(map.height() - 1 - origin.y(), origin.x()),
-                };
-                result.set_valid(&destination, map.is_point_valid(&origin));
-            }
-        }
-        result
-    }*/
-    /*fn get_neighbor<T: CheckedAdd + CheckedSub + Integer, P: Position<T>>(&self, point: &P) -> Option<P> {
-        match (self, point.y().is_even()) {
-            (Direction6::D0, _) => point.x().checked_add(&T::one()).map(|x| {P::new(x, point.y())}),
-            (Direction6::D180, _) => point.x().checked_sub(&T::one()).map(|x| {P::new(x, point.y())}),
-            (Direction6::D60, true) => point.y().checked_sub(&T::one()).map(|y| {P::new(point.x(), y)}),
-            (Direction6::D60, false) => point.y().checked_sub(&T::one()).and_then(|y| point.x().checked_add(&T::one()).map(|x| {P::new(x, y)})),
-            (Direction6::D120, true) => point.y().checked_sub(&T::one()).and_then(|y| point.x().checked_sub(&T::one()).map(|x| {P::new(x, y)})),
-            (Direction6::D120, false) => point.y().checked_sub(&T::one()).map(|y| {P::new(point.x(), y)}),
-            (Direction6::D240, true) => point.y().checked_sub(&T::one()).and_then(|y| point.x().checked_sub(&T::one()).map(|x| {P::new(x, y)})),
-            (Direction6::D240, false) => point.y().checked_add(&T::one()).map(|y| {P::new(point.x(), y)}),
-            (Direction6::D300, true) => point.y().checked_add(&T::one()).map(|y| {P::new(point.x(), y)}),
-            (Direction6::D300, false) => point.y().checked_sub(&T::one()).and_then(|y| point.x().checked_add(&T::one()).map(|x| {P::new(x, y)})),
-        }
-    }*/
 }
 impl fmt::Display for Direction6 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -320,6 +262,23 @@ impl Translation<Direction4> for Translation4 {
     }
 }
 
+const MAX_TRANSLATION4: i16 = 257;
+impl Zippable for Translation4 {
+    fn export(&self, zipper: &mut Zipper) {
+        // custom implementation because Translation can be bigger during calculations than they are allowed to during export
+        I16::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::try_from(self.x.max(-MAX_TRANSLATION4).min(MAX_TRANSLATION4)).unwrap().export(zipper);
+        I16::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::try_from(self.y.max(-MAX_TRANSLATION4).min(MAX_TRANSLATION4)).unwrap().export(zipper);
+    }
+    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+        let x = I16::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::import(unzipper)?;
+        let y = I16::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::import(unzipper)?;
+        Ok(Self {
+            x: *x,
+            y: *y,
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Translation6 {
     d0: i16,
@@ -410,6 +369,23 @@ impl Translation<Direction6> for Translation6 {
     }
 }
 
+const MAX_TRANSLATION6: i16 = 511;
+impl Zippable for Translation6 {
+    fn export(&self, zipper: &mut Zipper) {
+        // custom implementation because Translation can be bigger during calculations than they are allowed to during export
+        I16::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::try_from(self.d0.max(-MAX_TRANSLATION6).min(MAX_TRANSLATION6)).unwrap().export(zipper);
+        I16::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::try_from(self.d60.max(-MAX_TRANSLATION6).min(MAX_TRANSLATION6)).unwrap().export(zipper);
+    }
+    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+        let x = I16::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::import(unzipper)?;
+        let y = I16::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::import(unzipper)?;
+        Ok(Self {
+            d0: *x,
+            d60: *y,
+        })
+    }
+}
+
 pub trait PipeState<D: Direction> {
     fn is_enterable(&self) -> bool;
     fn enterable_from(&self, d: &D) -> bool;
@@ -419,7 +395,7 @@ pub trait PipeState<D: Direction> {
     fn next_dir(&self, entered_from: &D) -> D;
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Zippable)]
 pub struct PipeState4 {
     d1: Direction4,
     d2: Direction4,
@@ -459,7 +435,7 @@ impl PipeState<Direction4> for PipeState4 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Zippable)]
 pub struct PipeState6 {
     d1: Direction6,
     d2: Direction6,

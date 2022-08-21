@@ -8,21 +8,24 @@ use crate::game::game::Game;
 use crate::map::map::{NeighborMode, Map};
 use crate::terrain::*;
 
+use zipper::*;
+use zipper::zipper_derive::*;
+
 use super::*;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
 pub struct NormalUnit {
     pub typ: NormalUnits,
     pub owner: Owner,
-    pub hp: u8,
+    pub hp: Hp,
     pub exhausted: bool,
 }
 impl NormalUnit {
-    pub fn new_instance(from: NormalUnits, color_id: u8) -> NormalUnit {
+    pub fn new_instance(from: NormalUnits, color_id: Owner) -> NormalUnit {
         NormalUnit {
             typ: from,
             owner: color_id,
-            hp: 100,
+            hp: 100.try_into().unwrap(),
             exhausted: false,
         }
     }
@@ -50,7 +53,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         TransportableTypes::Normal(self.clone())
     }
     fn get_hp(&self) -> u8 {
-        self.hp
+        *self.hp
     }
     fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         self.typ.get_weapons()
@@ -243,10 +246,11 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 8)]
 pub enum NormalUnits {
     Hovercraft,
-    TransportHeli(Vec<TransportableTypes>),
+    TransportHeli(LVec::<TransportableTypes, 1>),
     DragonHead,
     Artillery,
     Magnet,

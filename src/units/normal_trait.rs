@@ -146,13 +146,13 @@ pub trait NormalUnitTrait<D: Direction> {
     fn can_pull(&self) -> bool;
 }
 
-pub fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: &Point, unload_index: Option<u8>) -> Result<(), CommandError> {
+pub fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: &Point, unload_index: Option<UnloadIndex>) -> Result<(), CommandError> {
     if !game.has_vision_at(Some(game.current_player().team), at) {
         return Err(CommandError::NoVision);
     }
     let unit = game.get_map().get_unit(&at).ok_or(CommandError::MissingUnit)?;
     let unit: &dyn NormalUnitTrait<D> = if let Some(index) = unload_index {
-        unit.get_boarded().get(index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
+        unit.get_boarded().get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
     } else {
         unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
     };

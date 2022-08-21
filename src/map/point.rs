@@ -1,3 +1,4 @@
+use zipper::*;
 
 pub trait Position<T> {
     fn new(x: T, y: T) -> Self;
@@ -9,6 +10,18 @@ pub trait Position<T> {
 pub struct Point {
     x: u8,
     y: u8,
+}
+impl Zippable for Point {
+    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+        Ok(Self {
+            x: unzipper.read_u8(8)?,
+            y: unzipper.read_u8(8)?,
+        })
+    }
+    fn export(&self, zipper: &mut Zipper) {
+        zipper.write_u8(self.x, 8);
+        zipper.write_u8(self.y, 8);
+    }
 }
 
 impl Position<u8> for Point {

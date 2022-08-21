@@ -2,9 +2,13 @@
 use crate::player::*;
 use crate::map::direction::Direction;
 
+use zipper::*;
+use zipper::zipper_derive::*;
+
 use super::*;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 1)]
 pub enum TransportableTypes {
     Normal(NormalUnit),
     Mercenary(Mercenary),

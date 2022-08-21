@@ -1,5 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
+use zipper::*;
+use zipper::zipper_derive::*;
+
+use crate::details;
 use crate::game::settings;
 use crate::game::game::*;
 use crate::game::events;
@@ -12,14 +16,14 @@ use crate::units::*;
 use crate::units::mercenary::Mercenary;
 use crate::details::*;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Map<D>
 where D: Direction
 {
     wrapping_logic: WrappingMap<D>,
     terrain: HashMap<Point, Terrain<D>>,
     units: HashMap<Point, UnitType<D>>,
-    details: HashMap<Point, Vec<Detail>>,
+    details: HashMap<Point, LVec<Detail, MAX_STACK_SIZE>>,
 }
 
 impl<D> Map<D>
@@ -164,7 +168,7 @@ where D: Direction
         }
     }
     pub fn get_details(&self, p: &Point) -> Vec<Detail> {
-        self.details.get(p).and_then(|v| Some(v.clone())).unwrap_or(vec![])
+        self.details.get(p).and_then(|v| Some(v.clone().into())).unwrap_or(vec![])
     }
     pub fn set_details(&mut self, p: Point, value: Vec<Detail>) {
         if self.is_point_valid(&p) {
@@ -185,9 +189,13 @@ where D: Direction
                     }
                 }
                 !remove
-            }).take(MAX_STACK_SIZE).collect();
-            let value = value.into_iter().rev().collect();
-            self.details.insert(p, value);
+            }).take(MAX_STACK_SIZE as usize).collect();
+            let value: Vec<Detail> = value.into_iter().rev().collect();
+            if value.len() > 0 {
+                self.details.insert(p, value.try_into().unwrap());
+            } else {
+                self.details.remove(&p);
+            }
         }
     }
     pub fn add_detail(&mut self, p: Point, value: Detail) {
@@ -303,8 +311,8 @@ where D: Direction
     }
     pub fn get_players(&self) -> Vec<Player> {
         vec![
-            Player::new(0, 0, 100, 333),
-            Player::new(1, 1, 144, 210),
+            Player::new(0, Team::try_from(0).unwrap(), 100, 333),
+            Player::new(1, Team::try_from(1).unwrap(), 144, 210),
         ]
     }
     /**
@@ -314,7 +322,7 @@ where D: Direction
     pub fn settings(&self) -> Result<settings::GameSettings, settings::NotPlayable> {
         // TODO: check if playable
         Ok(settings::GameSettings {
-            fog_mode: FogMode::DarkRegular(3, 4, 3),
+            fog_mode: FogMode::DarkRegular(3.try_into().unwrap(), 4.try_into().unwrap(), 3.try_into().unwrap()),
         })
     }
     pub fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {
@@ -322,6 +330,79 @@ where D: Direction
     }
     pub fn game_client(self, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Game<D> {
         Game::new_client(self, settings, events)
+    }
+
+    pub fn get_field_data(&self, p: &Point) -> FieldData<D> {
+        FieldData {
+            terrain: self.terrain.get(&p).unwrap().clone(),
+            details: self.details.get(&p).cloned().unwrap_or(LVec::new()),
+            unit: self.units.get(&p).cloned(),
+        }
+    }
+    pub fn export_field(&self, zipper: &mut Zipper, p: &Point, fog: bool) {
+        let mut fd = self.get_field_data(p);
+        if fog {
+            fd = fd.fog_replacement();
+        }
+        fd.export(zipper);
+    }
+
+    pub fn export(&self, zipper: &mut Zipper, fog: Option<&HashSet<Point>>) {
+        self.wrapping_logic.export(zipper);
+        for p in self.all_points() {
+            self.export_field(zipper, &p, fog.and_then(|fog| fog.get(&p)).is_some());
+        }
+    }
+
+    pub fn import(bytes: Vec<u8>) -> Result<Self, ZipperError> {
+        let mut unzipper = Unzipper::new(bytes);
+        Self::import_from_unzipper(&mut unzipper)
+    }
+    pub fn import_from_unzipper(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+        let wrapping_logic = WrappingMap::import(unzipper)?;
+        let mut terrain = HashMap::new();
+        let mut units = HashMap::new();
+        let mut details = HashMap::new();
+        for p in wrapping_logic.pointmap().get_valid_points() {
+            terrain.insert(p.clone(), Terrain::import(unzipper)?);
+            let det = LVec::<Detail, MAX_STACK_SIZE>::import(unzipper)?;
+            if det.len() > 0 {
+                details.insert(p.clone(), det);
+            }
+            if let Some(unit) = Option::<UnitType<D>>::import(unzipper)? {
+                units.insert(p.clone(), unit);
+            }
+        }
+        Ok(Self {
+            wrapping_logic,
+            terrain,
+            units,
+            details,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Zippable)]
+pub struct FieldData<D: Direction> {
+    pub terrain: Terrain::<D>,
+    pub details: LVec::<Detail, {details::MAX_STACK_SIZE}>,
+    pub unit: Option::<UnitType<D>>,
+}
+impl<D: Direction> FieldData<D> {
+    pub fn fog_replacement(&self) -> Self {
+        Self {
+            terrain: self.terrain.fog_replacement(),
+            details: details_fog_replacement(&self.details),
+            unit: self.unit.clone().and_then(|unit| unit.fog_replacement())
+        }
+    }
+}
+
+impl<D: Direction> interfaces::Map for Map<D> {
+    fn export(&self) -> Vec<u8> {
+        let mut zipper = Zipper::new();
+        self.export(&mut zipper, None);
+        zipper.finish()
     }
 }
 

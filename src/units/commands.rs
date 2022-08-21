@@ -1,7 +1,11 @@
 use std::fmt;
 
+use zipper::*;
+use zipper::zipper_derive::*;
+
 use crate::details::Detail;
 use crate::game::events::*;
+use crate::map::point_map;
 use crate::map::wrapping_map::{OrientedPoint};
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -11,14 +15,15 @@ use super::chess::*;
 
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Zippable)]
+#[zippable(bits = 6)]
 pub enum UnitAction<D: Direction> {
     Wait,
     Enter,
     Capture,
-    Attack(AttackInfo<D>),
+    Attack(AttackInfo::<D>),
     Pull(D),
-    MercenaryPowerSimple(String),
+    MercenaryPowerSimple,
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -28,35 +33,39 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Capture => write!(f, "Capture"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
             Self::Pull(_) => write!(f, "Pull"),
-            Self::MercenaryPowerSimple(name) => write!(f, "Activate \"{}\"", name),
+            Self::MercenaryPowerSimple => write!(f, "Activate Power"),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(bits = 2)]
 pub enum AttackInfo<D: Direction> {
     Point(Point),
     Direction(D)
 }
 
+pub type UnloadIndex = U8<7>;
+
+#[derive(Debug, Clone, PartialEq, Zippable)]
 pub struct CommonMovement {
     pub start: Point,
-    pub unload_index: Option<u8>,
-    pub path: Vec<Point>,
+    pub unload_index: Option::<UnloadIndex>,
+    pub path: LVec::<Point, {point_map::MAX_AREA}>,
 }
 impl CommonMovement {
     pub fn new(start: Point, unload_index: Option<u8>, path: Vec<Point>) -> Self {
         Self {
             start,
-            unload_index,
-            path,
+            unload_index: unload_index.and_then(|i| Some(i.try_into().unwrap())),
+            path: path.try_into().unwrap(),
         }
     }
     
     fn get_unit<'a, D: Direction>(&self, map: &'a Map<D>) -> Result<&'a dyn NormalUnitTrait<D>, CommandError> {
         let unit = map.get_unit(&self.start).ok_or(CommandError::MissingUnit)?;
         let unit: &'a dyn NormalUnitTrait<D> = if let Some(index) = self.unload_index {
-            unit.get_boarded().get(index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
+            unit.get_boarded().get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
         } else {
             unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
         };
@@ -71,7 +80,7 @@ impl CommonMovement {
         if !game.get_map().is_point_valid(&self.start) {
             return Err(CommandError::InvalidPoint(self.start.clone()));
         }
-        for p in &self.path {
+        for p in self.path.iter() {
             if !game.get_map().is_point_valid(p) {
                 return Err(CommandError::InvalidPoint(p.clone()));
             }
@@ -92,7 +101,7 @@ impl CommonMovement {
         let unit = self.get_unit(handler.get_map()).expect("Unit command applied without unit, although it should be checked already");
         let intended_end = self.intended_end();
         let mut path_taken = vec![self.start.clone()];
-        for p in self.path {
+        for p in self.path.into_iter() {
             if !unit.can_move_to(&p, handler.get_game()) {
                 // the unit is blocked by a fog trap
                 // first make sure no other unit is overwritten
@@ -102,7 +111,8 @@ impl CommonMovement {
                 // no event for the path is necessary if the unit is unable to move at all
                 if path_taken.len() > 1 {
                     let unit = unit.as_unit();
-                    handler.add_event(Event::UnitPath(self.unload_index, path_taken.iter().map(|p| Some(p.clone())).collect(), unit.clone()));
+                    let path: Vec<Option<Point>> = path_taken.iter().map(|p| Some(p.clone())).collect();
+                    handler.add_event(Event::UnitPath(self.unload_index, path.try_into().unwrap(), unit.clone()));
                     after_path(handler, &path_taken, &unit);
                 }
                 // special case of a unit being unable to move that's loaded in a transport
@@ -125,7 +135,7 @@ impl CommonMovement {
     fn apply_without_boarding<D: Direction>(self, handler: &mut EventHandler<D>) -> Option<Point> {
         let unload_index = self.unload_index;
         self.apply_with_custom(handler, |handler, unit, path| {
-            handler.add_event(Event::UnitPath(unload_index, path, unit));
+            handler.add_event(Event::UnitPath(unload_index, path.try_into().unwrap(), unit));
         })
     }
 }
@@ -142,19 +152,22 @@ fn after_path<D: Direction>(handler: &mut EventHandler<D>, path: &Vec<Point>, un
             }
         }
         if vision_changes.len() > 0 {
-            handler.add_event(Event::PureFogChange(Some(team), vision_changes));
+            let vision_changes: Vec<Point> = vision_changes.into_iter().collect();
+            handler.add_event(Event::PureFogChange(Some(team), vision_changes.try_into().unwrap()));
         }
     }
     on_path_details(handler, &path, &unit);
 }
 
+#[derive(Debug, Zippable)]
+#[zippable(bits = 8)]
 pub enum UnitCommand<D: Direction> {
-    MoveAttack(CommonMovement, AttackInfo<D>),
+    MoveAttack(CommonMovement, AttackInfo::<D>),
     MovePull(CommonMovement, D),
     MoveCapture(CommonMovement),
     MoveWait(CommonMovement),
     MoveAboard(CommonMovement),
-    MoveChess(Point, ChessCommand<D>),
+    MoveChess(Point, ChessCommand::<D>),
     MercenaryPowerSimple(Point),
 }
 impl<D: Direction> UnitCommand<D> {
@@ -242,7 +255,8 @@ impl<D: Direction> UnitCommand<D> {
                 if let Some(end) = cm.apply_without_boarding(handler) {
                     if !blocked {
                         let unit = handler.get_map().get_unit(&pull_path.first().unwrap()).unwrap().clone();
-                        handler.add_event(Event::UnitPath(None, pull_path.iter().map(|p| Some(p.clone())).collect(), unit.clone()));
+                        let path: Vec<Option<Point>> = pull_path.iter().map(|p| Some(p.clone())).collect();
+                        handler.add_event(Event::UnitPath(None, path.try_into().unwrap(), unit.clone()));
                         after_path(handler, &pull_path, &unit);
                     }
                     handler.add_event(Event::UnitExhaust(end));
@@ -292,9 +306,9 @@ impl<D: Direction> UnitCommand<D> {
                 let unload_index = cm.unload_index;
                 let load_index = transporter.get_boarded().len() as u8;
                 if let Some(end) = cm.apply_with_custom(handler, |handler, unit, path| {
-                    handler.add_event(Event::UnitPathInto(unload_index, path, unit));
+                    handler.add_event(Event::UnitPathInto(unload_index, path.try_into().unwrap(), unit));
                 }) {
-                    handler.add_event(Event::UnitExhaustBoarded(end, load_index));
+                    handler.add_event(Event::UnitExhaustBoarded(end, load_index.try_into().unwrap()));
                 }
             }
             Self::MoveChess(start, chess_command) => {
@@ -317,8 +331,8 @@ impl<D: Direction> UnitCommand<D> {
                 match handler.get_map().get_unit(&pos) {
                     Some(UnitType::Mercenary(merc)) => {
                         if merc.can_use_simple_power(handler.get_game(), &pos) {
-                            let change = -(merc.charge as i8);
-                            handler.add_event(Event::MercenaryCharge(pos, change));
+                            let change = -(*merc.charge as i8);
+                            handler.add_event(Event::MercenaryCharge(pos, change.try_into().unwrap()));
                             handler.add_event(Event::MercenaryPowerSimple(pos));
                         } else {
                             return Err(CommandError::PowerNotUsable);
@@ -340,7 +354,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins1 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(*owner, player.income / 2));
+                            handler.add_event(Event::MoneyChange(*owner, (*player.income as i32 / 2).try_into().unwrap()));
                         }
                     }
                     false
@@ -348,7 +362,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins2 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(*owner, player.income));
+                            handler.add_event(Event::MoneyChange(*owner, (*player.income as i32).try_into().unwrap()));
                         }
                     }
                     false
@@ -356,7 +370,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins4 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(*owner, player.income * 2));
+                            handler.add_event(Event::MoneyChange(*owner, (*player.income as i32 * 2).try_into().unwrap()));
                         }
                     }
                     false
@@ -367,7 +381,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
             }
         }).collect();
         if details != old_details {
-            handler.add_event(Event::ReplaceDetail(p.clone(), old_details, details));
+            handler.add_event(Event::ReplaceDetail(p.clone(), old_details.try_into().unwrap(), details.try_into().unwrap()));
         }
     }
 }
@@ -399,7 +413,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
                         charges.insert(p, charges.get(&p).unwrap_or(&0) + change);
                     }
                 }
-                handler.add_event(Event::UnitHpChange(target.clone(), -(damage.min(hp as u16) as i8), -(damage as i16)));
+                handler.add_event(Event::UnitHpChange(target.clone(), (-(damage.min(hp as u16) as i8)).try_into().unwrap(), (-(damage as i16)).max(-999).try_into().unwrap()));
                 if damage >= hp as u16 {
                     handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(&target).unwrap().clone()));
                     recalculate_fog = true;
@@ -411,9 +425,9 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
     }
     for (p, change) in charges {
         if let Some(UnitType::Mercenary(merc)) = handler.get_map().get_unit(&p) {
-            let change = change.min(merc.typ.max_charge() as i16 - change).max(-(merc.charge as i16));
+            let change = change.min(merc.typ.max_charge() as i16 - change).max(-(*merc.charge as i16));
             if change != 0 {
-                handler.add_event(Event::MercenaryCharge(p, change as i8));
+                handler.add_event(Event::MercenaryCharge(p, (change as i8).try_into().unwrap()));
             }
         }
     }

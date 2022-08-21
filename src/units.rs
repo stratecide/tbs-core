@@ -10,6 +10,9 @@ pub mod combat;
 
 use std::collections::{HashSet, HashMap};
 
+use zipper::*;
+use zipper::zipper_derive::*;
+
 use crate::game::events::*;
 use crate::player::*;
 use crate::map::direction::Direction;
@@ -27,12 +30,15 @@ use self::combat::*;
 use self::transportable::*;
 use self::commands::*;
 
-#[derive(Debug, PartialEq, Clone)]
+pub type Hp = U8<100>;
+
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 3)]
 pub enum UnitType<D: Direction> {
     Normal(NormalUnit),
     Mercenary(Mercenary),
     Chess(ChessUnit),
-    Structure(Structure<D>),
+    Structure(Structure::<D>),
 }
 impl<D: Direction> UnitType<D> {
     pub fn as_normal_trait(&self) -> Option<&dyn NormalUnitTrait<D>> {
@@ -48,6 +54,9 @@ impl<D: Direction> UnitType<D> {
             Self::Mercenary(u) => Some(TransportableTypes::Mercenary(u.clone())),
             _ => None,
         }
+    }
+    pub fn normal(typ: NormalUnits, owner: Owner) -> Self {
+        Self::Normal(NormalUnit::new_instance(typ, owner))
     }
     pub fn name(&self) -> &'static str {
         match self {
@@ -69,19 +78,20 @@ impl<D: Direction> UnitType<D> {
         game.get_team(self.get_owner())
     }
     pub fn get_hp(&self) -> u8 {
-        match self {
+        *match self {
             Self::Normal(unit) => unit.hp,
             Self::Mercenary(unit) => unit.unit.hp,
             Self::Chess(unit) => unit.hp,
             Self::Structure(unit) => unit.hp,
         }
     }
-    pub fn get_hp_mut(&mut self) -> &mut u8 {
+    pub fn set_hp(&mut self, hp: u8) {
+        let hp = hp.min(100).try_into().unwrap();
         match self {
-            Self::Normal(unit) => &mut unit.hp,
-            Self::Mercenary(unit) => &mut unit.unit.hp,
-            Self::Chess(unit) => &mut unit.hp,
-            Self::Structure(unit) => &mut unit.hp,
+            Self::Normal(unit) => unit.hp = hp,
+            Self::Mercenary(unit) => unit.unit.hp = hp,
+            Self::Chess(unit) => unit.hp = hp,
+            Self::Structure(unit) => unit.hp = hp,
         }
     }
     pub fn is_exhausted(&self) -> bool {
@@ -281,6 +291,9 @@ impl<D: Direction> UnitType<D> {
         } else {
             None
         }
+    }
+    pub fn fog_replacement(&self) -> Option<Self> {
+        None
     }
 }
 

@@ -1,8 +1,12 @@
 use crate::player::*;
 
-pub const MAX_STACK_SIZE: usize = 4;
+use zipper::*;
+use zipper::zipper_derive::*;
 
-#[derive(Debug, PartialEq, Clone)]
+pub const MAX_STACK_SIZE: u32 = 4;
+
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 8)]
 pub enum Detail {
     Coins1,
     Coins2,
@@ -20,4 +24,11 @@ impl Detail {
             }
         }
     }
+}
+
+pub fn details_fog_replacement<const S: u32>(dets: &LVec<Detail, S>) -> LVec<Detail, S> {
+    let dets: Vec<Detail> = dets.into_iter().flat_map(|det| {
+        det.fog_replacement()
+    }).collect();
+    LVec::try_from(dets).unwrap()
 }
