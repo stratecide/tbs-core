@@ -222,6 +222,7 @@ pub enum Event<D:Direction> {
     RevealFunds(Owner, Funds), // when fog ends
     RemoveDetail(Point, U8::<{details::MAX_STACK_SIZE as u8 - 1}>, Detail),
     ReplaceDetail(Point, LVec::<Detail, {details::MAX_STACK_SIZE}>, LVec::<Detail, {details::MAX_STACK_SIZE}>),
+    Effect(Effect),
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -335,6 +336,7 @@ impl<D: Direction> Event<D> {
             Self::ReplaceDetail(p, _, list) => {
                 game.get_map_mut().set_details(p.clone(), list.iter().cloned().collect());
             }
+            Self::Effect(_) => {}
         }
     }
     pub fn undo(&self, game: &mut Game<D>) {
@@ -448,6 +450,7 @@ impl<D: Direction> Event<D> {
             Self::ReplaceDetail(p, list, _) => {
                 game.get_map_mut().set_details(p.clone(), list.iter().cloned().collect());
             }
+            Self::Effect(_) => {}
         }
     }
     fn fog_replacement(&self, game: &Game<D>, team: &Perspective) -> Option<Event<D>> {
@@ -630,6 +633,38 @@ impl<D: Direction> Event<D> {
                     } else {
                         None
                     }
+                }
+            }
+            Self::Effect(effect) => {
+                if !game.is_foggy() {
+                    Some(self.clone())
+                } else if let Some(effect) = effect.fog_replacement(game, *team) {
+                    Some(Self::Effect(effect))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(bits = 8)]
+pub enum Effect {
+    Flame(Point),
+    GunFire(Point),
+    ShellFire(Point),
+}
+impl Effect {
+    pub fn fog_replacement<D: Direction>(&self, game: &Game<D>, team: Option<Team>) -> Option<Self> {
+        match self {
+            Self::Flame(p) |
+            Self::GunFire(p) |
+            Self::ShellFire(p) => {
+                if game.has_vision_at(team, p) {
+                    Some(self.clone())
+                } else {
+                    None
                 }
             }
         }

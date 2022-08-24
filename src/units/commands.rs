@@ -401,7 +401,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
     for target in attacker.attack_splash(handler.get_map(), attacker_pos, target)? {
         if let Some(defender) = handler.get_map().get_unit(&target) {
             let damage = defender.calculate_attack_damage(handler.get_game(), &target, attacker_pos, attacker, is_counter);
-            if let Some(damage) = damage {
+            if let Some((weapon, damage)) = damage {
                 let hp = defender.get_hp();
                 if !is_counter && defender.get_owner() != Some(attacker.get_owner()) {
                     for (p, _) in handler.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {
@@ -413,6 +413,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
                         charges.insert(p, charges.get(&p).unwrap_or(&0) + change);
                     }
                 }
+                handler.add_event(Event::Effect(weapon.effect(target)));
                 handler.add_event(Event::UnitHpChange(target.clone(), (-(damage.min(hp as u16) as i8)).try_into().unwrap(), (-(damage as i16)).max(-999).try_into().unwrap()));
                 if damage >= hp as u16 {
                     handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(&target).unwrap().clone()));

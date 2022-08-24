@@ -217,7 +217,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => false,
         }
     }
-    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: &Point, attacker_pos: &Point, attacker: &dyn NormalUnitTrait<D>, is_counter: bool) -> Option<u16> {
+    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: &Point, attacker_pos: &Point, attacker: &dyn NormalUnitTrait<D>, is_counter: bool) -> Option<(WeaponType, u16)> {
         let (armor_type, defense) = self.get_armor();
         let terrain_defense = if let Some(t) = game.get_map().get_terrain(pos) {
             t.defense(self)
@@ -225,6 +225,7 @@ impl<D: Direction> UnitType<D> {
             1.
         };
         let mut highest_damage: f32 = 0.;
+        let mut used_weapon = None;
         for (weapon, attack) in attacker.get_weapons() {
             if let Some(factor) = weapon.damage_factor(&armor_type) {
                 let mut damage = attacker.get_hp() as f32 * attack * factor / defense / terrain_defense;
@@ -234,14 +235,13 @@ impl<D: Direction> UnitType<D> {
                 for (_, merc) in game.get_map().mercenary_influence_at(pos, self.get_owner()) {
                     damage /= merc.defense_bonus(self, is_counter);
                 }
-                highest_damage = highest_damage.max(damage);
+                if damage > highest_damage {
+                    highest_damage = damage;
+                    used_weapon = Some(weapon);
+                }
             }
         }
-        if highest_damage > 0. {
-            Some(highest_damage.ceil() as u16)
-        } else {
-            None
-        }
+        used_weapon.and_then(|weapon| Some((weapon, highest_damage.ceil() as u16)))
     }
     fn true_vision_range(&self, _game: &Game<D>, _pos: &Point) -> usize {
         1

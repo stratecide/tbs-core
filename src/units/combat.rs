@@ -1,3 +1,5 @@
+use crate::{game::events::Effect, map::point::Point};
+
 
 
 pub enum AttackType {
@@ -83,6 +85,14 @@ impl WeaponType {
             (Self::AirMissiles, ArmorType::Heli) => Some(1.20),
             (Self::AirMissiles, ArmorType::Plane) => Some(1.00),
             (Self::AirMissiles, _) => None,
+        }
+    }
+    pub fn effect(&self, p: Point) -> Effect {
+        match self {
+            Self::Flame => Effect::Flame(p),
+            Self::MachineGun => Effect::GunFire(p),
+            Self::Shells => Effect::ShellFire(p),
+            _ => Effect::ShellFire(p), // TODO
         }
     }
 }
