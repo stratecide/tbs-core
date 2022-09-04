@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use zipper::*;
-use zipper::zipper_derive::*;
+use crate::commanders::*;
 
 pub type Owner = U8<16>;
 pub const OWNER_0: Owner = Owner::new(0);
@@ -35,9 +33,10 @@ pub struct Player {
     pub income: Income,
     pub funds: Funds, // may not be consistent during fog
     pub dead: bool,
+    pub commander: Commander,
 }
 impl Player {
-    pub fn new(id: u8, team: Team, income: i16, funds: i32) -> Self {
+    pub fn new(id: u8, team: Team, income: i16, funds: i32, commander: Commander) -> Self {
         Self {
             color_id: id,
             owner_id: id.try_into().expect(&format!("Owner id can be at most 15, got {}", id)),
@@ -45,14 +44,16 @@ impl Player {
             income: income.try_into().expect("income setting outside of allowed values"),
             funds: funds.try_into().expect("funds setting outside of allowed values"),
             dead: false,
+            commander,
         }
     }
     pub fn export(&self, zipper: &mut Zipper, hide_secrets: bool) {
         zipper.write_u8(self.color_id, 4);
         self.owner_id.export(zipper);
         self.team.export(zipper);
-        self.income.export(zipper);
         zipper.write_bool(self.dead);
+        self.commander.export(zipper);
+        self.income.export(zipper);
         if !hide_secrets {
             self.funds.export(zipper);
         }
@@ -61,8 +62,9 @@ impl Player {
         let color_id = unzipper.read_u8(4)?;
         let owner_id = Owner::import(unzipper)?;
         let team = Team::import(unzipper)?;
-        let income = Income::import(unzipper)?;
         let dead = unzipper.read_bool()?;
+        let commander = Commander::import(unzipper)?;
+        let income = Income::import(unzipper)?;
         let funds = if hidden {
             Funds::new(0)
         } else {
@@ -72,9 +74,10 @@ impl Player {
             color_id,
             owner_id,
             team,
+            commander,
             income,
             funds,
-            dead
+            dead,
         })
     }
 }

@@ -229,6 +229,10 @@ impl<D: Direction> UnitType<D> {
         for (weapon, attack) in attacker.get_weapons() {
             if let Some(factor) = weapon.damage_factor(&armor_type) {
                 let mut damage = attacker.get_hp() as f32 * attack * factor / defense / terrain_defense;
+                damage *= game.get_owning_player(attacker.get_owner()).unwrap().commander.attack_bonus(game, attacker, is_counter);
+                if let Some(owner) = self.get_owner().and_then(|owner| game.get_owning_player(owner)) {
+                    damage /= owner.commander.defense_bonus(game, self, is_counter);
+                }
                 for (_, merc) in game.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {
                     damage *= merc.attack_bonus(attacker, is_counter);
                 }
@@ -294,6 +298,14 @@ impl<D: Direction> UnitType<D> {
     }
     pub fn fog_replacement(&self) -> Option<Self> {
         None
+    }
+    pub fn type_value(&self) -> u16 {
+        match self {
+            UnitType::Normal(unit) => unit.typ.value(),
+            UnitType::Mercenary(merc) => merc.unit.typ.value(),
+            UnitType::Chess(unit) => unit.typ.value(),
+            UnitType::Structure(structure) => structure.typ.value(),
+        }
     }
 }
 

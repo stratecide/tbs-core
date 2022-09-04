@@ -34,5 +34,10 @@ impl<D: Direction> Structures<D> {
             Self::Cannon(_) => (ArmorType::Heavy, 2.5),
         }
     }
+    pub fn value(&self) -> u16 {
+        match self {
+            Self::Cannon(_) => 500,
+        }
+    }
 }
 

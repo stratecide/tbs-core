@@ -4,6 +4,8 @@ pub mod terrain;
 pub mod units;
 pub mod details;
 pub mod game;
+pub mod commanders;
+
 pub use zipper;
 
 #[cfg(test)]

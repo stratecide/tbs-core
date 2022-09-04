@@ -172,25 +172,7 @@ where D: Direction
     }
     pub fn set_details(&mut self, p: Point, value: Vec<Detail>) {
         if self.is_point_valid(&p) {
-            // remove Detail from value that conflict with other Detail
-            // starting from the back, so add_detail can be used by the editor to overwrite previous data
-            let mut bubble = false;
-            let mut coin = false;
-            let value: Vec<Detail> = value.into_iter().rev().filter(|detail| {
-                let remove;
-                match detail {
-                    Detail::FactoryBubble(_) => {
-                        remove = bubble;
-                        bubble = true;
-                    }
-                    Detail::Coins1 | Detail::Coins2 | Detail::Coins4 => {
-                        remove = coin;
-                        coin = true;
-                    }
-                }
-                !remove
-            }).take(MAX_STACK_SIZE as usize).collect();
-            let value: Vec<Detail> = value.into_iter().rev().collect();
+            let value: Vec<Detail> = Detail::correct_stack(value);
             if value.len() > 0 {
                 self.details.insert(p, value.try_into().unwrap());
             } else {
@@ -311,8 +293,8 @@ where D: Direction
     }
     pub fn get_players(&self) -> Vec<Player> {
         vec![
-            Player::new(0, Team::try_from(0).unwrap(), 100, 333),
-            Player::new(1, Team::try_from(1).unwrap(), 144, 210),
+            Player::new(0, Team::try_from(0).unwrap(), 100, 333, crate::commanders::Commander::Zombie(0.try_into().unwrap(), false)),
+            Player::new(1, Team::try_from(1).unwrap(), 144, 210, crate::commanders::Commander::Vampire(0.try_into().unwrap(), false)),
         ]
     }
     /**

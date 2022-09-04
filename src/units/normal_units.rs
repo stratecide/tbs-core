@@ -19,6 +19,7 @@ pub struct NormalUnit {
     pub owner: Owner,
     pub hp: Hp,
     pub exhausted: bool,
+    pub zombie: bool,
 }
 impl NormalUnit {
     pub fn new_instance(from: NormalUnits, color_id: Owner) -> NormalUnit {
@@ -27,9 +28,13 @@ impl NormalUnit {
             owner: color_id,
             hp: 100.try_into().unwrap(),
             exhausted: false,
+            zombie: false,
         }
     }
     pub fn can_capture(&self) -> bool {
+        if self.zombie {
+            return false;
+        }
         match self.typ {
             NormalUnits::Hovercraft => true,
             _ => false,

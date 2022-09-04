@@ -223,6 +223,11 @@ impl ChessUnits {
             Self::Rook(_) => (ArmorType::Light, 1.5),
         }
     }
+    pub fn value(&self) -> u16 {
+        match self {
+            Self::Rook(_) => 500,
+        }
+    }
 }
 
 

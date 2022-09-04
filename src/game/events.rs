@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use zipper::*;
 use zipper::zipper_derive::*;
 
+use crate::commanders::{Charge, MAX_CHARGE, CommanderPower};
 use crate::map::map::{Map, FieldData};
 use crate::map::point::Point;
 use crate::map::point_map;
@@ -22,6 +23,7 @@ pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand::<D>),
     BuyUnit(Point, U8::<255>),
+    CommanderPowerSimple(CommanderPower),
 }
 impl<D: Direction> Command<D> {
     pub fn convert<R: Fn() -> f32>(self, handler: &mut EventHandler<D>, random: R) -> Result<(), CommandError> {
@@ -81,6 +83,7 @@ impl<D: Direction> Command<D> {
                         handler.add_event(event);
                     }
                 }
+
                 // end merc powers
                 for p in handler.get_map().all_points() {
                     match handler.get_map().get_unit(&p) {
@@ -95,6 +98,8 @@ impl<D: Direction> Command<D> {
                         _ => {}
                     }
                 }
+                
+                handler.get_game().current_player().commander.clone().start_turn(handler, handler.get_game().current_player().owner_id);
 
                 handler.start_turn();
 
@@ -171,6 +176,21 @@ impl<D: Direction> Command<D> {
                     }
                 }
             }
+            Self::CommanderPowerSimple(power) => {
+                if !power.is_simple() || !handler.get_game().current_player().commander.powers().into_iter().any(|p| p == power) {
+                    return Err(CommandError::InvalidCommanderPower);
+                }
+                if *handler.get_game().current_player().commander.charge() < *power.charge_cost() {
+                    return Err(CommandError::NotEnoughCharge);
+                }
+                /*if !handler.get_game().current_player().commander.can_activate(&power) {
+                    return Err(CommandError::PowerNotUsable);
+                }*/
+                if handler.get_game().current_player().commander.power_active() {
+                    return Err(CommandError::PowerNotUsable);
+                }
+                Ok(power.execute(handler, handler.get_game().current_player().owner_id))
+            }
         }
     }
 }
@@ -196,6 +216,8 @@ pub enum CommandError {
     NotYourRealty,
     CannotCaptureHere,
     NotYourBubble,
+    InvalidCommanderPower,
+    NotEnoughCharge,
 }
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
@@ -223,6 +245,8 @@ pub enum Event<D:Direction> {
     RemoveDetail(Point, U8::<{details::MAX_STACK_SIZE as u8 - 1}>, Detail),
     ReplaceDetail(Point, LVec::<Detail, {details::MAX_STACK_SIZE}>, LVec::<Detail, {details::MAX_STACK_SIZE}>),
     Effect(Effect),
+    CommanderCharge(Owner, I32::<{-(MAX_CHARGE as i32)}, {MAX_CHARGE as i32}>),
+    CommanderFlipActiveSimple(Owner),
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -337,6 +361,12 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_details(p.clone(), list.iter().cloned().collect());
             }
             Self::Effect(_) => {}
+            Self::CommanderCharge(owner, delta) => {
+                game.get_owning_player_mut(owner).unwrap().commander.add_charge(**delta);
+            }
+            Self::CommanderFlipActiveSimple(owner) => {
+                game.get_owning_player_mut(owner).unwrap().commander.flip_active();
+            }
         }
     }
     pub fn undo(&self, game: &mut Game<D>) {
@@ -451,6 +481,12 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_details(p.clone(), list.iter().cloned().collect());
             }
             Self::Effect(_) => {}
+            Self::CommanderCharge(owner, delta) => {
+                game.get_owning_player_mut(owner).unwrap().commander.add_charge(-**delta);
+            }
+            Self::CommanderFlipActiveSimple(owner) => {
+                game.get_owning_player_mut(owner).unwrap().commander.flip_active();
+            }
         }
     }
     fn fog_replacement(&self, game: &Game<D>, team: &Perspective) -> Option<Event<D>> {
@@ -643,6 +679,12 @@ impl<D: Direction> Event<D> {
                 } else {
                     None
                 }
+            }
+            Self::CommanderCharge(_, _) => {
+                Some(self.clone())
+            }
+            Self::CommanderFlipActiveSimple(_) => {
+                Some(self.clone())
             }
         }
     }

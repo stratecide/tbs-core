@@ -3,6 +3,7 @@ use std::fmt;
 use zipper::*;
 use zipper::zipper_derive::*;
 
+use crate::commanders::Charge;
 use crate::details::Detail;
 use crate::game::events::*;
 use crate::map::point_map;
@@ -378,6 +379,9 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::FactoryBubble(owner) => {
                     Some(owner) == unit.get_owner()
                 }
+                Detail::Skull(owner, _) => {
+                    Some(owner) == unit.get_owner()
+                }
             }
         }).collect();
         if details != old_details {
@@ -398,6 +402,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
     let mut potential_counters = vec![];
     let mut recalculate_fog = false;
     let mut charges = HashMap::new();
+    let mut defenders = vec![];
     for target in attacker.attack_splash(handler.get_map(), attacker_pos, target)? {
         if let Some(defender) = handler.get_map().get_unit(&target) {
             let damage = defender.calculate_attack_damage(handler.get_game(), &target, attacker_pos, attacker, is_counter);
@@ -413,15 +418,46 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
                         charges.insert(p, charges.get(&p).unwrap_or(&0) + change);
                     }
                 }
+                defenders.push((target.clone(), defender.clone(), damage));
+                let defender = defender.clone();
                 handler.add_event(Event::Effect(weapon.effect(target)));
                 handler.add_event(Event::UnitHpChange(target.clone(), (-(damage.min(hp as u16) as i8)).try_into().unwrap(), (-(damage as i16)).max(-999).try_into().unwrap()));
                 if damage >= hp as u16 {
                     handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(&target).unwrap().clone()));
+                    if handler.get_game().get_team(Some(attacker.get_owner())) != handler.get_game().get_team(defender.get_owner()) {
+                        if let Some(commander) = handler.get_game().get_owning_player(attacker.get_owner()).and_then(|player| Some(player.commander.clone())) {
+                            commander.after_killing_unit(handler, *attacker.get_owner(), &target, &defender);
+                        }
+                    }
                     recalculate_fog = true;
                 } else {
                     potential_counters.push(target);
                 }
             }
+        }
+    }
+    if defenders.len() > 0 {
+        let attacker_team = handler.get_game().get_team(Some(attacker.get_owner()));
+        let mut charges = HashMap::new();
+        for (_, defender, damage) in &defenders {
+            if let Some(player) = defender.get_owner().and_then(|owner| handler.get_game().get_owning_player(owner)) {
+                if Some(player.team) != attacker_team {
+                    let commander_charge = defender.get_hp().min(*damage as u8) as u32 * defender.type_value() as u32 / 100;
+                    let old_charge = charges.remove(&player.owner_id).unwrap_or(0);
+                    charges.insert(player.owner_id, commander_charge + old_charge);
+                    let old_charge = charges.remove(attacker.get_owner()).unwrap_or(0);
+                    charges.insert(*attacker.get_owner(), commander_charge / 2 + old_charge);
+                }
+            }
+        }
+        for (owner, commander_charge) in charges {
+            let commander_charge = commander_charge.min(handler.get_game().get_owning_player(&owner).and_then(|player| Some(*player.commander.charge_potential())).unwrap_or(0));
+            if commander_charge > 0 {
+                handler.add_event(Event::CommanderCharge(owner, (commander_charge as i32).try_into().unwrap()));
+            }
+        }
+        if let Some(commander) = handler.get_game().get_owning_player(attacker.get_owner()).and_then(|player| Some(player.commander.clone())) {
+            commander.after_attacking(handler, attacker_pos, attacker, defenders, is_counter);
         }
     }
     for (p, change) in charges {
