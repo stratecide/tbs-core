@@ -454,7 +454,7 @@ where D: Direction
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OrientedPoint<D>
 where D: Direction {
     point: Point,

@@ -15,6 +15,8 @@ use crate::terrain::*;
 use crate::units::*;
 use crate::units::mercenary::Mercenary;
 use crate::details::*;
+use crate::units::movement::MovementType;
+use crate::units::movement::PathStep;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Map<D>
@@ -123,20 +125,26 @@ where D: Direction
                         result.push(neighbor);
                     }
                 }
-                NeighborMode::UnitMovement => {
-                    if let Some(neighbor) = self.get_neighbor(p, &d) {
-                        if self.terrain.get(p) == Some(&Terrain::Fountain) {
-                            if let Some(neighbor) = self.get_neighbor(neighbor.point(), neighbor.direction()) {
-                                result.push(neighbor);
-                            }
-                        }
-                        result.push(neighbor);
-                    }
-                }
             }
         }
         result
     }
+    
+    pub fn get_unit_movement_neighbors(&self, p: Point, mov: &MovementType) -> Vec<(OrientedPoint<D>, PathStep<D>)> {
+        let mut result = vec![];
+        for d in D::list() {
+            if let Some(neighbor) = self.get_neighbor(&p, &d) {
+                if self.terrain.get(&p) == Some(&Terrain::Fountain) {
+                    if let Some(neighbor) = self.get_neighbor(neighbor.point(), neighbor.direction()) {
+                        result.push((neighbor, PathStep::Jump(*d)));
+                    }
+                }
+                result.push((neighbor, PathStep::Dir(*d)));
+            }
+        }
+        result
+    }
+    
     pub fn get_terrain(&self, p: &Point) -> Option<&Terrain<D>> {
         self.terrain.get(p)
     }
@@ -392,5 +400,4 @@ impl<D: Direction> interfaces::Map for Map<D> {
 pub enum NeighborMode {
     Direct,
     FollowPipes,
-    UnitMovement,
 }

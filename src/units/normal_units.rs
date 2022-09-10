@@ -85,11 +85,15 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     fn has_stealth(&self) -> bool {
         false
     }
-    fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
+    fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
         let mut result = vec![];
-        let destination = path.last().unwrap_or(start).clone();
-        if path.len() == 0 || game.get_map().get_unit(&destination).is_none() {
-            for target in self.attackable_positions(game.get_map(), &destination, path.len() > 0) {
+        let destination = if let Ok(p) = path.end(game.get_map()) {
+            p
+        } else {
+            return result;
+        };
+        if path.steps.len() == 0 || game.get_map().get_unit(&destination).is_none() {
+            for target in self.attackable_positions(game.get_map(), &destination, path.steps.len() > 0) {
                 if let Some(attack_info) = self.make_attack_info(game, &destination, &target) {
                     if !self.can_pull() {
                         result.push(UnitAction::Attack(attack_info));
@@ -114,7 +118,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                 }
             }
             result.push(UnitAction::Wait);
-        } else if path.len() > 0 {
+        } else if path.steps.len() > 0 {
             if let Some(transporter) = game.get_map().get_unit(&destination) {
                 // TODO: this is called indirectly by mercenaries, so using ::Normal isn't necessarily correct
                 if transporter.boardable_by(&TransportableTypes::Normal(self.clone())) {

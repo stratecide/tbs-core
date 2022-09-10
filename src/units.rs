@@ -164,34 +164,34 @@ impl<D: Direction> UnitType<D> {
             _ => {}
         }
     }
-    pub fn movable_positions(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>) -> HashSet<Point> {
+    pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
         match self {
-            Self::Normal(unit) => unit.movable_positions(game, start, path_so_far),
-            Self::Mercenary(unit) => unit.movable_positions(game, start, path_so_far),
-            Self::Chess(unit) => unit.movable_positions(game, start, path_so_far),
+            Self::Normal(unit) => unit.movable_positions(game, path_so_far),
+            Self::Mercenary(unit) => unit.movable_positions(game, path_so_far),
+            Self::Chess(unit) => unit.movable_positions(game, path_so_far),
             Self::Structure(_) => HashSet::new(),
         }
     }
-    pub fn shortest_path_to(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
+    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: &Point) -> Option<Path<D>> {
         match self {
-            Self::Normal(unit) => unit.shortest_path_to(game, start, path_so_far, goal),
-            Self::Mercenary(unit) => unit.shortest_path_to(game, start, path_so_far, goal),
-            Self::Chess(unit) => unit.shortest_path_to(game, start, path_so_far, goal),
+            Self::Normal(unit) => unit.shortest_path_to(game, path_so_far, goal),
+            Self::Mercenary(unit) => unit.shortest_path_to(game, path_so_far, goal),
+            Self::Chess(unit) => unit.shortest_path_to(game, path_so_far, goal),
             Self::Structure(_) => None,
         }
     }
-    pub fn shortest_path_to_attack(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
+    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: &Point) -> Option<Path<D>> {
         match self {
-            Self::Normal(unit) => unit.shortest_path_to_attack(game, start, path_so_far, goal),
-            Self::Mercenary(unit) => unit.shortest_path_to_attack(game, start, path_so_far, goal),
+            Self::Normal(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
+            Self::Mercenary(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
             Self::Chess(_) => None,
             Self::Structure(_) => None,
         }
     }
-    pub fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
+    pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
         match self {
-            Self::Normal(unit) => unit.options_after_path(game, start, path),
-            Self::Mercenary(unit) => unit.options_after_path(game, start, path),
+            Self::Normal(unit) => unit.options_after_path(game, path),
+            Self::Mercenary(unit) => unit.options_after_path(game, path),
             Self::Chess(_) => vec![UnitAction::Wait],
             Self::Structure(_) => vec![],
         }

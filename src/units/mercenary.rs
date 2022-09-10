@@ -120,11 +120,11 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
         let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
         u.has_stealth()
     }
-    fn options_after_path(&self, game: &Game<D>, start: &Point, path: &Vec<Point>) -> Vec<UnitAction<D>> {
-        let mut options = self.unit.options_after_path(game, start, path);
+    fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
+        let mut options = self.unit.options_after_path(game, path);
         match self.typ {
             Mercenaries::EarlGrey(false) => {
-                if path.len() == 0 && *self.charge >= self.typ.max_charge() {
+                if path.steps.len() == 0 && *self.charge >= self.typ.max_charge() {
                     options.insert(0, UnitAction::MercenaryPowerSimple);
                 }
             }

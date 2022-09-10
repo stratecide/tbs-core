@@ -25,36 +25,34 @@ impl<D: Direction> ChessCommand<D> {
         match (self, &unit.typ) {
             (Self::Rook(dir, distance), ChessUnits::Rook(_)) => {
                 let mut path = None;
-                straight_search(handler.get_game(), &start, &dir, max_cost, HashSet::new(), Some(team), |p, path_so_far| {
+                straight_search(handler.get_game(), &Path::new(start), &dir, max_cost, Some(team), |p, path_so_far| {
                     if let Some(other) = handler.get_map().get_unit(p) {
                         if other.killable_by_chess(team, handler.get_game()) {
                             path = Some(path_so_far.clone());
                             true
                         } else if !handler.get_game().has_vision_at(Some(team), p) {
                             path = Some(path_so_far.clone());
-                            path.as_mut().unwrap().pop();
+                            path.as_mut().unwrap().steps.pop();
                             true
                         } else {
                             true
                         }
-                    } else if path_so_far.len() == *distance as usize {
+                    } else if path_so_far.steps.len() == *distance as usize {
                         path = Some(path_so_far.clone());
                         true
                     } else {
                         false
                     }
                 });
-                if let Some(mut path) = path {
-                    path.insert(0, start.clone());
-                    let p = path.last().unwrap().clone();
+                if let Some(path) = path {
+                    let end = path.end(handler.get_map())?;
                     let mut recalculate_fog = false;
-                    if let Some(other) = handler.get_map().get_unit(&p) {
+                    if let Some(other) = handler.get_map().get_unit(&end) {
                         recalculate_fog = true;
-                        handler.add_event(Event::UnitDeath(p.clone(), other.clone()));
+                        handler.add_event(Event::UnitDeath(end, other.clone()));
                     }
-                    let l_path: Vec<Option<Point>> = path.iter().map(|p| Some(p.clone())).collect();
-                    handler.add_event(Event::UnitPath(None, l_path.try_into().unwrap(), UnitType::Chess::<D>(unit.clone())));
-                    let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &p).into_iter().filter(|p| {
+                    handler.add_event(Event::UnitPath(Some(None), path.clone(), true, UnitType::Chess::<D>(unit.clone())));
+                    let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &end).into_iter().filter(|p| {
                         !handler.get_game().has_vision_at(Some(team), &p)
                     }).collect();
                     if vision_changes.len() > 0 {
@@ -62,7 +60,7 @@ impl<D: Direction> ChessCommand<D> {
                         handler.add_event(Event::PureFogChange(Some(team), vision_changes.try_into().unwrap()));
                     }
                     super::on_path_details(handler, &path, &UnitType::Chess::<D>(unit.clone()));
-                    handler.add_event(Event::UnitExhaust(p));
+                    handler.add_event(Event::UnitExhaust(end));
                     if recalculate_fog {
                         handler.recalculate_fog(true);
                     }
@@ -83,20 +81,20 @@ pub struct ChessUnit {
     pub exhausted: bool,
 }
 impl ChessUnit {
-    fn consider_path_so_far<D: Direction>(&self, game: &Game<D>, _start: &Point, path_so_far: &Vec<Point>) -> u8 {
+    /*fn consider_path_so_far<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>) -> u8 {
         let mut max_cost = self.typ.get_movement();
-        for step in path_so_far {
-            max_cost -= game.get_map().get_terrain(step).unwrap().movement_cost(&MovementType::Chess).unwrap();
+        for p in path_so_far.points(game.get_map()).unwrap().into_iter().skip(1) {
+            max_cost -= game.get_map().get_terrain(&p).unwrap().movement_cost(&MovementType::Chess).unwrap();
         }
         max_cost
-    }
-    pub fn rook_directions<D: Direction>(game: &Game<D>, start: &Point, path_so_far: &Vec<Point>) -> Vec<Box<D>> {
+    }*/
+    pub fn rook_directions<D: Direction>(game: &Game<D>, path_so_far: &Path<D>) -> Vec<Box<D>> {
         let mut directions = D::list();
-        if path_so_far.len() > 0 {
+        if path_so_far.steps.len() > 0 {
             directions = directions.into_iter().filter(|d| {
                 let mut accept = false;
-                straight_search(game, start, &d, 255, HashSet::new(), None, |_, path| {
-                    if path.len() == path_so_far.len() {
+                straight_search(game, path_so_far, &d, 255, None, |_, path| {
+                    if path.steps.len() == path_so_far.steps.len() {
                         accept = path == path_so_far;
                         true
                     } else {
@@ -108,16 +106,13 @@ impl ChessUnit {
         }
         directions
     }
-    pub fn movable_positions<D: Direction>(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>) -> HashSet<Point> {
-        let max_cost = self.consider_path_so_far(game, start, path_so_far);
+    pub fn movable_positions<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
         let mut result = HashSet::new();
         match self.typ {
             ChessUnits::Rook(_) => {
-                let mut blocked_positions:HashSet<Point> = path_so_far.iter().map(|p| p.clone()).collect();
-                blocked_positions.insert(start.clone());
-                let directions = Self::rook_directions(game, start, path_so_far);
+                let directions = Self::rook_directions(game, path_so_far);
                 for d in directions {
-                    straight_search(game, start, &d, max_cost, blocked_positions.clone(), game.get_team(Some(&self.owner)), |p, _| {
+                    straight_search(game, path_so_far, &d, self.typ.get_movement(), game.get_team(Some(&self.owner)), |p, _| {
                         result.insert(p.clone());
                         false
                     });
@@ -126,19 +121,16 @@ impl ChessUnit {
         }
         result
     }
-    pub fn shortest_path_to<D: Direction>(&self, game: &Game<D>, start: &Point, path_so_far: &Vec<Point>, goal: &Point) -> Option<Vec<Point>> {
-        let max_cost = self.consider_path_so_far(game, start, path_so_far);
-        let mut blocked_positions:HashSet<Point> = path_so_far.iter().map(|p| p.clone()).collect();
-        blocked_positions.insert(start.clone());
+    pub fn shortest_path_to<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>, goal: &Point) -> Option<Path<D>> {
         match self.typ {
             ChessUnits::Rook(_) => {
-                let directions = Self::rook_directions(game, start, path_so_far);
-                let mut result: Option<Vec<Point>> = None;
+                let directions = Self::rook_directions(game, path_so_far);
+                let mut result: Option<Path<D>> = None;
                 for d in directions {
-                    straight_search(game, start, &d, max_cost, blocked_positions.clone(), game.get_team(Some(&self.owner)), |_, path| {
-                        if path.last() == Some(goal) {
+                    straight_search(game, path_so_far, &d, self.typ.get_movement(), game.get_team(Some(&self.owner)), |_, path| {
+                        if path.end(game.get_map()).ok() == Some(*goal) {
                             // TODO: should actually compare cost instead of length
-                            if result.is_none() || result.as_ref().unwrap().len() > path.len() {
+                            if result.is_none() || result.as_ref().unwrap().steps.len() > path.steps.len() {
                                 result = Some(path.clone());
                             }
                         }
@@ -233,14 +225,21 @@ impl ChessUnits {
 
 // callback returns true if the search can be aborted
 // if team is None, units will be ignored
-fn straight_search<D: Direction, F: FnMut(&Point, &Vec<Point>) -> bool>(game: &Game<D>, start: &Point, direction: &D, max_cost: u8, mut blocked_positions: HashSet<Point>, team: Option<Team>, mut callback: F) {
-    let mut dp = OrientedPoint::new(start.clone(), false, *direction);
-    let mut ray = vec![];
+fn straight_search<D: Direction, F: FnMut(&Point, &Path<D>) -> bool>(game: &Game<D>, path_so_far: &Path<D>, direction: &D, max_cost: u8, team: Option<Team>, mut callback: F) {
     let mut cost = 0;
-    blocked_positions.insert(start.clone());
+    let mut blocked_positions = HashMap::new();
+    blocked_positions.insert(path_so_far.start, *direction);
+    let mut path = Path {start: path_so_far.start, steps: LVec::new()};
+    let mut dp = OrientedPoint::new(path_so_far.start, false, *direction);
     loop {
+        if path.steps.push(PathStep::Dir(*dp.direction())).is_err() {
+            break;
+        }
+        if path.steps.len() <= path_so_far.steps.len() && path.steps[path.steps.len() - 1] != path_so_far.steps[path.steps.len() - 1] {
+            break;
+        }
         if let Some(next_dp) = game.get_map().get_neighbor(dp.point(), dp.direction()) {
-            if blocked_positions.contains(next_dp.point()) {
+            if blocked_positions.get(next_dp.point()).and_then(|d| Some(d == next_dp.direction() || d.opposite_direction() == *next_dp.direction())).unwrap_or(false) {
                 break;
             }
             if let Some(c) = game.get_map().get_terrain(next_dp.point()).unwrap().movement_cost(&MovementType::Chess) {
@@ -249,20 +248,18 @@ fn straight_search<D: Direction, F: FnMut(&Point, &Vec<Point>) -> bool>(game: &G
                 }
                 if let Some(team) = team {
                     if let Some(unit) = game.get_map().get_unit(next_dp.point()) {
-                        if unit.killable_by_chess(team, game) {
-                            ray.push(next_dp.point().clone());
-                            callback(next_dp.point(), &ray);
+                        if unit.killable_by_chess(team, game) && path.steps.len() > path_so_far.steps.len() {
+                            callback(next_dp.point(), &path);
                         }
                         break;
                     }
                 }
                 cost += c;
                 dp = next_dp;
-                ray.push(dp.point().clone());
-                if callback(dp.point(), &ray) {
+                if path.steps.len() > path_so_far.steps.len() && callback(dp.point(), &path) {
                     break;
                 }
-                blocked_positions.insert(dp.point().clone());
+                blocked_positions.insert(*dp.point(), *dp.direction());
             }
         } else {
             break;
