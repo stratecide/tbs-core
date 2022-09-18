@@ -1,4 +1,8 @@
+use std::collections::HashSet;
+
+use crate::game::game::Game;
 use crate::map::direction::Direction;
+use crate::map::point::Point;
 use crate::player::Owner;
 
 use super::ArmorType;
@@ -16,6 +20,18 @@ pub struct Structure<D: Direction> {
     pub owner: Option::<Owner>,
     pub hp: Hp,
     pub exhausted: bool,
+}
+impl<D: Direction> Structure<D> {
+
+    pub fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        match self.typ {
+            Structures::Cannon(_d) => {
+                // TODO
+            }
+        }
+        result
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Zippable)]

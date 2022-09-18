@@ -139,11 +139,14 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn get_attack_type(&self) -> AttackType {
         self.unit.typ.get_attack_type()
     }
-    fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
-        self.unit.can_attack_unit_type(game, target)
+    fn can_attack_unit(&self, game: &Game<D>, unit: &UnitType<D>) -> bool {
+        self.unit.can_attack_unit(game, unit)
     }
-    fn attackable_positions(&self, map: &Map<D>, position: &Point, moved: bool) -> HashSet<Point> {
-        self.unit.attackable_positions(map, position, moved)
+    fn threatens(&self, game: &Game<D>, unit: &UnitType<D>) -> bool {
+        self.unit.threatens(game, unit)
+    }
+    fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
+        self.unit.attackable_positions(game, position, moved)
     }
     fn attack_splash(&self, map: &Map<D>, from: &Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
         self.unit.attack_splash(map, from, to)

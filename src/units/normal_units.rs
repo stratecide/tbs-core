@@ -93,7 +93,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             return result;
         };
         if path.steps.len() == 0 || game.get_map().get_unit(&destination).is_none() {
-            for target in self.attackable_positions(game.get_map(), &destination, path.steps.len() > 0) {
+            for target in self.attackable_positions(game, &destination, path.steps.len() > 0) {
                 if let Some(attack_info) = self.make_attack_info(game, &destination, &target) {
                     if !self.can_pull() {
                         result.push(UnitAction::Attack(attack_info));
@@ -141,11 +141,14 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         self.typ.get_attack_type()
     }
     // ignores fog
-    fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
-        let this: &dyn NormalUnitTrait<D> = self.as_trait();
-        target.get_team(game) != self.get_team(game) && this.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
+    fn can_attack_unit(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+        target.get_team(game) != self.get_team(game) && self.threatens(game, target)
     }
-    fn attackable_positions(&self, map: &Map<D>, position: &Point, moved: bool) -> HashSet<Point> {
+    fn threatens(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+        let this: &dyn NormalUnitTrait<D> = self.as_trait();
+        this.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
+    }
+    fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
         let mut result = HashSet::new();
         let this: &dyn NormalUnitTrait<D> = self.as_trait();
         if moved && !this.can_attack_after_moving() {
@@ -154,7 +157,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         match self.typ.get_attack_type() {
             AttackType::None => {},
             AttackType::Adjacent => {
-                for p in map.get_neighbors(position, NeighborMode::FollowPipes) {
+                for p in game.get_map().get_neighbors(position, NeighborMode::FollowPipes) {
                     result.insert(p.point().clone());
                 }
             }
@@ -162,10 +165,10 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                 for d in D::list() {
                     let mut current_pos = None;
                     for i in 0..max_range {
-                        if let Some(dp) = map.get_neighbor(&current_pos.and_then(|dp: OrientedPoint<D>| Some(dp.point().clone())).unwrap_or(*position), &d) {
+                        if let Some(dp) = game.get_map().get_neighbor(&current_pos.and_then(|dp: OrientedPoint<D>| Some(dp.point().clone())).unwrap_or(*position), &d) {
                             if i + 1 >= min_range {
                                 result.insert(dp.point().clone());
-                            } else if map.get_unit(dp.point()).is_some() {
+                            } else if game.get_map().get_unit(dp.point()).is_some() {
                                 break;
                             }
                             current_pos = Some(dp);
@@ -177,7 +180,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             }
             AttackType::Ranged(min_range, max_range) => {
                 // each point in a layer is probably in it 2 times
-                let mut layers = map.range_in_layers(position, max_range as usize);
+                let mut layers = game.get_map().range_in_layers(position, max_range as usize);
                 for _ in min_range-1..max_range {
                     for (p, _, _) in layers.pop().unwrap() {
                         result.insert(p);
@@ -219,7 +222,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                 return None;
             }
         } else {
-            if !self.can_attack_unit_type(game, unit) {
+            if !self.can_attack_unit(game, unit) {
                 return None;
             }
         }

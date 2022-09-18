@@ -4,7 +4,7 @@ use crate::player::*;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
-use crate::map::map::{NeighborMode, Map};
+use crate::map::map::{Map};
 use crate::terrain::Terrain;
 
 use super::*;
@@ -47,7 +47,7 @@ pub trait NormalUnitTrait<D: Direction> {
     fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: &Point) -> Option<Path<D>> {
         if !self.can_attack_after_moving() {
             // no need to look for paths if the unit can't attack after moving
-            if path_so_far.steps.len() == 0 && self.attackable_positions(game.get_map(), &path_so_far.start, false).contains(goal) {
+            if path_so_far.steps.len() == 0 && self.attackable_positions(game, &path_so_far.start, false).contains(goal) {
                 return Some(path_so_far.clone());
             } else {
                 return None;
@@ -57,7 +57,7 @@ pub trait NormalUnitTrait<D: Direction> {
         let current_pos = path_so_far.end(game.get_map()).unwrap();
         let mut result = None;
         width_search(&movement_type, max_cost, game, &current_pos, blocked_positions, Some(self.as_trait()), |p, path| {
-            if (*p == path_so_far.start || self.can_stop_on(p, game)) && self.attackable_positions(game.get_map(), p, path.steps.len() + path_so_far.steps.len() > 0).contains(goal) {
+            if (*p == path_so_far.start || self.can_stop_on(p, game)) && self.attackable_positions(game, p, path.steps.len() + path_so_far.steps.len() > 0).contains(goal) {
                 result = Some(path.clone());
                 true
             } else {
@@ -121,7 +121,10 @@ pub trait NormalUnitTrait<D: Direction> {
                         return Err(CommandError::InvalidPath);
                     }
                 }
-                PathStep::Point(p) => {
+                PathStep::Diagonal(_) | PathStep::Knight(_, _) => {
+                    return Err(CommandError::InvalidPath);
+                }
+                PathStep::Point(_p) => {
                     // currently no use case
                     return Err(CommandError::InvalidPath);
                 }
@@ -150,8 +153,9 @@ pub trait NormalUnitTrait<D: Direction> {
         Ok(())
     }
     fn get_attack_type(&self) -> AttackType;
-    fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool;
-    fn attackable_positions(&self, map: &Map<D>, position: &Point, moved: bool) -> HashSet<Point>;
+    fn can_attack_unit(&self, game: &Game<D>, unit: &UnitType<D>) -> bool;
+    fn threatens(&self, game: &Game<D>, unit: &UnitType<D>) -> bool;
+    fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point>;
     // the result-vector should never contain the same point multiple times
     fn attack_splash(&self, map: &Map<D>, from: &Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError>;
     fn make_attack_info(&self, game: &Game<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>>;

@@ -9,6 +9,9 @@ use crate::game::settings;
 use crate::game::events;
 use crate::map::point::Point;
 use crate::player::*;
+use crate::units::UnitType;
+use crate::units::combat::ArmorType;
+use crate::units::movement::Path;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Game<D: Direction> {
@@ -169,26 +172,30 @@ impl<D: Direction> Game<D> {
             event.undo(self);
         }
     }
+    pub fn find_visible_threats(&self, pos: Point, threatened: &UnitType<D>, team: Team) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        for p in self.map.all_points().into_iter().filter(|p| self.has_vision_at(Some(team), &p)) {
+            if let Some(unit) = self.map.get_unit(&p) {
+                if unit.threatens(self, threatened) && unit.shortest_path_to_attack(self, &Path::new(p), &pos).is_some() {
+                    result.insert(p);
+                }
+            }
+        }
+        result
+    }
 }
 
 fn export_fog(zipper: &mut Zipper, points: &Vec<Point>, fog: &HashSet<Point>) {
-    let mut count = 0;
     for p in points {
-        if fog.contains(p) {
-            count += 1;
-        }
         zipper.write_bool(fog.contains(p));
     }
 }
 
 fn import_fog(unzipper: &mut Unzipper, points: &Vec<Point>) -> Result<HashSet<Point>, ZipperError> {
     let mut result = HashSet::new();
-    let mut count = 0;
     for p in points {
         if unzipper.read_bool()? {
             result.insert(p.clone());
-            count += 1;
-        } else {
         }
     }
     Ok(result)

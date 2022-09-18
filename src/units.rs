@@ -37,7 +37,7 @@ pub type Hp = U8<100>;
 pub enum UnitType<D: Direction> {
     Normal(NormalUnit),
     Mercenary(Mercenary),
-    Chess(ChessUnit),
+    Chess(ChessUnit::<D>),
     Structure(Structure::<D>),
 }
 impl<D: Direction> UnitType<D> {
@@ -57,6 +57,9 @@ impl<D: Direction> UnitType<D> {
     }
     pub fn normal(typ: NormalUnits, owner: Owner) -> Self {
         Self::Normal(NormalUnit::new_instance(typ, owner))
+    }
+    pub fn chess(typ: ChessUnits<D>, owner: Owner) -> Self {
+        Self::Chess(ChessUnit::new_instance(typ, owner))
     }
     pub fn name(&self) -> &'static str {
         match self {
@@ -184,7 +187,7 @@ impl<D: Direction> UnitType<D> {
         match self {
             Self::Normal(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
             Self::Mercenary(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
-            Self::Chess(_) => None,
+            Self::Chess(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
             Self::Structure(_) => None,
         }
     }
@@ -192,7 +195,7 @@ impl<D: Direction> UnitType<D> {
         match self {
             Self::Normal(unit) => unit.options_after_path(game, path),
             Self::Mercenary(unit) => unit.options_after_path(game, path),
-            Self::Chess(_) => vec![UnitAction::Wait],
+            Self::Chess(unit) => unit.options_after_path(game, path),
             Self::Structure(_) => vec![],
         }
     }
@@ -271,6 +274,14 @@ impl<D: Direction> UnitType<D> {
             }
         }
     }
+    pub fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
+        match self {
+            Self::Normal(u) => u.attackable_positions(game, position, moved),
+            Self::Mercenary(u) => u.attackable_positions(game, position, moved),
+            Self::Chess(u) => u.attackable_positions(game, position, moved),
+            Self::Structure(u) => u.attackable_positions(game, position, moved),
+        }
+    }
     pub fn can_pull(&self) -> bool {
         match self {
             Self::Normal(unit) => unit.can_pull(),
@@ -282,11 +293,19 @@ impl<D: Direction> UnitType<D> {
     pub fn can_be_pulled(&self, _map: &Map<D>, _pos: &Point) -> bool {
         true
     }
-    pub fn can_attack_unit_type(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+    pub fn can_attack_unit(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
         if let Some(unit) = self.as_normal_trait() {
-            unit.can_attack_unit_type(game, target)
+            unit.can_attack_unit(game, target)
         } else {
             false
+        }
+    }
+    pub fn threatens(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+        self.get_team(game) != target.get_team(game) && match self {
+            Self::Normal(unit) => unit.threatens(game, target),
+            Self::Mercenary(unit) => unit.threatens(game, target),
+            Self::Chess(unit) => unit.threatens(game, target),
+            Self::Structure(_unit) => false,
         }
     }
     pub fn make_attack_info(&self, game: &Game<D>, pos: &Point, target: &Point) -> Option<AttackInfo<D>> {

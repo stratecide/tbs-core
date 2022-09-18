@@ -17,6 +17,7 @@ pub enum Terrain<D: Direction> {
     Realty(Realty, Option::<Owner>),
     Fountain,
     Pipe(D::P),
+    ChessTile,
 }
 impl<D: Direction> Terrain<D> {
     pub fn movement_cost(&self, movement_type: &MovementType) -> Option<u8> {
@@ -36,6 +37,10 @@ impl<D: Direction> Terrain<D> {
                 _ => None,
             }
             Self::Pipe(_) => None,
+            Self::ChessTile => match movement_type {
+                MovementType::Chess => Some(0),
+                _ => Some(6)
+            }
         }
     }
     pub fn defense(&self, unit: &UnitType<D>) -> f32 {

@@ -11,7 +11,7 @@ use crate::game::game::Game;
 use crate::map::map::*;
 use crate::player::Perspective;
 
-use super::normal_trait::*;
+use super::{normal_trait::*, chess};
 
 pub enum MovementType {
     Hover,
@@ -39,7 +39,7 @@ impl<D: Direction> Ord for WidthSearch<D> {
 }
 
 // callback returns true if the search can be aborted
-// if team is None, units will be ignored
+// if unit is None, units will be ignored
 pub fn width_search<D: Direction, F: FnMut(&Point, &Path<D>) -> bool>(movement_type: &MovementType, max_cost: u8, game: &Game<D>, start: &Point, mut blocked_positions: HashSet<Point>, unit: Option<&dyn NormalUnitTrait<D>>, mut callback: F) {
     if blocked_positions.contains(start) {
         println!("width_search fail");
@@ -84,10 +84,12 @@ pub fn width_search<D: Direction, F: FnMut(&Point, &Path<D>) -> bool>(movement_t
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Zippable)]
-#[zippable(bits = 2)]
+#[zippable(bits = 3)]
 pub enum PathStep<D: Direction> {
     Dir(D),
     Jump(D), // jumps 2 fields, caused by Fountains
+    Diagonal(D), // moves diagonally, for chess units
+    Knight(D, bool),
     Point(Point),
 }
 impl<D: Direction> PathStep<D> {
@@ -107,7 +109,30 @@ impl<D: Direction> PathStep<D> {
                     Err(CommandError::InvalidPath)
                 }
             }
+            Self::Diagonal(d) => {
+                if let Some(o) = chess::get_diagonal_neighbor(map, pos, d) {
+                    Ok(*o.point())
+                } else {
+                    Err(CommandError::InvalidPath)
+                }
+            }
+            Self::Knight(d, turn_left) => {
+                if let Some(o) = chess::get_knight_neighbor(map, pos, d, *turn_left) {
+                    Ok(*o.point())
+                } else {
+                    Err(CommandError::InvalidPath)
+                }
+            }
             Self::Point(p) => Ok(*p),
+        }
+    }
+    pub fn dir(&self) -> Option<D> {
+        match self {
+            Self::Dir(d) => Some(*d),
+            Self::Jump(d) => Some(*d),
+            Self::Diagonal(_) => None,
+            Self::Knight(_, _) => None,
+            Self::Point(_) => None,
         }
     }
 }

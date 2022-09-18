@@ -14,6 +14,7 @@ use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::units::mercenary::Mercenaries;
+use crate::units::chess::*;
 use crate::units::commands::{UnitCommand, UnloadIndex};
 use crate::units::transportable::TransportableTypes;
 use crate::units::movement::Path;
@@ -248,6 +249,10 @@ pub enum Event<D:Direction> {
     Effect(Effect),
     CommanderCharge(Owner, I32::<{-(MAX_CHARGE as i32)}, {MAX_CHARGE as i32}>),
     CommanderFlipActiveSimple(Owner),
+    UnitMovedThisGame(Point),
+    EnPassantOpportunity(Point, Point),
+    EnPassantOpportunityGone(Point, Point),
+    UnitDirection(Point, D, D),
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -370,6 +375,41 @@ impl<D: Direction> Event<D> {
             Self::CommanderFlipActiveSimple(owner) => {
                 game.get_owning_player_mut(owner).unwrap().commander.flip_active();
             }
+            Self::UnitMovedThisGame(p) => {
+                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(p) {
+                    unit.typ.flip_moved_this_game();
+                }
+            }
+            Self::EnPassantOpportunity(p, passed_over) => {
+                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(p) {
+                    match &mut unit.typ {
+                        ChessUnits::Pawn(_, _, p) => {
+                            *p = Some(*passed_over);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Self::EnPassantOpportunityGone(p, _) => {
+                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(p) {
+                    match &mut unit.typ {
+                        ChessUnits::Pawn(_, _, p) => {
+                            *p = None;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Self::UnitDirection(p, new_dir, _) => {
+                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(p) {
+                    match &mut unit.typ {
+                        ChessUnits::Pawn(d, _, _) => {
+                            *d = *new_dir;
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
     }
     pub fn undo(&self, game: &mut Game<D>) {
@@ -491,6 +531,41 @@ impl<D: Direction> Event<D> {
             }
             Self::CommanderFlipActiveSimple(owner) => {
                 game.get_owning_player_mut(owner).unwrap().commander.flip_active();
+            }
+            Self::UnitMovedThisGame(p) => {
+                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(p) {
+                    unit.typ.flip_moved_this_game();
+                }
+            }
+            Self::EnPassantOpportunity(p, _) => {
+                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(p) {
+                    match &mut unit.typ {
+                        ChessUnits::Pawn(_, _, p) => {
+                            *p = None;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Self::EnPassantOpportunityGone(p, passed_over) => {
+                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(p) {
+                    match &mut unit.typ {
+                        ChessUnits::Pawn(_, _, p) => {
+                            *p = Some(*passed_over);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Self::UnitDirection(p, _, old_dir) => {
+                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(p) {
+                    match &mut unit.typ {
+                        ChessUnits::Pawn(d, _, _) => {
+                            *d = *old_dir;
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
     }
@@ -690,6 +765,27 @@ impl<D: Direction> Event<D> {
             }
             Self::CommanderFlipActiveSimple(_) => {
                 Some(self.clone())
+            }
+            Self::UnitMovedThisGame(p) => {
+                if game.has_vision_at(*team, p) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::EnPassantOpportunity(p, _) | Self::EnPassantOpportunityGone(p, _) => {
+                if game.has_vision_at(*team, p) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitDirection(p, _, _) => {
+                if game.has_vision_at(*team, p) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
             }
         }
     }

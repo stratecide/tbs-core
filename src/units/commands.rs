@@ -23,6 +23,8 @@ pub enum UnitAction<D: Direction> {
     Attack(AttackInfo::<D>),
     Pull(D),
     MercenaryPowerSimple,
+    Castle,
+    PawnUpgrade(chess::PawnUpgrade),
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -33,6 +35,8 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Attack(p) => write!(f, "Attack {:?}", p),
             Self::Pull(_) => write!(f, "Pull"),
             Self::MercenaryPowerSimple => write!(f, "Activate Power"),
+            Self::Castle => write!(f, "Castle"),
+            Self::PawnUpgrade(p) => write!(f, "{}", p),
         }
     }
 }
@@ -94,13 +98,13 @@ impl<D: Direction> CommonMovement<D> {
     }
     
     // returns the point the unit ends on unless it is stopped by a fog trap
-    fn apply_with_custom<F>(self, handler: &mut EventHandler<D>, f: F) -> Result<Option<Point>, CommandError> where
+    fn apply_with_custom<F>(&self, handler: &mut EventHandler<D>, f: F) -> Result<Option<Point>, CommandError> where
         F: FnOnce(&mut EventHandler<D>, UnitType<D>, Path<D>)
         {
         let unit = self.get_unit(handler.get_map()).expect("Unit command applied without unit, although it should be checked already");
         let mut path_taken = Path {start: self.path.start, steps: LVec::new()};
         let mut current = self.path.start;
-        for p in self.path.steps {
+        for p in &self.path.steps {
             current = p.progress(handler.get_map(), current)?;
             if !unit.can_move_to(&current, handler.get_game()) {
                 // the unit is blocked by a fog trap
@@ -122,7 +126,7 @@ impl<D: Direction> CommonMovement<D> {
                 }
                 return Ok(None);
             }
-            path_taken.steps.push(p).unwrap();
+            path_taken.steps.push(p.clone()).unwrap();
         }
         if path_taken.steps.len() > 0 {
             let unit = unit.as_unit();
@@ -131,7 +135,7 @@ impl<D: Direction> CommonMovement<D> {
         }
         Ok(Some(current))
     }
-    fn apply_without_boarding(self, handler: &mut EventHandler<D>) -> Result<Option<Point>, CommandError> {
+    fn apply_without_boarding(&self, handler: &mut EventHandler<D>) -> Result<Option<Point>, CommandError> {
         let unload_index = self.unload_index;
         self.apply_with_custom(handler, |handler, unit, path| {
             handler.add_event(Event::UnitPath(Some(unload_index), path, true, unit));
@@ -172,7 +176,7 @@ pub enum UnitCommand<D: Direction> {
 impl<D: Direction> UnitCommand<D> {
     pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         let team = handler.get_game().current_player().team;
-        match self {
+        let chess_exhaust = match self {
             Self::MoveAttack(cm, target) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
                 cm.validate_input(handler.get_game())?;
@@ -189,11 +193,11 @@ impl<D: Direction> UnitCommand<D> {
                         if !handler.get_game().has_vision_at(Some(team), target) {
                             return Err(CommandError::NoVision);
                         }
-                        if !unit.attackable_positions(handler.get_map(), &intended_end, cm.path.steps.len() > 0).contains(target) {
+                        if !unit.attackable_positions(handler.get_game(), &intended_end, cm.path.steps.len() > 0).contains(target) {
                             return Err(CommandError::InvalidTarget);
                         }
                         let target_unit = handler.get_map().get_unit(target).ok_or(CommandError::MissingUnit)?;
-                        if !unit.can_attack_unit_type(handler.get_game(), target_unit) {
+                        if !unit.can_attack_unit(handler.get_game(), target_unit) {
                             return Err(CommandError::InvalidTarget);
                         }
                     }
@@ -214,6 +218,7 @@ impl<D: Direction> UnitCommand<D> {
                         handler.add_event(Event::UnitExhaust(end));
                     }
                 }
+                Some(cm.path.start)
             }
             Self::MovePull(cm, dir) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
@@ -256,6 +261,7 @@ impl<D: Direction> UnitCommand<D> {
                         pull_path.insert(0, PathStep::Dir(dp.direction().opposite_direction()));
                     }
                 }
+                Some(cm.path.start)
             }
             Self::MoveCapture(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
@@ -280,12 +286,14 @@ impl<D: Direction> UnitCommand<D> {
                     handler.add_event(Event::TerrainChange(end, handler.get_map().get_terrain(&end).unwrap().clone(), Terrain::Realty(realty, Some(handler.get_game().current_player().owner_id))));
                     handler.add_event(Event::UnitExhaust(end));
                 }
+                Some(cm.path.start)
             }
             Self::MoveWait(cm) => {
                 cm.validate_input(handler.get_game())?;
                 if let Some(end) = cm.apply_without_boarding(handler)? {
                     handler.add_event(Event::UnitExhaust(end));
                 }
+                Some(cm.path.start)
             }
             Self::MoveAboard(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
@@ -305,6 +313,7 @@ impl<D: Direction> UnitCommand<D> {
                 })? {
                     handler.add_event(Event::UnitExhaustBoarded(end, load_index.try_into().unwrap()));
                 }
+                Some(cm.path.start)
             }
             Self::MoveChess(start, chess_command) => {
                 check_chess_unit_can_act(handler.get_game(), &start)?;
@@ -315,6 +324,7 @@ impl<D: Direction> UnitCommand<D> {
                     },
                     _ => return Err(CommandError::UnitTypeWrong),
                 }
+                Some(start)
             }
             Self::MercenaryPowerSimple(pos) => {
                 if !handler.get_map().is_point_valid(&pos) {
@@ -335,7 +345,11 @@ impl<D: Direction> UnitCommand<D> {
                     },
                     _ => return Err(CommandError::UnitTypeWrong),
                 }
+                None
             }
+        };
+        if let Some(p) = chess_exhaust {
+            ChessCommand::exhaust_all_on_board(handler, p);
         }
         Ok(())
     }
@@ -482,7 +496,7 @@ pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: 
         if !handler.get_game().has_vision_at(unit.get_team(handler.get_game()), attacker_pos) {
             continue;
         }
-        if !unit.attackable_positions(handler.get_map(), &p, false).contains(attacker_pos) {
+        if !unit.attackable_positions(handler.get_game(), &p, false).contains(attacker_pos) {
             continue;
         }
         // todo: if a straight attacker is counter-attacking another straight attacker, it should first try to reverse the direction

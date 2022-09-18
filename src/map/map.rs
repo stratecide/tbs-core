@@ -13,6 +13,7 @@ use crate::map::point::*;
 use crate::player::*;
 use crate::terrain::*;
 use crate::units::*;
+use crate::units::combat::ArmorType;
 use crate::units::mercenary::Mercenary;
 use crate::details::*;
 use crate::units::movement::MovementType;
@@ -130,7 +131,7 @@ where D: Direction
         result
     }
     
-    pub fn get_unit_movement_neighbors(&self, p: Point, mov: &MovementType) -> Vec<(OrientedPoint<D>, PathStep<D>)> {
+    pub fn get_unit_movement_neighbors(&self, p: Point, _mov: &MovementType) -> Vec<(OrientedPoint<D>, PathStep<D>)> {
         let mut result = vec![];
         for d in D::list() {
             if let Some(neighbor) = self.get_neighbor(&p, &d) {
@@ -251,6 +252,7 @@ where D: Direction
         }
         layers
     }
+
     pub fn mercenary_influence_at(&self, point: &Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenary)> {
         let mut result = vec![];
         for p in self.all_points() {
@@ -262,6 +264,7 @@ where D: Direction
         }
         result
     }
+
     pub fn validate_terrain(&mut self) -> Vec<(Point, Terrain<D>)> {
         let mut corrected = vec![];
         for p in self.all_points() {
@@ -299,6 +302,7 @@ where D: Direction
         }
         corrected
     }
+    
     pub fn get_players(&self) -> Vec<Player> {
         vec![
             Player::new(0, Team::try_from(0).unwrap(), 100, 333, crate::commanders::Commander::Zombie(0.try_into().unwrap(), false)),
