@@ -229,7 +229,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         match self.typ.get_attack_type() {
             AttackType::Straight(min, max) => {
                 for d in D::list() {
-                    let mut current = OrientedPoint::new(*pos, false, *d);
+                    let mut current = OrientedPoint::new(*pos, false, d);
                     for i in 0..max {
                         if let Some(dp) = game.get_map().get_neighbor(current.point(), current.direction()) {
                             current = dp;
@@ -238,7 +238,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                                     break;
                                 }
                             } else if current.point() == target {
-                                return Some(AttackInfo::Direction(*d));
+                                return Some(AttackInfo::Direction(d));
                             }
                         } else {
                             break;

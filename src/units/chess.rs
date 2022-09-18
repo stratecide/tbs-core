@@ -303,7 +303,7 @@ impl<D: Direction> ChessUnit<D> {
             ChessUnits::Pawn(dir, moved_this_game, _) => {
                 let mut directions = vec![];
                 if game.get_map().get_terrain(&start) == Some(&Terrain::ChessTile) {
-                    directions.push(Box::new(dir));
+                    directions.push(dir);
                 } else {
                     directions = D::list();
                 }
@@ -311,7 +311,7 @@ impl<D: Direction> ChessUnit<D> {
                     if let Some(dp) = game.get_map().get_neighbor(&start, &d) {
                         if Self::can_move_through(game, *dp.point(), team, ignore_unseen) {
                             // move forward 1
-                            let mut steps = vec![PathStep::Dir(*d)];
+                            let mut steps = vec![PathStep::Dir(d)];
 
                             match callback(*dp.point(), &steps) {
                                 PathSearchFeedback::Continue => {
@@ -370,7 +370,7 @@ impl<D: Direction> ChessUnit<D> {
                     for turn_left in vec![true, false] {
                         if let Some(dp) = get_knight_neighbor(game.get_map(), start, &d, turn_left) {
                             if Self::can_stop_on(game, *dp.point(), team) {
-                                let steps = vec![PathStep::Knight(*d, turn_left)];
+                                let steps = vec![PathStep::Knight(d, turn_left)];
                                 match callback(*dp.point(), &steps) {
                                     PathSearchFeedback::Found => return,
                                     _ => {}
@@ -389,7 +389,7 @@ impl<D: Direction> ChessUnit<D> {
                 for d in D::list() {
                     if let Some(dp) = game.get_map().get_neighbor(&start, &d) {
                         if Self::can_stop_on(game, *dp.point(), team) {
-                            let steps = vec![PathStep::Dir(*d)];
+                            let steps = vec![PathStep::Dir(d)];
                             match callback(*dp.point(), &steps) {
                                 PathSearchFeedback::Found => return,
                                 _ => {}
@@ -401,7 +401,7 @@ impl<D: Direction> ChessUnit<D> {
                     if let Some(dp) = get_diagonal_neighbor(game.get_map(), start, &d) {
                         if Self::can_stop_on(game, *dp.point(), team) {
                                     
-                            let steps = vec![PathStep::Diagonal(*d)];
+                            let steps = vec![PathStep::Diagonal(d)];
 
                             match callback(*dp.point(), &steps) {
                                 PathSearchFeedback::Found => return,

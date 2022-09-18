@@ -82,7 +82,7 @@ where D: Direction
         for d in D::list() {
             if let Some(dp) = self.get_neighbor(from, &d) {
                 if dp.point() == to {
-                    return Some(*d);
+                    return Some(d);
                 }
             }
         }
@@ -137,10 +137,10 @@ where D: Direction
             if let Some(neighbor) = self.get_neighbor(&p, &d) {
                 if self.terrain.get(&p) == Some(&Terrain::Fountain) {
                     if let Some(neighbor) = self.get_neighbor(neighbor.point(), neighbor.direction()) {
-                        result.push((neighbor, PathStep::Jump(*d)));
+                        result.push((neighbor, PathStep::Jump(d)));
                     }
                 }
-                result.push((neighbor, PathStep::Dir(*d)));
+                result.push((neighbor, PathStep::Dir(d)));
             }
         }
         result
@@ -233,7 +233,7 @@ where D: Direction
                     dir_changes.push(dir_change.clone());
                 } else {
                     // since only one direction has been used so far, try both directions that are directly neighboring
-                    let d = **D::list().last().unwrap();
+                    let d = *D::list().last().unwrap();
                     dir_changes.push(d.opposite_angle());
                     dir_changes.push(d);
                 }

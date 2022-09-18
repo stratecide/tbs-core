@@ -445,7 +445,7 @@ where D: Direction
                         if ap.0.distortion.0 {
                             direction = direction.mirror_vertically();
                         }
-                        self.wrapped_neighbors.insert((p, *d), OrientedPoint::new(ap.1, ap.0.distortion.0, direction));
+                        self.wrapped_neighbors.insert((p, d), OrientedPoint::new(ap.1, ap.0.distortion.0, direction));
                     }
                 }
             }

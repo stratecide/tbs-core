@@ -15,7 +15,7 @@ pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable {
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
     fn pipe_entry(&self) -> Self::P;
-    fn list() -> Vec<Box<Self>>;
+    fn list() -> Vec<Self>;
     fn mirror_vertically(&self) -> Self;
     //fn rotate_point_map(&self, map: &PointMap) -> PointMap;
     fn get_neighbor(&self, point: &Point, odd_if_hex: bool) -> Option<Point> {
@@ -33,36 +33,36 @@ pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable {
     }
     fn list_index(&self) -> usize {
         let list = Self::list();
-        list.iter().position(|d| self == d.as_ref()).expect("Unable to find Direction in list of all Directions")
+        list.iter().position(|d| self == d).expect("Unable to find Direction in list of all Directions")
     }
     fn rotate_counter_clockwise(&self) -> Self {
         let list = Self::list();
         let index = self.list_index();
-        *list[(index + 1) % list.len()]
+        list[(index + 1) % list.len()]
     }
     fn rotate_clockwise(&self) -> Self {
         let list = Self::list();
-        if self == list[0].as_ref() {
-            return **list.last().unwrap();
+        if self == &list[0] {
+            return *list.last().unwrap();
         }
         let index = self.list_index();
-        *list[index - 1]
+        list[index - 1]
     }
     fn rotate_by(&self, other: &Self) -> Self {
         let list = Self::list();
         let index = self.list_index();
         let index2 = other.list_index();
-        *list[(index + index2) % list.len()]
+        list[(index + index2) % list.len()]
     }
     fn opposite_angle(&self) -> Self {
         let list = Self::list();
         let index = self.list_index();
-        *list[(list.len() - index) % list.len()]
+        list[(list.len() - index) % list.len()]
     }
     fn opposite_direction(&self) -> Self {
         let list = Self::list();
         let index = self.list_index();
-        *list[(index + list.len() / 2) % list.len()]
+        list[(index + list.len() / 2) % list.len()]
     }
 }
 
@@ -92,12 +92,12 @@ impl Direction for Direction4 {
             d2: self.clone(),
         }
     }
-    fn list() -> Vec<Box<Self>> {
+    fn list() -> Vec<Self> {
         vec![
-            Box::new(Self::D0),
-            Box::new(Self::D90),
-            Box::new(Self::D180),
-            Box::new(Self::D270),
+            Self::D0,
+            Self::D90,
+            Self::D180,
+            Self::D270,
         ]
     }
     fn mirror_vertically(&self) -> Self {
@@ -147,14 +147,14 @@ impl Direction for Direction6 {
             d2: self.clone(),
         }
     }
-    fn list() -> Vec<Box<Self>> {
+    fn list() -> Vec<Self> {
         vec![
-            Box::new(Self::D0),
-            Box::new(Self::D60),
-            Box::new(Self::D120),
-            Box::new(Self::D180),
-            Box::new(Self::D240),
-            Box::new(Self::D300),
+            Self::D0,
+            Self::D60,
+            Self::D120,
+            Self::D180,
+            Self::D240,
+            Self::D300,
         ]
     }
     fn mirror_vertically(&self) -> Self {
