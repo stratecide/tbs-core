@@ -58,15 +58,15 @@ impl PointMap {
             }
         }
     }
-    pub fn is_inside(&self, point: &Point) -> bool {
+    pub fn is_inside(&self, point: Point) -> bool {
         point.x() < self.width() &&
         point.y() < self.height()
     }
-    pub fn is_point_valid(&self, point: &Point) -> bool {
+    pub fn is_point_valid(&self, point: Point) -> bool {
         self.is_inside(point) &&
         self.point_validity[point.y() as usize][point.x() as usize]
     }
-    pub fn set_valid(&mut self, point: &Point, value: bool) {
+    pub fn set_valid(&mut self, point: Point, value: bool) {
         if self.is_inside(point) {
             *self.point_validity.get_mut(point.y() as usize).unwrap().get_mut(point.x() as usize).unwrap() = value;
         }
@@ -76,7 +76,7 @@ impl PointMap {
         for x in 0..self.width() {
             for y in 0..self.height() {
                 let p = Point::new(x, y);
-                if self.is_point_valid(&p) {
+                if self.is_point_valid(p) {
                     result.push(p);
                 }
             }

@@ -63,7 +63,7 @@ impl Commander {
         }
     }
 
-    pub fn after_attacking<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: &Point, attacker: &dyn NormalUnitTrait<D>, defenders: Vec<(Point, UnitType<D>, u16)>, _is_counter: bool) {
+    pub fn after_attacking<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Point, attacker: &dyn NormalUnitTrait<D>, defenders: Vec<(Point, UnitType<D>, u16)>, _is_counter: bool) {
         match self {
             Self::Vampire(_, _) => {
                 if handler.get_game().is_foggy() {
@@ -81,7 +81,7 @@ impl Commander {
         }
     }
 
-    pub fn after_killing_unit<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner, defender_pos: &Point, defender: &UnitType<D>) {
+    pub fn after_killing_unit<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner, defender_pos: Point, defender: &UnitType<D>) {
         let player = handler.get_game().get_owning_player(&owner).unwrap();
         match self {
             Self::Zombie(_, _) => {
@@ -203,7 +203,7 @@ impl CommanderPower {
             Self::VampireBloodStorm => {
                 let team = player.team;
                 for p in handler.get_map().all_points() {
-                    if let Some(unit) = handler.get_map().get_unit(&p) {
+                    if let Some(unit) = handler.get_map().get_unit(p) {
                         // structures aren't affected
                         match unit {
                             UnitType::Structure(_) => continue,
@@ -222,10 +222,10 @@ impl CommanderPower {
             }
             Self::ZombieResurrection => {
                 for p in handler.get_map().all_points() {
-                    if handler.get_map().get_unit(&p).is_some() {
+                    if handler.get_map().get_unit(p).is_some() {
                         continue;
                     }
-                    for (index, detail) in handler.get_map().get_details(&p).into_iter().enumerate() {
+                    for (index, detail) in handler.get_map().get_details(p).into_iter().enumerate() {
                         match detail {
                             Detail::Skull(o, unit_type) => {
                                 if o == owner {

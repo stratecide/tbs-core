@@ -31,12 +31,12 @@ mod tests {
         assert_eq!(map.height(), 6);
         for x in 0..5 {
             for y in 0..6 {
-                assert!(map.is_point_valid(&Point::new(x, y)));
+                assert!(map.is_point_valid(Point::new(x, y)));
             }
-            assert!(!map.is_point_valid(&Point::new(x, 6)));
+            assert!(!map.is_point_valid(Point::new(x, 6)));
         }
         for y in 0..6 {
-            assert!(!map.is_point_valid(&Point::new(5, y)));
+            assert!(!map.is_point_valid(Point::new(5, y)));
         }
     }
 

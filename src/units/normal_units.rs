@@ -92,13 +92,13 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         } else {
             return result;
         };
-        if path.steps.len() == 0 || game.get_map().get_unit(&destination).is_none() {
-            for target in self.attackable_positions(game, &destination, path.steps.len() > 0) {
-                if let Some(attack_info) = self.make_attack_info(game, &destination, &target) {
+        if path.steps.len() == 0 || game.get_map().get_unit(destination).is_none() {
+            for target in self.attackable_positions(game, destination, path.steps.len() > 0) {
+                if let Some(attack_info) = self.make_attack_info(game, destination, target) {
                     if !self.can_pull() {
                         result.push(UnitAction::Attack(attack_info));
                     } else {
-                        match self.make_attack_info(game, &destination, &target) {
+                        match self.make_attack_info(game, destination, target) {
                             Some(AttackInfo::Direction(d)) => {
                                 result.push(UnitAction::Pull(d));
                             }
@@ -108,7 +108,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                 }
             }
             if self.can_capture() {
-                match game.get_map().get_terrain(&destination) {
+                match game.get_map().get_terrain(destination) {
                     Some(Terrain::Realty(_, owner)) => {
                         if Some(game.get_owning_player(&self.owner).unwrap().team) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team)) {
                             result.push(UnitAction::Capture);
@@ -119,7 +119,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             }
             result.push(UnitAction::Wait);
         } else if path.steps.len() > 0 {
-            if let Some(transporter) = game.get_map().get_unit(&destination) {
+            if let Some(transporter) = game.get_map().get_unit(destination) {
                 // TODO: this is called indirectly by mercenaries, so using ::Normal isn't necessarily correct
                 if transporter.boardable_by(&TransportableTypes::Normal(self.clone())) {
                     result.push(UnitAction::Enter);
@@ -148,7 +148,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         let this: &dyn NormalUnitTrait<D> = self.as_trait();
         this.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
     }
-    fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
+    fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         let mut result = HashSet::new();
         let this: &dyn NormalUnitTrait<D> = self.as_trait();
         if moved && !this.can_attack_after_moving() {
@@ -158,17 +158,17 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             AttackType::None => {},
             AttackType::Adjacent => {
                 for p in game.get_map().get_neighbors(position, NeighborMode::FollowPipes) {
-                    result.insert(p.point().clone());
+                    result.insert(p.point);
                 }
             }
             AttackType::Straight(min_range, max_range) => {
                 for d in D::list() {
                     let mut current_pos = None;
                     for i in 0..max_range {
-                        if let Some(dp) = game.get_map().get_neighbor(&current_pos.and_then(|dp: OrientedPoint<D>| Some(dp.point().clone())).unwrap_or(*position), &d) {
+                        if let Some(dp) = game.get_map().get_neighbor(current_pos.and_then(|dp: OrientedPoint<D>| Some(dp.point)).unwrap_or(position), d) {
                             if i + 1 >= min_range {
-                                result.insert(dp.point().clone());
-                            } else if game.get_map().get_unit(dp.point()).is_some() {
+                                result.insert(dp.point);
+                            } else if game.get_map().get_unit(dp.point).is_some() {
                                 break;
                             }
                             current_pos = Some(dp);
@@ -190,13 +190,13 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         }
         result
     }
-    fn attack_splash(&self, map: &Map<D>, from: &Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
+    fn attack_splash(&self, map: &Map<D>, from: Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
         match (&self.typ, to) {
             (NormalUnits::DragonHead, AttackInfo::Direction(dir)) => {
-                if let Some(dp) = map.get_neighbor(from, dir) {
-                    let mut result = vec![dp.point().clone()];
-                    if let Some(dp) = map.get_neighbor(dp.point(), dir) {
-                        result.push(dp.point().clone());
+                if let Some(dp) = map.get_neighbor(from, *dir) {
+                    let mut result = vec![dp.point];
+                    if let Some(dp) = map.get_neighbor(dp.point, *dir) {
+                        result.push(dp.point);
                     }
                     Ok(result)
                 } else {
@@ -212,7 +212,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
     // returns Some(...) if the target position can be attacked from pos
     // returns None otherwise
-    fn make_attack_info(&self, game: &Game<D>, pos: &Point, target: &Point) -> Option<AttackInfo<D>> {
+    fn make_attack_info(&self, game: &Game<D>, pos: Point, target: Point) -> Option<AttackInfo<D>> {
         let unit = match game.get_map().get_unit(target) {
             None => return None,
             Some(unit) => unit,
@@ -229,15 +229,15 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         match self.typ.get_attack_type() {
             AttackType::Straight(min, max) => {
                 for d in D::list() {
-                    let mut current = OrientedPoint::new(*pos, false, d);
+                    let mut current = OrientedPoint::new(pos, false, d);
                     for i in 0..max {
-                        if let Some(dp) = game.get_map().get_neighbor(current.point(), current.direction()) {
+                        if let Some(dp) = game.get_map().get_neighbor(current.point, current.direction) {
                             current = dp;
                             if i < min - 1 {
-                                if game.get_map().get_unit(current.point()).is_some() {
+                                if game.get_map().get_unit(current.point).is_some() {
                                     break;
                                 }
-                            } else if current.point() == target {
+                            } else if current.point == target {
                                 return Some(AttackInfo::Direction(d));
                             }
                         } else {
@@ -247,7 +247,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                 }
                 None
             }
-            _ => Some(AttackInfo::Point(*target)),
+            _ => Some(AttackInfo::Point(target)),
         }
     }
     fn can_capture(&self) -> bool {

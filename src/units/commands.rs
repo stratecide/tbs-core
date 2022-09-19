@@ -64,7 +64,7 @@ impl<D: Direction> CommonMovement<D> {
     }
     
     fn get_unit<'a>(&self, map: &'a Map<D>) -> Result<&'a dyn NormalUnitTrait<D>, CommandError> {
-        let unit = map.get_unit(&self.path.start).ok_or(CommandError::MissingUnit)?;
+        let unit = map.get_unit(self.path.start).ok_or(CommandError::MissingUnit)?;
         let unit: &'a dyn NormalUnitTrait<D> = if let Some(index) = self.unload_index {
             unit.get_boarded().get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
         } else {
@@ -78,10 +78,10 @@ impl<D: Direction> CommonMovement<D> {
     }
 
     fn validate_input(&self, game: &Game<D>) -> Result<(), CommandError> {
-        if !game.get_map().is_point_valid(&self.path.start) {
+        if !game.get_map().is_point_valid(self.path.start) {
             return Err(CommandError::InvalidPoint(self.path.start));
         }
-        check_normal_unit_can_act(game, &self.path.start, self.unload_index)?;
+        check_normal_unit_can_act(game, self.path.start, self.unload_index)?;
         if self.unload_index.is_some() && self.path.steps.len() == 0 {
             return Err(CommandError::InvalidPath);
         }
@@ -106,10 +106,10 @@ impl<D: Direction> CommonMovement<D> {
         let mut current = self.path.start;
         for p in &self.path.steps {
             current = p.progress(handler.get_map(), current)?;
-            if !unit.can_move_to(&current, handler.get_game()) {
+            if !unit.can_move_to(current, handler.get_game()) {
                 // the unit is blocked by a fog trap
                 // first make sure no other unit is overwritten
-                while path_taken.steps.len() > 0 && !unit.can_stop_on(&current, handler.get_game()) {
+                while path_taken.steps.len() > 0 && !unit.can_stop_on(current, handler.get_game()) {
                     path_taken.steps.pop();
                 }
                 // no event for the path is necessary if the unit is unable to move at all
@@ -148,8 +148,8 @@ fn after_path<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>, unit:
     if Some(team) == unit.get_team(handler.get_game()) {
         let mut vision_changes = HashSet::new();
         for p in path.points(handler.get_map()).unwrap().into_iter().skip(1) {
-            for p in unit.get_vision(handler.get_game(), &p) {
-                if !handler.get_game().has_vision_at(Some(team), &p) {
+            for p in unit.get_vision(handler.get_game(), p) {
+                if !handler.get_game().has_vision_at(Some(team), p) {
                     vision_changes.insert(p);
                 }
             }
@@ -183,20 +183,20 @@ impl<D: Direction> UnitCommand<D> {
                 let unit = cm.get_unit(handler.get_map())?;
                 match &target {
                     AttackInfo::Point(target) => {
-                        if !handler.get_map().is_point_valid(target) {
+                        if !handler.get_map().is_point_valid(*target) {
                             return Err(CommandError::InvalidPoint(target.clone()));
                         }
                         match unit.get_attack_type() {
                             AttackType::Straight(_, _) => return Err(CommandError::InvalidTarget),
                             _ => {}
                         }
-                        if !handler.get_game().has_vision_at(Some(team), target) {
+                        if !handler.get_game().has_vision_at(Some(team), *target) {
                             return Err(CommandError::NoVision);
                         }
-                        if !unit.attackable_positions(handler.get_game(), &intended_end, cm.path.steps.len() > 0).contains(target) {
+                        if !unit.attackable_positions(handler.get_game(), intended_end, cm.path.steps.len() > 0).contains(target) {
                             return Err(CommandError::InvalidTarget);
                         }
-                        let target_unit = handler.get_map().get_unit(target).ok_or(CommandError::MissingUnit)?;
+                        let target_unit = handler.get_map().get_unit(*target).ok_or(CommandError::MissingUnit)?;
                         if !unit.can_attack_unit(handler.get_game(), target_unit) {
                             return Err(CommandError::InvalidTarget);
                         }
@@ -212,8 +212,8 @@ impl<D: Direction> UnitCommand<D> {
                     }
                 }
                 if let Some(end) = cm.apply_without_boarding(handler)? {
-                    handle_attack(handler, &end, &target)?;
-                    if handler.get_game().get_map().get_unit(&end).is_some() {
+                    handle_attack(handler, end, &target)?;
+                    if handler.get_game().get_map().get_unit(end).is_some() {
                         // ensured that the unit didn't die from counter attack
                         handler.add_event(Event::UnitExhaust(end));
                     }
@@ -236,17 +236,17 @@ impl<D: Direction> UnitCommand<D> {
                 let mut pull_path = vec![];
                 let mut dp = OrientedPoint::new(intended_end.clone(), false, dir);
                 for i in 0..max_dist {
-                    if let Some(next_dp) = handler.get_map().get_neighbor(dp.point(), dp.direction()) {
+                    if let Some(next_dp) = handler.get_map().get_neighbor(dp.point, dp.direction) {
                         dp = next_dp;
-                        if let Some(unit) = handler.get_map().get_unit(dp.point()).cloned() {
+                        if let Some(unit) = handler.get_map().get_unit(dp.point).cloned() {
                             if let Some(end) = cm.apply_without_boarding(handler)? {
-                                if handler.get_game().has_vision_at(Some(team), dp.point()) {
-                                    if i < min_dist - 1 || !unit.can_be_pulled(handler.get_map(), dp.point()) {
+                                if handler.get_game().has_vision_at(Some(team), dp.point) {
+                                    if i < min_dist - 1 || !unit.can_be_pulled(handler.get_map(), dp.point) {
                                         // can't pull if the target is already next to the unit
                                         return Err(CommandError::InvalidTarget);
                                     } else {
                                         // found a valid target
-                                        let pull_path = Path {start: *dp.point(), steps: pull_path.try_into().unwrap()};
+                                        let pull_path = Path {start: dp.point, steps: pull_path.try_into().unwrap()};
                                         handler.add_event(Event::UnitPath(Some(None), pull_path.clone(), true, unit.clone()));
                                         after_path(handler, &pull_path, &unit);
                                     }
@@ -258,7 +258,7 @@ impl<D: Direction> UnitCommand<D> {
                             }
                             break;
                         }
-                        pull_path.insert(0, PathStep::Dir(dp.direction().opposite_direction()));
+                        pull_path.insert(0, PathStep::Dir(dp.direction.opposite_direction()));
                     }
                 }
                 Some(cm.path.start)
@@ -270,7 +270,7 @@ impl<D: Direction> UnitCommand<D> {
                 if !unit.can_capture() {
                     return Err(CommandError::UnitCannotCapture);
                 }
-                let realty = match handler.get_map().get_terrain(&intended_end) {
+                let realty = match handler.get_map().get_terrain(intended_end) {
                     Some(Terrain::Realty(realty, owner)) => {
                         if Some(team) != handler.get_game().get_team(owner.as_ref()) {
                             realty.clone()
@@ -283,7 +283,7 @@ impl<D: Direction> UnitCommand<D> {
                     }
                 };
                 if let Some(end) = cm.apply_without_boarding(handler)? {
-                    handler.add_event(Event::TerrainChange(end, handler.get_map().get_terrain(&end).unwrap().clone(), Terrain::Realty(realty, Some(handler.get_game().current_player().owner_id))));
+                    handler.add_event(Event::TerrainChange(end, handler.get_map().get_terrain(end).unwrap().clone(), Terrain::Realty(realty, Some(handler.get_game().current_player().owner_id))));
                     handler.add_event(Event::UnitExhaust(end));
                 }
                 Some(cm.path.start)
@@ -298,11 +298,11 @@ impl<D: Direction> UnitCommand<D> {
             Self::MoveAboard(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
                 cm.validate_input(handler.get_game())?;
-                if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), &intended_end) {
+                if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), intended_end) {
                     return Err(CommandError::NoVision);
                 }
                 let unit = cm.get_unit(handler.get_map())?;
-                let transporter = handler.get_map().get_unit(&intended_end).ok_or(CommandError::MissingUnit)?;
+                let transporter = handler.get_map().get_unit(intended_end).ok_or(CommandError::MissingUnit)?;
                 if !transporter.boardable_by(&unit.as_transportable()) {
                     return Err(CommandError::UnitCannotBeBoarded);
                 }
@@ -316,8 +316,8 @@ impl<D: Direction> UnitCommand<D> {
                 Some(cm.path.start)
             }
             Self::MoveChess(start, chess_command) => {
-                check_chess_unit_can_act(handler.get_game(), &start)?;
-                match handler.get_map().get_unit(&start) {
+                check_chess_unit_can_act(handler.get_game(), start)?;
+                match handler.get_map().get_unit(start) {
                     Some(UnitType::Chess(unit)) => {
                         let unit = unit.clone();
                         chess_command.convert(start, &unit, handler)?;
@@ -327,15 +327,15 @@ impl<D: Direction> UnitCommand<D> {
                 Some(start)
             }
             Self::MercenaryPowerSimple(pos) => {
-                if !handler.get_map().is_point_valid(&pos) {
+                if !handler.get_map().is_point_valid(pos) {
                     return Err(CommandError::InvalidPoint(pos));
                 }
-                if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), &pos) {
+                if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), pos) {
                     return Err(CommandError::NoVision);
                 }
-                match handler.get_map().get_unit(&pos) {
+                match handler.get_map().get_unit(pos) {
                     Some(UnitType::Mercenary(merc)) => {
-                        if merc.can_use_simple_power(handler.get_game(), &pos) {
+                        if merc.can_use_simple_power(handler.get_game(), pos) {
                             let change = -(*merc.charge as i8);
                             handler.add_event(Event::MercenaryCharge(pos, change.try_into().unwrap()));
                             handler.add_event(Event::MercenaryPowerSimple(pos));
@@ -357,7 +357,7 @@ impl<D: Direction> UnitCommand<D> {
 
 pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: &Path<D>, unit: &UnitType<D>) {
     for p in path_taken.points(handler.get_map()).unwrap() {
-        let old_details = handler.get_map().get_details(&p);
+        let old_details = handler.get_map().get_details(p);
         let details: Vec<Detail> = old_details.clone().into_iter().filter(|detail| {
             match detail {
                 Detail::Coins1 => {
@@ -398,7 +398,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
     }
 }
 
-pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {
+pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {
     let attacker = handler.get_map().get_unit(attacker_pos).and_then(|u| Some(u.clone()));
     let attacker: &dyn NormalUnitTrait<D> = match &attacker {
         Some(UnitType::Normal(unit)) => Ok(unit.as_trait()),
@@ -412,13 +412,13 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
     let mut charges = HashMap::new();
     let mut defenders = vec![];
     for target in attacker.attack_splash(handler.get_map(), attacker_pos, target)? {
-        if let Some(defender) = handler.get_map().get_unit(&target) {
-            let damage = defender.calculate_attack_damage(handler.get_game(), &target, attacker_pos, attacker, is_counter);
+        if let Some(defender) = handler.get_map().get_unit(target) {
+            let damage = defender.calculate_attack_damage(handler.get_game(), target, attacker_pos, attacker, is_counter);
             if let Some((weapon, damage)) = damage {
                 let hp = defender.get_hp();
                 if !is_counter && defender.get_owner() != Some(attacker.get_owner()) {
                     for (p, _) in handler.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {
-                        let change = if &p == attacker_pos {
+                        let change = if p == attacker_pos {
                             3
                         } else {
                             1
@@ -431,10 +431,10 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
                 handler.add_event(Event::Effect(weapon.effect(target)));
                 handler.add_event(Event::UnitHpChange(target.clone(), (-(damage.min(hp as u16) as i8)).try_into().unwrap(), (-(damage as i16)).max(-999).try_into().unwrap()));
                 if damage >= hp as u16 {
-                    handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(&target).unwrap().clone()));
+                    handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(target).unwrap().clone()));
                     if handler.get_game().get_team(Some(attacker.get_owner())) != handler.get_game().get_team(defender.get_owner()) {
                         if let Some(commander) = handler.get_game().get_owning_player(attacker.get_owner()).and_then(|player| Some(player.commander.clone())) {
-                            commander.after_killing_unit(handler, *attacker.get_owner(), &target, &defender);
+                            commander.after_killing_unit(handler, *attacker.get_owner(), target, &defender);
                         }
                     }
                     recalculate_fog = true;
@@ -469,7 +469,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
         }
     }
     for (p, change) in charges {
-        if let Some(UnitType::Mercenary(merc)) = handler.get_map().get_unit(&p) {
+        if let Some(UnitType::Mercenary(merc)) = handler.get_map().get_unit(p) {
             let change = change.min(merc.typ.max_charge() as i16 - change).max(-(*merc.charge as i16));
             if change != 0 {
                 handler.add_event(Event::MercenaryCharge(p, (change as i8).try_into().unwrap()));
@@ -482,11 +482,11 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
     Ok(potential_counters)
 }
 
-pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: &Point, target: &AttackInfo<D>) -> Result<(), CommandError> {
+pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: Point, target: &AttackInfo<D>) -> Result<(), CommandError> {
     let potential_counters = calculate_attack(handler, attacker_pos, target, false)?;
     // counter attack
     for p in &potential_counters {
-        let unit: &dyn NormalUnitTrait<D> = match handler.get_map().get_unit(p) {
+        let unit: &dyn NormalUnitTrait<D> = match handler.get_map().get_unit(*p) {
             Some(UnitType::Normal(unit)) => unit.as_trait(),
             Some(UnitType::Mercenary(unit)) => unit.as_trait(),
             Some(UnitType::Chess(_)) => continue,
@@ -496,13 +496,13 @@ pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: 
         if !handler.get_game().has_vision_at(unit.get_team(handler.get_game()), attacker_pos) {
             continue;
         }
-        if !unit.attackable_positions(handler.get_game(), &p, false).contains(attacker_pos) {
+        if !unit.attackable_positions(handler.get_game(), *p, false).contains(&attacker_pos) {
             continue;
         }
         // todo: if a straight attacker is counter-attacking another straight attacker, it should first try to reverse the direction
-        let attack_info = unit.make_attack_info(handler.get_game(), p, attacker_pos).ok_or(CommandError::InvalidTarget)?;
+        let attack_info = unit.make_attack_info(handler.get_game(), *p, attacker_pos).ok_or(CommandError::InvalidTarget)?;
         // this may return an error, but we don't care about that
-        calculate_attack(handler, p, &attack_info, true).ok();
+        calculate_attack(handler, *p, &attack_info, true).ok();
     }
 
     Ok(())

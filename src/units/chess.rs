@@ -108,13 +108,13 @@ impl<D: Direction> ChessCommand<D> {
 
         let end = path.end(handler.get_map())?;
         let mut recalculate_fog = false;
-        if let Some(other) = handler.get_map().get_unit(&end) {
+        if let Some(other) = handler.get_map().get_unit(end) {
             recalculate_fog = true;
             handler.add_event(Event::UnitDeath(end, other.clone()));
         }
         handler.add_event(Event::UnitPath(Some(None), path.clone(), true, UnitType::Chess::<D>(unit.clone())));
-        let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), &end).into_iter().filter(|p| {
-            !handler.get_game().has_vision_at(Some(team), &p)
+        let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), end).into_iter().filter(|p| {
+            !handler.get_game().has_vision_at(Some(team), *p)
         }).collect();
         if vision_changes.len() > 0 {
             let vision_changes: Vec<Point> = vision_changes.into_iter().collect();
@@ -126,12 +126,12 @@ impl<D: Direction> ChessCommand<D> {
                 match path.steps[0] {
                     PathStep::Diagonal(_) => {
                         // en passant
-                        for n in handler.get_map().get_neighbors(&end, NeighborMode::FollowPipes) {
-                            if let Some(UnitType::Chess(unit)) = handler.get_map().get_unit(n.point()) {
+                        for n in handler.get_map().get_neighbors(end, NeighborMode::FollowPipes) {
+                            if let Some(UnitType::Chess(unit)) = handler.get_map().get_unit(n.point) {
                                 match unit.typ {
                                     ChessUnits::Pawn(_, _, p) => {
                                         if p == Some(end) && handler.get_game().get_team(Some(&unit.owner)) != Some(team) {
-                                            handler.add_event(Event::UnitDeath(*n.point(), UnitType::Chess(unit.clone())));
+                                            handler.add_event(Event::UnitDeath(n.point, UnitType::Chess(unit.clone())));
                                         }
                                     }
                                     _ => {}
@@ -175,12 +175,12 @@ impl<D: Direction> ChessCommand<D> {
                         Self::Rook(dir, path_len, true) => {
                             if *path_len as usize == path.steps.len() {
                                 if let Some(dp) = ChessUnit::find_king_for_castling(handler.get_game(), start, dir, *path_len as usize, unit.owner) {
-                                    let mut king_path = Path::new(*dp.point());
-                                    king_path.steps.push(PathStep::Jump(dp.direction().opposite_direction())).unwrap();
-                                    let king = handler.get_map().get_unit(dp.point()).unwrap().clone();
+                                    let mut king_path = Path::new(dp.point);
+                                    king_path.steps.push(PathStep::Jump(dp.direction.opposite_direction())).unwrap();
+                                    let king = handler.get_map().get_unit(dp.point).unwrap().clone();
                                     handler.add_event(Event::UnitPath(Some(None), king_path.clone(), true, king.clone()));
-                                    let vision_changes: HashSet<Point> = king.get_vision(handler.get_game(), &king_path.end(handler.get_map()).unwrap()).into_iter().filter(|p| {
-                                        !handler.get_game().has_vision_at(Some(team), &p)
+                                    let vision_changes: HashSet<Point> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter().filter(|p| {
+                                        !handler.get_game().has_vision_at(Some(team), *p)
                                     }).collect();
                                     if vision_changes.len() > 0 {
                                         let vision_changes: Vec<Point> = vision_changes.into_iter().collect();
@@ -208,14 +208,14 @@ impl<D: Direction> ChessCommand<D> {
         Ok(())
     }
     pub fn exhaust_all_on_board(handler: &mut EventHandler<D>, pos: Point) {
-        if handler.get_map().get_terrain(&pos) != Some(&Terrain::ChessTile) {
+        if handler.get_map().get_terrain(pos) != Some(&Terrain::ChessTile) {
             return;
         }
         let mut to_exhaust = HashSet::new();
-        width_search(&MovementType::Chess, 0, handler.get_game(), &pos, HashSet::new(), None, |p, _| {
+        width_search(&MovementType::Chess, 0, handler.get_game(), pos, HashSet::new(), None, |p, _| {
             if let Some(unit) = handler.get_map().get_unit(p) {
                 if !unit.is_exhausted() && unit.get_owner() == Some(&handler.get_game().current_player().owner_id) {
-                    to_exhaust.insert(*p);
+                    to_exhaust.insert(p);
                 }
             }
             false
@@ -243,14 +243,14 @@ impl<D: Direction> ChessUnit<D> {
         }
     }
     fn can_move_through(game: &Game<D>, p: Point, team: Team, ignore_unseen: bool) -> bool {
-        game.get_map().get_terrain(&p).and_then(|t| t.movement_cost(&MovementType::Chess)).is_some() &&
-        (game.get_map().get_unit(&p).is_none() || ignore_unseen && !game.has_vision_at(Some(team), &p))
+        game.get_map().get_terrain(p).and_then(|t| t.movement_cost(&MovementType::Chess)).is_some() &&
+        (game.get_map().get_unit(p).is_none() || ignore_unseen && !game.has_vision_at(Some(team), p))
     }
     fn can_stop_on(game: &Game<D>, p: Point, team: Team) -> bool {
-        if game.get_map().get_terrain(&p).and_then(|t| t.movement_cost(&MovementType::Chess)).is_none() {
+        if game.get_map().get_terrain(p).and_then(|t| t.movement_cost(&MovementType::Chess)).is_none() {
             return false;
         }
-        if let Some(unit) = game.get_map().get_unit(&p) {
+        if let Some(unit) = game.get_map().get_unit(p) {
             unit.killable_by_chess(team, game)
         } else {
             true
@@ -260,7 +260,7 @@ impl<D: Direction> ChessUnit<D> {
     where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
         for d in D::list() {
             let mut found = false;
-            straight_search(game, start, &d, Some(max_cost), team, ignore_unseen, |p, steps| {
+            straight_search(game, start, d, Some(max_cost), team, ignore_unseen, |p, steps| {
                 match callback(p, steps) {
                     PathSearchFeedback::Continue => false,
                     PathSearchFeedback::Found => {
@@ -280,7 +280,7 @@ impl<D: Direction> ChessUnit<D> {
     where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
         for d in D::list() {
             let mut found = false;
-            diagonal_search(game, start, &d, Some(max_cost), team, ignore_unseen, |p, steps| {
+            diagonal_search(game, start, d, Some(max_cost), team, ignore_unseen, |p, steps| {
                 match callback(p, steps) {
                     PathSearchFeedback::Continue => false,
                     PathSearchFeedback::Found => {
@@ -302,24 +302,24 @@ impl<D: Direction> ChessUnit<D> {
         match self.typ {
             ChessUnits::Pawn(dir, moved_this_game, _) => {
                 let mut directions = vec![];
-                if game.get_map().get_terrain(&start) == Some(&Terrain::ChessTile) {
+                if game.get_map().get_terrain(start) == Some(&Terrain::ChessTile) {
                     directions.push(dir);
                 } else {
                     directions = D::list();
                 }
                 for d in directions.clone() {
-                    if let Some(dp) = game.get_map().get_neighbor(&start, &d) {
-                        if Self::can_move_through(game, *dp.point(), team, ignore_unseen) {
+                    if let Some(dp) = game.get_map().get_neighbor(start, d) {
+                        if Self::can_move_through(game, dp.point, team, ignore_unseen) {
                             // move forward 1
                             let mut steps = vec![PathStep::Dir(d)];
 
-                            match callback(*dp.point(), &steps) {
+                            match callback(dp.point, &steps) {
                                 PathSearchFeedback::Continue => {
-                                    if let Some(dp) = game.get_map().get_neighbor(dp.point(), dp.direction()) {
-                                        if !moved_this_game && Self::can_move_through(game, *dp.point(), team, ignore_unseen) {
+                                    if let Some(dp) = game.get_map().get_neighbor(dp.point, dp.direction) {
+                                        if !moved_this_game && Self::can_move_through(game, dp.point, team, ignore_unseen) {
                                             // move forward 2
-                                            steps.push(PathStep::Dir(*dp.direction()));
-                                            match callback(*dp.point(), &steps) {
+                                            steps.push(PathStep::Dir(dp.direction));
+                                            match callback(dp.point, &steps) {
                                                 PathSearchFeedback::Found => return,
                                                 _ => {}
                                             }
@@ -332,26 +332,26 @@ impl<D: Direction> ChessUnit<D> {
                         }
                     }
                 }
-                //let directions: HashSet<Box<D>> = directions.into_iter().flat_map(|d| vec![d.clone(), Box::new(d.rotate_by(&D::list()[1].opposite_angle()))]).collect();
+                //let directions: HashSet<Box<D>> = directions.into_iter().flat_map(|d| vec![d.clone(), Box::new(d.rotate_by(&D::list()[1].mirror_vertically()))]).collect();
                 //for d in directions {
                 for dp in pawn_attackable_positions(game, start, dir) {
                     //if let Some(dp) = get_diagonal_neighbor(game.get_map(), start, &d) {
                         let mut en_passant = false;
-                        for n in game.get_map().get_neighbors(dp.point(), NeighborMode::FollowPipes) {
-                            if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(n.point()) {
+                        for n in game.get_map().get_neighbors(dp.point, NeighborMode::FollowPipes) {
+                            if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(n.point) {
                                 match unit.typ {
                                     ChessUnits::Pawn(_, _, p) => {
-                                        en_passant = en_passant || p == Some(*dp.point()) && game.get_team(Some(&unit.owner)) != Some(team);
+                                        en_passant = en_passant || p == Some(dp.point) && game.get_team(Some(&unit.owner)) != Some(team);
                                     }
                                     _ => {}
                                 }
                             }
                         }
-                        if Self::can_stop_on(game, *dp.point(), team) &&
-                        (en_passant || game.get_map().get_unit(dp.point()).is_some() && game.has_vision_at(Some(team), dp.point())) {
+                        if Self::can_stop_on(game, dp.point, team) &&
+                        (en_passant || game.get_map().get_unit(dp.point).is_some() && game.has_vision_at(Some(team), dp.point)) {
                             // kill unit diagonally
-                            let steps = vec![PathStep::Diagonal(*dp.direction())];
-                            match callback(*dp.point(), &steps) {
+                            let steps = vec![PathStep::Diagonal(dp.direction)];
+                            match callback(dp.point, &steps) {
                                 PathSearchFeedback::Found => return,
                                 _ => {}
                             }
@@ -368,10 +368,10 @@ impl<D: Direction> ChessUnit<D> {
             ChessUnits::Knight => {
                 for d in D::list() {
                     for turn_left in vec![true, false] {
-                        if let Some(dp) = get_knight_neighbor(game.get_map(), start, &d, turn_left) {
-                            if Self::can_stop_on(game, *dp.point(), team) {
+                        if let Some(dp) = get_knight_neighbor(game.get_map(), start, d, turn_left) {
+                            if Self::can_stop_on(game, dp.point, team) {
                                 let steps = vec![PathStep::Knight(d, turn_left)];
-                                match callback(*dp.point(), &steps) {
+                                match callback(dp.point, &steps) {
                                     PathSearchFeedback::Found => return,
                                     _ => {}
                                 }
@@ -387,10 +387,10 @@ impl<D: Direction> ChessUnit<D> {
             }
             ChessUnits::King(_) => {
                 for d in D::list() {
-                    if let Some(dp) = game.get_map().get_neighbor(&start, &d) {
-                        if Self::can_stop_on(game, *dp.point(), team) {
+                    if let Some(dp) = game.get_map().get_neighbor(start, d) {
+                        if Self::can_stop_on(game, dp.point, team) {
                             let steps = vec![PathStep::Dir(d)];
-                            match callback(*dp.point(), &steps) {
+                            match callback(dp.point, &steps) {
                                 PathSearchFeedback::Found => return,
                                 _ => {}
                             }
@@ -398,12 +398,12 @@ impl<D: Direction> ChessUnit<D> {
                     }
                 }
                 for d in D::list() {
-                    if let Some(dp) = get_diagonal_neighbor(game.get_map(), start, &d) {
-                        if Self::can_stop_on(game, *dp.point(), team) {
+                    if let Some(dp) = get_diagonal_neighbor(game.get_map(), start, d) {
+                        if Self::can_stop_on(game, dp.point, team) {
                                     
                             let steps = vec![PathStep::Diagonal(d)];
 
-                            match callback(*dp.point(), &steps) {
+                            match callback(dp.point, &steps) {
                                 PathSearchFeedback::Found => return,
                                 _ => {}
                             }
@@ -423,21 +423,21 @@ impl<D: Direction> ChessUnit<D> {
         });
         result
     }
-    pub fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
+    pub fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         if moved {
             return HashSet::new();
         }
         match self.typ {
             ChessUnits::Pawn(d, _, _) => {
-                pawn_attackable_positions(game, *position, d).into_iter().map(|dp| *dp.point()).collect()
+                pawn_attackable_positions(game, position, d).into_iter().map(|dp| dp.point).collect()
             }
-            _ => self.movable_positions(game, &Path::new(*position)),
+            _ => self.movable_positions(game, &Path::new(position)),
         }
     }
-    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: &Point) -> Option<Path<D>> {
+    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         let mut result = None;
         self.all_possible_paths(game, path_so_far.start, false, |p, steps| {
-            if p == *goal && steps.len() >= path_so_far.steps.len() && steps[..path_so_far.steps.len()] == path_so_far.steps[..] {
+            if p == goal && steps.len() >= path_so_far.steps.len() && steps[..path_so_far.steps.len()] == path_so_far.steps[..] {
                 let steps: Vec<PathStep<D>> = steps.clone().into_iter().skip(path_so_far.steps.len()).collect();
                 result = Some(Path {
                     start: path_so_far.start,
@@ -452,14 +452,14 @@ impl<D: Direction> ChessUnit<D> {
         });
         result
     }
-    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: &Point) -> Option<Path<D>> {
+    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         match self.typ {
             ChessUnits::Pawn(d, _, _) => {
                 for dp in pawn_attackable_positions(game, path_so_far.start, d) {
-                    if dp.point() == goal {
+                    if dp.point == goal {
                         return Some(Path {
                             start: path_so_far.start,
-                            steps: vec![PathStep::Diagonal(*dp.direction())].try_into().unwrap(),
+                            steps: vec![PathStep::Diagonal(dp.direction)].try_into().unwrap(),
                         });
                     }
                 }
@@ -504,17 +504,17 @@ impl<D: Direction> ChessUnit<D> {
     fn find_king_for_castling(game: &Game<D>, start: Point, dir: D, path_len: usize, owner: Owner) -> Option<OrientedPoint<D>> {
         let mut rook_end = OrientedPoint::new(start, false, dir);
         for _ in 0..path_len {
-            rook_end = game.get_map().get_neighbor(rook_end.point(), rook_end.direction()).unwrap();
+            rook_end = game.get_map().get_neighbor(rook_end.point, rook_end.direction).unwrap();
         }
-        if let Some(dp) = game.get_map().get_neighbor(rook_end.point(), rook_end.direction()) {
-            if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(dp.point()) {
-                let king = game.get_map().get_unit(dp.point()).unwrap();
+        if let Some(dp) = game.get_map().get_neighbor(rook_end.point, rook_end.direction) {
+            if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(dp.point) {
+                let king = game.get_map().get_unit(dp.point).unwrap();
                 let armor = ChessUnits::<D>::King(false).get_armor().0;
                 let team = game.get_team(Some(&owner)).unwrap();
                 if unit.typ == ChessUnits::King(false) && unit.owner == owner
-                    && game.find_visible_threats(*dp.point(), &king, team).is_empty()
-                    && game.find_visible_threats(*rook_end.point(), &king, team).is_empty()
-                    && game.find_visible_threats(*game.get_map().get_neighbor(rook_end.point(), &rook_end.direction().opposite_direction()).unwrap().point(), &king, team).is_empty() {
+                    && game.find_visible_threats(dp.point, &king, team).is_empty()
+                    && game.find_visible_threats(rook_end.point, &king, team).is_empty()
+                    && game.find_visible_threats(game.get_map().get_neighbor(rook_end.point, rook_end.direction.opposite_direction()).unwrap().point, &king, team).is_empty() {
                     return Some(dp);
                 }
             }
@@ -527,7 +527,7 @@ impl<D: Direction> ChessUnit<D> {
             for step in path.steps.iter().take(path.steps.len() - 1) {
                 p = step.progress(map, p).unwrap();
             }
-            *map.get_neighbor(&p, &d).unwrap().direction()
+            map.get_neighbor(p, d).unwrap().direction
         } else {
             old_dir
         }
@@ -535,15 +535,15 @@ impl<D: Direction> ChessUnit<D> {
     fn pawn_upgrades_after_path(map: &Map<D>, path: &Path<D>, old_dir: D) -> bool {
         let end = path.end(map).unwrap();
         let new_dir = Self::pawn_dir_after_path(map, path, old_dir);
-        map.get_terrain(&end) == Some(&Terrain::ChessTile)
-        && map.get_neighbor(&end, &new_dir).is_none()
-        && get_diagonal_neighbor(map, end, &new_dir).is_none()
-        && get_diagonal_neighbor(map, end, &new_dir.rotate_by(&D::list()[1].opposite_angle())).is_none()
+        map.get_terrain(end) == Some(&Terrain::ChessTile)
+        && map.get_neighbor(end, new_dir).is_none()
+        && get_diagonal_neighbor(map, end, new_dir).is_none()
+        && get_diagonal_neighbor(map, end, new_dir.rotate_clockwise()).is_none()
     }
-    fn true_vision_range(&self, _game: &Game<D>, _pos: &Point) -> usize {
+    fn true_vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         1
     }
-    fn vision_range(&self, _game: &Game<D>, _pos: &Point) -> usize {
+    fn vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         match self.typ {
             ChessUnits::Pawn(_, _, _) => 2,
             ChessUnits::Rook(_) => 8,
@@ -553,20 +553,20 @@ impl<D: Direction> ChessUnit<D> {
             ChessUnits::King(_) => 2,
         }
     }
-    pub fn get_vision(&self, game: &Game<D>, pos: &Point) -> HashSet<Point> {
+    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashSet<Point> {
         let mut result = HashSet::new();
-        result.insert(*pos);
+        result.insert(pos);
         for p in game.get_map().get_neighbors(pos, NeighborMode::FollowPipes) {
-            result.insert(*p.point());
+            result.insert(p.point);
         }
         match self.typ {
             ChessUnits::Rook(_) => {
                 for d in D::list() {
-                    straight_search(game, *pos, &d, None, None, true, |p, path| {
+                    straight_search(game, pos, d, None, None, true, |p, path| {
                         if path.len() > self.vision_range(game, pos) {
                             true
                         } else {
-                            let terrain = game.get_map().get_terrain(&p).unwrap();
+                            let terrain = game.get_map().get_terrain(p).unwrap();
                             if path.len() <= self.true_vision_range(game, pos) || !terrain.requires_true_sight() {
                                 result.insert(p);
                             }
@@ -577,11 +577,11 @@ impl<D: Direction> ChessUnit<D> {
             }
             ChessUnits::Bishop => {
                 for d in D::list() {
-                    diagonal_search(game, *pos, &d, None, None, true, |p, path| {
+                    diagonal_search(game, pos, d, None, None, true, |p, path| {
                         if path.len() > self.vision_range(game, pos) {
                             true
                         } else {
-                            let terrain = game.get_map().get_terrain(&p).unwrap();
+                            let terrain = game.get_map().get_terrain(p).unwrap();
                             if path.len() <= self.true_vision_range(game, pos) || !terrain.requires_true_sight() {
                                 result.insert(p);
                             }
@@ -594,7 +594,7 @@ impl<D: Direction> ChessUnit<D> {
                 let layers = game.get_map().range_in_layers(pos, self.vision_range(game, pos));
                 for (i, layer) in layers.into_iter().enumerate() {
                     for (p, _, _) in layer {
-                        if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(&p).unwrap().requires_true_sight() {
+                        if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(p).unwrap().requires_true_sight() {
                             result.insert(p);
                         }
                     }
@@ -602,22 +602,22 @@ impl<D: Direction> ChessUnit<D> {
             }
             ChessUnits::Queen => {
                 for d in D::list() {
-                    straight_search(game, *pos, &d, None, None, true, |p, path| {
+                    straight_search(game, pos, d, None, None, true, |p, path| {
                         if path.len() > self.vision_range(game, pos) {
                             true
                         } else {
-                            let terrain = game.get_map().get_terrain(&p).unwrap();
+                            let terrain = game.get_map().get_terrain(p).unwrap();
                             if path.len() <= self.true_vision_range(game, pos) || !terrain.requires_true_sight() {
                                 result.insert(p);
                             }
                             false
                         }
                     });
-                    diagonal_search(game, *pos, &d, None, None, true, |p, path| {
+                    diagonal_search(game, pos, d, None, None, true, |p, path| {
                         if path.len() > self.vision_range(game, pos) {
                             true
                         } else {
-                            let terrain = game.get_map().get_terrain(&p).unwrap();
+                            let terrain = game.get_map().get_terrain(p).unwrap();
                             if path.len() <= self.true_vision_range(game, pos) || !terrain.requires_true_sight() {
                                 result.insert(p);
                             }
@@ -628,8 +628,8 @@ impl<D: Direction> ChessUnit<D> {
             }
             ChessUnits::King(_) => {
                 for d in D::list() {
-                    if let Some(dp) = get_diagonal_neighbor(game.get_map(), *pos, &d) {
-                        result.insert(*dp.point());
+                    if let Some(dp) = get_diagonal_neighbor(game.get_map(), pos, d) {
+                        result.insert(dp.point);
                     }
                 }
             }
@@ -644,11 +644,11 @@ enum PathSearchFeedback {
     Found,
 }
 
-pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: &Point) -> Result<(), CommandError> {
+pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: Point) -> Result<(), CommandError> {
     if !game.has_vision_at(Some(game.current_player().team), at) {
         return Err(CommandError::NoVision);
     }
-    let unit = match game.get_map().get_unit(&at).ok_or(CommandError::MissingUnit)? {
+    let unit = match game.get_map().get_unit(at).ok_or(CommandError::MissingUnit)? {
         UnitType::Chess(unit) => unit,
         _ => return Err(CommandError::UnitTypeWrong),
     };
@@ -663,9 +663,9 @@ pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: &Point) -> Res
 
 fn pawn_attackable_positions<D: Direction>(game: &Game<D>, pos: Point, d:D) -> HashSet<OrientedPoint<D>> {
     let mut result = HashSet::new();
-    for d in vec![d.clone(), d.rotate_by(&D::list()[1].opposite_angle())] {
-        if let Some(dp) = get_diagonal_neighbor(game.get_map(), pos, &d) {
-            result.insert(OrientedPoint::new(*dp.point(), dp.mirrored(), d.clone()));
+    for d in vec![d.clone(), d.rotate_clockwise()] {
+        if let Some(dp) = get_diagonal_neighbor(game.get_map(), pos, d) {
+            result.insert(OrientedPoint::new(dp.point, dp.mirrored, d.clone()));
         }
     }
     result
@@ -763,25 +763,25 @@ impl<D: Direction> ChessUnits<D> {
     }
 }
 
-pub fn get_diagonal_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: &D) -> Option<OrientedPoint<D>> {
-    if let Some(dp) = map.wrapping_logic().get_neighbor(&p, dir).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point(), &dp.direction().rotate_by(&D::list()[1]))) {
-        Some(OrientedPoint::new(*dp.point(), dp.mirrored(), dp.direction().rotate_by(&D::list()[1].opposite_angle())))
-    } else if let Some(dp) = map.wrapping_logic().get_neighbor(&p, &dir.rotate_by(&D::list()[1])).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point(), &dp.direction().rotate_by(&D::list()[1].opposite_angle()))) {
+pub fn get_diagonal_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D) -> Option<OrientedPoint<D>> {
+    if let Some(dp) = map.wrapping_logic().get_neighbor(p, dir).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point, dp.direction.rotate_counter_clockwise())) {
+        Some(OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_clockwise()))
+    } else if let Some(dp) = map.wrapping_logic().get_neighbor(p, dir.rotate_counter_clockwise()).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point, dp.direction.rotate_clockwise())) {
         Some(dp)
     } else {
         None
     }
 }
 
-pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: &D, turn_left: bool) -> Option<OrientedPoint<D>> {
+pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D, turn_left: bool) -> Option<OrientedPoint<D>> {
     let rotation = if turn_left {
         D::angle_0()
     } else {
-        D::list()[1].opposite_angle()
+        D::angle_0().rotate_clockwise()
     };
-    if let Some(dp) = map.wrapping_logic().get_neighbor(&p, dir).and_then(|dp| get_diagonal_neighbor(map, *dp.point(), &dp.direction().rotate_by(&rotation))) {
-        Some(OrientedPoint::new(*dp.point(), dp.mirrored(), dp.direction().rotate_by(&rotation.opposite_angle())))
-    } else if let Some(dp) = get_diagonal_neighbor(map, p, &dir.rotate_by(&rotation)).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point(), &dp.direction().rotate_by(&rotation.opposite_angle()))) {
+    if let Some(dp) = map.wrapping_logic().get_neighbor(p, dir).and_then(|dp| get_diagonal_neighbor(map, dp.point, dp.direction.rotate_by(rotation))) {
+        Some(OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_by(rotation.mirror_vertically())))
+    } else if let Some(dp) = get_diagonal_neighbor(map, p, dir.rotate_by(rotation)).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point, dp.direction.rotate_by(rotation.mirror_vertically()))) {
         Some(dp)
     } else {
         None
@@ -790,30 +790,30 @@ pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: &D, turn_l
 
 // callback returns true if the search can be aborted
 // if team is None, units will be ignored
-fn straight_search<D, F>(game: &Game<D>, start: Point, direction: &D, max_cost: Option<u8>, team: Option<Team>, ignore_unseen: bool, mut callback: F)
+fn straight_search<D, F>(game: &Game<D>, start: Point, direction: D, max_cost: Option<u8>, team: Option<Team>, ignore_unseen: bool, mut callback: F)
 where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
     let mut cost = 0;
     let mut blocked_positions = HashMap::new();
-    blocked_positions.insert(start, *direction);
+    blocked_positions.insert(start, direction);
     let mut steps = vec![];
-    let mut dp = OrientedPoint::new(start, false, *direction);
+    let mut dp = OrientedPoint::new(start, false, direction);
     loop {
-        steps.push(PathStep::Dir(*dp.direction()));
-        if let Some(next_dp) = game.get_map().get_neighbor(dp.point(), dp.direction()) {
-            if blocked_positions.get(next_dp.point()).and_then(|d| Some(d == next_dp.direction() || d.opposite_direction() == *next_dp.direction())).unwrap_or(false) {
+        steps.push(PathStep::Dir(dp.direction));
+        if let Some(next_dp) = game.get_map().get_neighbor(dp.point, dp.direction) {
+            if blocked_positions.get(&next_dp.point).and_then(|d| Some(*d == next_dp.direction || d.opposite_direction() == next_dp.direction)).unwrap_or(false) {
                 break;
             }
-            if let Some(c) = game.get_map().get_terrain(next_dp.point()).unwrap().movement_cost(&MovementType::Chess) {
+            if let Some(c) = game.get_map().get_terrain(next_dp.point).unwrap().movement_cost(&MovementType::Chess) {
                 if let Some(max_cost) = max_cost {
                     if cost + c > max_cost {
                         break;
                     }
                 }
                 if let Some(team) = team {
-                    if let Some(unit) = game.get_map().get_unit(next_dp.point()) {
-                        if !ignore_unseen || game.has_vision_at(Some(team), next_dp.point()) {
+                    if let Some(unit) = game.get_map().get_unit(next_dp.point) {
+                        if !ignore_unseen || game.has_vision_at(Some(team), next_dp.point) {
                             if unit.killable_by_chess(team, game) {
-                                callback(*next_dp.point(), &steps);
+                                callback(next_dp.point, &steps);
                             }
                             break;
                         }
@@ -821,10 +821,10 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                 }
                 cost += c;
                 dp = next_dp;
-                if callback(*dp.point(), &steps) {
+                if callback(dp.point, &steps) {
                     break;
                 }
-                blocked_positions.insert(*dp.point(), *dp.direction());
+                blocked_positions.insert(dp.point, dp.direction);
             }
         } else {
             break;
@@ -835,30 +835,30 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
 
 // callback returns true if the search can be aborted
 // if team is None, units will be ignored
-fn diagonal_search<D, F>(game: &Game<D>, start: Point, direction: &D, max_cost: Option<u8>, team: Option<Team>, ignore_unseen: bool, mut callback: F)
+fn diagonal_search<D, F>(game: &Game<D>, start: Point, direction: D, max_cost: Option<u8>, team: Option<Team>, ignore_unseen: bool, mut callback: F)
 where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
     let mut cost = 0;
     let mut blocked_positions = HashMap::new();
-    blocked_positions.insert(start, *direction);
+    blocked_positions.insert(start, direction);
     let mut steps = vec![];
-    let mut dp = OrientedPoint::new(start, false, *direction);
+    let mut dp = OrientedPoint::new(start, false, direction);
     loop {
-        steps.push(PathStep::Diagonal(*dp.direction()));
-        if let Some(next_dp) = get_diagonal_neighbor(game.get_map(), *dp.point(), dp.direction()) {
-            if blocked_positions.get(next_dp.point()).and_then(|d| Some(d == next_dp.direction() || d.opposite_direction() == *next_dp.direction())).unwrap_or(false) {
+        steps.push(PathStep::Diagonal(dp.direction));
+        if let Some(next_dp) = get_diagonal_neighbor(game.get_map(), dp.point, dp.direction) {
+            if blocked_positions.get(&next_dp.point).and_then(|d| Some(*d == next_dp.direction || d.opposite_direction() == next_dp.direction)).unwrap_or(false) {
                 break;
             }
-            if let Some(c) = game.get_map().get_terrain(next_dp.point()).unwrap().movement_cost(&MovementType::Chess) {
+            if let Some(c) = game.get_map().get_terrain(next_dp.point).unwrap().movement_cost(&MovementType::Chess) {
                 if let Some(max_cost) = max_cost {
                     if cost + c > max_cost {
                         break;
                     }
                 }
                 if let Some(team) = team {
-                    if let Some(unit) = game.get_map().get_unit(next_dp.point()) {
-                        if !ignore_unseen || game.has_vision_at(Some(team), next_dp.point()) {
+                    if let Some(unit) = game.get_map().get_unit(next_dp.point) {
+                        if !ignore_unseen || game.has_vision_at(Some(team), next_dp.point) {
                             if unit.killable_by_chess(team, game) {
-                                callback(*next_dp.point(), &steps);
+                                callback(next_dp.point, &steps);
                             }
                             break;
                         }
@@ -866,10 +866,10 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                 }
                 cost += c;
                 dp = next_dp;
-                if callback(*dp.point(), &steps) {
+                if callback(dp.point, &steps) {
                     break;
                 }
-                blocked_positions.insert(*dp.point(), *dp.direction());
+                blocked_positions.insert(dp.point, dp.direction);
             }
         } else {
             break;

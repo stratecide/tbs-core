@@ -83,12 +83,12 @@ impl<D: Direction> Game<D> {
                 fog.insert(p);
             }
             for p in self.get_map().all_points() {
-                for p in self.get_map().get_terrain(&p).unwrap().get_vision(self, &p, perspective) {
+                for p in self.get_map().get_terrain(p).unwrap().get_vision(self, p, perspective) {
                     fog.remove(&p);
                 }
-                if let Some(unit) = self.get_map().get_unit(&p) {
+                if let Some(unit) = self.get_map().get_unit(p) {
                     if perspective.is_some() && perspective == unit.get_owner().and_then(|owner| self.get_owning_player(owner)).and_then(|player| Some(player.team)) {
-                        for p in unit.get_vision(self, &p) {
+                        for p in unit.get_vision(self, p) {
                             fog.remove(&p);
                         }
                     }
@@ -148,8 +148,8 @@ impl<D: Direction> Game<D> {
     pub fn get_fog_mut(&mut self) -> &mut HashMap<Option<Team>, HashSet<Point>> {
         &mut self.fog
     }
-    pub fn has_vision_at(&self, team: Option<Team>, at: &Point) -> bool {
-        !self.fog.get(&team).unwrap().contains(at)
+    pub fn has_vision_at(&self, team: Option<Team>, at: Point) -> bool {
+        !self.fog.get(&team).unwrap().contains(&at)
     }
 
     pub fn handle_command<R: Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<HashMap<Option<Perspective>, Vec<events::Event<D>>>, events::CommandError> {
@@ -174,9 +174,9 @@ impl<D: Direction> Game<D> {
     }
     pub fn find_visible_threats(&self, pos: Point, threatened: &UnitType<D>, team: Team) -> HashSet<Point> {
         let mut result = HashSet::new();
-        for p in self.map.all_points().into_iter().filter(|p| self.has_vision_at(Some(team), &p)) {
-            if let Some(unit) = self.map.get_unit(&p) {
-                if unit.threatens(self, threatened) && unit.shortest_path_to_attack(self, &Path::new(p), &pos).is_some() {
+        for p in self.map.all_points().into_iter().filter(|p| self.has_vision_at(Some(team), *p)) {
+            if let Some(unit) = self.map.get_unit(p) {
+                if unit.threatens(self, threatened) && unit.shortest_path_to_attack(self, &Path::new(p), pos).is_some() {
                     result.insert(p);
                 }
             }
@@ -330,7 +330,7 @@ impl<D: Direction> interfaces::Game for Game<D> {
                     export_fog(&mut zipper, &points, fog);
                     for p in &points {
                         if neutral_fog.contains(p) && !fog.contains(p) {
-                            self.map.export_field(&mut zipper, p, false);
+                            self.map.export_field(&mut zipper, *p, false);
                         }
                     }
                     for player in self.players.iter() {

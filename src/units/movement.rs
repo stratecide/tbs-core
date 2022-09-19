@@ -40,22 +40,22 @@ impl<D: Direction> Ord for WidthSearch<D> {
 
 // callback returns true if the search can be aborted
 // if unit is None, units will be ignored
-pub fn width_search<D: Direction, F: FnMut(&Point, &Path<D>) -> bool>(movement_type: &MovementType, max_cost: u8, game: &Game<D>, start: &Point, mut blocked_positions: HashSet<Point>, unit: Option<&dyn NormalUnitTrait<D>>, mut callback: F) {
-    if blocked_positions.contains(start) {
+pub fn width_search<D: Direction, F: FnMut(Point, &Path<D>) -> bool>(movement_type: &MovementType, max_cost: u8, game: &Game<D>, start: Point, mut blocked_positions: HashSet<Point>, unit: Option<&dyn NormalUnitTrait<D>>, mut callback: F) {
+    if blocked_positions.contains(&start) {
         println!("width_search fail");
     }
     let mut next_checks = BinaryHeap::new();
-    let mut add_point = |p: &Point, path_so_far: &Path<D>, cost_so_far: u8, next_checks: &mut BinaryHeap<Reverse<WidthSearch<D>>>| {
-        if blocked_positions.contains(p) {
+    let mut add_point = |p: Point, path_so_far: &Path<D>, cost_so_far: u8, next_checks: &mut BinaryHeap<Reverse<WidthSearch<D>>>| {
+        if blocked_positions.contains(&p) {
             return false;
         }
         if callback(p, path_so_far) {
             return true;
         }
         blocked_positions.insert(p.clone());
-        for (neighbor, step) in game.get_map().get_unit_movement_neighbors(*p, movement_type) {
-            if !blocked_positions.contains(neighbor.point()) {
-                match (unit, game.get_map().get_unit(neighbor.point())) {
+        for (neighbor, step) in game.get_map().get_unit_movement_neighbors(p, movement_type) {
+            if !blocked_positions.contains(&neighbor.point) {
+                match (unit, game.get_map().get_unit(neighbor.point)) {
                     (Some(mover), Some(other)) => {
                         if !other.can_be_moved_through(mover, game) {
                             continue;
@@ -63,7 +63,7 @@ pub fn width_search<D: Direction, F: FnMut(&Point, &Path<D>) -> bool>(movement_t
                     }
                     (_, _) => {}
                 }
-                if let Some(cost) = game.get_map().get_terrain(neighbor.point()).unwrap().movement_cost(movement_type) {
+                if let Some(cost) = game.get_map().get_terrain(neighbor.point).unwrap().movement_cost(movement_type) {
                     if cost_so_far + cost <= max_cost {
                         let mut path = path_so_far.clone();
                         path.steps.push(step).unwrap();
@@ -74,9 +74,9 @@ pub fn width_search<D: Direction, F: FnMut(&Point, &Path<D>) -> bool>(movement_t
         }
         false
     };
-    add_point(start, &Path::new(*start), 0, &mut next_checks);
+    add_point(start, &Path::new(start), 0, &mut next_checks);
     while let Some(Reverse(check)) = next_checks.pop() {
-        let finished = add_point(&check.path.end(game.get_map()).unwrap(), &check.path, check.path_cost, &mut next_checks);
+        let finished = add_point(check.path.end(game.get_map()).unwrap(), &check.path, check.path_cost, &mut next_checks);
         if finished {
             break;
         }
@@ -96,29 +96,29 @@ impl<D: Direction> PathStep<D> {
     pub fn progress(&self, map: &Map<D>, pos: Point) -> Result<Point, CommandError> {
         match self {
             Self::Dir(d) => {
-                if let Some(o) = map.get_neighbor(&pos, d) {
-                    Ok(*o.point())
+                if let Some(o) = map.get_neighbor(pos, *d) {
+                    Ok(o.point)
                 } else {
                     Err(CommandError::InvalidPath)
                 }
             }
             Self::Jump(d) => {
-                if let Some(o) = map.get_neighbor(&pos, d).and_then(|o| map.get_neighbor(o.point(), o.direction())) {
-                    Ok(*o.point())
+                if let Some(o) = map.get_neighbor(pos, *d).and_then(|o| map.get_neighbor(o.point, o.direction)) {
+                    Ok(o.point)
                 } else {
                     Err(CommandError::InvalidPath)
                 }
             }
             Self::Diagonal(d) => {
-                if let Some(o) = chess::get_diagonal_neighbor(map, pos, d) {
-                    Ok(*o.point())
+                if let Some(o) = chess::get_diagonal_neighbor(map, pos, *d) {
+                    Ok(o.point)
                 } else {
                     Err(CommandError::InvalidPath)
                 }
             }
             Self::Knight(d, turn_left) => {
-                if let Some(o) = chess::get_knight_neighbor(map, pos, d, *turn_left) {
-                    Ok(*o.point())
+                if let Some(o) = chess::get_knight_neighbor(map, pos, *d, *turn_left) {
+                    Ok(o.point)
                 } else {
                     Err(CommandError::InvalidPath)
                 }
@@ -173,7 +173,7 @@ impl<D: Direction> Path<D> {
         let mut current = self.start;
         let mut previous_visible = false;
         let mut last_visible = None;
-        if game.has_vision_at(team, &current) {
+        if game.has_vision_at(team, current) {
             result = Some(Path::new(self.start));
             previous_visible = true;
             last_visible = Some(self.start);
@@ -181,7 +181,7 @@ impl<D: Direction> Path<D> {
         for step in self.steps.iter() {
             let previous = current;
             current = step.progress(game.get_map(), current).expect(&format!("unable to find next point after {:?}", current));
-            let visible = game.has_vision_at(team, &current);
+            let visible = game.has_vision_at(team, current);
             if visible && !previous_visible {
                 // either the unit appears out of fog or this is the first step
                 if let Some(result) = &mut result {

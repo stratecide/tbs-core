@@ -59,7 +59,7 @@ where D: Direction
     pub fn all_points(&self) -> Vec<Point> {
         self.wrapping_logic.pointmap().get_valid_points()
     }
-    pub fn is_point_valid(&self, point: &Point) -> bool {
+    pub fn is_point_valid(&self, point: Point) -> bool {
         self.wrapping_logic.pointmap().is_point_valid(point)
     }
     /**
@@ -67,10 +67,10 @@ where D: Direction
      * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
      */
     fn next_pipe_tile(&self, dp: &OrientedPoint<D>) -> Option<OrientedPoint<D>> {
-        match self.terrain.get(dp.point()) {
+        match self.terrain.get(&dp.point) {
             Some(Terrain::Pipe(pipe_state)) => {
-                if pipe_state.connects_towards(&dp.direction().opposite_direction()) || pipe_state.enterable_from(dp.direction()) {
-                    self.wrapping_logic.get_neighbor(dp.point(), &pipe_state.next_dir(dp.direction()))
+                if pipe_state.connects_towards(dp.direction.opposite_direction()) || pipe_state.enterable_from(dp.direction) {
+                    self.wrapping_logic.get_neighbor(dp.point, pipe_state.next_dir(dp.direction))
                 } else {
                     None
                 }
@@ -78,25 +78,25 @@ where D: Direction
             _ => None,
         }
     }
-    pub fn get_direction(&self, from: &Point, to: &Point) -> Option<D> {
+    pub fn get_direction(&self, from: Point, to: Point) -> Option<D> {
         for d in D::list() {
-            if let Some(dp) = self.get_neighbor(from, &d) {
-                if dp.point() == to {
+            if let Some(dp) = self.get_neighbor(from, d) {
+                if dp.point == to {
                     return Some(d);
                 }
             }
         }
         None
     }
-    pub fn get_neighbor(&self, p: &Point, d: &D) -> Option<OrientedPoint<D>> {
+    pub fn get_neighbor(&self, p: Point, d: D) -> Option<OrientedPoint<D>> {
         if let Some(n) = self.wrapping_logic.get_neighbor(p, d) {
-            match self.terrain.get(n.point()) {
+            match self.terrain.get(&n.point) {
                 Some(Terrain::Pipe(pipe_state)) => {
-                    if pipe_state.enterable_from(n.direction()) || pipe_state.connects_towards(&n.direction().opposite_direction()) {
+                    if pipe_state.enterable_from(n.direction) || pipe_state.connects_towards(n.direction.opposite_direction()) {
                         let mut dp = n.clone();
                         while let Some(next) = self.next_pipe_tile(&dp) {
                             dp = next;
-                            if dp.point() == n.point() {
+                            if dp.point == n.point {
                                 // infinite loop, abort
                                 return None;
                             }
@@ -112,17 +112,17 @@ where D: Direction
             None
         }
     }
-    pub fn get_neighbors(&self, p: &Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+    pub fn get_neighbors(&self, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
         let mut result = vec![];
         for d in D::list() {
             match mode {
                 NeighborMode::Direct => {
-                    if let Some(neighbor) = self.wrapping_logic.get_neighbor(p, &d) {
+                    if let Some(neighbor) = self.wrapping_logic.get_neighbor(p, d) {
                         result.push(neighbor);
                     }
                 }
                 NeighborMode::FollowPipes => {
-                    if let Some(neighbor) = self.get_neighbor(p, &d) {
+                    if let Some(neighbor) = self.get_neighbor(p, d) {
                         result.push(neighbor);
                     }
                 }
@@ -134,9 +134,9 @@ where D: Direction
     pub fn get_unit_movement_neighbors(&self, p: Point, _mov: &MovementType) -> Vec<(OrientedPoint<D>, PathStep<D>)> {
         let mut result = vec![];
         for d in D::list() {
-            if let Some(neighbor) = self.get_neighbor(&p, &d) {
+            if let Some(neighbor) = self.get_neighbor(p, d) {
                 if self.terrain.get(&p) == Some(&Terrain::Fountain) {
-                    if let Some(neighbor) = self.get_neighbor(neighbor.point(), neighbor.direction()) {
+                    if let Some(neighbor) = self.get_neighbor(neighbor.point, neighbor.direction) {
                         result.push((neighbor, PathStep::Jump(d)));
                     }
                 }
@@ -146,28 +146,28 @@ where D: Direction
         result
     }
     
-    pub fn get_terrain(&self, p: &Point) -> Option<&Terrain<D>> {
-        self.terrain.get(p)
+    pub fn get_terrain(&self, p: Point) -> Option<&Terrain<D>> {
+        self.terrain.get(&p)
     }
-    pub fn get_terrain_mut(&mut self, p: &Point) -> Option<&mut Terrain<D>> {
-        self.terrain.get_mut(p)
+    pub fn get_terrain_mut(&mut self, p: Point) -> Option<&mut Terrain<D>> {
+        self.terrain.get_mut(&p)
     }
     pub fn set_terrain(&mut self, p: Point, t: Terrain<D>) {
         // TODO: return a Result<(), ?>
-        if self.is_point_valid(&p) {
+        if self.is_point_valid(p) {
             self.terrain.insert(p, t);
         }
     }
-    pub fn get_unit(&self, p: &Point) -> Option<&UnitType<D>> {
-        self.units.get(p)
+    pub fn get_unit(&self, p: Point) -> Option<&UnitType<D>> {
+        self.units.get(&p)
     }
-    pub fn get_unit_mut(&mut self, p: &Point) -> Option<&mut UnitType<D>> {
-        self.units.get_mut(p)
+    pub fn get_unit_mut(&mut self, p: Point) -> Option<&mut UnitType<D>> {
+        self.units.get_mut(&p)
     }
     pub fn set_unit(&mut self, p: Point, unit: Option<UnitType<D>>) -> Option<UnitType<D>> {
         // TODO: return a Result<(), ?>, returning an error if the point is invalid
         if let Some(unit) = unit {
-            if self.is_point_valid(&p) {
+            if self.is_point_valid(p) {
                 self.units.insert(p, unit)
             } else {
                 None
@@ -176,11 +176,11 @@ where D: Direction
             self.units.remove(&p)
         }
     }
-    pub fn get_details(&self, p: &Point) -> Vec<Detail> {
-        self.details.get(p).and_then(|v| Some(v.clone().into())).unwrap_or(vec![])
+    pub fn get_details(&self, p: Point) -> Vec<Detail> {
+        self.details.get(&p).and_then(|v| Some(v.clone().into())).unwrap_or(vec![])
     }
     pub fn set_details(&mut self, p: Point, value: Vec<Detail>) {
-        if self.is_point_valid(&p) {
+        if self.is_point_valid(p) {
             let value: Vec<Detail> = Detail::correct_stack(value);
             if value.len() > 0 {
                 self.details.insert(p, value.try_into().unwrap());
@@ -190,42 +190,42 @@ where D: Direction
         }
     }
     pub fn add_detail(&mut self, p: Point, value: Detail) {
-        let mut list: Vec<Detail> = self.get_details(&p).into_iter().map(|f| f.clone()).collect();
+        let mut list: Vec<Detail> = self.get_details(p).into_iter().map(|f| f.clone()).collect();
         list.push(value);
         self.set_details(p, list);
     }
     pub fn insert_detail(&mut self, p: Point, index: usize, value: Detail) {
-        let mut list: Vec<Detail> = self.get_details(&p).into_iter().map(|f| f.clone()).collect();
+        let mut list: Vec<Detail> = self.get_details(p).into_iter().map(|f| f.clone()).collect();
         if index <= list.len() {
             list.insert(index, value);
             self.set_details(p, list);
         }
     }
-    pub fn remove_detail(&mut self, p: &Point, index: usize) -> Option<Detail> {
-        if let Some(list) = self.details.get_mut(p) {
+    pub fn remove_detail(&mut self, p: Point, index: usize) -> Option<Detail> {
+        if let Some(list) = self.details.get_mut(&p) {
             if list.len() > index {
                 return Some(list.remove(index));
             }
         }
         None
     }
-    pub fn range_in_layers(&self, center: &Point, range: usize) -> Vec<HashSet<(Point, D, Option<D>)>> {
+    pub fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<(Point, D, Option<D>)>> {
         let mut layers: Vec<HashSet<(Point, D, Option<D>)>> = vec![];
         let mut layer = HashSet::new();
         for dp in self.get_neighbors(center, NeighborMode::FollowPipes) {
-            layer.insert((dp.point().clone(), dp.direction().clone(), None));
+            layer.insert((dp.point.clone(), dp.direction.clone(), None));
         }
         layers.push(layer);
         while layers.len() < range {
             let mut layer = HashSet::new();
             for (p, dir, dir_change) in layers.last().unwrap() {
-                if let Some(dp) = self.get_neighbor(p, dir) {
-                    let dir_change = match (dp.mirrored(), dir_change) {
+                if let Some(dp) = self.get_neighbor(*p, *dir) {
+                    let dir_change = match (dp.mirrored, dir_change) {
                         (_, None) => None,
-                        (true, Some(angle)) => Some(angle.opposite_angle()),
+                        (true, Some(angle)) => Some(angle.mirror_vertically()),
                         (false, Some(angle)) => Some(angle.clone()),
                     };
-                    layer.insert((dp.point().clone(), dp.direction().clone(), dir_change));
+                    layer.insert((dp.point.clone(), dp.direction.clone(), dir_change));
                 }
                 let mut dir_changes = vec![];
                 if let Some(dir_change) = dir_change {
@@ -234,17 +234,17 @@ where D: Direction
                 } else {
                     // since only one direction has been used so far, try both directions that are directly neighboring
                     let d = *D::list().last().unwrap();
-                    dir_changes.push(d.opposite_angle());
+                    dir_changes.push(d.mirror_vertically());
                     dir_changes.push(d);
                 }
                 for dir_change in dir_changes {
-                    if let Some(dp) = self.get_neighbor(p, &dir.rotate_by(&dir_change)) {
+                    if let Some(dp) = self.get_neighbor(*p, dir.rotate_by(dir_change)) {
                         let mut dir_change = dir_change.clone();
-                        if dp.mirrored() {
-                            dir_change = dir_change.opposite_angle();
+                        if dp.mirrored {
+                            dir_change = dir_change.mirror_vertically();
                         }
-                        let dir = dp.direction().rotate_by(&dir_change.opposite_angle());
-                        layer.insert((dp.point().clone(), dir, Some(dir_change)));
+                        let dir = dp.direction.rotate_by(dir_change.mirror_vertically());
+                        layer.insert((dp.point.clone(), dir, Some(dir_change)));
                     }
                 }
             }
@@ -253,11 +253,11 @@ where D: Direction
         layers
     }
 
-    pub fn mercenary_influence_at(&self, point: &Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenary)> {
+    pub fn mercenary_influence_at(&self, point: Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenary)> {
         let mut result = vec![];
         for p in self.all_points() {
-            if let Some(UnitType::Mercenary(merc)) = self.get_unit(&p) {
-                if (owner.is_none() || owner == Some(&merc.unit.owner)) && merc.in_range(self, &p, &point) {
+            if let Some(UnitType::Mercenary(merc)) = self.get_unit(p) {
+                if (owner.is_none() || owner == Some(&merc.unit.owner)) && merc.in_range(self, p, point) {
                     result.push((p.clone(), merc));
                 }
             }
@@ -268,15 +268,15 @@ where D: Direction
     pub fn validate_terrain(&mut self) -> Vec<(Point, Terrain<D>)> {
         let mut corrected = vec![];
         for p in self.all_points() {
-            match self.get_terrain(&p).unwrap() {
+            match self.get_terrain(p).unwrap() {
                 Terrain::Pipe(state) => {
                     let mut is_valid = true;
                     let mut valid_dir = None;
                     for d in state.connections() {
-                        if let Some(dp) = self.wrapping_logic.get_neighbor(&p, &d) {
-                            match self.get_terrain(&dp.point()).unwrap() {
+                        if let Some(dp) = self.wrapping_logic.get_neighbor(p, d) {
+                            match self.get_terrain(dp.point).unwrap() {
                                 Terrain::Pipe(state) => {
-                                    if state.connects_towards(&dp.direction().opposite_direction()) {
+                                    if state.connects_towards(dp.direction.opposite_direction()) {
                                         valid_dir = Some(d)
                                     } else {
                                         is_valid = false;
@@ -326,14 +326,14 @@ where D: Direction
         Game::new_client(self, settings, events)
     }
 
-    pub fn get_field_data(&self, p: &Point) -> FieldData<D> {
+    pub fn get_field_data(&self, p: Point) -> FieldData<D> {
         FieldData {
             terrain: self.terrain.get(&p).unwrap().clone(),
             details: self.details.get(&p).cloned().unwrap_or(LVec::new()),
             unit: self.units.get(&p).cloned(),
         }
     }
-    pub fn export_field(&self, zipper: &mut Zipper, p: &Point, fog: bool) {
+    pub fn export_field(&self, zipper: &mut Zipper, p: Point, fog: bool) {
         let mut fd = self.get_field_data(p);
         if fog {
             fd = fd.fog_replacement();
@@ -344,7 +344,7 @@ where D: Direction
     pub fn export(&self, zipper: &mut Zipper, fog: Option<&HashSet<Point>>) {
         self.wrapping_logic.export(zipper);
         for p in self.all_points() {
-            self.export_field(zipper, &p, fog.and_then(|fog| fog.get(&p)).is_some());
+            self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p)).is_some());
         }
     }
 

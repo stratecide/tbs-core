@@ -28,12 +28,12 @@ where D: Direction {
         &self.translate_by
     }
     fn opposite(&self) -> Self {
-        let mut translate_by = self.translate_by.rotate_by(&self.distortion.1.opposite_angle().opposite_direction());
+        let mut translate_by = self.translate_by.rotate_by(self.distortion.1.mirror_vertically().opposite_direction());
         let angle = if self.distortion.0 {
-            translate_by = translate_by.mirror_vertically();
+            translate_by = translate_by.mirror_horizontally();
             self.distortion.1
         } else {
-            self.distortion.1.opposite_angle()
+            self.distortion.1.mirror_vertically()
         };
         Transformation {
             distortion: (self.distortion.0, angle),
@@ -44,20 +44,20 @@ where D: Direction {
         let mut translate_by = other.translate_by;
         let mut angle = other.distortion.1;
         if self.distortion.0 {
-            angle = angle.opposite_angle();
-            translate_by = translate_by.mirror_vertically();
+            angle = angle.mirror_vertically();
+            translate_by = translate_by.mirror_horizontally();
         }
         Transformation{
-            distortion: (self.distortion.0 != other.distortion.0, self.distortion.1.rotate_by(&angle)),
-            translate_by: self.translate_by.plus(&translate_by.rotate_by(&self.distortion.1)),
+            distortion: (self.distortion.0 != other.distortion.0, self.distortion.1.rotate_by(angle)),
+            translate_by: self.translate_by.plus(&translate_by.rotate_by(self.distortion.1)),
         }
     }
     fn subtract(&self, other: &Self) -> Self {
-        let mut translate_by = self.translate_by.minus(&other.translate_by).rotate_by(&other.distortion.1.opposite_angle());
-        let mut angle = self.distortion.1.rotate_by(&other.distortion.1.opposite_angle());
+        let mut translate_by = self.translate_by.minus(&other.translate_by).rotate_by(other.distortion.1.mirror_vertically());
+        let mut angle = self.distortion.1.rotate_by(other.distortion.1.mirror_vertically());
         if other.distortion.0 {
-            angle = angle.opposite_angle();
-            translate_by = translate_by.mirror_vertically();
+            angle = angle.mirror_vertically();
+            translate_by = translate_by.mirror_horizontally();
         }
         Transformation{
             distortion: (self.distortion.0 != other.distortion.0, angle),
@@ -441,9 +441,9 @@ where D: Direction
                 let neighbor = d.translation(1).translate_point(&gp, self.odd_if_hex());
                 if let Some(ap) = area.get(&neighbor) {
                     if ap.0.translate_by().len() > 0 {
-                        let mut direction = d.rotate_by(&ap.0.distortion.1.opposite_angle());
+                        let mut direction = d.rotate_by(ap.0.distortion.1.mirror_vertically());
                         if ap.0.distortion.0 {
-                            direction = direction.mirror_vertically();
+                            direction = direction.mirror_horizontally();
                         }
                         self.wrapped_neighbors.insert((p, d), OrientedPoint::new(ap.1, ap.0.distortion.0, direction));
                     }
@@ -457,23 +457,14 @@ where D: Direction
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OrientedPoint<D>
 where D: Direction {
-    point: Point,
-    mirrored: bool,
-    direction: D,
+    pub point: Point,
+    pub mirrored: bool,
+    pub direction: D,
 }
 impl<D>OrientedPoint<D>
 where D: Direction {
     pub fn new(point: Point, mirrored: bool, direction: D) -> Self {
         OrientedPoint{point, mirrored, direction}
-    }
-    pub fn point(&self) -> &Point {
-        &self.point
-    }
-    pub fn mirrored(&self) -> bool {
-        self.mirrored
-    }
-    pub fn direction(&self) -> &D {
-        &self.direction
     }
 }
 
@@ -504,21 +495,21 @@ where D: Direction {
     pub fn seed_transformations(&self) -> &Vec<Transformation<D>> {
         &self.seed_transformations
     }
-    pub fn get_neighbor(&self, point: &Point, direction: &D) -> Option<OrientedPoint<D>> {
+    pub fn get_neighbor(&self, point: Point, direction: D) -> Option<OrientedPoint<D>> {
         if !self.pointmap.is_point_valid(point) {
             None
         } else {
             direction.get_neighbor(point, self.pointmap.odd_if_hex())
             .filter(|point| {
-                self.pointmap.is_point_valid(&point)
+                self.pointmap.is_point_valid(*point)
             })
             .map_or_else(|| {
-                self.wrapped_neighbors.get(&(point.clone(), *direction))
+                self.wrapped_neighbors.get(&(point.clone(), direction))
                 .map(|op| {
                     op.clone()
                 })
             }, |point| {
-                Some(OrientedPoint::new(point, false, *direction))
+                Some(OrientedPoint::new(point, false, direction))
             })
         }
     }

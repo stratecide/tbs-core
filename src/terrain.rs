@@ -67,7 +67,7 @@ impl<D: Direction> Terrain<D> {
     pub fn requires_true_sight(&self) -> bool {
         false
     }
-    pub fn get_vision(&self, game: &Game<D>, pos: &Point, team: Perspective) -> HashSet<Point> {
+    pub fn get_vision(&self, game: &Game<D>, pos: Point, team: Perspective) -> HashSet<Point> {
         let mut result = HashSet::new();
         match self {
             Terrain::Realty(_, owner) => {

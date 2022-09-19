@@ -23,7 +23,7 @@ pub struct Structure<D: Direction> {
 }
 impl<D: Direction> Structure<D> {
 
-    pub fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
+    pub fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         let mut result = HashSet::new();
         match self.typ {
             Structures::Cannon(_d) => {

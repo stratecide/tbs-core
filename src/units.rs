@@ -175,7 +175,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => HashSet::new(),
         }
     }
-    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: &Point) -> Option<Path<D>> {
+    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         match self {
             Self::Normal(unit) => unit.shortest_path_to(game, path_so_far, goal),
             Self::Mercenary(unit) => unit.shortest_path_to(game, path_so_far, goal),
@@ -183,7 +183,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => None,
         }
     }
-    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: &Point) -> Option<Path<D>> {
+    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         match self {
             Self::Normal(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
             Self::Mercenary(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
@@ -220,7 +220,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => false,
         }
     }
-    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: &Point, attacker_pos: &Point, attacker: &dyn NormalUnitTrait<D>, is_counter: bool) -> Option<(WeaponType, u16)> {
+    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &dyn NormalUnitTrait<D>, is_counter: bool) -> Option<(WeaponType, u16)> {
         let (armor_type, defense) = self.get_armor();
         let terrain_defense = if let Some(t) = game.get_map().get_terrain(pos) {
             t.defense(self)
@@ -250,13 +250,13 @@ impl<D: Direction> UnitType<D> {
         }
         used_weapon.and_then(|weapon| Some((weapon, highest_damage.ceil() as u16)))
     }
-    fn true_vision_range(&self, _game: &Game<D>, _pos: &Point) -> usize {
+    fn true_vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         1
     }
-    fn vision_range(&self, _game: &Game<D>, _pos: &Point) -> usize {
+    fn vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         2
     }
-    pub fn get_vision(&self, game: &Game<D>, pos: &Point) -> HashSet<Point> {
+    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashSet<Point> {
         match self {
             Self::Chess(unit) => unit.get_vision(game, pos),
             _ => {
@@ -265,7 +265,7 @@ impl<D: Direction> UnitType<D> {
                 let layers = game.get_map().range_in_layers(pos, self.vision_range(game, pos));
                 for (i, layer) in layers.into_iter().enumerate() {
                     for (p, _, _) in layer {
-                        if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(&p).unwrap().requires_true_sight() {
+                        if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(p).unwrap().requires_true_sight() {
                             result.insert(p);
                         }
                     }
@@ -274,7 +274,7 @@ impl<D: Direction> UnitType<D> {
             }
         }
     }
-    pub fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
+    pub fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         match self {
             Self::Normal(u) => u.attackable_positions(game, position, moved),
             Self::Mercenary(u) => u.attackable_positions(game, position, moved),
@@ -290,7 +290,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => false,
         }
     }
-    pub fn can_be_pulled(&self, _map: &Map<D>, _pos: &Point) -> bool {
+    pub fn can_be_pulled(&self, _map: &Map<D>, _pos: Point) -> bool {
         true
     }
     pub fn can_attack_unit(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
@@ -308,7 +308,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_unit) => false,
         }
     }
-    pub fn make_attack_info(&self, game: &Game<D>, pos: &Point, target: &Point) -> Option<AttackInfo<D>> {
+    pub fn make_attack_info(&self, game: &Game<D>, pos: Point, target: Point) -> Option<AttackInfo<D>> {
         if let Some(unit) = self.as_normal_trait() {
             unit.make_attack_info(game, pos, target)
         } else {

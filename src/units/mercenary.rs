@@ -27,10 +27,10 @@ impl Mercenary {
             Mercenaries::EarlGrey(_) => 1,
         }
     }
-    pub fn in_range<D: Direction>(&self, map: &Map<D>, position: &Point, target: &Point) -> bool {
-        self.aura(map, position).contains(target)
+    pub fn in_range<D: Direction>(&self, map: &Map<D>, position: Point, target: Point) -> bool {
+        self.aura(map, position).contains(&target)
     }
-    pub fn aura<D: Direction>(&self, map: &Map<D>, position: &Point) -> HashSet<Point> {
+    pub fn aura<D: Direction>(&self, map: &Map<D>, position: Point) -> HashSet<Point> {
         let mut result = HashSet::new();
         result.insert(position.clone());
         for layer in map.range_in_layers(position, self.range() as usize) {
@@ -61,7 +61,7 @@ impl Mercenary {
             Mercenaries::EarlGrey(power_active) => power_active,
         }
     }
-    pub fn can_use_simple_power<D: Direction>(&self, game: &Game<D>, pos: &Point) -> bool {
+    pub fn can_use_simple_power<D: Direction>(&self, game: &Game<D>, pos: Point) -> bool {
         match self.typ {
             Mercenaries::EarlGrey(true) => false,
             Mercenaries::EarlGrey(false) => *self.charge >= self.typ.max_charge(),
@@ -145,13 +145,13 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn threatens(&self, game: &Game<D>, unit: &UnitType<D>) -> bool {
         self.unit.threatens(game, unit)
     }
-    fn attackable_positions(&self, game: &Game<D>, position: &Point, moved: bool) -> HashSet<Point> {
+    fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         self.unit.attackable_positions(game, position, moved)
     }
-    fn attack_splash(&self, map: &Map<D>, from: &Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
+    fn attack_splash(&self, map: &Map<D>, from: Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
         self.unit.attack_splash(map, from, to)
     }
-    fn make_attack_info(&self, game: &Game<D>, from: &Point, to: &Point) -> Option<AttackInfo<D>> {
+    fn make_attack_info(&self, game: &Game<D>, from: Point, to: Point) -> Option<AttackInfo<D>> {
         self.unit.make_attack_info(game, from, to)
     }
     fn can_capture(&self) -> bool {

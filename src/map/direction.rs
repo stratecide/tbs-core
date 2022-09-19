@@ -16,9 +16,9 @@ pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable {
     fn translation(&self, distance: i16) -> Self::T;
     fn pipe_entry(&self) -> Self::P;
     fn list() -> Vec<Self>;
-    fn mirror_vertically(&self) -> Self;
+    fn mirror_horizontally(&self) -> Self;
     //fn rotate_point_map(&self, map: &PointMap) -> PointMap;
-    fn get_neighbor(&self, point: &Point, odd_if_hex: bool) -> Option<Point> {
+    fn get_neighbor(&self, point: Point, odd_if_hex: bool) -> Option<Point> {
         let gp = self.translation(1).translate_point(&GlobalPoint::new(point.x() as i16, point.y() as i16), odd_if_hex);
         if gp.x() >= 0 && gp.x() <= 255 && gp.y() >= 0 && gp.y() <= 255 {
             Some(Point::new(gp.x() as u8, gp.y() as u8))
@@ -28,7 +28,7 @@ pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable {
     }
     fn rotate_around_center<P: Position<i16>>(&self, point: &P, center: &P, odd_if_hex: bool) -> P {
         let trans = Self::T::between(center, point, odd_if_hex);
-        let trans = trans.rotate_by(self);
+        let trans = trans.rotate_by(*self);
         trans.translate_point(center, odd_if_hex)
     }
     fn list_index(&self) -> usize {
@@ -48,13 +48,13 @@ pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable {
         let index = self.list_index();
         list[index - 1]
     }
-    fn rotate_by(&self, other: &Self) -> Self {
+    fn rotate_by(&self, other: Self) -> Self {
         let list = Self::list();
         let index = self.list_index();
         let index2 = other.list_index();
         list[(index + index2) % list.len()]
     }
-    fn opposite_angle(&self) -> Self {
+    fn mirror_vertically(&self) -> Self {
         let list = Self::list();
         let index = self.list_index();
         list[(list.len() - index) % list.len()]
@@ -84,7 +84,7 @@ impl Direction for Direction4 {
         Self::D0
     }
     fn translation(&self, distance: i16) -> Translation4 {
-        Translation4::new(self, distance)
+        Translation4::new(*self, distance)
     }
     fn pipe_entry(&self) -> Self::P {
         PipeState4 {
@@ -100,7 +100,7 @@ impl Direction for Direction4 {
             Self::D270,
         ]
     }
-    fn mirror_vertically(&self) -> Self {
+    fn mirror_horizontally(&self) -> Self {
         match self {
             Self::D0 => Self::D180,
             Self::D180 => Self::D0,
@@ -139,7 +139,7 @@ impl Direction for Direction6 {
         Self::D0
     }
     fn translation(&self, distance: i16) -> Translation6 {
-        Translation6::new(self, distance)
+        Translation6::new(*self, distance)
     }
     fn pipe_entry(&self) -> Self::P {
         PipeState6 {
@@ -157,7 +157,7 @@ impl Direction for Direction6 {
             Self::D300,
         ]
     }
-    fn mirror_vertically(&self) -> Self {
+    fn mirror_horizontally(&self) -> Self {
         match self {
             Self::D0 => Self::D180,
             Self::D180 => Self::D0,
@@ -183,7 +183,7 @@ impl fmt::Display for Direction6 {
 
 pub trait Translation<D>: Clone + PartialEq
 where D: Direction {
-    fn new(direction: &D, distance: i16) -> Self;
+    fn new(direction: D, distance: i16) -> Self;
     fn len(&self) -> u16;
     fn between<P: Position<i16>>(from: &P, to: &P, odd_if_hex: bool) -> Self;
     fn plus(&self, other: &Self) -> Self;
@@ -191,8 +191,8 @@ where D: Direction {
     fn is_parallel(&self, other: &Self) -> bool;
     #[cfg(feature = "rendering")]
     fn screen_coordinates(&self) -> (f32, f32);
-    fn rotate_by(&self, angle: &D) -> Self;
-    fn mirror_vertically(&self) -> Self;
+    fn rotate_by(&self, angle: D) -> Self;
+    fn mirror_horizontally(&self) -> Self;
     fn translate_point<P: Position<i16>>(&self, p: &P, odd_if_hex: bool) -> P;
 }
 
@@ -202,7 +202,7 @@ pub struct Translation4 {
     y: i16,
 }
 impl Translation<Direction4> for Translation4 {
-    fn new(direction: &Direction4, distance: i16) -> Self {
+    fn new(direction: Direction4, distance: i16) -> Self {
         match direction {
             Direction4::D0 => Translation4 {x: distance, y: 0},
             Direction4::D90 => Translation4 {x: 0, y: -distance},
@@ -246,7 +246,7 @@ impl Translation<Direction4> for Translation4 {
     fn screen_coordinates(&self) -> (f32, f32) {
         (self.x as f32, self.y as f32)
     }
-    fn rotate_by(&self, angle: &Direction4) -> Self {
+    fn rotate_by(&self, angle: Direction4) -> Self {
         match angle {
             Direction4::D0 => self.clone(),
             Direction4::D90 => Translation4 {x: self.y, y: -self.x},
@@ -254,7 +254,7 @@ impl Translation<Direction4> for Translation4 {
             Direction4::D270 => Translation4 {x: -self.y, y: self.x},
         }
     }
-    fn mirror_vertically(&self) -> Self {
+    fn mirror_horizontally(&self) -> Self {
         Translation4 {x: -self.x, y: self.y}
     }
     fn translate_point<P: Position<i16>>(&self, p: &P, _: bool) -> P {
@@ -285,7 +285,7 @@ pub struct Translation6 {
     d60: i16,
 }
 impl Translation<Direction6> for Translation6 {
-    fn new(direction: &Direction6, distance: i16) -> Self {
+    fn new(direction: Direction6, distance: i16) -> Self {
         match direction {
             Direction6::D0 => Translation6 {d0: distance, d60: 0},
             Direction6::D60 => Translation6 {d0: 0, d60: distance},
@@ -341,7 +341,7 @@ impl Translation<Direction6> for Translation6 {
     fn screen_coordinates(&self) -> (f32, f32) {
         (self.d0 as f32 + (self.d60 as f32) / 2., -self.d60 as f32)
     }
-    fn rotate_by(&self, angle: &Direction6) -> Self {
+    fn rotate_by(&self, angle: Direction6) -> Self {
         match angle {
             Direction6::D0 => self.clone(),
             Direction6::D60 => Translation6 {d0: -self.d60, d60: self.d0 + self.d60},
@@ -351,7 +351,7 @@ impl Translation<Direction6> for Translation6 {
             Direction6::D300 => Translation6 {d0: self.d0 + self.d60, d60: -self.d0},
         }
     }
-    fn mirror_vertically(&self) -> Self {
+    fn mirror_horizontally(&self) -> Self {
         Translation6 {d0: -self.d0 - self.d60, d60: self.d60}
     }
     fn translate_point<P: Position<i16>>(&self, p: &P, odd_if_hex: bool) -> P {
@@ -388,11 +388,11 @@ impl Zippable for Translation6 {
 
 pub trait PipeState<D: Direction> {
     fn is_enterable(&self) -> bool;
-    fn enterable_from(&self, d: &D) -> bool;
+    fn enterable_from(&self, d: D) -> bool;
     fn connections(&self) -> Vec<D>;
-    fn connects_towards(&self, d: &D) -> bool;
-    fn connect_to(&mut self, d: &D); // TODO: maybe return result depending on whether it was able to connect?
-    fn next_dir(&self, entered_from: &D) -> D;
+    fn connects_towards(&self, d: D) -> bool;
+    fn connect_to(&mut self, d: D); // TODO: maybe return result depending on whether it was able to connect?
+    fn next_dir(&self, entered_from: D) -> D;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Zippable)]
@@ -404,8 +404,8 @@ impl PipeState<Direction4> for PipeState4 {
     fn is_enterable(&self) -> bool {
         self.d1 == self.d2
     }
-    fn enterable_from(&self, d: &Direction4) -> bool {
-        self.d1 == self.d2 && self.d1 == *d
+    fn enterable_from(&self, d: Direction4) -> bool {
+        self.d1 == self.d2 && self.d1 == d
     }
     fn connections(&self) -> Vec<Direction4> {
         let mut result = vec![self.d1];
@@ -414,15 +414,15 @@ impl PipeState<Direction4> for PipeState4 {
         }
         result
     }
-    fn connects_towards(&self, d: &Direction4) -> bool {
-        self.d1 == *d || self.d2 == *d
+    fn connects_towards(&self, d: Direction4) -> bool {
+        self.d1 == d || self.d2 == d
     }
-    fn connect_to(&mut self, d: &Direction4) {
+    fn connect_to(&mut self, d: Direction4) {
         if self.is_enterable() {
             self.d2 = d.clone();
         }
     }
-    fn next_dir(&self, entered_from: &Direction4) -> Direction4 {
+    fn next_dir(&self, entered_from: Direction4) -> Direction4 {
         if self.d1 == entered_from.opposite_direction() {
             if self.is_enterable() {
                 self.d2.opposite_direction()
@@ -444,8 +444,8 @@ impl PipeState<Direction6> for PipeState6 {
     fn is_enterable(&self) -> bool {
         self.d1 == self.d2
     }
-    fn enterable_from(&self, d: &Direction6) -> bool {
-        self.d1 == self.d2 && self.d1 == *d
+    fn enterable_from(&self, d: Direction6) -> bool {
+        self.d1 == self.d2 && self.d1 == d
     }
     fn connections(&self) -> Vec<Direction6> {
         let mut result = vec![self.d1];
@@ -454,16 +454,16 @@ impl PipeState<Direction6> for PipeState6 {
         }
         result
     }
-    fn connects_towards(&self, d: &Direction6) -> bool {
-        self.d1 == *d || self.d2 == *d
+    fn connects_towards(&self, d: Direction6) -> bool {
+        self.d1 == d || self.d2 == d
     }
-    fn connect_to(&mut self, d: &Direction6) {
+    fn connect_to(&mut self, d: Direction6) {
         let angle_difference = (d.list_index() as i8 - self.d1.list_index() as i8).abs();
         if self.is_enterable() && angle_difference > 1 && angle_difference < 5 {
             self.d2 = d.clone();
         }
     }
-    fn next_dir(&self, entered_from: &Direction6) -> Direction6 {
+    fn next_dir(&self, entered_from: Direction6) -> Direction6 {
         if self.d1 == entered_from.opposite_direction() {
             if self.is_enterable() {
                 self.d2.opposite_direction()
