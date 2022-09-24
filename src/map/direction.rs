@@ -8,7 +8,7 @@ use zipper::zipper_derive::*;
 use super::point_map;
 
 
-pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable {
+pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display {
     type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
     type P: PipeState<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
     fn is_hex() -> bool;

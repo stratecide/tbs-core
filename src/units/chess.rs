@@ -122,15 +122,15 @@ impl<D: Direction> ChessCommand<D> {
         }
         super::on_path_details(handler, &path, &UnitType::Chess::<D>(unit.clone()));
         match unit.typ {
-            ChessUnits::Pawn(d, moved_this_game, _) => {
+            ChessUnits::Pawn(d, moved_this_game, en_passant) => {
                 match path.steps[0] {
                     PathStep::Diagonal(_) => {
                         // en passant
                         for n in handler.get_map().get_neighbors(end, NeighborMode::FollowPipes) {
                             if let Some(UnitType::Chess(unit)) = handler.get_map().get_unit(n.point) {
                                 match unit.typ {
-                                    ChessUnits::Pawn(_, _, p) => {
-                                        if p == Some(end) && handler.get_game().get_team(Some(&unit.owner)) != Some(team) {
+                                    ChessUnits::Pawn(d, _, true) => {
+                                        if n.direction == d && handler.get_game().get_team(Some(&unit.owner)) != Some(team) {
                                             handler.add_event(Event::UnitDeath(n.point, UnitType::Chess(unit.clone())));
                                         }
                                     }
@@ -156,8 +156,8 @@ impl<D: Direction> ChessCommand<D> {
                         _ => return Err(CommandError::UnitTypeWrong)
                     }
                 } else {
-                    if path.steps.len() > 1 {
-                        handler.add_event(Event::EnPassantOpportunity(end, path.steps[0].progress(handler.get_map(), start).unwrap()));
+                    if (path.steps.len() > 1) != en_passant {
+                        handler.add_event(Event::EnPassantOpportunity(end));
                     }
                     let new_dir = ChessUnit::pawn_dir_after_path(handler.get_map(), &path, d.clone());
                     if d != new_dir {
@@ -340,8 +340,8 @@ impl<D: Direction> ChessUnit<D> {
                         for n in game.get_map().get_neighbors(dp.point, NeighborMode::FollowPipes) {
                             if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(n.point) {
                                 match unit.typ {
-                                    ChessUnits::Pawn(_, _, p) => {
-                                        en_passant = en_passant || p == Some(dp.point) && game.get_team(Some(&unit.owner)) != Some(team);
+                                    ChessUnits::Pawn(d, _, true) => {
+                                        en_passant = en_passant || n.direction == d && game.get_team(Some(&unit.owner)) != Some(team);
                                     }
                                     _ => {}
                                 }
@@ -704,7 +704,7 @@ impl fmt::Display for PawnUpgrade {
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 4)]
 pub enum ChessUnits<D: Direction> {
-    Pawn(D, bool, Option::<Point>),
+    Pawn(D, bool, bool),
     Rook(bool),
     Bishop,
     Knight,

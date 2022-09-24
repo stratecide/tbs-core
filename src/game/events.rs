@@ -250,8 +250,7 @@ pub enum Event<D:Direction> {
     CommanderCharge(Owner, I32::<{-(MAX_CHARGE as i32)}, {MAX_CHARGE as i32}>),
     CommanderFlipActiveSimple(Owner),
     UnitMovedThisGame(Point),
-    EnPassantOpportunity(Point, Point),
-    EnPassantOpportunityGone(Point, Point),
+    EnPassantOpportunity(Point),
     UnitDirection(Point, D, D),
 }
 impl<D: Direction> Event<D> {
@@ -380,21 +379,11 @@ impl<D: Direction> Event<D> {
                     unit.typ.flip_moved_this_game();
                 }
             }
-            Self::EnPassantOpportunity(p, passed_over) => {
+            Self::EnPassantOpportunity(p) => {
                 if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
                     match &mut unit.typ {
-                        ChessUnits::Pawn(_, _, p) => {
-                            *p = Some(*passed_over);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Self::EnPassantOpportunityGone(p, _) => {
-                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
-                    match &mut unit.typ {
-                        ChessUnits::Pawn(_, _, p) => {
-                            *p = None;
+                        ChessUnits::Pawn(_, _, en_passant) => {
+                            *en_passant = !*en_passant;
                         }
                         _ => {}
                     }
@@ -537,21 +526,11 @@ impl<D: Direction> Event<D> {
                     unit.typ.flip_moved_this_game();
                 }
             }
-            Self::EnPassantOpportunity(p, _) => {
+            Self::EnPassantOpportunity(p) => {
                 if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
                     match &mut unit.typ {
-                        ChessUnits::Pawn(_, _, p) => {
-                            *p = None;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Self::EnPassantOpportunityGone(p, passed_over) => {
-                if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
-                    match &mut unit.typ {
-                        ChessUnits::Pawn(_, _, p) => {
-                            *p = Some(*passed_over);
+                        ChessUnits::Pawn(_, _, en_passant) => {
+                            *en_passant = !*en_passant;
                         }
                         _ => {}
                     }
@@ -773,7 +752,7 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::EnPassantOpportunity(p, _) | Self::EnPassantOpportunityGone(p, _) => {
+            Self::EnPassantOpportunity(p) => {
                 if game.has_vision_at(*team, *p) {
                     Some(self.clone())
                 } else {
