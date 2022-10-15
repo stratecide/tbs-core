@@ -8,8 +8,8 @@ pub trait Position<T> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
-    x: u8,
-    y: u8,
+    pub x: u8,
+    pub y: u8,
 }
 impl Zippable for Point {
     fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {

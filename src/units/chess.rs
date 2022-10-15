@@ -112,7 +112,7 @@ impl<D: Direction> ChessCommand<D> {
             recalculate_fog = true;
             handler.add_event(Event::UnitDeath(end, other.clone()));
         }
-        handler.add_event(Event::UnitPath(Some(None), path.clone(), true, UnitType::Chess::<D>(unit.clone())));
+        handler.add_event(Event::UnitPath(Some(None), path.clone(), Some(false), UnitType::Chess::<D>(unit.clone())));
         let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), end).into_iter().filter(|p| {
             !handler.get_game().has_vision_at(Some(team), *p)
         }).collect();
@@ -178,7 +178,7 @@ impl<D: Direction> ChessCommand<D> {
                                     let mut king_path = Path::new(dp.point);
                                     king_path.steps.push(PathStep::Jump(dp.direction.opposite_direction())).unwrap();
                                     let king = handler.get_map().get_unit(dp.point).unwrap().clone();
-                                    handler.add_event(Event::UnitPath(Some(None), king_path.clone(), true, king.clone()));
+                                    handler.add_event(Event::UnitPath(Some(None), king_path.clone(), Some(false), king.clone()));
                                     let vision_changes: HashSet<Point> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter().filter(|p| {
                                         !handler.get_game().has_vision_at(Some(team), *p)
                                     }).collect();
@@ -212,13 +212,13 @@ impl<D: Direction> ChessCommand<D> {
             return;
         }
         let mut to_exhaust = HashSet::new();
-        width_search(&MovementType::Chess, 0, handler.get_game(), pos, HashSet::new(), None, |p, _| {
+        handler.get_map().width_search(pos, |p| {
             if let Some(unit) = handler.get_map().get_unit(p) {
                 if !unit.is_exhausted() && unit.get_owner() == Some(&handler.get_game().current_player().owner_id) {
                     to_exhaust.insert(p);
                 }
             }
-            false
+            handler.get_map().get_terrain(p) == Some(&Terrain::ChessTile)
         });
         for p in handler.get_map().all_points().into_iter().filter(|p| to_exhaust.contains(p)) {
             handler.add_event(Event::UnitExhaust(p));
@@ -243,11 +243,11 @@ impl<D: Direction> ChessUnit<D> {
         }
     }
     fn can_move_through(game: &Game<D>, p: Point, team: Team, ignore_unseen: bool) -> bool {
-        game.get_map().get_terrain(p).and_then(|t| t.movement_cost(&MovementType::Chess)).is_some() &&
+        game.get_map().get_terrain(p).and_then(|t| t.movement_cost(MovementType::Chess)).is_some() &&
         (game.get_map().get_unit(p).is_none() || ignore_unseen && !game.has_vision_at(Some(team), p))
     }
     fn can_stop_on(game: &Game<D>, p: Point, team: Team) -> bool {
-        if game.get_map().get_terrain(p).and_then(|t| t.movement_cost(&MovementType::Chess)).is_none() {
+        if game.get_map().get_terrain(p).and_then(|t| t.movement_cost(MovementType::Chess)).is_none() {
             return false;
         }
         if let Some(unit) = game.get_map().get_unit(p) {
@@ -438,10 +438,9 @@ impl<D: Direction> ChessUnit<D> {
         let mut result = None;
         self.all_possible_paths(game, path_so_far.start, false, |p, steps| {
             if p == goal && steps.len() >= path_so_far.steps.len() && steps[..path_so_far.steps.len()] == path_so_far.steps[..] {
-                let steps: Vec<PathStep<D>> = steps.clone().into_iter().skip(path_so_far.steps.len()).collect();
                 result = Some(Path {
                     start: path_so_far.start,
-                    steps: steps.try_into().unwrap(),
+                    steps: steps.clone().try_into().unwrap(),
                 });
                 PathSearchFeedback::Found
             } else if steps.len() > path_so_far.steps.len() || steps[..] == path_so_far.steps[..steps.len()] {
@@ -638,12 +637,6 @@ impl<D: Direction> ChessUnit<D> {
     }
 }
 
-enum PathSearchFeedback {
-    Continue,
-    Rejected,
-    Found,
-}
-
 pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: Point) -> Result<(), CommandError> {
     if !game.has_vision_at(Some(game.current_player().team), at) {
         return Err(CommandError::NoVision);
@@ -803,7 +796,7 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
             if blocked_positions.get(&next_dp.point).and_then(|d| Some(*d == next_dp.direction || d.opposite_direction() == next_dp.direction)).unwrap_or(false) {
                 break;
             }
-            if let Some(c) = game.get_map().get_terrain(next_dp.point).unwrap().movement_cost(&MovementType::Chess) {
+            if let Some(c) = game.get_map().get_terrain(next_dp.point).and_then(|t| t.movement_cost(MovementType::Chess)) {
                 if let Some(max_cost) = max_cost {
                     if cost + c > max_cost {
                         break;
@@ -825,6 +818,8 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                     break;
                 }
                 blocked_positions.insert(dp.point, dp.direction);
+            } else {
+                break;
             }
         } else {
             break;
@@ -848,7 +843,7 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
             if blocked_positions.get(&next_dp.point).and_then(|d| Some(*d == next_dp.direction || d.opposite_direction() == next_dp.direction)).unwrap_or(false) {
                 break;
             }
-            if let Some(c) = game.get_map().get_terrain(next_dp.point).unwrap().movement_cost(&MovementType::Chess) {
+            if let Some(c) = game.get_map().get_terrain(next_dp.point).and_then(|t| t.movement_cost(MovementType::Chess)) {
                 if let Some(max_cost) = max_cost {
                     if cost + c > max_cost {
                         break;

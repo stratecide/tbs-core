@@ -1,5 +1,6 @@
 use crate::map::direction::Direction;
 use crate::map::map::Map;
+use crate::terrain::Terrain;
 
 use super::*;
 
@@ -73,11 +74,20 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D> {
         self
     }
+    fn as_trait_mut(&mut self) -> &mut dyn NormalUnitTrait<D> {
+        self
+    }
     fn as_unit(&self) -> UnitType<D> {
         UnitType::Mercenary(self.clone())
     }
     fn as_transportable(&self) -> TransportableTypes {
         TransportableTypes::Mercenary(self.clone())
+    }
+    fn get_type(&self) -> &NormalUnits {
+        &self.unit.typ
+    }
+    fn get_type_mut(&mut self) -> &mut NormalUnits {
+        &mut self.unit.typ
     }
     fn get_hp(&self) -> u8 {
         *self.unit.hp
@@ -107,9 +117,9 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
         let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
         u.can_act(player)
     }
-    fn get_movement(&self) -> (MovementType, u8) {
+    fn get_movement(&self, terrain: &Terrain<D>) -> (MovementType, u8) {
         let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        let (movement_type, mut range) = u.get_movement();
+        let (movement_type, mut range) = u.get_movement(terrain);
         match self.typ {
             Mercenaries::EarlGrey(true) => range += 6,
             _ => {}

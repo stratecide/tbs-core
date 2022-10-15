@@ -1,5 +1,6 @@
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashSet, HashMap};
 use std::cmp::{Ordering, Reverse};
+use std::hash::Hash;
 
 use zipper::*;
 use zipper_derive::*;
@@ -10,11 +11,37 @@ use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::map::map::*;
 use crate::player::Perspective;
+use crate::terrain::Terrain;
 
-use super::{normal_trait::*, chess};
+use super::normal_units::NormalUnits;
+use super::{normal_trait::*, chess, UnitType};
 
+pub enum PathSearchFeedback {
+    Continue,
+    Rejected,
+    Found,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HoverMode {
+    Land,
+    Sea,
+    Beach,
+}
+impl HoverMode {
+    pub fn new(on_sea: bool) -> Self {
+        if on_sea {
+            Self::Sea
+        } else {
+            Self::Land
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MovementType {
-    Hover,
+    Hover(HoverMode),
     Foot,
     Wheel,
     Treads,
@@ -26,6 +53,7 @@ pub enum MovementType {
 struct WidthSearch<D: Direction> {
     path: Path<D>,
     path_cost: u8,
+    movement_type: MovementType,
 }
 impl<D: Direction> PartialOrd for WidthSearch<D> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -38,52 +66,8 @@ impl<D: Direction> Ord for WidthSearch<D> {
     }
 }
 
-// callback returns true if the search can be aborted
-// if unit is None, units will be ignored
-pub fn width_search<D: Direction, F: FnMut(Point, &Path<D>) -> bool>(movement_type: &MovementType, max_cost: u8, game: &Game<D>, start: Point, mut blocked_positions: HashSet<Point>, unit: Option<&dyn NormalUnitTrait<D>>, mut callback: F) {
-    if blocked_positions.contains(&start) {
-        println!("width_search fail");
-    }
-    let mut next_checks = BinaryHeap::new();
-    let mut add_point = |p: Point, path_so_far: &Path<D>, cost_so_far: u8, next_checks: &mut BinaryHeap<Reverse<WidthSearch<D>>>| {
-        if blocked_positions.contains(&p) {
-            return false;
-        }
-        if callback(p, path_so_far) {
-            return true;
-        }
-        blocked_positions.insert(p.clone());
-        for (neighbor, step) in game.get_map().get_unit_movement_neighbors(p, movement_type) {
-            if !blocked_positions.contains(&neighbor.point) {
-                match (unit, game.get_map().get_unit(neighbor.point)) {
-                    (Some(mover), Some(other)) => {
-                        if !other.can_be_moved_through(mover, game) {
-                            continue;
-                        }
-                    }
-                    (_, _) => {}
-                }
-                if let Some(cost) = game.get_map().get_terrain(neighbor.point).unwrap().movement_cost(movement_type) {
-                    if cost_so_far + cost <= max_cost {
-                        let mut path = path_so_far.clone();
-                        path.steps.push(step).unwrap();
-                        next_checks.push(Reverse(WidthSearch{path, path_cost: cost_so_far + cost}));
-                    }
-                }
-            }
-        }
-        false
-    };
-    add_point(start, &Path::new(start), 0, &mut next_checks);
-    while let Some(Reverse(check)) = next_checks.pop() {
-        let finished = add_point(check.path.end(game.get_map()).unwrap(), &check.path, check.path_cost, &mut next_checks);
-        if finished {
-            break;
-        }
-    }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq, Zippable)]
+#[derive(Debug, Clone, PartialEq, Eq, Zippable, Hash)]
 #[zippable(bits = 3)]
 pub enum PathStep<D: Direction> {
     Dir(D),
@@ -137,7 +121,7 @@ impl<D: Direction> PathStep<D> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Zippable)]
+#[derive(Debug, Clone, PartialEq, Eq, Zippable, Hash)]
 pub struct Path<D: Direction> {
     pub start: Point,
     pub steps: LVec::<PathStep::<D>, {crate::map::point_map::MAX_AREA}>,
@@ -204,3 +188,204 @@ impl<D: Direction> Path<D> {
         result
     }
 }
+
+pub trait PathStepExt<D: Direction>: Clone {
+    fn step(&self) -> &PathStep<D>;
+    fn skip_to(&self, p: Point) -> Self;
+    fn update_unit(&self, unit: &mut UnitType<D>);
+}
+impl<D: Direction> PathStepExt<D> for PathStep<D> {
+    fn step(&self) -> &PathStep<D> {
+        self
+    }
+    fn skip_to(&self, p: Point) -> Self {
+        PathStep::Point(p)
+    }
+    fn update_unit(&self, _: &mut UnitType<D>) {
+        // do nothing
+    }
+}
+
+type HoverStep<D> = (bool, PathStep<D>);
+impl<D: Direction> PathStepExt<D> for HoverStep<D> {
+    fn step(&self) -> &PathStep<D> {
+        &self.1
+    }
+    fn skip_to(&self, p: Point) -> Self {
+        (self.0, self.1.skip_to(p))
+    }
+    fn update_unit(&self, unit: &mut UnitType<D>) {
+        match unit {
+            UnitType::Normal(unit) => {
+                match &mut unit.typ {
+                    NormalUnits::Hovercraft(on_sea) => *on_sea = self.0,
+                    _ => {}
+                }
+            }
+            _ => {} // should not happen
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MovementSearchMeta<D: Direction> {
+    pub movement_type: MovementType,
+    pub stealth: bool,
+    pub illegal_next_dir: Option<D>, // units aren't allowed to turn around 180°
+    pub remaining_movement: u8,
+    pub path: Path<D>,
+}
+impl<D: Direction> MovementSearchMeta<D> {
+    fn order(&self, other: &Self) -> Ordering {
+        if self.movement_type == other.movement_type {
+            let mut orderings = HashSet::new();
+            orderings.insert(if self.stealth == other.stealth {
+                Ordering::Equal
+            } else if self.stealth {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            });
+            orderings.insert(self.remaining_movement.cmp(&other.remaining_movement));
+            orderings.insert(if self.illegal_next_dir.is_some() == other.illegal_next_dir.is_some() {
+                Ordering::Equal
+            } else if self.illegal_next_dir.is_some() {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            });
+            if orderings.len() == 1 || orderings.len() == 2 && orderings.contains(&Ordering::Equal) {
+                for ord in orderings {
+                    if ord != Ordering::Equal {
+                        return ord;
+                    }
+                }
+            }
+            Ordering::Equal
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+impl<D: Direction> PartialOrd for MovementSearchMeta<D> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.order(other))
+    }
+}
+impl<D: Direction> Ord for MovementSearchMeta<D> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.order(other)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MovementSearch<D: Direction> {
+    pos: Point,
+    meta: MovementSearchMeta<D>,
+}
+impl<D: Direction> PartialOrd for MovementSearch<D> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.meta.partial_cmp(&other.meta)
+    }
+}
+impl<D: Direction> Ord for MovementSearch<D> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.meta.cmp(&other.meta)
+    }
+}
+
+pub fn movement_search<D, F>(game: &Game<D>, unit: &dyn NormalUnitTrait<D>, path_so_far: &Path<D>, fog: Option<&HashSet<Point>>, mut callback: F)
+where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
+    // if the unit can't move from it's position, no need to go further
+    let (movement_type, remaining_movement) = match game.get_map().get_terrain(path_so_far.start) {
+        Some(t) => {
+            let (movement_type, remaining_movement) = unit.get_movement(t);
+            if let Some(cost) = t.movement_cost(movement_type) {
+                if cost > remaining_movement {
+                    return
+                } else {
+                    (movement_type, remaining_movement)
+                }
+            } else {
+                return
+            }
+        }
+        None => return,
+    };
+
+    // start width-search
+    let mut best_metas: HashMap<Point, HashSet<MovementSearchMeta<D>>> = HashMap::new();
+    let mut next_checks = BinaryHeap::new();
+    next_checks.push(MovementSearch {
+        pos: path_so_far.start,
+        meta: MovementSearchMeta {
+            movement_type,
+            remaining_movement,
+            stealth: unit.has_stealth(),
+            illegal_next_dir: None,
+            path: Path::new(path_so_far.start),
+        }
+    });
+    while let Some(MovementSearch{pos, meta}) = next_checks.pop() {
+        let blocking_unit = game.get_map().get_unit(pos);
+        if meta.path.steps.len() <= path_so_far.steps.len() && meta.path.steps[..] != path_so_far.steps[..meta.path.steps.len()] {
+            // only follow path_so_far until its end, then the search can start
+            continue;
+        }
+        if meta.path.steps.len() >= path_so_far.steps.len() {
+            match callback(&meta.path, pos, blocking_unit == None || path_so_far.start == pos && blocking_unit.unwrap() == &unit.as_unit()) {
+                PathSearchFeedback::Found => return,
+                PathSearchFeedback::Rejected => continue,
+                PathSearchFeedback::Continue => {}
+            }
+            if let Some(metas) = best_metas.get_mut(&pos) {
+                // check if this pos already has a MovementSearchMeta that's superior in every way
+                // if so, skip this MovementSearch, it can't be useful
+                if metas.iter().any(|m| meta.order(m) == Ordering::Less) {
+                    continue;
+                }
+                let mut set = HashSet::new();
+                for m in metas.drain() {
+                    if meta.order(&m) != Ordering::Greater {
+                        set.insert(m);
+                    }
+                }
+                *metas = set;
+                metas.insert(meta.clone());
+            } else {
+                let mut set = HashSet::new();
+                set.insert(meta.clone());
+                best_metas.insert(pos, set);
+            }
+        }
+        let prev_terrain = game.get_map().get_terrain(pos).unwrap();
+        for (neighbor, step) in game.get_map().get_unit_movement_neighbors(pos, meta.movement_type) {
+            if step.dir().is_some() && step.dir() == meta.illegal_next_dir {
+                // don't turn around 180°
+                continue;
+            }
+            match game.get_map().get_unit(neighbor.point) {
+                Some(other) => {
+                    if !other.can_be_moved_through(unit, game) {
+                        continue;
+                    }
+                }
+                _ => {}
+            }
+            if let Some(mut meta) = game.get_map().get_terrain(neighbor.point).and_then(|t| t.update_movement(&meta, prev_terrain)) {
+                // todo: check if maybe the PathStep is disallowed by some Detail at neighbor.point
+                if meta.path.steps.push(step.clone()).is_ok() {
+                    meta.illegal_next_dir = None;
+                    if step.dir().is_some() {
+                        meta.illegal_next_dir = Some(neighbor.direction.opposite_direction());
+                    }
+                    next_checks.push(MovementSearch {
+                        pos: neighbor.point,
+                        meta,
+                    });
+                }
+            }
+        }
+    }
+}
+

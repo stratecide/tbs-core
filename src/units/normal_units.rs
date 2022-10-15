@@ -36,7 +36,7 @@ impl NormalUnit {
             return false;
         }
         match self.typ {
-            NormalUnits::Hovercraft => true,
+            NormalUnits::Hovercraft(_) => true,
             _ => false,
         }
     }
@@ -51,11 +51,20 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D> {
         self
     }
+    fn as_trait_mut(&mut self) -> &mut dyn NormalUnitTrait<D> {
+        self
+    }
     fn as_unit(&self) -> UnitType<D> {
         UnitType::Normal(self.clone())
     }
     fn as_transportable(&self) -> TransportableTypes {
         TransportableTypes::Normal(self.clone())
+    }
+    fn get_type(&self) -> &NormalUnits {
+        &self.typ
+    }
+    fn get_type_mut(&mut self) -> &mut NormalUnits {
+        &mut self.typ
     }
     fn get_hp(&self) -> u8 {
         *self.hp
@@ -72,10 +81,16 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     fn can_act(&self, player: &Player) -> bool {
         !self.exhausted && player.owner_id == self.owner
     }
-    fn get_movement(&self) -> (MovementType, u8) {
+    fn get_movement(&self, terrain: &Terrain<D>) -> (MovementType, u8) {
         let factor = 6;
         match self.typ {
-            NormalUnits::Hovercraft => (MovementType::Hover, 3 * factor),
+            NormalUnits::Hovercraft(on_sea) => {
+                let mut movement_type = MovementType::Hover(HoverMode::new(on_sea));
+                if terrain.like_beach_for_hovercraft() {
+                    movement_type = MovementType::Hover(HoverMode::Beach);
+                }
+                (movement_type, 3 * factor)
+            },
             NormalUnits::TransportHeli(_) => (MovementType::Heli, 6 * factor),
             NormalUnits::DragonHead => (MovementType::Wheel, 6 * factor),
             NormalUnits::Artillery => (MovementType::Treads, 5 * factor),
@@ -130,7 +145,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
     fn can_attack_after_moving(&self) -> bool {
         match self.typ {
-            NormalUnits::Hovercraft => true,
+            NormalUnits::Hovercraft(_) => true,
             NormalUnits::TransportHeli(_) => true,
             NormalUnits::DragonHead => true,
             NormalUnits::Artillery => false,
@@ -261,7 +276,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 8)]
 pub enum NormalUnits {
-    Hovercraft,
+    Hovercraft(bool), // bool is only relevant on e.g. bridges. true if HoverMode::Sea, false if HoverMode::Land
     TransportHeli(LVec::<TransportableTypes, 1>),
     DragonHead,
     Artillery,
@@ -270,7 +285,7 @@ pub enum NormalUnits {
 impl NormalUnits {
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Hovercraft => "Hovercraft",
+            Self::Hovercraft(_) => "Hovercraft",
             Self::TransportHeli(_) => "Transport Helicopter",
             Self::DragonHead => "Dragon Head",
             Self::Artillery => "Artillery",
@@ -299,7 +314,7 @@ impl NormalUnits {
         match self {
             NormalUnits::TransportHeli(_) => {
                 match unit {
-                    NormalUnits::Hovercraft => true,
+                    NormalUnits::Hovercraft(_) => true,
                     _ => false,
                 }
             }
@@ -326,7 +341,7 @@ impl NormalUnits {
     }
     pub fn get_attack_type(&self) -> AttackType {
         match self {
-            Self::Hovercraft => AttackType::Adjacent,
+            Self::Hovercraft(_) => AttackType::Adjacent,
             Self::TransportHeli(_) => AttackType::None,
             Self::DragonHead => AttackType::Straight(1, 2),
             Self::Artillery => AttackType::Ranged(2, 3),
@@ -335,7 +350,7 @@ impl NormalUnits {
     }
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         match self {
-            Self::Hovercraft => vec![(WeaponType::MachineGun, 1.)],
+            Self::Hovercraft(_) => vec![(WeaponType::MachineGun, 1.)],
             Self::TransportHeli(_) => vec![],
             Self::DragonHead => vec![(WeaponType::Flame, 1.)],
             Self::Artillery => vec![(WeaponType::SurfaceMissiles, 1.)],
@@ -344,7 +359,7 @@ impl NormalUnits {
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
-            Self::Hovercraft => (ArmorType::Infantry, 1.5),
+            Self::Hovercraft(_) => (ArmorType::Infantry, 1.5),
             Self::TransportHeli(_) => (ArmorType::Heli, 1.5),
             Self::DragonHead => (ArmorType::Light, 1.5),
             Self::Artillery => (ArmorType::Light, 1.5),
@@ -353,7 +368,7 @@ impl NormalUnits {
     }
     pub fn value(&self) -> u16 {
         match self {
-            Self::Hovercraft => 100,
+            Self::Hovercraft(_) => 100,
             Self::TransportHeli(_) => 500,
             Self::DragonHead => 400,
             Self::Artillery => 600,

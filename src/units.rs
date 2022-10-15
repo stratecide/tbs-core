@@ -48,6 +48,13 @@ impl<D: Direction> UnitType<D> {
             _ => None,
         }
     }
+    pub fn as_normal_trait_mut(&mut self) -> Option<&mut dyn NormalUnitTrait<D>> {
+        match self {
+            Self::Normal(unit) => Some(unit.as_trait_mut()),
+            Self::Mercenary(merc) => Some(merc.as_trait_mut()),
+            _ => None,
+        }
+    }
     pub fn as_transportable(&self) -> Option<TransportableTypes> {
         match self {
             Self::Normal(u) => Some(TransportableTypes::Normal(u.clone())),

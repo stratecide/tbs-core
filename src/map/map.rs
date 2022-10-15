@@ -112,6 +112,7 @@ where D: Direction
             None
         }
     }
+
     pub fn get_neighbors(&self, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
         let mut result = vec![];
         for d in D::list() {
@@ -131,7 +132,28 @@ where D: Direction
         result
     }
     
-    pub fn get_unit_movement_neighbors(&self, p: Point, _mov: &MovementType) -> Vec<(OrientedPoint<D>, PathStep<D>)> {
+    pub fn width_search<F: FnMut(Point) -> bool>(&self, start: Point, mut f: F) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        let mut to_check = HashSet::new();
+        to_check.insert(start);
+        while to_check.len() > 0 {
+            let mut next = HashSet::new();
+            for p in to_check {
+                if f(p) {
+                    result.insert(p);
+                    for p in self.get_neighbors(p, NeighborMode::Direct) {
+                        if !result.contains(&p.point) {
+                            next.insert(p.point);
+                        }
+                    }
+                }
+            }
+            to_check = next;
+        }
+        result
+    }
+    
+    pub fn get_unit_movement_neighbors(&self, p: Point, _mov: MovementType) -> Vec<(OrientedPoint<D>, PathStep<D>)> {
         let mut result = vec![];
         for d in D::list() {
             if let Some(neighbor) = self.get_neighbor(p, d) {

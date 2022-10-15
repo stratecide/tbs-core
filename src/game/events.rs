@@ -7,6 +7,8 @@ use crate::commanders::{Charge, MAX_CHARGE, CommanderPower};
 use crate::map::map::{Map, FieldData};
 use crate::map::point::Point;
 use crate::map::point_map;
+use crate::units::normal_units::{NormalUnits, NormalUnit};
+use crate::units::normal_trait::NormalUnitTrait;
 use crate::{player::*, details};
 use crate::terrain::Terrain;
 use crate::details::Detail;
@@ -17,7 +19,7 @@ use crate::units::mercenary::Mercenaries;
 use crate::units::chess::*;
 use crate::units::commands::{UnitCommand, UnloadIndex};
 use crate::units::transportable::TransportableTypes;
-use crate::units::movement::Path;
+use crate::units::movement::{Path, PathStep, PathStepExt};
 
 #[derive(Debug, Zippable)]
 #[zippable(bits = 8)]
@@ -229,8 +231,8 @@ pub enum Event<D:Direction> {
     FogFlipRandom,
     PureFogChange(Perspective, LVec::<Point, {point_map::MAX_AREA}>),
     FogChange(Perspective, LVec::<(Point, FieldData::<D>), {point_map::MAX_AREA}>),
-    UnitPath(Option::<Option::<UnloadIndex>>, Path::<D>, bool, UnitType::<D>),
-    UnitPathInto(Option::<Option::<UnloadIndex>>, Path::<D>, UnitType::<D>),
+    UnitPath(Option::<Option::<UnloadIndex>>, Path::<D>, Option::<bool>, UnitType::<D>),
+    HoverPath(Option::<Option::<UnloadIndex>>, Point, LVec::<(bool, PathStep::<D>), {point_map::MAX_AREA}>, Option::<bool>, UnitType::<D>),
     UnitExhaust(Point),
     UnitExhaustBoarded(Point, UnloadIndex),
     UnitHpChange(Point, I8::<-100, 99>, I16::<-999, 999>),
@@ -270,33 +272,21 @@ impl<D: Direction> Event<D> {
             }
             Self::NextTurn => game.current_turn += 1,
             Self::UnitPath(unload_index, path, end_visible, unit) => {
-                if let Some(unload_index) = unload_index {
-                    if let Some(index) = unload_index {
-                        if let Some(unit) = game.get_map_mut().get_unit_mut(path.start) {
-                            unit.unboard(**index);
-                        }
-                    } else {
-                        game.get_map_mut().set_unit(path.start.clone(), None);
-                    }
-                }
-                if *end_visible {
-                    let end = path.end(game.get_map()).unwrap();
-                    game.get_map_mut().set_unit(end, Some(unit.clone()));
-                }
+                apply_unit_path(game, *unload_index, path, *end_visible, unit);
             }
-            Self::UnitPathInto(unload_index, path, unit) => {
-                if let Some(unload_index) = unload_index {
-                    if let Some(index) = unload_index {
-                        if let Some(unit) = game.get_map_mut().get_unit_mut(path.start) {
-                            unit.unboard(**index);
-                        }
-                    } else {
-                        game.get_map_mut().set_unit(path.start.clone(), None);
+            Self::HoverPath(unload_index, start, steps, end_visible, unit) => {
+                let mut unit = unit.clone();
+                if let Some((on_sea, _)) = steps.iter().last() {
+                    match unit.as_normal_trait_mut().and_then(|u| Some(u.get_type_mut())) {
+                        Some(NormalUnits::Hovercraft(os)) => *os = *on_sea,
+                        _ => {}
                     }
                 }
-                let end = path.end(game.get_map()).unwrap();
-                let transporter = game.get_map_mut().get_unit_mut(end).unwrap();
-                transporter.board(transporter.get_boarded().len() as u8, unit.clone().as_transportable().unwrap());
+                let mut path = Path::new(*start);
+                for (_, step) in steps {
+                    path.steps.push(step.clone()).unwrap();
+                }
+                apply_unit_path(game, *unload_index, &path, *end_visible, &unit);
             }
             Self::UnitExhaust(pos) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
@@ -417,33 +407,14 @@ impl<D: Direction> Event<D> {
             }
             Self::NextTurn => game.current_turn -= 1,
             Self::UnitPath(unload_index, path, end_visible, unit) => {
-                if *end_visible {
-                    let end = path.end(game.get_map()).unwrap();
-                    game.get_map_mut().set_unit(end, None);
-                }
-                if let Some(unload_index) = unload_index {
-                    if let Some(index) = unload_index {
-                        if let (Some(u), Some(b)) = (game.get_map_mut().get_unit_mut(path.start), unit.clone().as_transportable()) {
-                            u.board(**index, b);
-                        }
-                    } else {
-                        game.get_map_mut().set_unit(path.start.clone(), Some(unit.clone()));
-                    }
-                }
+                undo_unit_path(game, *unload_index, path, *end_visible, unit);
             }
-            Self::UnitPathInto(unload_index, path, unit) => {
-                let end = path.end(game.get_map()).unwrap();
-                let transporter = game.get_map_mut().get_unit_mut(end).unwrap();
-                transporter.unboard(transporter.get_boarded().len() as u8 - 1);
-                if let Some(unload_index) = unload_index {
-                    if let Some(index) = unload_index {
-                        if let (Some(u), Some(b)) = (game.get_map_mut().get_unit_mut(path.start), unit.clone().as_transportable()) {
-                            u.board(**index, b);
-                        }
-                    } else {
-                        game.get_map_mut().set_unit(path.start.clone(), Some(unit.clone()));
-                    }
+            Self::HoverPath(unload_index, start, steps, end_visible, unit) => {
+                let mut path = Path::new(*start);
+                for (_, step) in steps {
+                    path.steps.push(step.clone()).unwrap();
                 }
+                undo_unit_path(game, *unload_index, &path, *end_visible, unit);
             }
             Self::UnitExhaust(pos) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
@@ -568,40 +539,18 @@ impl<D: Direction> Event<D> {
                 panic!("FogChange should only ever be created as replacement for PureFogChange. It shouldn't be replaced itself!");
             }
             Self::NextTurn => Some(Self::NextTurn),
-            Self::UnitPath(unload_index, path, _, unit) => {
-                let visible_path: Option<Path<D>> = if unit.get_team(game) != *team {
-                    path.fog_replacement(game, *team)
-                } else {
-                    Some(path.clone())
-                };
-                if let Some(visible_path) = visible_path {
-                    let unload_index = if game.has_vision_at(*team, path.start) {
-                        Some(unload_index.unwrap_or(None))
-                    } else {
-                        None
-                    };
-                    Some(Self::UnitPath(unload_index, visible_path, game.has_vision_at(*team, path.end(game.get_map()).unwrap()), unit.clone()))
+            Self::UnitPath(unload_index, path, into, unit) => {
+                if let Some((unload_index, start, steps, into, unit)) = fog_replacement_unit_path(game, *team, *unload_index, path.start, &path.steps, *into, unit.clone()) {
+                    let mut path = Path::new(start);
+                    path.steps = steps;
+                    Some(Self::UnitPath(unload_index, path, into, unit))
                 } else {
                     None
                 }
             }
-            Self::UnitPathInto(unload_index, path, unit) => {
-                let visible_path: Option<Path<D>> = if unit.get_team(game) != *team {
-                    path.fog_replacement(game, *team)
-                } else {
-                    Some(path.clone())
-                };
-                if let Some(visible_path) = visible_path {
-                    let unload_index = if game.has_vision_at(*team, path.start) {
-                        Some(unload_index.unwrap_or(None))
-                    } else {
-                        None
-                    };
-                    if game.has_vision_at(*team, path.end(game.get_map()).unwrap()) {
-                        Some(Self::UnitPathInto(unload_index, visible_path.try_into().unwrap(), unit.clone()))
-                    } else {
-                        Some(Self::UnitPath(unload_index, visible_path.try_into().unwrap(), false, unit.clone()))
-                    }
+            Self::HoverPath(unload_index, start, steps, into, unit) => {
+                if let Some((unload_index, start, steps, into, unit)) = fog_replacement_unit_path(game, *team, *unload_index, *start, steps, *into, unit.clone()) {
+                    Some(Self::HoverPath(unload_index, start, steps, into, unit))
                 } else {
                     None
                 }
@@ -768,6 +717,114 @@ impl<D: Direction> Event<D> {
             }
         }
     }
+}
+
+fn apply_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option<UnloadIndex>>, path: &Path<D>, end_visible: Option<bool>, unit: &UnitType<D>) {
+    if let Some(unload_index) = unload_index {
+        if let Some(index) = unload_index {
+            if let Some(unit) = game.get_map_mut().get_unit_mut(path.start) {
+                unit.unboard(*index);
+            }
+        } else {
+            game.get_map_mut().set_unit(path.start.clone(), None);
+        }
+    }
+    if let Some(into) = end_visible {
+        let end = path.end(game.get_map()).unwrap();
+        if into {
+            let transporter = game.get_map_mut().get_unit_mut(end).unwrap();
+            transporter.board(transporter.get_boarded().len() as u8, unit.clone().as_transportable().unwrap());
+        } else {
+            game.get_map_mut().set_unit(end, Some(unit.clone()));
+        }
+    }
+}
+
+fn undo_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option<UnloadIndex>>, path: &Path<D>, end_visible: Option<bool>, unit: &UnitType<D>) {
+    if let Some(into) = end_visible {
+        let end = path.end(game.get_map()).unwrap();
+        if into {
+            let transporter = game.get_map_mut().get_unit_mut(end).unwrap();
+            transporter.unboard(transporter.get_boarded().len() as u8 - 1);
+        } else {
+            game.get_map_mut().set_unit(end, None);
+        }
+    }
+    if let Some(unload_index) = unload_index {
+        if let Some(index) = unload_index {
+            if let (Some(u), Some(b)) = (game.get_map_mut().get_unit_mut(path.start), unit.clone().as_transportable()) {
+                u.board(*index, b);
+            }
+        } else {
+            game.get_map_mut().set_unit(path.start.clone(), Some(unit.clone()));
+        }
+    }
+}
+
+fn fog_replacement_unit_path<D: Direction, S: PathStepExt<D>>(game: &Game<D>, team: Perspective, unload_index: Option<Option<UnloadIndex>>, start: Point, steps: &LVec<S, {point_map::MAX_AREA}>, end_visible: Option<bool>, unit: UnitType<D>) -> Option<(Option<Option<UnloadIndex>>, Point, LVec<S, {point_map::MAX_AREA}>, Option<bool>, UnitType<D>)> {
+    let visible_path = if unit.get_team(game) != team {
+        unit_path_fog_replacement(game, team, unit, start, steps)
+    } else {
+        Some((unit, start, steps.clone()))
+    };
+    let unload_index = if game.has_vision_at(team, start) {
+        Some(unload_index.unwrap_or(None))
+    } else {
+        None
+    };
+    let mut path = Path::new(start);
+    for step in steps {
+        path.steps.push(step.step().clone()).unwrap();
+    }
+    let into = if game.has_vision_at(team, path.end(game.get_map()).unwrap()) {
+        end_visible
+    } else {
+        None
+    };
+    if let Some((unit, start, steps)) = visible_path {
+        Some((unload_index, start, steps, into, unit))
+    } else {
+        None
+    }
+}
+
+fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, team: Perspective, mut unit: UnitType<D>, start: Point, steps: &LVec<S, {point_map::MAX_AREA}>) -> Option<(UnitType<D>, Point, LVec<S, {point_map::MAX_AREA}>)> {
+    let mut result = None;
+    let mut current = start;
+    let mut previous_visible = false;
+    let mut last_visible = None;
+    if game.has_vision_at(team, current) {
+        result = Some((start, LVec::new()));
+        previous_visible = true;
+        last_visible = Some(start);
+    }
+    for step in steps.iter() {
+        if result.is_none() {
+            step.update_unit(&mut unit);
+        }
+        let previous = current;
+        current = step.step().progress(game.get_map(), current).expect(&format!("unable to find next point after {:?}", current));
+        let visible = game.has_vision_at(team, current);
+        if visible && !previous_visible {
+            // either the unit appears out of fog or this is the first step
+            if let Some(result) = &mut result {
+                // TODO: this step isn't necessary if the unit reappears in the same field where it last vanished
+                if last_visible != Some(previous) {
+                    result.1.push(step.skip_to(previous)).unwrap();
+                }
+            } else {
+                result = Some((previous, LVec::new()));
+            }
+        }
+        if visible || previous_visible {
+            // if the previous step was visible, this one should be too
+            // CAUTION: should not be visible if teleporting into fog
+            last_visible = Some(current);
+            result.as_mut().unwrap().1.push(step.clone()).unwrap();
+        }
+        previous_visible = visible;
+    }
+    result.and_then(|(start, steps)| Some((unit, start, steps)))
 }
 
 #[derive(Debug, Clone, PartialEq, Zippable)]

@@ -11,38 +11,31 @@ use super::*;
 
 pub trait NormalUnitTrait<D: Direction> {
     fn as_trait(&self) -> &dyn NormalUnitTrait<D>;
+    fn as_trait_mut(&mut self) -> &mut dyn NormalUnitTrait<D>;
     fn as_unit(&self) -> UnitType<D>;
     fn as_transportable(&self) -> TransportableTypes;
+    fn get_type(&self) -> &NormalUnits;
+    fn get_type_mut(&mut self) -> &mut NormalUnits;
     fn get_hp(&self) -> u8;
     fn get_weapons(&self) -> Vec<(WeaponType, f32)>;
     fn get_owner(&self) -> &Owner;
     fn get_team(&self, game: &Game<D>) -> Option<Team>;
     fn can_act(&self, player: &Player) -> bool;
-    fn get_movement(&self) -> (MovementType, u8);
+    fn get_movement(&self, terrain: &Terrain<D>) -> (MovementType, u8);
     fn has_stealth(&self) -> bool;
     fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
-        let (blocked_positions, movement_type, max_cost) = self.consider_path_so_far(game, path_so_far);
-        let start = path_so_far.end(game.get_map()).unwrap();
         let mut result = None;
-        width_search(&movement_type, max_cost, game, start, blocked_positions, Some(self.as_trait()), |p, path| {
-            if p == goal {
+        movement_search(game, self.as_trait(), path_so_far, None, |path, p, _can_stop_here| {
+            if goal == p {
                 result = Some(path.clone());
-                true
+                PathSearchFeedback::Found
             } else {
-                false
+                PathSearchFeedback::Continue
             }
         });
         result
     }
     fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>>;
-    fn can_stop_on(&self, p: Point, game: &Game<D>) -> bool {
-        // doesn't check terrain
-        if let Some(_) = game.get_map().get_unit(p) {
-            false
-        } else {
-            true
-        }
-    }
     fn can_attack_after_moving(&self) -> bool;
     fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         if !self.can_attack_after_moving() {
@@ -53,15 +46,13 @@ pub trait NormalUnitTrait<D: Direction> {
                 return None;
             }
         }
-        let (blocked_positions, movement_type, max_cost) = self.consider_path_so_far(game, path_so_far);
-        let current_pos = path_so_far.end(game.get_map()).unwrap();
         let mut result = None;
-        width_search(&movement_type, max_cost, game, current_pos, blocked_positions, Some(self.as_trait()), |p, path| {
-            if (p == path_so_far.start || self.can_stop_on(p, game)) && self.attackable_positions(game, p, path.steps.len() + path_so_far.steps.len() > 0).contains(&goal) {
+        movement_search(game, self.as_trait(), path_so_far, None, |path, p, can_stop_here| {
+            if can_stop_here && self.attackable_positions(game, p, path.steps.len() > 0).contains(&goal) {
                 result = Some(path.clone());
-                true
+                PathSearchFeedback::Found
             } else {
-                false
+                PathSearchFeedback::Continue
             }
         });
         result
@@ -75,82 +66,31 @@ pub trait NormalUnitTrait<D: Direction> {
         }
         true
     }
-    fn consider_path_so_far(&self, game: &Game<D>, path_so_far: &Path<D>) -> (HashSet<Point>, MovementType, u8) {
-        let (movement_type, mut max_cost) = self.get_movement();
-        let mut blocked_positions = HashSet::new();
-        blocked_positions.insert(path_so_far.start);
-        for step in path_so_far.points(game.get_map()).unwrap().into_iter().skip(1) {
-            blocked_positions.insert(step);
-            max_cost -= game.get_map().get_terrain(step).unwrap().movement_cost(&movement_type).unwrap();
-        }
-        blocked_positions.remove(&path_so_far.end(game.get_map()).unwrap());
-        (blocked_positions, movement_type, max_cost)
-    }
     fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
-        let (blocked_positions, movement_type, max_cost) = self.consider_path_so_far(game, path_so_far);
-        let start = path_so_far.end(game.get_map()).unwrap();
         let mut result = HashSet::new();
-        width_search(&movement_type, max_cost, game, start, blocked_positions, Some(self.as_trait()), |p, _| {
-            result.insert(p.clone());
-            false
+        movement_search(game, self.as_trait(), path_so_far, None, |path, p, _can_stop_here| {
+            result.insert(p);
+            PathSearchFeedback::Continue
         });
         result
     }
-    fn check_path(&self, game: &Game<D>, path: &Path<D>) -> Result<(), CommandError> {
-        let (movement_type, mut remaining_movement) = self.get_movement();
-        let mut current = path.start;
-        for p in &path.steps {
-            // the points in the path have to neighbor each other
-            current = match p {
-                PathStep::Dir(d) => {
-                    if let Some(p) = game.get_map().get_neighbor(current, *d) {
-                        p.point
-                    } else {
-                        // should not happen because it's already checked before calling this method, but better to be safe
-                        return Err(CommandError::InvalidPath);
-                    }
-                }
-                PathStep::Jump(d) => {
-                    if game.get_map().get_terrain(current) != Some(&Terrain::Fountain) {
-                        return Err(CommandError::InvalidPath);
-                    }
-                    if let Some(p) = game.get_map().get_neighbor(current, *d).and_then(|o| game.get_map().get_neighbor(o.point, o.direction)) {
-                        p.point
-                    } else {
-                        // should not happen because it's already checked before calling this method, but better to be safe
-                        return Err(CommandError::InvalidPath);
-                    }
-                }
-                PathStep::Diagonal(_) | PathStep::Knight(_, _) => {
-                    return Err(CommandError::InvalidPath);
-                }
-                PathStep::Point(_p) => {
-                    // currently no use case
-                    return Err(CommandError::InvalidPath);
-                }
-            };
-            // check if that unit can move far enough
-            if let Some(terrain) = game.get_map().get_terrain(current) {
-                if let Some(cost) = terrain.movement_cost(&movement_type) {
-                    if cost > remaining_movement {
-                        return Err(CommandError::InvalidPath);
-                    }
-                    remaining_movement -= cost;
-                } else {
-                    return Err(CommandError::InvalidPath);
-                }
-            } else {
-                // no terrain means the point is invalid
-                return Err(CommandError::InvalidPath);
+    fn check_path(&self, game: &Game<D>, path_to_check: &Path<D>) -> Result<(), CommandError> {
+        let team = self.get_team(game);
+        let fog = game.get_fog().get(&team);
+        let mut path_is_valid = false;
+        movement_search(game, self.as_trait(), path_to_check, fog, |path, p, can_stop_here| {
+            if path == path_to_check {
+                path_is_valid = can_stop_here;
             }
-            // no visible unit should block movement
-            if let Some(unit) = game.get_map().get_unit(current) {
-                if game.has_vision_at(Some(game.current_player().team), current) && !unit.can_be_moved_through(self.as_trait(), game) {
-                    return Err(CommandError::InvalidPath);
-                }
-            }
+            // if path_to_check will be found at all, it would be the first one this callback gets called with
+            PathSearchFeedback::Found
+        });
+        // TODO: make this method's return value a bool
+        if path_is_valid {
+            Ok(())
+        } else {
+            Err(CommandError::InvalidPath)
         }
-        Ok(())
     }
     fn get_attack_type(&self) -> AttackType;
     fn can_attack_unit(&self, game: &Game<D>, unit: &UnitType<D>) -> bool;
