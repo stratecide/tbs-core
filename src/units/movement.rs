@@ -364,13 +364,16 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
                 // don't turn around 180°
                 continue;
             }
-            match game.get_map().get_unit(neighbor.point) {
-                Some(other) => {
-                    if !other.can_be_moved_through(unit, game) {
-                        continue;
+            let hidden_by_fog = fog.and_then(|fog| Some(fog.contains(&neighbor.point))).unwrap_or(false);
+            if !hidden_by_fog {
+                match game.get_map().get_unit(neighbor.point) {
+                    Some(other) => {
+                        if !other.can_be_moved_through(unit, game) {
+                            continue;
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
             if let Some(mut meta) = game.get_map().get_terrain(neighbor.point).and_then(|t| t.update_movement(&meta, prev_terrain)) {
                 // todo: check if maybe the PathStep is disallowed by some Detail at neighbor.point
