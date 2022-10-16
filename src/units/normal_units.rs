@@ -107,7 +107,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         } else {
             return result;
         };
-        if path.steps.len() == 0 || game.get_map().get_unit(destination).is_none() {
+        if path.start == destination || game.get_map().get_unit(destination).is_none() {
             for target in self.attackable_positions(game, destination, path.steps.len() > 0) {
                 if let Some(attack_info) = self.make_attack_info(game, destination, target) {
                     if !self.can_pull() {

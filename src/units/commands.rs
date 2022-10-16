@@ -92,22 +92,23 @@ impl<D: Direction> CommonMovement<D> {
     // returns the point the unit ends on unless it is stopped by a fog trap
     fn apply(&self, handler: &mut EventHandler<D>, into: bool, actively: bool) -> Result<Option<Point>, CommandError> {
         if let Ok(unit) = self.get_unit(handler.get_map()) {
-            let mut path_taken = None;
-            movement_search(handler.get_game(), unit, &Path::new(self.path.start), None, |path, _, can_stop_here| {
-                if path.steps.len() > self.path.steps.len() || path.steps[..path.steps.len()] != self.path.steps[..path.steps.len()] {
-                    PathSearchFeedback::Rejected
-                } else {
+            let mut path_taken = self.path.clone();
+            let mut path_taken_works = false;
+            while !path_taken_works {
+                movement_search(handler.get_game(), unit, &path_taken, None, |path, _, can_stop_here| {
                     if can_stop_here {
-                        path_taken = Some(path.clone());
+                        path_taken_works = true;
                     }
-                    if path == &self.path {
-                        PathSearchFeedback::Found
-                    } else {
-                        PathSearchFeedback::Continue
-                    }
+                    PathSearchFeedback::Found
+                });
+                if path_taken.steps.len() == 0 {
+                    // doesn't matter if path_taken_works is true or not at this point
+                    break
+                } else if !path_taken_works {
+                    path_taken.steps.pop();
                 }
-            });
-            if let Some(path_taken) = path_taken {
+            }
+            if path_taken_works {
                 if path_taken != self.path {
                     // no event for the path is necessary if the unit is unable to move at all
                     if path_taken.steps.len() > 0 {

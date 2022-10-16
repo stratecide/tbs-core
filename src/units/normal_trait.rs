@@ -68,7 +68,7 @@ pub trait NormalUnitTrait<D: Direction> {
     }
     fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
         let mut result = HashSet::new();
-        movement_search(game, self.as_trait(), path_so_far, None, |path, p, _can_stop_here| {
+        movement_search(game, self.as_trait(), path_so_far, None, |_path, p, _can_stop_here| {
             result.insert(p);
             PathSearchFeedback::Continue
         });
@@ -78,7 +78,7 @@ pub trait NormalUnitTrait<D: Direction> {
         let team = self.get_team(game);
         let fog = game.get_fog().get(&team);
         let mut path_is_valid = false;
-        movement_search(game, self.as_trait(), path_to_check, fog, |path, p, can_stop_here| {
+        movement_search(game, self.as_trait(), path_to_check, fog, |path, _p, can_stop_here| {
             if path == path_to_check {
                 path_is_valid = can_stop_here;
             }
