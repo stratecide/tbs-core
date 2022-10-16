@@ -15,7 +15,6 @@ macro_rules! land_units {
         MovementType::Foot |
         MovementType::Wheel |
         MovementType::Hover(HoverMode::Land) |
-        MovementType::Hover(HoverMode::Beach) |
         MovementType::Treads |
         MovementType::Chess
     };
@@ -23,8 +22,7 @@ macro_rules! land_units {
 
 macro_rules! sea_units {
     () => {
-        MovementType::Hover(HoverMode::Sea) |
-        MovementType::Hover(HoverMode::Beach)
+        MovementType::Hover(HoverMode::Sea)
     };
 }
 
@@ -38,30 +36,33 @@ macro_rules! air_units {
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 8)]
 pub enum Terrain<D: Direction> {
-    Grass,
-    Forest,
-    Mountain,
-    Sea,
     Beach,
-    Reef,
-    Street,
     Bridge,
-    Flame,
-    Realty(Realty, Option::<Owner>),
-    Fountain,
-    Pipe(D::P),
     ChessTile,
+    Flame,
+    Forest,
+    Fountain,
+    Grass,
+    Mountain,
+    Pipe(D::P),
+    Realty(Realty, Option::<Owner>),
+    Reef,
+    Ruins,
+    Sea,
+    Street,
 }
 impl<D: Direction> Terrain<D> {
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<u8> {
         match (self, movement_type) {
             (Self::Grass, sea_units!()) => None,
+            (Self::Grass, MovementType::Hover(HoverMode::Beach)) => Some(6),
             (Self::Grass, MovementType::Wheel) => Some(9),
             (Self::Grass, land_units!()) => Some(6),
             (Self::Grass, air_units!()) => Some(6),
             
             (Self::Forest, sea_units!()) => None,
-            (Self::Forest, MovementType::Foot) => Some(9),
+            (Self::Forest, MovementType::Hover(HoverMode::Beach)) => Some(9),
+            (Self::Forest, MovementType::Foot) => Some(6),
             (Self::Forest, land_units!()) => Some(9),
             (Self::Forest, air_units!()) => Some(6),
 
@@ -86,6 +87,9 @@ impl<D: Direction> Terrain<D> {
             (Self::Street, sea_units!()) => None,
             (Self::Street, _) => Some(6),
 
+            (Self::Ruins, sea_units!()) => None,
+            (Self::Ruins, _) => Some(6),
+
             (Self::Bridge, MovementType::Chess) => None,
             (Self::Bridge, _) => Some(6),
                 
@@ -95,6 +99,7 @@ impl<D: Direction> Terrain<D> {
 
             (Self::Fountain, land_units!()) => None,
             (Self::Fountain, sea_units!()) => Some(6),
+            (Self::Fountain, MovementType::Hover(HoverMode::Beach)) => Some(6),
             (Self::Fountain, MovementType::Heli) => Some(9),
 
             (Self::Pipe(_), _) => None,
@@ -106,6 +111,7 @@ impl<D: Direction> Terrain<D> {
     pub fn like_beach_for_hovercraft(&self) -> bool {
         match self {
             Self::Beach => true,
+            Self::Realty(realty, _) => realty.like_beach_for_hovercraft(),
             _ => false,
         }
     }
@@ -137,6 +143,7 @@ impl<D: Direction> Terrain<D> {
                         Self::Pipe(_) => mode,
                         Self::Realty(_, _) => HoverMode::Land,
                         Self::Reef => HoverMode::Sea,
+                        Self::Ruins => HoverMode::Land,
                         Self::Sea => HoverMode::Sea,
                         Self::Street => HoverMode::Land,
                     })
@@ -173,23 +180,23 @@ impl<D: Direction> Terrain<D> {
         })
     }
     pub fn defense(&self, unit: &UnitType<D>) -> f32 {
-        let u: &dyn NormalUnitTrait<D> = match unit {
+        let movement_type = match unit {
             UnitType::Normal(unit) => {
-                unit
+                unit.get_movement(self).0
             }
             UnitType::Mercenary(unit) => {
-                unit
+                unit.get_movement(self).0
             }
             UnitType::Chess(_) => {
-                return match self {
-                    Self::Grass => 1.1,
-                    _ => 1.,
-                };
+                MovementType::Chess
             }
             UnitType::Structure(_) => return 1.0,
         };
-        match (self, u.get_movement(self).0) {
-            (Self::Grass, MovementType::Foot) => 1.1,
+        match (self, movement_type) {
+            (Self::Grass, land_units!()) => 1.1,
+            (Self::Forest, land_units!()) => 1.3,
+            (Self::Realty(_, _), land_units!()) => 1.2,
+            (Self::Ruins, land_units!()) => 1.2,
             (_, _) => 1.,
         }
     }
@@ -239,6 +246,9 @@ pub enum Realty {
     Hq,
     City,
     Factory(U8::<9>),
+    Port(U8::<9>),
+    Airport(U8::<9>),
+    Tavern,
 }
 impl Realty {
     pub fn income_factor(&self) -> i16 {
@@ -250,19 +260,34 @@ impl Realty {
     pub fn buildable_units<D: Direction>(&self, game: &Game<D>, owner: Owner) -> Vec<(UnitType<D>, u16)> {
         match self {
             Self::Factory(built_this_turn) => build_options_factory(game, owner, **built_this_turn),
+            Self::Port(built_this_turn) => build_options_port(game, owner, **built_this_turn),
+            Self::Airport(built_this_turn) => build_options_airport(game, owner, **built_this_turn),
             _ => vec![],
         }
     }
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<u8> {
         match (self, movement_type) {
+            (Self::Port(_), MovementType::Chess) => None,
+            (Self::Port(_), _) => Some(6),
+
+            (Self::Tavern, MovementType::Chess) => None,
+            (Self::Tavern, _) => Some(6),
+
             (
                 Self::Hq |
                 Self::City |
-                Self::Factory(_)
-                ,
-                MovementType::Hover(HoverMode::Sea)
+                Self::Factory(_) |
+                Self::Airport(_),
+                sea_units!()
             ) => None,
-            _ => Some(6),
+            _ => Some(6)
+        }
+    }
+    pub fn like_beach_for_hovercraft(&self) -> bool {
+        match self {
+            Self::Port(_) => true,
+            Self::Tavern => true,
+            _ => false,
         }
     }
 }
@@ -271,7 +296,30 @@ pub fn build_options_factory<D: Direction>(_game: &Game<D>, owner: Owner, built_
     let units = vec![
         NormalUnits::Hovercraft(false),
         NormalUnits::DragonHead,
+        NormalUnits::Magnet,
         NormalUnits::Artillery,
+    ];
+    units.into_iter().map(|u| {
+        let value = u.value() + 300 * built_this_turn as u16;
+        let unit = UnitType::Normal(NormalUnit::new_instance(u, owner));
+        (unit, value)
+    }).collect()
+}
+
+pub fn build_options_port<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
+    let units = vec![
+        NormalUnits::Hovercraft(true),
+    ];
+    units.into_iter().map(|u| {
+        let value = u.value() + 300 * built_this_turn as u16;
+        let unit = UnitType::Normal(NormalUnit::new_instance(u, owner));
+        (unit, value)
+    }).collect()
+}
+
+pub fn build_options_airport<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
+    let units = vec![
+        NormalUnits::TransportHeli(LVec::new()),
     ];
     units.into_iter().map(|u| {
         let value = u.value() + 300 * built_this_turn as u16;
