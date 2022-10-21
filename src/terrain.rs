@@ -50,6 +50,7 @@ pub enum Terrain<D: Direction> {
     Ruins,
     Sea,
     Street,
+    Tavern,
 }
 impl<D: Direction> Terrain<D> {
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<u8> {
@@ -97,6 +98,9 @@ impl<D: Direction> Terrain<D> {
             
             (Self::Realty(realty, _), movement_type) => realty.movement_cost(movement_type),
 
+            (Self::Tavern, MovementType::Chess) => None,
+            (Self::Tavern, _) => Some(6),
+
             (Self::Fountain, land_units!()) => None,
             (Self::Fountain, sea_units!()) => Some(6),
             (Self::Fountain, MovementType::Hover(HoverMode::Beach)) => Some(6),
@@ -112,6 +116,7 @@ impl<D: Direction> Terrain<D> {
         match self {
             Self::Beach => true,
             Self::Realty(realty, _) => realty.like_beach_for_hovercraft(),
+            Self::Tavern => true,
             _ => false,
         }
     }
@@ -146,6 +151,7 @@ impl<D: Direction> Terrain<D> {
                         Self::Ruins => HoverMode::Land,
                         Self::Sea => HoverMode::Sea,
                         Self::Street => HoverMode::Land,
+                        Self::Tavern => HoverMode::Beach,
                     })
                 } else {
                     MovementType::Hover(mode)
@@ -248,7 +254,6 @@ pub enum Realty {
     Factory(U8::<9>),
     Port(U8::<9>),
     Airport(U8::<9>),
-    Tavern,
 }
 impl Realty {
     pub fn income_factor(&self) -> i16 {
@@ -270,9 +275,6 @@ impl Realty {
             (Self::Port(_), MovementType::Chess) => None,
             (Self::Port(_), _) => Some(6),
 
-            (Self::Tavern, MovementType::Chess) => None,
-            (Self::Tavern, _) => Some(6),
-
             (
                 Self::Hq |
                 Self::City |
@@ -286,7 +288,6 @@ impl Realty {
     pub fn like_beach_for_hovercraft(&self) -> bool {
         match self {
             Self::Port(_) => true,
-            Self::Tavern => true,
             _ => false,
         }
     }

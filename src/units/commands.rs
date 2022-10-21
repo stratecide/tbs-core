@@ -14,14 +14,14 @@ use super::chess::*;
 
 use super::*;
 
-#[derive(Debug, Clone, Zippable)]
-#[zippable(bits = 6)]
+#[derive(Debug, Clone)]
 pub enum UnitAction<D: Direction> {
     Wait,
     Enter,
     Capture,
     Attack(AttackInfo::<D>),
     Pull(D),
+    BuyMercenary(Vec<MercenaryOption>),
     MercenaryPowerSimple,
     Castle,
     PawnUpgrade(chess::PawnUpgrade),
@@ -34,6 +34,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Capture => write!(f, "Capture"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
             Self::Pull(_) => write!(f, "Pull"),
+            Self::BuyMercenary(_) => write!(f, "Buy Mercenary"),
             Self::MercenaryPowerSimple => write!(f, "Activate Power"),
             Self::Castle => write!(f, "Castle"),
             Self::PawnUpgrade(p) => write!(f, "{}", p),
@@ -95,7 +96,7 @@ impl<D: Direction> CommonMovement<D> {
             let mut path_taken = self.path.clone();
             let mut path_taken_works = false;
             while !path_taken_works {
-                movement_search(handler.get_game(), unit, &path_taken, None, |path, _, can_stop_here| {
+                movement_search(handler.get_game(), unit, &path_taken, None, |_path, _, can_stop_here| {
                     if can_stop_here {
                         path_taken_works = true;
                     }
@@ -229,6 +230,7 @@ pub enum UnitCommand<D: Direction> {
     MovePull(CommonMovement::<D>, D),
     MoveCapture(CommonMovement::<D>),
     MoveWait(CommonMovement::<D>),
+    MoveBuyMerc(CommonMovement::<D>, MercenaryOption),
     MoveAboard(CommonMovement::<D>),
     MoveChess(Point, ChessCommand::<D>),
     MercenaryPowerSimple(Point),
@@ -351,6 +353,28 @@ impl<D: Direction> UnitCommand<D> {
             Self::MoveWait(cm) => {
                 cm.validate_input(handler.get_game())?;
                 if let Some(end) = cm.apply(handler, false, true)? {
+                    handler.add_event(Event::UnitExhaust(end));
+                }
+                Some(cm.path.start)
+            }
+            Self::MoveBuyMerc(cm, merc) => {
+                cm.validate_input(handler.get_game())?;
+                if let Some(end) = cm.apply(handler, false, true)? {
+                    let unit = if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(end) {
+                        unit.clone()
+                    } else {
+                        return Err(CommandError::UnitTypeWrong);
+                    };
+                    let cost = if let Some(cost) = merc.price(handler.get_game(), &unit) {
+                        cost as i32
+                    } else {
+                        return Err(CommandError::UnitTypeWrong);
+                    };
+                    if handler.get_game().can_buy_merc_at(handler.get_game().current_player(), end) && cost <= *handler.get_game().current_player().funds {
+                        handler.add_event(Event::MoneyChange(unit.owner, (-(cost as i32)).try_into().unwrap()));
+                        handler.add_event(Event::UnitReplacement(end, UnitType::Normal(unit.clone()), UnitType::mercenary(merc.mercenary(), unit, end)));
+                        // TODO: update vision ...
+                    }
                     handler.add_event(Event::UnitExhaust(end));
                 }
                 Some(cm.path.start)

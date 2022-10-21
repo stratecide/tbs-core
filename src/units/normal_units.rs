@@ -107,6 +107,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         } else {
             return result;
         };
+        let player = game.get_owning_player(&self.owner).unwrap();
         if path.start == destination || game.get_map().get_unit(destination).is_none() {
             for target in self.attackable_positions(game, destination, path.steps.len() > 0) {
                 if let Some(attack_info) = self.make_attack_info(game, destination, target) {
@@ -125,11 +126,20 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             if self.can_capture() {
                 match game.get_map().get_terrain(destination) {
                     Some(Terrain::Realty(_, owner)) => {
-                        if Some(game.get_owning_player(&self.owner).unwrap().team) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team)) {
+                        if Some(player.team) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team)) {
                             result.push(UnitAction::Capture);
                         }
                     }
                     _ => {}
+                }
+            }
+            if game.can_buy_merc_at(player, destination) {
+                let mercs:Vec<MercenaryOption> = game.available_mercs(player)
+                    .into_iter()
+                    .filter(|m| m.price(game, &self).is_some())
+                    .collect();
+                if mercs.len() > 0 {
+                    result.push(UnitAction::BuyMercenary(mercs));
                 }
             }
             result.push(UnitAction::Wait);

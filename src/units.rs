@@ -62,12 +62,17 @@ impl<D: Direction> UnitType<D> {
             _ => None,
         }
     }
+
     pub fn normal(typ: NormalUnits, owner: Owner) -> Self {
         Self::Normal(NormalUnit::new_instance(typ, owner))
+    }
+    pub fn mercenary(typ: Mercenaries, base_unit: NormalUnit, origin: Point) -> Self {
+        Self::Mercenary(Mercenary::new_instance(typ, base_unit, origin))
     }
     pub fn chess(typ: ChessUnits<D>, owner: Owner) -> Self {
         Self::Chess(ChessUnit::new_instance(typ, owner))
     }
+
     pub fn name(&self) -> &'static str {
         match self {
             Self::Normal(unit) => unit.typ.name(),
@@ -327,10 +332,23 @@ impl<D: Direction> UnitType<D> {
     }
     pub fn type_value(&self) -> u16 {
         match self {
-            UnitType::Normal(unit) => unit.typ.value(),
-            UnitType::Mercenary(merc) => merc.unit.typ.value(),
-            UnitType::Chess(unit) => unit.typ.value(),
-            UnitType::Structure(structure) => structure.typ.value(),
+            Self::Normal(unit) => unit.typ.value(),
+            Self::Mercenary(merc) => merc.unit.typ.value(),
+            Self::Chess(unit) => unit.typ.value(),
+            Self::Structure(structure) => structure.typ.value(),
+        }
+    }
+    pub fn remove_available_mercs(&self, mercs: &mut Vec<MercenaryOption>) {
+        for boarded in self.get_boarded() {
+            boarded.remove_available_mercs(mercs);
+        }
+        match self {
+            Self::Mercenary(merc) => {
+                if let Some(index) = mercs.iter().position(|m| m == &merc.typ.build_option()) {
+                    mercs.remove(index);
+                }
+            }
+            _ => {}
         }
     }
 }

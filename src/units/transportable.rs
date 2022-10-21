@@ -38,4 +38,14 @@ impl TransportableTypes {
             Self::Mercenary(merc) => merc.unit.exhausted,
         }
     }
+    pub fn remove_available_mercs(&self, mercs: &mut Vec<MercenaryOption>) {
+        match self {
+            Self::Mercenary(merc) => {
+                if let Some(index) = mercs.iter().position(|m| m == &merc.typ.build_option()) {
+                    mercs.remove(index);
+                }
+            }
+            _ => {}
+        }
+    }
 }

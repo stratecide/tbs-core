@@ -16,8 +16,17 @@ pub struct Mercenary {
     pub typ: Mercenaries,
     pub unit: NormalUnit,
     pub charge: U8::<MAX_CHARGE>,
+    pub origin: Point,
 }
 impl Mercenary {
+    pub fn new_instance(typ: Mercenaries, unit: NormalUnit, origin: Point) -> Self {
+        Self {
+            typ,
+            unit,
+            charge: 0.try_into().unwrap(),
+            origin,
+        }
+    }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         let (armor_type, mut factor) = self.unit.typ.get_armor();
         factor *= 1.2;
@@ -131,7 +140,12 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
         u.has_stealth()
     }
     fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
-        let mut options = self.unit.options_after_path(game, path);
+        let mut options: Vec<UnitAction<D>> = self.unit.options_after_path(game, path)
+            .into_iter()
+            .filter(|o| match o {
+                UnitAction::BuyMercenary(_) => false,
+                _ => true
+            }).collect();
         match self.typ {
             Mercenaries::EarlGrey(false) => {
                 if path.steps.len() == 0 && *self.charge >= self.typ.max_charge() {
@@ -193,4 +207,29 @@ impl Mercenaries {
             Self::EarlGrey(true) => 0,
         }
     }
+    pub fn price<D: Direction>(&self, _game: &Game<D>, unit: &NormalUnit) -> Option<i32> {
+        Some(unit.typ.value() as i32 / 2)
+    }
+    pub fn build_option(&self) -> MercenaryOption {
+        match self {
+            Mercenaries::EarlGrey(_) => MercenaryOption::EarlGrey,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Zippable)]
+#[zippable(bits = 6)]
+pub enum MercenaryOption {
+    EarlGrey,
+}
+impl MercenaryOption {
+    pub fn mercenary(&self) -> Mercenaries {
+        match self {
+            MercenaryOption::EarlGrey => Mercenaries::EarlGrey(false),
+        }
+    }
+    pub fn price<D: Direction>(&self, _game: &Game<D>, unit: &NormalUnit) -> Option<u16> {
+        Some(unit.typ.value() / 2)
+    }
+
 }

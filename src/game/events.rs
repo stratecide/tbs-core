@@ -238,6 +238,7 @@ pub enum Event<D:Direction> {
     UnitHpChange(Point, I8::<-100, 99>, I16::<-999, 999>),
     UnitCreation(Point, UnitType::<D>),
     UnitDeath(Point, UnitType::<D>),
+    UnitReplacement(Point, UnitType::<D>, UnitType::<D>),
     MercenaryCharge(Point, I8::<{-(mercenary::MAX_CHARGE as i8)}, {mercenary::MAX_CHARGE as i8}>),
     MercenaryPowerSimple(Point),
     TerrainChange(Point, Terrain::<D>, Terrain::<D>),
@@ -316,6 +317,9 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitDeath(pos, _) => {
                 game.get_map_mut().set_unit(pos.clone(), None).expect(&format!("expected a unit at {:?} to die!", pos));
+            }
+            Self::UnitReplacement(pos, _, unit) => {
+                game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
             }
             Self::MercenaryCharge(pos, change) => {
                 if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(*pos) {
@@ -443,6 +447,9 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_unit(pos.clone(), None).expect(&format!("expected a unit at {:?} to die!", pos));
             }
             Self::UnitDeath(pos, unit) => {
+                game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
+            }
+            Self::UnitReplacement(pos, unit, _) => {
                 game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
             }
             Self::MercenaryCharge(pos, change) => {
@@ -584,6 +591,13 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::UnitDeath(pos, _) => {
+                if game.has_vision_at(*team, *pos) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitReplacement(pos, _, _) => {
                 if game.has_vision_at(*team, *pos) {
                     Some(self.clone())
                 } else {

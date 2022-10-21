@@ -143,10 +143,9 @@ impl<D: Direction> ChessCommand<D> {
                 }
                 if ChessUnit::pawn_upgrades_after_path(handler.get_map(), &path, d) {
                     // upgrade if "end of map" reached, i.e. no terrain ahead that the pawn can enter
-                    handler.add_event(Event::UnitDeath(end, UnitType::Chess(unit.clone())));
                     match self {
                         ChessCommand::Pawn(_, upgrade) => {
-                            handler.add_event(Event::UnitCreation(end, UnitType::Chess(ChessUnit {
+                            handler.add_event(Event::UnitReplacement(end, UnitType::Chess(unit.clone()), UnitType::Chess(ChessUnit {
                                 typ: upgrade.to_chess_typ(),
                                 hp: unit.hp,
                                 owner: unit.owner,

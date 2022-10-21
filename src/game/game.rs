@@ -9,9 +9,11 @@ use crate::game::settings;
 use crate::game::events;
 use crate::map::point::Point;
 use crate::player::*;
+use crate::terrain::Terrain;
 use crate::units::UnitType;
-use crate::units::combat::ArmorType;
+use crate::units::mercenary::MercenaryOption;
 use crate::units::movement::Path;
+use crate::units::transportable::TransportableTypes;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Game<D: Direction> {
@@ -150,6 +152,51 @@ impl<D: Direction> Game<D> {
     }
     pub fn has_vision_at(&self, team: Option<Team>, at: Point) -> bool {
         !self.fog.get(&team).unwrap().contains(&at)
+    }
+    
+    pub fn available_mercs(&self, player: &Player) -> Vec<MercenaryOption> {
+        let mut result = vec![MercenaryOption::EarlGrey];
+        for p in self.map.all_points() {
+            if let Some(unit) = self.map.get_unit(p) {
+                if unit.get_owner() == Some(&player.owner_id) {
+                    unit.remove_available_mercs(&mut result);
+                }
+            }
+        }
+        result
+    }
+    
+    pub fn can_buy_merc_at(&self, player: &Player, pos: Point) -> bool {
+        if self.map.get_terrain(pos) == Some(&Terrain::Tavern) {
+            for p in self.map.all_points() {
+                if let Some(unit) = self.map.get_unit(p) {
+                    if unit.get_owner() == Some(&player.owner_id) {
+                        // check if unit is mercenary or transports a mercenary
+                        match unit {
+                            UnitType::Mercenary(merc) => {
+                                if merc.origin == pos {
+                                    return false;
+                                }
+                            }
+                            _ => {}
+                        }
+                        for unit in unit.get_boarded() {
+                            match unit {
+                                TransportableTypes::Mercenary(merc) => {
+                                    if merc.origin == pos {
+                                        return false;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            true
+        } else {
+            false
+        }
     }
 
     pub fn handle_command<R: Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<HashMap<Option<Perspective>, Vec<events::Event<D>>>, events::CommandError> {
