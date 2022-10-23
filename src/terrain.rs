@@ -22,13 +22,16 @@ macro_rules! land_units {
 
 macro_rules! sea_units {
     () => {
-        MovementType::Hover(HoverMode::Sea)
+        MovementType::Hover(HoverMode::Sea) |
+        MovementType::Boat |
+        MovementType::Ship
     };
 }
 
 macro_rules! air_units {
     () => {
-        MovementType::Heli
+        MovementType::Heli |
+        MovementType::Plane
     };
 }
 
@@ -56,20 +59,22 @@ impl<D: Direction> Terrain<D> {
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<u8> {
         match (self, movement_type) {
             (Self::Grass, sea_units!()) => None,
-            (Self::Grass, MovementType::Hover(HoverMode::Beach)) => Some(6),
-            (Self::Grass, MovementType::Wheel) => Some(9),
-            (Self::Grass, land_units!()) => Some(6),
-            (Self::Grass, air_units!()) => Some(6),
+            (Self::Grass, MovementType::Hover(HoverMode::Beach)) => Some(1.),
+            (Self::Grass, MovementType::Wheel) => Some(1.5),
+            (Self::Grass, land_units!()) => Some(1.),
+            (Self::Grass, air_units!()) => Some(1.),
             
             (Self::Forest, sea_units!()) => None,
-            (Self::Forest, MovementType::Hover(HoverMode::Beach)) => Some(9),
-            (Self::Forest, MovementType::Foot) => Some(6),
-            (Self::Forest, land_units!()) => Some(9),
-            (Self::Forest, air_units!()) => Some(6),
+            (Self::Forest, MovementType::Hover(HoverMode::Beach)) => Some(1.5),
+            (Self::Forest, MovementType::Foot) => Some(1.),
+            (Self::Forest, MovementType::Wheel) => Some(2.),
+            (Self::Forest, land_units!()) => Some(1.5),
+            (Self::Forest, air_units!()) => Some(1.),
 
             (Self::Mountain, sea_units!()) => None,
-            (Self::Mountain, MovementType::Foot) => Some(9),
-            (Self::Mountain, MovementType::Heli) => Some(9),
+            (Self::Mountain, MovementType::Foot) => Some(1.5),
+            (Self::Mountain, MovementType::Heli) => Some(1.5),
+            (Self::Mountain, MovementType::Plane) => Some(1.),
             (Self::Mountain,
                 MovementType::Hover(_) |
                 MovementType::Wheel |
@@ -77,40 +82,42 @@ impl<D: Direction> Terrain<D> {
                 MovementType::Chess) => None,
 
             (Self::Sea, land_units!()) => None,
-            (Self::Sea, _) => Some(6),
+            (Self::Sea, _) => Some(1.),
 
             (Self::Beach, MovementType::Chess) => None,
-            (Self::Beach, _) => Some(6),
+            (Self::Beach, MovementType::Ship) => None,
+            (Self::Beach, _) => Some(1.),
 
             (Self::Reef, land_units!()) => None,
-            (Self::Reef, _) => Some(6),
+            (Self::Reef, _) => Some(1.),
 
             (Self::Street, sea_units!()) => None,
-            (Self::Street, _) => Some(6),
+            (Self::Street, _) => Some(1.),
 
             (Self::Ruins, sea_units!()) => None,
-            (Self::Ruins, _) => Some(6),
+            (Self::Ruins, _) => Some(1.),
 
             (Self::Bridge, MovementType::Chess) => None,
-            (Self::Bridge, _) => Some(6),
+            (Self::Bridge, _) => Some(1.),
                 
             (Self::Flame, _) => None,
             
-            (Self::Realty(realty, _), movement_type) => realty.movement_cost(movement_type),
+            (Self::Realty(realty, _), movement_type) => return realty.movement_cost(movement_type),
 
             (Self::Tavern, MovementType::Chess) => None,
-            (Self::Tavern, _) => Some(6),
+            (Self::Tavern, _) => Some(1.),
 
             (Self::Fountain, land_units!()) => None,
-            (Self::Fountain, sea_units!()) => Some(6),
-            (Self::Fountain, MovementType::Hover(HoverMode::Beach)) => Some(6),
-            (Self::Fountain, MovementType::Heli) => Some(9),
+            (Self::Fountain, sea_units!()) => Some(1.),
+            (Self::Fountain, MovementType::Hover(HoverMode::Beach)) => Some(1.),
+            (Self::Fountain, MovementType::Heli) => Some(1.5),
+            (Self::Fountain, MovementType::Plane) => Some(1.),
 
             (Self::Pipe(_), _) => None,
 
             (Self::ChessTile, sea_units!()) => None,
-            (Self::ChessTile, _) => Some(6),
-        }
+            (Self::ChessTile, _) => Some(1.),
+        }.and_then(|v| Some((v * 6.) as u8))
     }
     pub fn like_beach_for_hovercraft(&self) -> bool {
         match self {

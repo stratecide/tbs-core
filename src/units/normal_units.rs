@@ -84,6 +84,16 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     fn get_movement(&self, terrain: &Terrain<D>) -> (MovementType, u8) {
         let factor = 6;
         match self.typ {
+            NormalUnits::Sniper => (MovementType::Foot, 3 * factor),
+            NormalUnits::Bazooka => (MovementType::Foot, 3 * factor),
+            NormalUnits::DragonHead => (MovementType::Wheel, 6 * factor),
+            NormalUnits::Artillery => (MovementType::Treads, 5 * factor),
+            NormalUnits::SmallTank => (MovementType::Treads, 7 * factor),
+            NormalUnits::BigTank => (MovementType::Treads, 6 * factor),
+            NormalUnits::AntiAir => (MovementType::Treads, 7 * factor),
+            NormalUnits::RocketLauncher => (MovementType::Wheel, 5 * factor),
+            NormalUnits::Magnet => (MovementType::Wheel, 7 * factor),
+
             NormalUnits::Hovercraft(on_sea) => {
                 let mut movement_type = MovementType::Hover(HoverMode::new(on_sea));
                 if terrain.like_beach_for_hovercraft() {
@@ -91,10 +101,18 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                 }
                 (movement_type, 3 * factor)
             },
+            
+            NormalUnits::SharkRider => (MovementType::Boat, 3 * factor),
+            NormalUnits::TransportBoat(_) => (MovementType::Boat, 5 * factor),
+            NormalUnits::WaveBreaker => (MovementType::Ship, 7 * factor),
+            NormalUnits::Submarine => (MovementType::Ship, 7 * factor),
+            NormalUnits::SiegeShip => (MovementType::Ship, 5 * factor),
+
             NormalUnits::TransportHeli(_) => (MovementType::Heli, 6 * factor),
-            NormalUnits::DragonHead => (MovementType::Wheel, 6 * factor),
-            NormalUnits::Artillery => (MovementType::Treads, 5 * factor),
-            NormalUnits::Magnet => (MovementType::Wheel, 7 * factor),
+            NormalUnits::AttackHeli => (MovementType::Heli, 7 * factor),
+            NormalUnits::Blimp => (MovementType::Heli, 5 * factor),
+            NormalUnits::Bomber => (MovementType::Plane, 8 * factor),
+            NormalUnits::Fighter => (MovementType::Plane, 10 * factor),
         }
     }
     fn has_stealth(&self) -> bool {
@@ -155,11 +173,9 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
     fn can_attack_after_moving(&self) -> bool {
         match self.typ {
-            NormalUnits::Hovercraft(_) => true,
-            NormalUnits::TransportHeli(_) => true,
-            NormalUnits::DragonHead => true,
             NormalUnits::Artillery => false,
-            NormalUnits::Magnet => true,
+            NormalUnits::RocketLauncher => false,
+            _ => true,
         }
     }
     fn get_attack_type(&self) -> AttackType {
@@ -286,20 +302,62 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 8)]
 pub enum NormalUnits {
-    Hovercraft(bool), // bool is only relevant on e.g. bridges. true if HoverMode::Sea, false if HoverMode::Land
-    TransportHeli(LVec::<TransportableTypes, 1>),
+    // ground units
+    Sniper,
+    Bazooka,
     DragonHead,
     Artillery,
+    SmallTank,
+    BigTank,
+    AntiAir,
+    RocketLauncher,
     Magnet,
+
+    // hover units
+    Hovercraft(bool), // bool is only relevant on e.g. bridges. true if HoverMode::Sea, false if HoverMode::Land
+
+    // sea units
+    SharkRider,
+    //ChargeBoat,
+    TransportBoat(LVec::<TransportableTypes, 2>),
+    WaveBreaker,
+    Submarine,
+    SiegeShip,
+
+    // air units
+    TransportHeli(LVec::<TransportableTypes, 1>),
+    AttackHeli,
+    Blimp,
+    Bomber,
+    Fighter,
 }
 impl NormalUnits {
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Hovercraft(_) => "Hovercraft",
-            Self::TransportHeli(_) => "Transport Helicopter",
+            Self::Sniper => "Sniper",
+            Self::Bazooka => "Bazooka",
             Self::DragonHead => "Dragon Head",
             Self::Artillery => "Artillery",
+            Self::SmallTank => "Small Tank",
+            Self::BigTank => "Big Tank",
+            Self::AntiAir => "Anti Air",
+            Self::RocketLauncher => "Rocket Launcher",
             Self::Magnet => "Magnet",
+
+            Self::Hovercraft(_) => "Hovercraft",
+            
+            Self::SharkRider => "Shark Rider",
+            //Self::ChargeBoat => "Charge Boat",
+            Self::TransportBoat(_) => "Transport Boat",
+            Self::WaveBreaker => "Wavebreaker",
+            Self::Submarine => "Submarine",
+            Self::SiegeShip => "Siege Ship",
+
+            Self::TransportHeli(_) => "Transport Helicopter",
+            Self::AttackHeli => "Attack Helicopter",
+            Self::Blimp => "Blimp",
+            Self::Bomber => "Bomber",
+            Self::Fighter => "Fighter",
         }
     }
     pub fn get_boarded(&self) -> Vec<&TransportableTypes> {
@@ -351,38 +409,111 @@ impl NormalUnits {
     }
     pub fn get_attack_type(&self) -> AttackType {
         match self {
-            Self::Hovercraft(_) => AttackType::Adjacent,
-            Self::TransportHeli(_) => AttackType::None,
+            Self::Sniper => AttackType::Ranged(1, 2),
+            Self::Bazooka => AttackType::Adjacent,
             Self::DragonHead => AttackType::Straight(1, 2),
-            Self::Artillery => AttackType::Ranged(2, 3),
+            Self::Artillery => AttackType::Ranged(2, 4),
+            Self::SmallTank => AttackType::Adjacent,
+            Self::BigTank => AttackType::Adjacent,
+            Self::AntiAir => AttackType::Adjacent,
+            Self::RocketLauncher => AttackType::Ranged(3, 6),
             Self::Magnet => AttackType::Straight(2, 2),
+
+            Self::Hovercraft(_) => AttackType::Adjacent,
+
+            Self::SharkRider => AttackType::Adjacent,
+            //Self::ChargeBoat => AttackType::Adjacent,
+            Self::TransportBoat(_) => AttackType::None,
+            Self::WaveBreaker => AttackType::Adjacent,
+            Self::Submarine => AttackType::Adjacent,
+            Self::SiegeShip => AttackType::Ranged(2, 4),
+
+            Self::TransportHeli(_) => AttackType::None,
+            Self::AttackHeli => AttackType::Adjacent,
+            Self::Blimp => AttackType::Adjacent,
+            Self::Bomber => AttackType::Adjacent,
+            Self::Fighter => AttackType::Adjacent,
         }
     }
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         match self {
-            Self::Hovercraft(_) => vec![(WeaponType::MachineGun, 1.)],
-            Self::TransportHeli(_) => vec![],
+            Self::Sniper => vec![(WeaponType::Rifle, 1.)],
+            Self::Bazooka => vec![(WeaponType::Shells, 1.)],
             Self::DragonHead => vec![(WeaponType::Flame, 1.)],
             Self::Artillery => vec![(WeaponType::SurfaceMissiles, 1.)],
+            Self::SmallTank => vec![(WeaponType::Shells, 1.)],
+            Self::BigTank => vec![(WeaponType::Shells, 1.8)],
+            Self::AntiAir => vec![(WeaponType::AntiAir, 1.)],
+            Self::RocketLauncher => vec![(WeaponType::SurfaceMissiles, 1.)],
             Self::Magnet => vec![],
+
+            Self::Hovercraft(_) => vec![(WeaponType::MachineGun, 1.)],
+
+            Self::SharkRider => vec![(WeaponType::Rifle, 1.)],
+            Self::TransportBoat(_) => vec![],
+            Self::WaveBreaker => vec![(WeaponType::Shells, 1.)],
+            Self::Submarine => vec![(WeaponType::Torpedo, 1.)],
+            Self::SiegeShip => vec![(WeaponType::SurfaceMissiles, 1.), (WeaponType::AntiAir, 0.5)],
+
+            Self::TransportHeli(_) => vec![],
+            Self::AttackHeli => vec![(WeaponType::Rocket, 1.)],
+            Self::Blimp => vec![(WeaponType::Rifle, 1.)],
+            Self::Bomber => vec![(WeaponType::Bombs, 1.)],
+            Self::Fighter => vec![(WeaponType::AntiAir, 1.)],
         }
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
-            Self::Hovercraft(_) => (ArmorType::Infantry, 1.5),
-            Self::TransportHeli(_) => (ArmorType::Heli, 1.5),
+            Self::Sniper => (ArmorType::Infantry, 1.2),
+            Self::Bazooka => (ArmorType::Infantry, 1.6),
             Self::DragonHead => (ArmorType::Light, 1.5),
             Self::Artillery => (ArmorType::Light, 1.5),
+            Self::SmallTank => (ArmorType::Light, 2.0),
+            Self::BigTank => (ArmorType::Heavy, 1.5),
+            Self::AntiAir => (ArmorType::Light, 1.5),
+            Self::RocketLauncher => (ArmorType::Light, 1.2),
             Self::Magnet => (ArmorType::Light, 1.5),
+
+            Self::Hovercraft(_) => (ArmorType::Infantry, 1.5),
+            
+            Self::SharkRider => (ArmorType::Infantry, 1.5),
+            Self::TransportBoat(_) => (ArmorType::Boat, 1.0),
+            Self::WaveBreaker => (ArmorType::Boat, 2.0),
+            Self::Submarine => (ArmorType::Submarine, 2.0),
+            Self::SiegeShip => (ArmorType::Ship, 1.5),
+            
+            Self::TransportHeli(_) => (ArmorType::Heli, 1.2),
+            Self::AttackHeli => (ArmorType::Heli, 1.8),
+            Self::Blimp => (ArmorType::Heli, 1.5),
+            Self::Bomber => (ArmorType::Plane, 1.5),
+            Self::Fighter => (ArmorType::Plane, 1.5),
         }
     }
     pub fn value(&self) -> u16 {
         match self {
-            Self::Hovercraft(_) => 100,
-            Self::TransportHeli(_) => 500,
+            Self::Sniper => 150,
+            Self::Bazooka => 250,
             Self::DragonHead => 400,
             Self::Artillery => 600,
+            Self::SmallTank => 800,
+            Self::BigTank => 1500,
+            Self::AntiAir => 800,
+            Self::RocketLauncher => 1500,
             Self::Magnet => 500,
+
+            Self::Hovercraft(_) => 100,
+            
+            Self::SharkRider => 150,
+            Self::TransportBoat(_) => 1000,
+            Self::WaveBreaker => 800,
+            Self::Submarine => 1000,
+            Self::SiegeShip => 1400,
+
+            Self::TransportHeli(_) => 500,
+            Self::AttackHeli => 900,
+            Self::Blimp => 1200,
+            Self::Bomber => 1800,
+            Self::Fighter => 1600,
         }
     }
 }

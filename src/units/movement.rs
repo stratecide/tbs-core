@@ -41,11 +41,18 @@ impl HoverMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MovementType {
-    Hover(HoverMode),
     Foot,
     Wheel,
     Treads,
+
+    Hover(HoverMode),
+    
+    Boat,
+    Ship,
+
     Heli,
+    Plane,
+
     Chess,
 }
 
