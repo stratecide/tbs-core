@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::{player::*, map::{direction::Direction, point::Point}, game::game::Game};
+use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::Game, events::{EventHandler, Event}}};
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
 use crate::units::UnitType;
@@ -253,14 +253,17 @@ impl<D: Direction> Terrain<D> {
 }
 
 
+const MAX_BUILT_THIS_TURN: u8 = 9;
+pub type BuiltThisTurn = U8<{MAX_BUILT_THIS_TURN}>;
+
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 6)]
 pub enum Realty {
     Hq,
     City,
-    Factory(U8::<9>),
-    Port(U8::<9>),
-    Airport(U8::<9>),
+    Factory(BuiltThisTurn),
+    Port(BuiltThisTurn),
+    Airport(BuiltThisTurn),
 }
 impl Realty {
     pub fn income_factor(&self) -> i16 {
@@ -296,6 +299,18 @@ impl Realty {
         match self {
             Self::Port(_) => true,
             _ => false,
+        }
+    }
+    pub fn after_buying<D: Direction>(&self, pos: Point, handler: &mut EventHandler<D>) {
+        match self {
+            Self::Factory(built_this_turn) |
+            Self::Airport(built_this_turn) |
+            Self::Port(built_this_turn) => {
+                if **built_this_turn < MAX_BUILT_THIS_TURN {
+                    handler.add_event(Event::UpdateBuiltThisTurn(pos, *built_this_turn, BuiltThisTurn::new(**built_this_turn + 1)));
+                }
+            }
+            _ => {}
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::map::point_map;
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::normal_trait::NormalUnitTrait;
 use crate::{player::*, details};
-use crate::terrain::Terrain;
+use crate::terrain::{Terrain, BuiltThisTurn, Realty};
 use crate::details::Detail;
 use crate::units::*;
 use crate::map::direction::Direction;
@@ -54,6 +54,21 @@ impl<D: Direction> Command<D> {
                         }
                     }
                 }
+                
+                // reset built_this_turn-counter for realties
+                for p in handler.get_map().all_points() {
+                    match handler.get_map().get_terrain(p) {
+                        Some(Terrain::Realty(Realty::Factory(built_this_turn), _)) |
+                        Some(Terrain::Realty(Realty::Airport(built_this_turn), _)) |
+                        Some(Terrain::Realty(Realty::Port(built_this_turn), _)) => {
+                            if **built_this_turn > 0 {
+                                handler.add_event(Event::UpdateBuiltThisTurn(p, *built_this_turn, 0.try_into().unwrap()));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                
                 let was_foggy = handler.get_game().is_foggy();
 
                 handler.add_event(Event::NextTurn);
@@ -156,6 +171,7 @@ impl<D: Direction> Command<D> {
                             let options = realty.buildable_units(handler.get_game(), owner_id);
                             if let Some((unit, cost)) = options.get(*index as usize) {
                                 if *cost as i32 <= *handler.get_game().current_player().funds {
+                                    let realty = realty.clone();
                                     handler.add_event(Event::MoneyChange(owner_id, (-(*cost as i32)).try_into().unwrap()));
                                     let mut u = unit.clone();
                                     u.set_exhausted(true);
@@ -164,7 +180,8 @@ impl<D: Direction> Command<D> {
                                     if vision_changes.len() > 0 {
                                         handler.add_event(Event::PureFogChange(team, vision_changes.try_into().unwrap()));
                                     }
-                                    // TODO: increment counter for that realty
+                                    // increment counter for that realty
+                                    realty.after_buying(pos, handler);
                                     Ok(())
                                 } else {
                                     Err(CommandError::NotEnoughMoney)
@@ -255,6 +272,7 @@ pub enum Event<D:Direction> {
     UnitMovedThisGame(Point),
     EnPassantOpportunity(Point),
     UnitDirection(Point, D, D),
+    UpdateBuiltThisTurn(Point, BuiltThisTurn, BuiltThisTurn),
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -393,6 +411,16 @@ impl<D: Direction> Event<D> {
                     }
                 }
             }
+            Self::UpdateBuiltThisTurn(p, _, val) => {
+                match game.get_map_mut().get_terrain_mut(*p) {
+                    Some(Terrain::Realty(Realty::Factory(built_this_turn), _)) |
+                    Some(Terrain::Realty(Realty::Airport(built_this_turn), _)) |
+                    Some(Terrain::Realty(Realty::Port(built_this_turn), _)) => {
+                        *built_this_turn = *val;
+                    }
+                    _ => {}
+                }
+            }
         }
     }
     pub fn undo(&self, game: &mut Game<D>) {
@@ -522,6 +550,16 @@ impl<D: Direction> Event<D> {
                         }
                         _ => {}
                     }
+                }
+            }
+            Self::UpdateBuiltThisTurn(p, val, _) => {
+                match game.get_map_mut().get_terrain_mut(*p) {
+                    Some(Terrain::Realty(Realty::Factory(built_this_turn), _)) |
+                    Some(Terrain::Realty(Realty::Airport(built_this_turn), _)) |
+                    Some(Terrain::Realty(Realty::Port(built_this_turn), _)) => {
+                        *built_this_turn = *val;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -729,6 +767,13 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
+            Self::UpdateBuiltThisTurn(p, _, _) => {
+                if game.has_vision_at(*team, *p) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -822,7 +867,7 @@ fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
         if visible && !previous_visible {
             // either the unit appears out of fog or this is the first step
             if let Some(result) = &mut result {
-                // TODO: this step isn't necessary if the unit reappears in the same field where it last vanished
+                // not necessary to skip ahead if the unit reappears in the same field where it last vanished
                 if last_visible != Some(previous) {
                     result.1.push(step.skip_to(previous)).unwrap();
                 }
