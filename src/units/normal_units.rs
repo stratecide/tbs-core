@@ -163,7 +163,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             result.push(UnitAction::Wait);
         } else if path.steps.len() > 0 {
             if let Some(transporter) = game.get_map().get_unit(destination) {
-                // TODO: this is called indirectly by mercenaries, so using ::Normal isn't necessarily correct
+                // this is called indirectly by mercenaries, so using ::Normal could theoretically give wrong results
                 if transporter.boardable_by(&TransportableTypes::Normal(self.clone())) {
                     result.push(UnitAction::Enter);
                 }

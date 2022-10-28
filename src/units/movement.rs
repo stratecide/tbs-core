@@ -158,42 +158,6 @@ impl<D: Direction> Path<D> {
         }
         Ok(points)
     }
-
-    pub fn fog_replacement(&self, game: &Game<D>, team: Perspective) -> Option<Self> {
-        let mut result: Option<Path<D>> = None;
-        let mut current = self.start;
-        let mut previous_visible = false;
-        let mut last_visible = None;
-        if game.has_vision_at(team, current) {
-            result = Some(Path::new(self.start));
-            previous_visible = true;
-            last_visible = Some(self.start);
-        }
-        for step in self.steps.iter() {
-            let previous = current;
-            current = step.progress(game.get_map(), current).expect(&format!("unable to find next point after {:?}", current));
-            let visible = game.has_vision_at(team, current);
-            if visible && !previous_visible {
-                // either the unit appears out of fog or this is the first step
-                if let Some(result) = &mut result {
-                    // TODO: this step isn't necessary if the unit reappears in the same field where it last vanished
-                    if last_visible != Some(previous) {
-                        result.steps.push(PathStep::Point(previous)).unwrap();
-                    }
-                } else {
-                    result = Some(Path::new(previous));
-                }
-            }
-            if visible || previous_visible {
-                // if the previous step was visible, this one should be too
-                // CAUTION: should not be visible if teleporting into fog
-                last_visible = Some(current);
-                result.as_mut().unwrap().steps.push(step.clone()).unwrap();
-            }
-            previous_visible = visible;
-        }
-        result
-    }
 }
 
 pub trait PathStepExt<D: Direction>: Clone {
