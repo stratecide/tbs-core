@@ -7,6 +7,7 @@ use crate::details;
 use crate::game::settings;
 use crate::game::game::*;
 use crate::game::events;
+use crate::game::settings::PlayerSettings;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
@@ -325,20 +326,50 @@ where D: Direction
         corrected
     }
     
-    pub fn get_players(&self) -> Vec<Player> {
-        vec![
-            Player::new(0, Team::try_from(0).unwrap(), 100, 333, crate::commanders::Commander::Zombie(0.try_into().unwrap(), false)),
-            Player::new(1, Team::try_from(1).unwrap(), 144, 210, crate::commanders::Commander::Vampire(0.try_into().unwrap(), false)),
-        ]
+    pub fn get_viable_player_ids(&self) -> Vec<Owner> {
+        let mut owners = HashSet::new();
+        for p in self.all_points() {
+            if let Some(unit) = self.get_unit(p) {
+                if let Some(owner) = unit.get_owner() {
+                    owners.insert(*owner);
+                }
+            }
+            if let Some(Terrain::Realty(realty, owner)) = self.get_terrain(p) {
+                if let Some(owner) = owner {
+                    if realty.can_build() {
+                        owners.insert(*owner);
+                    }
+                }
+            }
+            for detail in self.get_details(p) {
+                match detail {
+                    Detail::FactoryBubble(owner) => {
+                        owners.insert(owner);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut owners: Vec<Owner> = owners.into_iter().collect();
+        owners.sort();
+        owners
     }
     /**
      * returns Ok(...) if the map is playable
      * returns Err(...) containing the reason otherwise
      */
     pub fn settings(&self) -> Result<settings::GameSettings, settings::NotPlayable> {
+        let owners = self.get_viable_player_ids();
+        if owners.len() < 2 {
+            return Err(settings::NotPlayable::TooFewPlayers);
+        }
+        let players:Vec<PlayerSettings> = owners.into_iter()
+            .map(|owner| PlayerSettings::new(owner))
+            .collect();
         // TODO: check if playable
         Ok(settings::GameSettings {
-            fog_mode: FogMode::DarkRegular(3.try_into().unwrap(), 4.try_into().unwrap(), 3.try_into().unwrap()),
+            fog_mode: FogMode::DarkRegular(0.try_into().unwrap(), 4.try_into().unwrap(), 3.try_into().unwrap()),
+            players: players.try_into().unwrap(),
         })
     }
     pub fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {

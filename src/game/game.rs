@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 
 use zipper::*;
 use zipper::zipper_derive::*;
@@ -26,11 +27,15 @@ pub struct Game<D: Direction> {
 }
 impl<D: Direction> Game<D> {
     fn new(map: Map<D>, settings: &settings::GameSettings) -> Self {
-        let players = map.get_players();
+        let players: Vec<Player> = settings.players.iter()
+            .map(|player| player.build())
+            .collect();
         let mut fog = HashMap::new();
         let neutral_fog = HashSet::new();
         for player in &players {
-            fog.insert(Some(player.team.clone()), neutral_fog.clone());
+            if !fog.contains_key(&Some(player.team)) {
+                fog.insert(Some(player.team), neutral_fog.clone());
+            }
         }
         fog.insert(None, neutral_fog);
         Game {
@@ -407,6 +412,26 @@ impl<D: Direction> interfaces::Game for Game<D> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Zippable)]
+pub struct FogChangeChance (U8::<240>);
+impl FogChangeChance {
+    pub fn new(chance: f32) -> Self {
+        Self (
+            U8::new((chance.max(0.).min(1.) * 240.) as u8)
+        )
+    }
+    pub fn check(&self, value: f32) -> bool {
+        value < self.get_chance()
+    }
+    pub fn get_chance(&self) -> f32 {
+        (*self.0 as f32) / 240.
+    }
+}
+impl Display for FogChangeChance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{}", self.get_chance()))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 3)]
@@ -415,7 +440,7 @@ pub enum FogMode {
     Always,
     DarkRegular(U8::<255>, U8::<255>, U8::<255>),
     BrightRegular(U8::<255>, U8::<255>, U8::<255>),
-    Random(bool, U8::<255>, U8::<240>, U8::<240>),
+    Random(bool, U8::<255>, FogChangeChance, FogChangeChance),
 }
 impl FogMode {
     pub fn is_foggy(&self, turn: u32) -> bool {

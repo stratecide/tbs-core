@@ -77,8 +77,8 @@ impl<D: Direction> Command<D> {
                 match handler.get_game().get_fog_mode() {
                     FogMode::Random(value, offset, to_bright_chance, to_dark_chance) => {
                         if handler.get_game().current_turn() >= **offset as u32 {
-                            let random_value= (random() * 180.) as u8;
-                            if *value && random_value < **to_bright_chance || !*value && random_value < **to_dark_chance {
+                            let random_value= random();
+                            if *value && to_bright_chance.check(random_value) || !*value && to_dark_chance.check(random_value) {
                                 handler.add_event(Event::FogFlipRandom);
                             }
                         }

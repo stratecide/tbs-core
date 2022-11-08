@@ -1,7 +1,7 @@
 use zipper::*;
 use crate::commanders::*;
 
-pub type Owner = U8<16>;
+pub type Owner = U8<15>;
 pub const OWNER_0: Owner = Owner::new(0);
 pub const OWNER_1: Owner = Owner::new(1);
 pub const OWNER_2: Owner = Owner::new(2);
@@ -19,7 +19,7 @@ pub const OWNER_13: Owner = Owner::new(13);
 pub const OWNER_14: Owner = Owner::new(14);
 pub const OWNER_15: Owner = Owner::new(15);
 
-pub type Team = U8<16>;
+pub type Team = U8<15>;
 pub type Income = I16<-1000, 1000>;
 pub type Funds = I32<-1_000_000_000, 1_000_000_000>;
 

@@ -22,10 +22,10 @@ pub struct NormalUnit {
     pub zombie: bool,
 }
 impl NormalUnit {
-    pub fn new_instance(from: NormalUnits, color_id: Owner) -> NormalUnit {
+    pub fn new_instance(from: NormalUnits, owner: Owner) -> NormalUnit {
         NormalUnit {
             typ: from,
-            owner: color_id,
+            owner,
             hp: 100.try_into().unwrap(),
             exhausted: false,
             zombie: false,

@@ -272,6 +272,14 @@ impl Realty {
             _ => 0,
         }
     }
+    pub fn can_build(&self) -> bool {
+        match self {
+            Self::Factory(_) => true,
+            Self::Airport(_) => true,
+            Self::Port(_) => true,
+            _ => false
+        }
+    }
     pub fn buildable_units<D: Direction>(&self, game: &Game<D>, owner: Owner) -> Vec<(UnitType<D>, u16)> {
         match self {
             Self::Factory(built_this_turn) => build_options_factory(game, owner, **built_this_turn),

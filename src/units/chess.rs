@@ -233,10 +233,10 @@ pub struct ChessUnit<D: Direction> {
     pub exhausted: bool,
 }
 impl<D: Direction> ChessUnit<D> {
-    pub fn new_instance(from: ChessUnits<D>, color_id: Owner) -> ChessUnit<D> {
+    pub fn new_instance(from: ChessUnits<D>, owner: Owner) -> ChessUnit<D> {
         ChessUnit {
             typ: from,
-            owner: color_id,
+            owner,
             hp: 100.try_into().unwrap(),
             exhausted: false,
         }

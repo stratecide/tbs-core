@@ -10,8 +10,6 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::map::map::*;
-use crate::player::Perspective;
-use crate::terrain::Terrain;
 
 use super::normal_units::NormalUnits;
 use super::{normal_trait::*, chess, UnitType};

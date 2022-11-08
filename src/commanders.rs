@@ -156,14 +156,14 @@ impl Commander {
             handler.add_event(Event::CommanderFlipActiveSimple(owner))
         }
     }
-
-    /*pub fn can_use_power<D: Direction>(&self, game: &Game<D>, owner: Owner, power: &CommanderPower) -> bool {
-        match (self, power) {
-            (Self::Vampire(charge, power_active), CommanderPower::VampireBloodStorm) => !power_active && *charge >= power.charge_cost(),
-            (Self::Zombie(charge, power_active), CommanderPower::ZombieResurrection) => !power_active && *charge >= power.charge_cost(),
-            _ => false,
-        }
-    }*/
+    
+    pub fn list_all() -> Vec<Self> {
+        vec![
+            Self::None,
+            Self::Vampire(Charge::new(0), false),
+            Self::Zombie(Charge::new(0), false),
+        ]
+    }
 }
 
 
