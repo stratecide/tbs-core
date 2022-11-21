@@ -980,19 +980,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn start_turn(&mut self) {
         self.recalculate_fog(false);
 
-        // income from properties
-        let mut income_factor = 0;
-        for p in self.get_map().all_points() {
-            match self.get_map().get_terrain(p) {
-                Some(Terrain::Realty(realty, owner)) => {
-                    if *owner == Some(self.game.current_player().owner_id) {
-                        income_factor += realty.income_factor();
-                    }
-                }
-                _ => {}
-            }
-        }
-        self.add_event(Event::MoneyChange(self.game.current_player().owner_id, ((*self.game.current_player().income * income_factor) as i32).try_into().unwrap()));
+        self.add_event(Event::MoneyChange(self.game.current_player().owner_id, ((*self.game.current_player().income * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32).try_into().unwrap()));
     }
     pub fn recalculate_fog(&mut self, keep_current_team: bool) {
         let mut teams:HashSet<Option<Team>> = self.game.get_teams().into_iter().map(|team| Some(team)).collect();

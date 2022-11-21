@@ -326,6 +326,22 @@ where D: Direction
         corrected
     }
     
+    pub fn get_income_factor(&self, owner_id: Owner) -> i16 {
+        // income from properties
+        let mut income_factor = 0;
+        for p in self.all_points() {
+            match self.get_terrain(p) {
+                Some(Terrain::Realty(realty, owner)) => {
+                    if *owner == Some(owner_id) {
+                        income_factor += realty.income_factor();
+                    }
+                }
+                _ => {}
+            }
+        }
+        income_factor
+    }
+    
     pub fn get_viable_player_ids(&self) -> Vec<Owner> {
         let mut owners = HashSet::new();
         for p in self.all_points() {

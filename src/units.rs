@@ -13,6 +13,7 @@ use std::collections::{HashSet, HashMap};
 use zipper::*;
 use zipper::zipper_derive::*;
 
+use crate::commanders::Commander;
 use crate::game::events::*;
 use crate::player::*;
 use crate::map::direction::Direction;
@@ -337,6 +338,14 @@ impl<D: Direction> UnitType<D> {
             Self::Chess(unit) => unit.typ.value(),
             Self::Structure(structure) => structure.typ.value(),
         }
+    }
+    pub fn value(&self, game: &Game<D>, _co: &Commander) -> u16 {
+        (match self {
+            Self::Normal(unit) => unit.typ.value(),
+            Self::Mercenary(merc) => merc.unit.typ.value() + merc.typ.price(game, &merc.unit).unwrap() as u16,
+            Self::Chess(unit) => unit.typ.value(),
+            Self::Structure(structure) => structure.typ.value(),
+        }) * self.get_hp() as u16 / 100
     }
     pub fn remove_available_mercs(&self, mercs: &mut Vec<MercenaryOption>) {
         for boarded in self.get_boarded() {

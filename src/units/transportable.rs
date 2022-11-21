@@ -32,6 +32,12 @@ impl TransportableTypes {
             Self::Mercenary(m) => &m.unit.owner,
         }
     }
+    pub fn get_hp(&self) -> u8 {
+        *match self {
+            Self::Normal(unit) => unit.hp,
+            Self::Mercenary(unit) => unit.unit.hp,
+        }
+    }
     pub fn is_exhausted(&self) -> bool {
         match self {
             Self::Normal(unit) => unit.exhausted,
