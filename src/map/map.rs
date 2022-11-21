@@ -326,14 +326,14 @@ where D: Direction
         corrected
     }
     
-    pub fn get_income_factor(&self, owner_id: Owner) -> i16 {
+    pub fn get_income_factor(&self, owner_id: Owner) -> isize {
         // income from properties
         let mut income_factor = 0;
         for p in self.all_points() {
             match self.get_terrain(p) {
                 Some(Terrain::Realty(realty, owner)) => {
                     if *owner == Some(owner_id) {
-                        income_factor += realty.income_factor();
+                        income_factor += realty.income_factor() as isize;
                     }
                 }
                 _ => {}

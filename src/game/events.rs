@@ -980,7 +980,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn start_turn(&mut self) {
         self.recalculate_fog(false);
 
-        self.add_event(Event::MoneyChange(self.game.current_player().owner_id, ((*self.game.current_player().income * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32).try_into().unwrap()));
+        self.add_event(Event::MoneyChange(self.game.current_player().owner_id, ((*self.game.current_player().income as isize * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32).try_into().unwrap()));
     }
     pub fn recalculate_fog(&mut self, keep_current_team: bool) {
         let mut teams:HashSet<Option<Team>> = self.game.get_teams().into_iter().map(|team| Some(team)).collect();
