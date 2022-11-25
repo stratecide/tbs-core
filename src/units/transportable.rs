@@ -7,7 +7,7 @@ use zipper::zipper_derive::*;
 
 use super::*;
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 1)]
 pub enum TransportableTypes {
     Normal(NormalUnit),

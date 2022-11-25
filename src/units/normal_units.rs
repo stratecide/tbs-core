@@ -1,4 +1,5 @@
 
+use crate::details::Detail;
 use crate::game::events::*;
 use crate::map::wrapping_map::{OrientedPoint};
 use crate::player::*;
@@ -13,7 +14,7 @@ use zipper::zipper_derive::*;
 
 use super::*;
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 pub struct NormalUnit {
     pub typ: NormalUnits,
     pub owner: Owner,
@@ -127,6 +128,18 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         };
         let player = game.get_owning_player(&self.owner).unwrap();
         if path.start == destination || game.get_map().get_unit(destination).is_none() {
+            let mut funds_after_path = *player.funds;
+            let path_points: HashSet<Point> = path.points(game.get_map()).unwrap().into_iter().collect();
+            for p in path_points {
+                for detail in game.get_map().get_details(p) {
+                    match detail {
+                        Detail::Coins1 => funds_after_path += *player.income as i32 / 2,
+                        Detail::Coins2 => funds_after_path += *player.income as i32,
+                        Detail::Coins4 => funds_after_path += *player.income as i32 * 2,
+                        _ => {}
+                    }
+                }
+            }
             for target in self.attackable_positions(game, destination, path.steps.len() > 0) {
                 if let Some(attack_info) = self.make_attack_info(game, destination, target) {
                     if !self.can_pull() {
@@ -141,20 +154,21 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                     }
                 }
             }
-            if self.can_capture() {
-                match game.get_map().get_terrain(destination) {
-                    Some(Terrain::Realty(_, owner)) => {
-                        if Some(player.team) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team)) {
-                            result.push(UnitAction::Capture);
-                        }
+            match game.get_map().get_terrain(destination) {
+                Some(Terrain::Realty(realty, owner)) => {
+                    if self.can_capture() && Some(player.team) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team)) {
+                        result.push(UnitAction::Capture);
                     }
-                    _ => {}
+                    if owner == &Some(self.owner) && realty.can_repair(&self.typ) && funds_after_path * 100 >= self.typ.value() as i32 {
+                        result.push(UnitAction::Repair);
+                    }
                 }
+                _ => {}
             }
             if game.can_buy_merc_at(player, destination) {
                 let mercs:Vec<MercenaryOption> = game.available_mercs(player)
                     .into_iter()
-                    .filter(|m| m.price(game, &self).is_some())
+                    .filter(|m| m.price(game, &self).filter(|price| *price as i32 <= funds_after_path).is_some())
                     .collect();
                 if mercs.len() > 0 {
                     result.push(UnitAction::BuyMercenary(mercs));
@@ -299,7 +313,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 8)]
 pub enum NormalUnits {
     // ground units

@@ -25,6 +25,7 @@ pub enum UnitAction<D: Direction> {
     MercenaryPowerSimple,
     Castle,
     PawnUpgrade(chess::PawnUpgrade),
+    Repair,
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -38,6 +39,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::MercenaryPowerSimple => write!(f, "Activate Power"),
             Self::Castle => write!(f, "Castle"),
             Self::PawnUpgrade(p) => write!(f, "{}", p),
+            Self::Repair => write!(f, "Repair"),
         }
     }
 }
@@ -229,6 +231,7 @@ pub enum UnitCommand<D: Direction> {
     MoveAttack(CommonMovement::<D>, AttackInfo::<D>),
     MovePull(CommonMovement::<D>, D),
     MoveCapture(CommonMovement::<D>),
+    MoveRepair(CommonMovement::<D>),
     MoveWait(CommonMovement::<D>),
     MoveBuyMerc(CommonMovement::<D>, MercenaryOption),
     MoveAboard(CommonMovement::<D>),
@@ -346,6 +349,38 @@ impl<D: Direction> UnitCommand<D> {
                 };
                 if let Some(end) = cm.apply(handler, false, true)? {
                     handler.add_event(Event::TerrainChange(end, handler.get_map().get_terrain(end).unwrap().clone(), Terrain::Realty(realty, Some(handler.get_game().current_player().owner_id))));
+                    handler.add_event(Event::UnitExhaust(end));
+                }
+                Some(cm.path.start)
+            }
+            Self::MoveRepair(cm) => {
+                let intended_end = cm.intended_end(handler.get_map())?;
+                cm.validate_input(handler.get_game())?;
+                let unit = cm.get_unit(handler.get_map())?;
+                if unit.get_hp() == 100 {
+                    return Err(CommandError::UnitCannotCapture);
+                }
+                match handler.get_map().get_terrain(intended_end) {
+                    Some(Terrain::Realty(realty, owner)) => {
+                        if owner != &Some(*unit.get_owner()) || !realty.can_repair(unit.get_type()) {
+                            return Err(CommandError::CannotRepairHere);
+                        }
+                    }
+                    _ => {
+                        return Err(CommandError::CannotRepairHere);
+                    }
+                }
+                if let Some(end) = cm.apply(handler, false, true)? {
+                    let unit = handler.get_map().get_unit(end).unwrap();
+                    let heal:u32 = 30
+                        .min(100 - unit.get_hp() as u32)
+                        .min(*handler.get_game().current_player().funds as u32 * 100 / unit.type_value() as u32);
+                    if heal > 0 {
+                        let cost = unit.type_value() as i32 * heal as i32 / 100;
+                        handler.add_event(Event::MoneyChange(*unit.get_owner().unwrap(), (-cost).try_into().unwrap()));
+                        handler.add_event(Event::Effect(Effect::Repair(end)));
+                        handler.add_event(Event::UnitHpChange(end, (heal as i8).try_into().unwrap(), (heal as i16).try_into().unwrap()));
+                    }
                     handler.add_event(Event::UnitExhaust(end));
                 }
                 Some(cm.path.start)

@@ -11,7 +11,7 @@ use zipper::zipper_derive::*;
 
 pub const MAX_CHARGE: u8 = 63;
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 pub struct Mercenary {
     pub typ: Mercenaries,
     pub unit: NormalUnit,
@@ -189,7 +189,7 @@ impl<D: Direction> NormalUnitTrait<D> for Mercenary {
 }
 
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 6)]
 pub enum Mercenaries {
     EarlGrey(bool),

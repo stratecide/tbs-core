@@ -239,6 +239,7 @@ pub enum CommandError {
     NotYourBubble,
     InvalidCommanderPower,
     NotEnoughCharge,
+    CannotRepairHere,
 }
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
@@ -892,12 +893,14 @@ pub enum Effect {
     Flame(Point),
     GunFire(Point),
     ShellFire(Point),
+    Repair(Point),
 }
 impl Effect {
     pub fn fog_replacement<D: Direction>(&self, game: &Game<D>, team: Option<Team>) -> Option<Self> {
         match self {
             Self::Flame(p) |
             Self::GunFire(p) |
+            Self::Repair(p) |
             Self::ShellFire(p) => {
                 if game.has_vision_at(team, *p) {
                     Some(self.clone())

@@ -288,6 +288,14 @@ impl Realty {
             _ => vec![],
         }
     }
+    pub fn can_repair(&self, unit_type: &NormalUnits) -> bool {
+        match self {
+            Self::Factory(_) | Self::City => REPAIRABLE_ON_FACTORY.contains(unit_type),
+            Self::Port(_) => REPAIRABLE_ON_PORT.contains(unit_type),            
+            Self::Airport(_) => REPAIRABLE_ON_AIRPORT.contains(unit_type),            
+            _ => false,
+        }
+    }
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<u8> {
         match (self, movement_type) {
             (Self::Port(_), MovementType::Chess) => None,
@@ -323,38 +331,53 @@ impl Realty {
     }
 }
 
+pub const REPAIRABLE_ON_FACTORY: &'static [NormalUnits] = &[
+    NormalUnits::Hovercraft(false),
+    NormalUnits::Sniper,
+    NormalUnits::Bazooka,
+    NormalUnits::DragonHead,
+    NormalUnits::SmallTank,
+    NormalUnits::BigTank,
+    NormalUnits::AntiAir,
+    NormalUnits::Magnet,
+    NormalUnits::Artillery,
+    NormalUnits::RocketLauncher,
+];
 pub fn build_options_factory<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
-    let units = vec![
-        NormalUnits::Hovercraft(false),
-        NormalUnits::DragonHead,
-        NormalUnits::Magnet,
-        NormalUnits::Artillery,
-    ];
-    units.into_iter().map(|u| {
+    REPAIRABLE_ON_FACTORY.iter().map(|u| {
         let value = u.value() + 300 * built_this_turn as u16;
-        let unit = UnitType::Normal(NormalUnit::new_instance(u, owner));
+        let unit = UnitType::Normal(NormalUnit::new_instance(u.clone(), owner));
         (unit, value)
     }).collect()
 }
 
+pub const REPAIRABLE_ON_PORT: &'static [NormalUnits] = &[
+    NormalUnits::Hovercraft(true),
+    NormalUnits::SharkRider,
+    NormalUnits::TransportBoat(LVec::new()),
+    NormalUnits::WaveBreaker,
+    NormalUnits::Submarine,
+    NormalUnits::SiegeShip,
+];
 pub fn build_options_port<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
-    let units = vec![
-        NormalUnits::Hovercraft(true),
-    ];
-    units.into_iter().map(|u| {
+    REPAIRABLE_ON_PORT.iter().map(|u| {
         let value = u.value() + 300 * built_this_turn as u16;
-        let unit = UnitType::Normal(NormalUnit::new_instance(u, owner));
+        let unit = UnitType::Normal(NormalUnit::new_instance(u.clone(), owner));
         (unit, value)
     }).collect()
 }
 
+pub const REPAIRABLE_ON_AIRPORT: &'static [NormalUnits] = &[
+    NormalUnits::TransportHeli(LVec::new()),
+    NormalUnits::AttackHeli,
+    NormalUnits::Blimp,
+    NormalUnits::Fighter,
+    NormalUnits::Bomber,
+];
 pub fn build_options_airport<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
-    let units = vec![
-        NormalUnits::TransportHeli(LVec::new()),
-    ];
-    units.into_iter().map(|u| {
+    REPAIRABLE_ON_AIRPORT.iter().map(|u| {
         let value = u.value() + 300 * built_this_turn as u16;
-        let unit = UnitType::Normal(NormalUnit::new_instance(u, owner));
+        let unit = UnitType::Normal(NormalUnit::new_instance(u.clone(), owner));
         (unit, value)
     }).collect()
 }
