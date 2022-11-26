@@ -7,6 +7,7 @@ pub mod game;
 pub mod commanders;
 
 pub use zipper;
+pub use interfaces;
 
 #[cfg(test)]
 mod tests {

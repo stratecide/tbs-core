@@ -190,29 +190,32 @@ impl<D: Direction> UnitType<D> {
     pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &NormalUnit, is_counter: bool) -> Option<(WeaponType, u16)> {
         let (armor_type, defense) = self.get_armor();
         let terrain_defense = if let Some(t) = game.get_map().get_terrain(pos) {
-            t.defense(self)
+            1. + t.defense_bonus(self)
         } else {
             1.
         };
+
+        let mut defense_bonus = 1.;
+        if let Some(owner) = self.get_owner().and_then(|owner| game.get_owning_player(owner)) {
+            defense_bonus += owner.commander.defense_bonus(game, self, is_counter);
+        }
+        for (p, merc) in game.get_map().mercenary_influence_at(pos, self.get_owner()) {
+            if p != pos {
+                defense_bonus += merc.defense_bonus(self, is_counter);
+            }
+        }
+        let defense_bonus = defense_bonus; // to make sure it's not updated in the for-loop on accident
+
         let mut highest_damage: f32 = 0.;
         let mut used_weapon = None;
         for (weapon, attack) in attacker.get_weapons() {
             if let Some(factor) = weapon.damage_factor(&armor_type) {
                 let mut attack_bonus = 1.;
-                let mut defense_bonus = 1.;
                 attack_bonus += game.get_owning_player(attacker.get_owner()).unwrap().commander.attack_bonus(game, attacker, is_counter);
-                if let Some(owner) = self.get_owner().and_then(|owner| game.get_owning_player(owner)) {
-                    defense_bonus += owner.commander.defense_bonus(game, self, is_counter);
-                }
                 for (p, merc) in game.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {
                     // merc shouldn't be buffed twice
                     if p != attacker_pos {
                         attack_bonus += merc.attack_bonus(attacker, is_counter);
-                    }
-                }
-                for (p, merc) in game.get_map().mercenary_influence_at(pos, self.get_owner()) {
-                    if p != pos {
-                        defense_bonus += merc.defense_bonus(self, is_counter);
                     }
                 }
                 let damage = attacker.get_hp() as f32 * attack * attack_bonus * factor / defense / defense_bonus / terrain_defense;

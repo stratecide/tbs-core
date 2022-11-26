@@ -191,7 +191,7 @@ impl<D: Direction> Terrain<D> {
             stealth: movement_meta.stealth,
         })
     }
-    pub fn defense(&self, unit: &UnitType<D>) -> f32 {
+    pub fn defense_bonus(&self, unit: &UnitType<D>) -> f32 {
         let movement_type = match unit {
             UnitType::Normal(unit) => {
                 unit.get_movement(self).0
@@ -199,14 +199,14 @@ impl<D: Direction> Terrain<D> {
             UnitType::Chess(_) => {
                 MovementType::Chess
             }
-            UnitType::Structure(_) => return 1.0,
+            UnitType::Structure(_) => return 0.0,
         };
         match (self, movement_type) {
-            (Self::Grass, land_units!()) => 1.1,
-            (Self::Forest, land_units!()) => 1.3,
-            (Self::Realty(_, _), land_units!()) => 1.2,
-            (Self::Ruins, land_units!()) => 1.2,
-            (_, _) => 1.,
+            (Self::Grass, land_units!()) => 0.1,
+            (Self::Forest, land_units!()) => 0.3,
+            (Self::Realty(_, _), land_units!()) => 0.2,
+            (Self::Ruins, land_units!()) => 0.2,
+            (_, _) => 0.,
         }
     }
     pub fn requires_true_sight(&self) -> bool {
