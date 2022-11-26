@@ -1,10 +1,8 @@
 pub mod chess;
 pub mod structures;
 pub mod mercenary;
-pub mod normal_trait;
 pub mod normal_units;
 pub mod commands;
-pub mod transportable;
 pub mod movement;
 pub mod combat;
 
@@ -25,10 +23,8 @@ use self::chess::*;
 use self::structures::*;
 use self::mercenary::*;
 use self::normal_units::*;
-use self::normal_trait::*;
 use self::movement::*;
 use self::combat::*;
-use self::transportable::*;
 use self::commands::*;
 
 pub type Hp = U8<100>;
@@ -37,47 +33,27 @@ pub type Hp = U8<100>;
 #[zippable(bits = 3)]
 pub enum UnitType<D: Direction> {
     Normal(NormalUnit),
-    Mercenary(Mercenary),
     Chess(ChessUnit::<D>),
     Structure(Structure::<D>),
 }
 impl<D: Direction> UnitType<D> {
-    pub fn as_normal_trait(&self) -> Option<&dyn NormalUnitTrait<D>> {
-        match self {
-            Self::Normal(unit) => Some(unit.as_trait()),
-            Self::Mercenary(merc) => Some(merc.as_trait()),
-            _ => None,
-        }
-    }
-    pub fn as_normal_trait_mut(&mut self) -> Option<&mut dyn NormalUnitTrait<D>> {
-        match self {
-            Self::Normal(unit) => Some(unit.as_trait_mut()),
-            Self::Mercenary(merc) => Some(merc.as_trait_mut()),
-            _ => None,
-        }
-    }
-    pub fn as_transportable(&self) -> Option<TransportableTypes> {
-        match self {
-            Self::Normal(u) => Some(TransportableTypes::Normal(u.clone())),
-            Self::Mercenary(u) => Some(TransportableTypes::Mercenary(u.clone())),
-            _ => None,
-        }
-    }
-
     pub fn normal(typ: NormalUnits, owner: Owner) -> Self {
         Self::Normal(NormalUnit::new_instance(typ, owner))
-    }
-    pub fn mercenary(typ: Mercenaries, base_unit: NormalUnit, origin: Point) -> Self {
-        Self::Mercenary(Mercenary::new_instance(typ, base_unit, origin))
     }
     pub fn chess(typ: ChessUnits<D>, owner: Owner) -> Self {
         Self::Chess(ChessUnit::new_instance(typ, owner))
     }
 
+    pub fn cast_normal(&self) -> Option<NormalUnit> {
+        match self {
+            Self::Normal(unit) => Some(unit.clone()),
+            _ => None
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Self::Normal(unit) => unit.typ.name(),
-            Self::Mercenary(merc) => merc.typ.name(),
             Self::Chess(unit) => unit.typ.name(),
             Self::Structure(unit) => unit.typ.name(),
         }
@@ -85,7 +61,6 @@ impl<D: Direction> UnitType<D> {
     pub fn get_owner(&self) -> Option<&Owner> {
         match self {
             Self::Normal(unit) => Some(&unit.owner),
-            Self::Mercenary(unit) => Some(&unit.unit.owner),
             Self::Chess(unit) => Some(&unit.owner),
             Self::Structure(unit) => unit.owner.as_ref(),
         }
@@ -96,7 +71,6 @@ impl<D: Direction> UnitType<D> {
     pub fn get_hp(&self) -> u8 {
         *match self {
             Self::Normal(unit) => unit.hp,
-            Self::Mercenary(unit) => unit.unit.hp,
             Self::Chess(unit) => unit.hp,
             Self::Structure(unit) => unit.hp,
         }
@@ -105,7 +79,6 @@ impl<D: Direction> UnitType<D> {
         let hp = hp.min(100).try_into().unwrap();
         match self {
             Self::Normal(unit) => unit.hp = hp,
-            Self::Mercenary(unit) => unit.unit.hp = hp,
             Self::Chess(unit) => unit.hp = hp,
             Self::Structure(unit) => unit.hp = hp,
         }
@@ -113,7 +86,6 @@ impl<D: Direction> UnitType<D> {
     pub fn is_exhausted(&self) -> bool {
         match self {
             Self::Normal(unit) => unit.exhausted,
-            Self::Mercenary(merc) => merc.unit.exhausted,
             Self::Chess(unit) => unit.exhausted,
             Self::Structure(_) => false,
         }
@@ -121,32 +93,27 @@ impl<D: Direction> UnitType<D> {
     pub fn set_exhausted(&mut self, exhausted: bool) {
         match self {
             Self::Normal(unit) => unit.exhausted = exhausted,
-            Self::Mercenary(merc) => merc.unit.exhausted = exhausted,
             Self::Chess(unit) => unit.exhausted = exhausted,
             Self::Structure(_) => {},
         }
     }
     pub fn can_act(&self, player: &Player) -> bool {
-        let u: &dyn NormalUnitTrait<D> = match self {
-            Self::Normal(unit) => unit.as_trait(),
-            Self::Mercenary(unit) => unit.as_trait(),
+        match self {
+            Self::Normal(unit) => unit.can_act(player),
             Self::Chess(unit) => return !unit.exhausted && unit.owner == player.owner_id,
             Self::Structure(_) => return false,
-        };
-        u.can_act(player)
+        }
     }
-    pub fn get_boarded(&self) -> Vec<&TransportableTypes> {
+    pub fn get_boarded(&self) -> Vec<&NormalUnit> {
         match self {
             Self::Normal(unit) => unit.typ.get_boarded(),
-            Self::Mercenary(merc) => merc.unit.typ.get_boarded(),
             Self::Chess(_) => vec![],
             Self::Structure(_struc) => vec![],
         }
     }
-    pub fn get_boarded_mut(&mut self) -> Vec<&mut TransportableTypes> {
+    pub fn get_boarded_mut(&mut self) -> Vec<&mut NormalUnit> {
         match self {
             Self::Normal(unit) => unit.typ.get_boarded_mut(),
-            Self::Mercenary(merc) => merc.unit.typ.get_boarded_mut(),
             Self::Chess(_) => vec![],
             Self::Structure(_struc) => vec![],
         }
@@ -154,36 +121,28 @@ impl<D: Direction> UnitType<D> {
     pub fn unboard(&mut self, index: u8) {
         match self {
             Self::Normal(unit) => unit.typ.unboard(index),
-            Self::Mercenary(merc) => merc.unit.typ.unboard(index),
             _ => {}
         }
     }
-    pub fn boardable_by(&self, unit: &TransportableTypes) -> bool {
+    pub fn boardable_by(&self, unit: &NormalUnit) -> bool {
         if self.get_owner() != Some(unit.get_owner()) {
             return false;
         }
         let boarded_count = self.get_boarded().len() as u8;
-        let normal_typ = match unit {
-            TransportableTypes::Normal(u) => &u.typ,
-            TransportableTypes::Mercenary(m) => &m.unit.typ,
-        };
         match self {
-            Self::Normal(u) => boarded_count < u.typ.transport_capacity() && u.typ.could_transport(&normal_typ),
-            Self::Mercenary(m) => boarded_count < m.unit.typ.transport_capacity() && m.unit.typ.could_transport(&normal_typ),
+            Self::Normal(u) => boarded_count < u.typ.transport_capacity() && u.typ.could_transport(&unit.typ),
             _ => false,
         }
     }
-    pub fn board(&mut self, index: u8, unit: TransportableTypes) {
+    pub fn board(&mut self, index: u8, unit: NormalUnit) {
         match self {
             Self::Normal(u) => u.typ.board(index, unit),
-            Self::Mercenary(merc) => merc.unit.typ.board(index, unit),
             _ => {}
         }
     }
     pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
         match self {
             Self::Normal(unit) => unit.movable_positions(game, path_so_far),
-            Self::Mercenary(unit) => unit.movable_positions(game, path_so_far),
             Self::Chess(unit) => unit.movable_positions(game, path_so_far),
             Self::Structure(_) => HashSet::new(),
         }
@@ -191,7 +150,6 @@ impl<D: Direction> UnitType<D> {
     pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         match self {
             Self::Normal(unit) => unit.shortest_path_to(game, path_so_far, goal),
-            Self::Mercenary(unit) => unit.shortest_path_to(game, path_so_far, goal),
             Self::Chess(unit) => unit.shortest_path_to(game, path_so_far, goal),
             Self::Structure(_) => None,
         }
@@ -199,7 +157,6 @@ impl<D: Direction> UnitType<D> {
     pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         match self {
             Self::Normal(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
-            Self::Mercenary(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
             Self::Chess(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
             Self::Structure(_) => None,
         }
@@ -207,15 +164,13 @@ impl<D: Direction> UnitType<D> {
     pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
         match self {
             Self::Normal(unit) => unit.options_after_path(game, path),
-            Self::Mercenary(unit) => unit.options_after_path(game, path),
             Self::Chess(unit) => unit.options_after_path(game, path),
             Self::Structure(_) => vec![],
         }
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
-            Self::Normal(unit) => unit.typ.get_armor(),
-            Self::Mercenary(unit) => unit.get_armor(),
+            Self::Normal(unit) => unit.get_armor(),
             Self::Chess(unit) => unit.typ.get_armor(),
             Self::Structure(unit) => unit.typ.get_armor(),
         }
@@ -225,15 +180,14 @@ impl<D: Direction> UnitType<D> {
             _ => self.get_team(game) != Some(team),
         }
     }
-    pub fn can_be_moved_through(&self, by: &dyn NormalUnitTrait<D>, game: &Game<D>) -> bool {
+    pub fn can_be_moved_through(&self, by: &NormalUnit, game: &Game<D>) -> bool {
         match self {
             Self::Normal(_) => by.has_stealth() || self.get_team(game) == by.get_team(game),
-            Self::Mercenary(_) => by.has_stealth() || self.get_team(game) == by.get_team(game),
             Self::Chess(_) => false,
             Self::Structure(_) => false,
         }
     }
-    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &dyn NormalUnitTrait<D>, is_counter: bool) -> Option<(WeaponType, u16)> {
+    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &NormalUnit, is_counter: bool) -> Option<(WeaponType, u16)> {
         let (armor_type, defense) = self.get_armor();
         let terrain_defense = if let Some(t) = game.get_map().get_terrain(pos) {
             t.defense(self)
@@ -244,17 +198,24 @@ impl<D: Direction> UnitType<D> {
         let mut used_weapon = None;
         for (weapon, attack) in attacker.get_weapons() {
             if let Some(factor) = weapon.damage_factor(&armor_type) {
-                let mut damage = attacker.get_hp() as f32 * attack * factor / defense / terrain_defense;
-                damage *= game.get_owning_player(attacker.get_owner()).unwrap().commander.attack_bonus(game, attacker, is_counter);
+                let mut attack_bonus = 1.;
+                let mut defense_bonus = 1.;
+                attack_bonus += game.get_owning_player(attacker.get_owner()).unwrap().commander.attack_bonus(game, attacker, is_counter);
                 if let Some(owner) = self.get_owner().and_then(|owner| game.get_owning_player(owner)) {
-                    damage /= owner.commander.defense_bonus(game, self, is_counter);
+                    defense_bonus += owner.commander.defense_bonus(game, self, is_counter);
                 }
-                for (_, merc) in game.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {
-                    damage *= merc.attack_bonus(attacker, is_counter);
+                for (p, merc) in game.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {
+                    // merc shouldn't be buffed twice
+                    if p != attacker_pos {
+                        attack_bonus += merc.attack_bonus(attacker, is_counter);
+                    }
                 }
-                for (_, merc) in game.get_map().mercenary_influence_at(pos, self.get_owner()) {
-                    damage /= merc.defense_bonus(self, is_counter);
+                for (p, merc) in game.get_map().mercenary_influence_at(pos, self.get_owner()) {
+                    if p != pos {
+                        defense_bonus += merc.defense_bonus(self, is_counter);
+                    }
                 }
+                let damage = attacker.get_hp() as f32 * attack * attack_bonus * factor / defense / defense_bonus / terrain_defense;
                 if damage > highest_damage {
                     highest_damage = damage;
                     used_weapon = Some(weapon);
@@ -290,7 +251,6 @@ impl<D: Direction> UnitType<D> {
     pub fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         match self {
             Self::Normal(u) => u.attackable_positions(game, position, moved),
-            Self::Mercenary(u) => u.attackable_positions(game, position, moved),
             Self::Chess(u) => u.attackable_positions(game, position, moved),
             Self::Structure(u) => u.attackable_positions(game, position, moved),
         }
@@ -298,7 +258,6 @@ impl<D: Direction> UnitType<D> {
     pub fn can_pull(&self) -> bool {
         match self {
             Self::Normal(unit) => unit.can_pull(),
-            Self::Mercenary(merc) => merc.unit.can_pull(),
             Self::Chess(_) => false,
             Self::Structure(_) => false,
         }
@@ -307,25 +266,22 @@ impl<D: Direction> UnitType<D> {
         true
     }
     pub fn can_attack_unit(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
-        if let Some(unit) = self.as_normal_trait() {
-            unit.can_attack_unit(game, target)
-        } else {
-            false
+        match self {
+            Self::Normal(unit) => unit.can_attack_unit(game, target),
+            _ => false
         }
     }
     pub fn threatens(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
         self.get_team(game) != target.get_team(game) && match self {
             Self::Normal(unit) => unit.threatens(game, target),
-            Self::Mercenary(unit) => unit.threatens(game, target),
             Self::Chess(unit) => unit.threatens(game, target),
             Self::Structure(_unit) => false,
         }
     }
     pub fn make_attack_info(&self, game: &Game<D>, pos: Point, target: Point) -> Option<AttackInfo<D>> {
-        if let Some(unit) = self.as_normal_trait() {
-            unit.make_attack_info(game, pos, target)
-        } else {
-            None
+        match self {
+            Self::Normal(unit) => unit.make_attack_info(game, pos, target),
+            _ => None
         }
     }
     pub fn fog_replacement(&self) -> Option<Self> {
@@ -334,28 +290,24 @@ impl<D: Direction> UnitType<D> {
     pub fn type_value(&self) -> u16 {
         match self {
             Self::Normal(unit) => unit.typ.value(),
-            Self::Mercenary(merc) => merc.unit.typ.value(),
             Self::Chess(unit) => unit.typ.value(),
             Self::Structure(structure) => structure.typ.value(),
         }
     }
     pub fn value(&self, game: &Game<D>, _co: &Commander) -> usize {
         (match self {
-            Self::Normal(unit) => unit.typ.value(),
-            Self::Mercenary(merc) => merc.unit.typ.value() + merc.typ.price(game, &merc.unit).unwrap() as u16,
+            Self::Normal(unit) => unit.value(game),
             Self::Chess(unit) => unit.typ.value(),
             Self::Structure(structure) => structure.typ.value(),
         }) as usize * self.get_hp() as usize / 100
     }
-    pub fn remove_available_mercs(&self, mercs: &mut Vec<MercenaryOption>) {
+    pub fn update_used_mercs(&self, mercs: &mut HashSet<MercenaryOption>) {
         for boarded in self.get_boarded() {
-            boarded.remove_available_mercs(mercs);
+            boarded.update_used_mercs(mercs);
         }
         match self {
-            Self::Mercenary(merc) => {
-                if let Some(index) = mercs.iter().position(|m| m == &merc.typ.build_option()) {
-                    mercs.remove(index);
-                }
+            Self::Normal(unit) => {
+                unit.update_used_mercs(mercs)
             }
             _ => {}
         }

@@ -11,8 +11,8 @@ use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::map::map::*;
 
-use super::normal_units::NormalUnits;
-use super::{normal_trait::*, chess, UnitType};
+use super::normal_units::{NormalUnits, NormalUnit};
+use super::{chess, UnitType};
 
 pub enum PathSearchFeedback {
     Continue,
@@ -263,7 +263,7 @@ impl<D: Direction> Ord for MovementSearch<D> {
     }
 }
 
-pub fn movement_search<D, F>(game: &Game<D>, unit: &dyn NormalUnitTrait<D>, path_so_far: &Path<D>, fog: Option<&HashSet<Point>>, mut callback: F)
+pub fn movement_search<D, F>(game: &Game<D>, unit: &NormalUnit, path_so_far: &Path<D>, fog: Option<&HashSet<Point>>, mut callback: F)
 where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
     // if the unit can't move from it's position, no need to go further
     let (movement_type, remaining_movement) = match game.get_map().get_terrain(path_so_far.start) {

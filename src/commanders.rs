@@ -7,7 +7,6 @@ use crate::map::direction::*;
 use crate::map::point::Point;
 use crate::player::Owner;
 use crate::units::*;
-use crate::units::normal_trait::*;
 use crate::units::normal_units::NormalUnit;
 
 use zipper::*;
@@ -37,9 +36,9 @@ impl Commander {
         }
     }
     
-    pub fn attack_bonus<D: Direction>(&self, game: &Game<D>, attacker: &dyn NormalUnitTrait<D>, _is_counter: bool) -> f32 {
+    pub fn attack_bonus<D: Direction>(&self, game: &Game<D>, attacker: &NormalUnit, _is_counter: bool) -> f32 {
         let mut result = match self {
-            _ => 1.0,
+            _ => 0.,
         };
         if self.power_active() {
             result += DEFAULT_ATTACK_BONUS_POWER;
@@ -49,7 +48,7 @@ impl Commander {
 
     pub fn defense_bonus<D: Direction>(&self, game: &Game<D>, defender: &UnitType<D>, _is_counter: bool) -> f32 {
         let mut result = match self {
-            _ => 1.0,
+            _ => 0.,
         };
         if self.power_active() {
             result += DEFAULT_ATTACK_BONUS_POWER;
@@ -57,13 +56,13 @@ impl Commander {
         result
     }
     
-    pub fn after_attacked<D: Direction>(&self, game: &Game<D>, attacker: &dyn NormalUnitTrait<D>, defender: &UnitType<D>, _is_counter: bool) {
+    pub fn after_attacked<D: Direction>(&self, game: &Game<D>, attacker: &NormalUnit, defender: &UnitType<D>, _is_counter: bool) {
         match self {
             _ => {}
         }
     }
 
-    pub fn after_attacking<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Point, attacker: &dyn NormalUnitTrait<D>, defenders: Vec<(Point, UnitType<D>, u16)>, _is_counter: bool) {
+    pub fn after_attacking<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Point, attacker: &NormalUnit, defenders: Vec<(Point, UnitType<D>, u16)>, _is_counter: bool) {
         match self {
             Self::Vampire(_, _) => {
                 if handler.get_game().is_foggy() {
@@ -90,7 +89,6 @@ impl Commander {
                 if details.len() < MAX_STACK_SIZE as usize && defender.get_team(handler.get_game()) != Some(player.team) {
                     let mut unit_type = match defender {
                         UnitType::Normal(unit) => unit.typ.clone(),
-                        UnitType::Mercenary(merc) => merc.unit.typ.clone(),
                         _ => return,
                     };
                     while unit_type.get_boarded().len() > 0 {

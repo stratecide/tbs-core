@@ -17,6 +17,7 @@ use super::*;
 #[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 pub struct NormalUnit {
     pub typ: NormalUnits,
+    pub mercenary: MaybeMercenary,
     pub owner: Owner,
     pub hp: Hp,
     pub exhausted: bool,
@@ -26,11 +27,15 @@ impl NormalUnit {
     pub fn new_instance(from: NormalUnits, owner: Owner) -> NormalUnit {
         NormalUnit {
             typ: from,
+            mercenary: MaybeMercenary::None,
             owner,
             hp: 100.try_into().unwrap(),
             exhausted: false,
             zombie: false,
         }
+    }
+    pub fn value<D: Direction>(&self, game: &Game<D>) -> u16 {
+        self.typ.value() + self.mercenary.and_then(|m, _| m.price(game, self)).unwrap_or(0)
     }
     pub fn can_capture(&self) -> bool {
         if self.zombie {
@@ -47,44 +52,40 @@ impl NormalUnit {
             _ => false,
         }
     }
-}
-impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
-    fn as_trait(&self) -> &dyn NormalUnitTrait<D> {
-        self
-    }
-    fn as_trait_mut(&mut self) -> &mut dyn NormalUnitTrait<D> {
-        self
-    }
-    fn as_unit(&self) -> UnitType<D> {
+    pub fn as_unit<D: Direction>(&self) -> UnitType<D> {
         UnitType::Normal(self.clone())
     }
-    fn as_transportable(&self) -> TransportableTypes {
-        TransportableTypes::Normal(self.clone())
-    }
-    fn get_type(&self) -> &NormalUnits {
+    pub fn get_type(&self) -> &NormalUnits {
         &self.typ
     }
-    fn get_type_mut(&mut self) -> &mut NormalUnits {
+    pub fn get_type_mut(&mut self) -> &mut NormalUnits {
         &mut self.typ
     }
-    fn get_hp(&self) -> u8 {
+    pub fn get_hp(&self) -> u8 {
         *self.hp
     }
-    fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
-        self.typ.get_weapons()
+    pub fn get_armor(&self) -> (ArmorType, f32) {
+        let (armor, defense) = self.typ.get_armor();
+        (armor, defense + self.mercenary.own_defense_bonus())
     }
-    fn get_owner(&self) -> &Owner {
+    pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
+        self.typ.get_weapons()
+        .into_iter()
+        .map(|(weapon, attack)| (weapon, attack + self.mercenary.own_attack_bonus()))
+        .collect()
+    }
+    pub fn get_owner(&self) -> &Owner {
         &self.owner
     }
-    fn get_team(&self, game: &Game<D>) -> Option<Team> {
+    pub fn get_team<D: Direction>(&self, game: &Game<D>) -> Option<Team> {
         game.get_team(Some(&self.owner))
     }
-    fn can_act(&self, player: &Player) -> bool {
+    pub fn can_act(&self, player: &Player) -> bool {
         !self.exhausted && player.owner_id == self.owner
     }
-    fn get_movement(&self, terrain: &Terrain<D>) -> (MovementType, u8) {
+    pub fn get_movement<D: Direction>(&self, terrain: &Terrain<D>) -> (MovementType, u8) {
         let factor = 6;
-        match self.typ {
+        let (movement_type, movement) = match self.typ {
             NormalUnits::Sniper => (MovementType::Foot, 3 * factor),
             NormalUnits::Bazooka => (MovementType::Foot, 3 * factor),
             NormalUnits::DragonHead => (MovementType::Wheel, 6 * factor),
@@ -114,12 +115,25 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             NormalUnits::Blimp => (MovementType::Heli, 5 * factor),
             NormalUnits::Bomber => (MovementType::Plane, 8 * factor),
             NormalUnits::Fighter => (MovementType::Plane, 10 * factor),
-        }
+        };
+        (movement_type, movement + self.mercenary.own_movement_bonus())
     }
-    fn has_stealth(&self) -> bool {
+    pub fn has_stealth(&self) -> bool {
         false
     }
-    fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
+    pub fn shortest_path_to<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
+        let mut result = None;
+        movement_search(game, self, path_so_far, None, |path, p, _can_stop_here| {
+            if goal == p {
+                result = Some(path.clone());
+                PathSearchFeedback::Found
+            } else {
+                PathSearchFeedback::Continue
+            }
+        });
+        result
+    }
+    pub fn options_after_path<D: Direction>(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
         let mut result = vec![];
         let destination = if let Ok(p) = path.end(game.get_map()) {
             p
@@ -140,6 +154,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                     }
                 }
             }
+            self.mercenary.add_options_after_path(self, game, path, funds_after_path, &mut result);
             for target in self.attackable_positions(game, destination, path.steps.len() > 0) {
                 if let Some(attack_info) = self.make_attack_info(game, destination, target) {
                     if !self.can_pull() {
@@ -165,48 +180,92 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
                 }
                 _ => {}
             }
-            if game.can_buy_merc_at(player, destination) {
-                let mercs:Vec<MercenaryOption> = game.available_mercs(player)
-                    .into_iter()
-                    .filter(|m| m.price(game, &self).filter(|price| *price as i32 <= funds_after_path).is_some())
-                    .collect();
-                if mercs.len() > 0 {
-                    result.push(UnitAction::BuyMercenary(mercs));
-                }
-            }
             result.push(UnitAction::Wait);
         } else if path.steps.len() > 0 {
             if let Some(transporter) = game.get_map().get_unit(destination) {
                 // this is called indirectly by mercenaries, so using ::Normal could theoretically give wrong results
-                if transporter.boardable_by(&TransportableTypes::Normal(self.clone())) {
+                if transporter.boardable_by(self) {
                     result.push(UnitAction::Enter);
                 }
             }
         }
         result
     }
-    fn can_attack_after_moving(&self) -> bool {
+    pub fn can_attack_after_moving(&self) -> bool {
         match self.typ {
             NormalUnits::Artillery => false,
             NormalUnits::RocketLauncher => false,
             _ => true,
         }
     }
-    fn get_attack_type(&self) -> AttackType {
+    pub fn shortest_path_to_attack<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
+        if !self.can_attack_after_moving() {
+            // no need to look for paths if the unit can't attack after moving
+            if path_so_far.steps.len() == 0 && self.attackable_positions(game, path_so_far.start, false).contains(&goal) {
+                return Some(path_so_far.clone());
+            } else {
+                return None;
+            }
+        }
+        let mut result = None;
+        movement_search(game, self, path_so_far, None, |path, p, can_stop_here| {
+            if can_stop_here && self.attackable_positions(game, p, path.steps.len() > 0).contains(&goal) {
+                result = Some(path.clone());
+                PathSearchFeedback::Found
+            } else {
+                PathSearchFeedback::Continue
+            }
+        });
+        result
+    }
+    pub fn can_move_to<D: Direction>(&self, p: Point, game: &Game<D>) -> bool {
+        // doesn't check terrain
+        if let Some(unit) = game.get_map().get_unit(p) {
+            if !unit.can_be_moved_through(self, game) {
+                return false
+            }
+        }
+        true
+    }
+    pub fn movable_positions<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        movement_search(game, self, path_so_far, None, |_path, p, _can_stop_here| {
+            result.insert(p);
+            PathSearchFeedback::Continue
+        });
+        result
+    }
+    pub fn check_path<D: Direction>(&self, game: &Game<D>, path_to_check: &Path<D>) -> Result<(), CommandError> {
+        let team = self.get_team(game);
+        let fog = game.get_fog().get(&team);
+        let mut path_is_valid = false;
+        movement_search(game, self, path_to_check, fog, |path, _p, can_stop_here| {
+            if path == path_to_check {
+                path_is_valid = can_stop_here;
+            }
+            // if path_to_check will be found at all, it would be the first one this callback gets called with
+            PathSearchFeedback::Found
+        });
+        // TODO: make this method's return value a bool
+        if path_is_valid {
+            Ok(())
+        } else {
+            Err(CommandError::InvalidPath)
+        }
+    }
+    pub fn get_attack_type(&self) -> AttackType {
         self.typ.get_attack_type()
     }
     // ignores fog
-    fn can_attack_unit(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+    pub fn can_attack_unit<D: Direction>(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
         target.get_team(game) != self.get_team(game) && self.threatens(game, target)
     }
-    fn threatens(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
-        let this: &dyn NormalUnitTrait<D> = self.as_trait();
-        this.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
+    pub fn threatens<D: Direction>(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+        self.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
     }
-    fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
+    pub fn attackable_positions<D: Direction>(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         let mut result = HashSet::new();
-        let this: &dyn NormalUnitTrait<D> = self.as_trait();
-        if moved && !this.can_attack_after_moving() {
+        if moved && !self.can_attack_after_moving() {
             return result;
         }
         match self.typ.get_attack_type() {
@@ -245,7 +304,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
         }
         result
     }
-    fn attack_splash(&self, map: &Map<D>, from: Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
+    pub fn attack_splash<D: Direction>(&self, map: &Map<D>, from: Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
         match (&self.typ, to) {
             (NormalUnits::DragonHead, AttackInfo::Direction(dir)) => {
                 if let Some(dp) = map.get_neighbor(from, *dir) {
@@ -267,7 +326,7 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
     }
     // returns Some(...) if the target position can be attacked from pos
     // returns None otherwise
-    fn make_attack_info(&self, game: &Game<D>, pos: Point, target: Point) -> Option<AttackInfo<D>> {
+    pub fn make_attack_info<D: Direction>(&self, game: &Game<D>, pos: Point, target: Point) -> Option<AttackInfo<D>> {
         let unit = match game.get_map().get_unit(target) {
             None => return None,
             Some(unit) => unit,
@@ -305,11 +364,10 @@ impl<D: Direction> NormalUnitTrait<D> for NormalUnit {
             _ => Some(AttackInfo::Point(target)),
         }
     }
-    fn can_capture(&self) -> bool {
-        self.can_capture()
-    }
-    fn can_pull(&self) -> bool {
-        self.can_pull()
+    pub fn update_used_mercs(&self, mercs: &mut HashSet<MercenaryOption>) {
+        if let Some(merc) = self.mercenary.and_then(|m, _| Some(m.build_option())) {
+            mercs.insert(merc);
+        }
     }
 }
 
@@ -333,13 +391,13 @@ pub enum NormalUnits {
     // sea units
     SharkRider,
     //ChargeBoat,
-    TransportBoat(LVec::<TransportableTypes, 2>),
+    TransportBoat(LVec::<NormalUnit, 2>),
     WaveBreaker,
     Submarine,
     SiegeShip,
 
     // air units
-    TransportHeli(LVec::<TransportableTypes, 1>),
+    TransportHeli(LVec::<NormalUnit, 1>),
     AttackHeli,
     Blimp,
     Bomber,
@@ -374,13 +432,13 @@ impl NormalUnits {
             Self::Fighter => "Fighter",
         }
     }
-    pub fn get_boarded(&self) -> Vec<&TransportableTypes> {
+    pub fn get_boarded(&self) -> Vec<&NormalUnit> {
         match self {
             NormalUnits::TransportHeli(units) => units.iter().collect(),
             _ => vec![],
         }
     }
-    pub fn get_boarded_mut(&mut self) -> Vec<&mut TransportableTypes> {
+    pub fn get_boarded_mut(&mut self) -> Vec<&mut NormalUnit> {
         match self {
             NormalUnits::TransportHeli(units) => units.iter_mut().collect(),
             _ => vec![],
@@ -412,7 +470,7 @@ impl NormalUnits {
             units.remove(index as usize);
         }
     }
-    pub fn board(&mut self, index: u8, unit: TransportableTypes) {
+    pub fn board(&mut self, index: u8, unit: NormalUnit) {
         let units = match self {
             NormalUnits::TransportHeli(units) => units,
             _ => return,
@@ -530,4 +588,26 @@ impl NormalUnits {
             Self::Fighter => 1600,
         }
     }
+}
+
+pub fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: Point, unload_index: Option<UnloadIndex>) -> Result<(), CommandError> {
+    if !game.has_vision_at(Some(game.current_player().team), at) {
+        return Err(CommandError::NoVision);
+    }
+    let unit = game.get_map().get_unit(at).ok_or(CommandError::MissingUnit)?;
+    let unit: &NormalUnit = if let Some(index) = unload_index {
+        unit.get_boarded().get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?
+    } else {
+        match unit {
+            UnitType::Normal(unit) => unit,
+            _ => return Err(CommandError::UnitTypeWrong),
+        }
+    };
+    if &game.current_player().owner_id != unit.get_owner() {
+        return Err(CommandError::NotYourUnit);
+    }
+    if !unit.can_act(game.current_player()) {
+        return Err(CommandError::UnitCannotMove);
+    }
+    Ok(())
 }

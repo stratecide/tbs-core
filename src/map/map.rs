@@ -14,9 +14,9 @@ use crate::map::point::*;
 use crate::player::*;
 use crate::terrain::*;
 use crate::units::*;
-use crate::units::combat::ArmorType;
-use crate::units::mercenary::Mercenary;
 use crate::details::*;
+use crate::units::mercenary::MaybeMercenary;
+use crate::units::mercenary::Mercenaries;
 use crate::units::movement::MovementType;
 use crate::units::movement::PathStep;
 
@@ -276,12 +276,14 @@ where D: Direction
         layers
     }
 
-    pub fn mercenary_influence_at(&self, point: Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenary)> {
+    pub fn mercenary_influence_at(&self, point: Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenaries)> {
         let mut result = vec![];
         for p in self.all_points() {
-            if let Some(UnitType::Mercenary(merc)) = self.get_unit(p) {
-                if (owner.is_none() || owner == Some(&merc.unit.owner)) && merc.in_range(self, p, point) {
-                    result.push((p.clone(), merc));
+            if let Some(UnitType::Normal(unit)) = self.get_unit(p) {
+                if let MaybeMercenary::Some{mercenary, ..} = &unit.mercenary {
+                    if (owner.is_none() || owner == Some(&unit.owner)) && mercenary.in_range(self, p, point) {
+                        result.push((p.clone(), mercenary));
+                    }
                 }
             }
         }

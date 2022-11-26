@@ -9,6 +9,7 @@ pub enum AttackType {
     Straight(u8, u8),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WeaponType {
     MachineGun,
     Shells,
@@ -120,6 +121,7 @@ impl WeaponType {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ArmorType {
 	Infantry,
 	Light,

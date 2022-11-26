@@ -14,7 +14,6 @@ use crate::terrain::Terrain;
 use crate::units::UnitType;
 use crate::units::mercenary::MercenaryOption;
 use crate::units::movement::Path;
-use crate::units::transportable::TransportableTypes;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Game<D: Direction> {
@@ -160,15 +159,18 @@ impl<D: Direction> Game<D> {
     }
     
     pub fn available_mercs(&self, player: &Player) -> Vec<MercenaryOption> {
-        let mut result = vec![MercenaryOption::EarlGrey];
+        let mut used = HashSet::new();
         for p in self.map.all_points() {
             if let Some(unit) = self.map.get_unit(p) {
                 if unit.get_owner() == Some(&player.owner_id) {
-                    unit.remove_available_mercs(&mut result);
+                    unit.update_used_mercs(&mut used);
                 }
             }
         }
-        result
+        vec![MercenaryOption::EarlGrey]
+        .into_iter()
+        .filter(|m| !used.contains(m))
+        .collect()
     }
     
     pub fn can_buy_merc_at(&self, player: &Player, pos: Point) -> bool {
@@ -178,21 +180,16 @@ impl<D: Direction> Game<D> {
                     if unit.get_owner() == Some(&player.owner_id) {
                         // check if unit is mercenary or transports a mercenary
                         match unit {
-                            UnitType::Mercenary(merc) => {
-                                if merc.origin == pos {
+                            UnitType::Normal(unit) => {
+                                if unit.mercenary.get_origin() == Some(pos) {
                                     return false;
                                 }
                             }
                             _ => {}
                         }
                         for unit in unit.get_boarded() {
-                            match unit {
-                                TransportableTypes::Mercenary(merc) => {
-                                    if merc.origin == pos {
-                                        return false;
-                                    }
-                                }
-                                _ => {}
+                            if unit.mercenary.get_origin() == Some(pos) {
+                                return false;
                             }
                         }
                     }

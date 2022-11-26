@@ -12,29 +12,139 @@ use zipper::zipper_derive::*;
 pub const MAX_CHARGE: u8 = 63;
 
 #[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
-pub struct Mercenary {
-    pub typ: Mercenaries,
-    pub unit: NormalUnit,
-    pub charge: U8::<MAX_CHARGE>,
-    pub origin: Point,
+#[zippable(bits=1)]
+pub enum MaybeMercenary {
+    None,
+    Some {
+        mercenary: Mercenaries,
+        origin: Option::<Point>
+    },    
 }
-impl Mercenary {
-    pub fn new_instance(typ: Mercenaries, unit: NormalUnit, origin: Point) -> Self {
-        Self {
-            typ,
-            unit,
-            charge: 0.try_into().unwrap(),
-            origin,
+impl MaybeMercenary {
+    pub fn and_then<T, F: FnOnce(&Mercenaries, &Option<Point>) -> Option<T>>(&self, f: F) -> Option<T> {
+        match self {
+            Self::None => None,
+            Self::Some { mercenary, origin } => f(mercenary, origin),
         }
     }
-    pub fn get_armor(&self) -> (ArmorType, f32) {
-        let (armor_type, mut factor) = self.unit.typ.get_armor();
-        factor *= 1.2;
-        (armor_type, factor)
+    pub fn then<F: FnOnce(&mut Mercenaries, &mut Option<Point>)>(&mut self, f: F) {
+        match self {
+            Self::None => (),
+            Self::Some { mercenary, origin } => f(mercenary, origin),
+        }
     }
-    pub fn range(&self) -> u8 {
-        match self.typ {
-            Mercenaries::EarlGrey(_) => 1,
+    pub fn get_origin(&self) -> Option<Point> {
+        self.and_then(|_, origin| *origin)
+    }
+    pub fn own_movement_bonus(&self) -> u8 {
+        self.and_then(|m, _| Some(m.own_movement_bonus())).unwrap_or(0)
+    }
+    pub fn own_defense_bonus(&self) -> f32 {
+        self.and_then(|m, _| Some(m.own_defense_bonus())).unwrap_or(0.)
+    }
+    pub fn own_attack_bonus(&self) -> f32 {
+        self.and_then(|m, _| Some(m.own_attack_bonus())).unwrap_or(0.)
+    }
+    pub fn add_options_after_path<D: Direction>(&self, unit: &NormalUnit, game: &Game<D>, path: &Path<D>, available_funds: i32, options: &mut Vec<UnitAction<D>>) {
+        let player = game.get_owning_player(&unit.owner).unwrap();
+        let destination = path.end(game.get_map()).unwrap();
+        match self {
+            Self::None => {
+                if game.can_buy_merc_at(player, destination) {
+                    let mercs:Vec<MercenaryOption> = game.available_mercs(player)
+                        .into_iter()
+                        .filter(|m| m.price(game, unit).filter(|price| *price as i32 <= available_funds).is_some())
+                        .collect();
+                    if mercs.len() > 0 {
+                        options.push(UnitAction::BuyMercenary(mercs));
+                    }
+                }
+            }
+            Self::Some { mercenary, .. } => {
+                mercenary.add_options_after_path(unit, game, path, options);
+            }
+        }
+    }
+    pub fn power_active(&self) -> bool {
+        self.and_then(|m, _| Some(m.power_active())).unwrap_or(false)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
+#[zippable(bits = 6)]
+pub enum Mercenaries {
+    EarlGrey(U8::<10>, bool),
+}
+impl Mercenaries {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::EarlGrey(_, _) => "Earl Grey",
+        }
+    }
+    // should NEVER be higher than MAX_CHARGE
+    pub fn max_charge(&self) -> u8 {
+        if self.power_active() {
+            return 0;
+        }
+        match self {
+            Self::EarlGrey(charge, _) => charge.max_value(),
+        }
+    }
+    pub fn charge(&self) -> u8 {
+        match self {
+            Self::EarlGrey(charge, _) => **charge,
+        }
+    }
+    pub fn add_charge(&mut self, add: i8) {
+        let value = (self.charge() as i8 + add).min(self.max_charge() as i8).max(0) as u8;
+        match self {
+            Mercenaries::EarlGrey(charge, _) => *charge = value.try_into().unwrap(),
+        }
+    }
+    pub fn power_active(&self) -> bool {
+        match self {
+            Mercenaries::EarlGrey(_, power_active) => *power_active,
+        }
+    }
+    pub fn power_active_mut<'a>(&'a mut self) -> Option<&'a mut bool> {
+        match self {
+            Mercenaries::EarlGrey(_, power_active) => Some(power_active),
+        }
+    }
+    pub fn can_use_simple_power<D: Direction>(&self, game: &Game<D>, pos: Point) -> bool {
+        match self {
+            Mercenaries::EarlGrey(_, true) => false,
+            Mercenaries::EarlGrey(charge, false) => **charge >= self.max_charge(),
+        }
+    }
+    pub fn add_options_after_path<D: Direction>(&self, unit: &NormalUnit, game: &Game<D>, path: &Path<D>, options: &mut Vec<UnitAction<D>>) {
+        match self {
+            Mercenaries::EarlGrey(charge, false) => {
+                if path.steps.len() == 0 && **charge >= charge.max_value() {
+                    options.insert(0, UnitAction::MercenaryPowerSimple);
+                }
+            }
+            _ => {}
+        }
+    }
+    pub fn own_defense_bonus(&self) -> f32 {
+        0.2
+    }
+    pub fn own_attack_bonus(&self) -> f32 {
+        match self {
+            Mercenaries::EarlGrey(_, false) => 0.5,
+            Mercenaries::EarlGrey(_, true) => 0.8,
+        }
+    }
+    pub fn own_movement_bonus(&self) -> u8 {
+        match self {
+            Mercenaries::EarlGrey(_, true) => 6,
+            _ => 0
+        }
+    }
+    pub fn aura_range(&self) -> u8 {
+        match self {
+            Mercenaries::EarlGrey(_, _) => 1,
         }
     }
     pub fn in_range<D: Direction>(&self, map: &Map<D>, position: Point, target: Point) -> bool {
@@ -43,181 +153,36 @@ impl Mercenary {
     pub fn aura<D: Direction>(&self, map: &Map<D>, position: Point) -> HashSet<Point> {
         let mut result = HashSet::new();
         result.insert(position.clone());
-        for layer in map.range_in_layers(position, self.range() as usize) {
+        for layer in map.range_in_layers(position, self.aura_range() as usize) {
             for (p, _, _) in layer {
                 result.insert(p);
             }
         }
         result
     }
-    pub fn attack_bonus<D: Direction>(&self, attacker: &dyn NormalUnitTrait<D>, _is_counter: bool) -> f32 {
-        if attacker.get_owner() != &self.unit.owner {
-            return 1.0;
-        }
-        match &self.typ {
-            Mercenaries::EarlGrey(false) => 1.3,
-            Mercenaries::EarlGrey(true) => 1.5,
-            _ => 1.1,
+    pub fn attack_bonus(&self, _attacker: &NormalUnit, _is_counter: bool) -> f32 {
+        match &self {
+            Mercenaries::EarlGrey(_, false) => 0.3,
+            Mercenaries::EarlGrey(_, true) => 0.5,
+            _ => 0.1,
         }
     }
-    pub fn defense_bonus<D: Direction>(&self, defender: &UnitType<D>, _is_counter: bool) -> f32 {
-        if defender.get_owner() != Some(&self.unit.owner) {
-            return 1.0;
-        }
-        1.1
-    }
-    pub fn power_active(&self) -> bool {
-        match self.typ {
-            Mercenaries::EarlGrey(power_active) => power_active,
+    pub fn defense_bonus<D: Direction>(&self, _defender: &UnitType<D>, _is_counter: bool) -> f32 {
+        match &self {
+            _ => 0.1,
         }
     }
-    pub fn can_use_simple_power<D: Direction>(&self, game: &Game<D>, pos: Point) -> bool {
-        match self.typ {
-            Mercenaries::EarlGrey(true) => false,
-            Mercenaries::EarlGrey(false) => *self.charge >= self.typ.max_charge(),
-        }
-    }
-}
-
-impl<D: Direction> NormalUnitTrait<D> for Mercenary {
-    fn as_trait(&self) -> &dyn NormalUnitTrait<D> {
-        self
-    }
-    fn as_trait_mut(&mut self) -> &mut dyn NormalUnitTrait<D> {
-        self
-    }
-    fn as_unit(&self) -> UnitType<D> {
-        UnitType::Mercenary(self.clone())
-    }
-    fn as_transportable(&self) -> TransportableTypes {
-        TransportableTypes::Mercenary(self.clone())
-    }
-    fn get_type(&self) -> &NormalUnits {
-        &self.unit.typ
-    }
-    fn get_type_mut(&mut self) -> &mut NormalUnits {
-        &mut self.unit.typ
-    }
-    fn get_hp(&self) -> u8 {
-        *self.unit.hp
-    }
-    fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
-        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        u.get_weapons().into_iter().map(|(weapon, atk)| {
-            let mut factor = 1.2;
-            match (&self.typ, &weapon) {
-                (Mercenaries::EarlGrey(false), _) => {
-                    factor += 0.3;
-                }
-                (Mercenaries::EarlGrey(true), _) => {
-                    factor += 0.8;
-                }
-            }
-            (weapon, atk * factor)
-        }).collect()
-    }
-    fn get_owner(&self) -> &Owner {
-        &self.unit.owner
-    }
-    fn get_team(&self, game: &Game<D>) -> Option<Team> {
-        self.unit.get_team(game)
-    }
-    fn can_act(&self, player: &Player) -> bool {
-        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        u.can_act(player)
-    }
-    fn get_movement(&self, terrain: &Terrain<D>) -> (MovementType, u8) {
-        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        let (movement_type, mut range) = u.get_movement(terrain);
-        match self.typ {
-            Mercenaries::EarlGrey(true) => range += 6,
-            _ => {}
-        }
-        (movement_type, range)
-    }
-    fn has_stealth(&self) -> bool {
-        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        u.has_stealth()
-    }
-    fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
-        let mut options: Vec<UnitAction<D>> = self.unit.options_after_path(game, path)
-            .into_iter()
-            .filter(|o| match o {
-                UnitAction::BuyMercenary(_) => false,
-                _ => true
-            }).collect();
-        match self.typ {
-            Mercenaries::EarlGrey(false) => {
-                if path.steps.len() == 0 && *self.charge >= self.typ.max_charge() {
-                    options.insert(0, UnitAction::MercenaryPowerSimple);
-                }
-            }
-            _ => {}
-        }
-        options
-    }
-    fn can_attack_after_moving(&self) -> bool {
-        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        u.can_attack_after_moving()
-    }
-    fn get_attack_type(&self) -> AttackType {
-        self.unit.typ.get_attack_type()
-    }
-    fn can_attack_unit(&self, game: &Game<D>, unit: &UnitType<D>) -> bool {
-        self.unit.can_attack_unit(game, unit)
-    }
-    fn threatens(&self, game: &Game<D>, unit: &UnitType<D>) -> bool {
-        self.unit.threatens(game, unit)
-    }
-    fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
-        self.unit.attackable_positions(game, position, moved)
-    }
-    fn attack_splash(&self, map: &Map<D>, from: Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
-        self.unit.attack_splash(map, from, to)
-    }
-    fn make_attack_info(&self, game: &Game<D>, from: Point, to: Point) -> Option<AttackInfo<D>> {
-        self.unit.make_attack_info(game, from, to)
-    }
-    fn can_capture(&self) -> bool {
-        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        u.can_capture()
-    }
-    fn can_pull(&self) -> bool {
-        let u: &dyn NormalUnitTrait<D> = self.unit.as_trait();
-        u.can_pull()
-    }
-}
-
-
-#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
-#[zippable(bits = 6)]
-pub enum Mercenaries {
-    EarlGrey(bool),
-}
-impl Mercenaries {
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::EarlGrey(_) => "Earl Grey",
-        }
-    }
-    // has to be lower than 64 because charge is a U6
-    pub fn max_charge(&self) -> u8 {
-        match self {
-            Self::EarlGrey(false) => 10,
-            Self::EarlGrey(true) => 0,
-        }
-    }
-    pub fn price<D: Direction>(&self, _game: &Game<D>, unit: &NormalUnit) -> Option<i32> {
-        Some(unit.typ.value() as i32 / 2)
+    pub fn price<D: Direction>(&self, _game: &Game<D>, unit: &NormalUnit) -> Option<u16> {
+        Some(unit.typ.value())
     }
     pub fn build_option(&self) -> MercenaryOption {
         match self {
-            Mercenaries::EarlGrey(_) => MercenaryOption::EarlGrey,
+            Mercenaries::EarlGrey(_, _) => MercenaryOption::EarlGrey,
         }
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 6)]
 pub enum MercenaryOption {
     EarlGrey,
@@ -225,7 +190,7 @@ pub enum MercenaryOption {
 impl MercenaryOption {
     pub fn mercenary(&self) -> Mercenaries {
         match self {
-            MercenaryOption::EarlGrey => Mercenaries::EarlGrey(false),
+            MercenaryOption::EarlGrey => Mercenaries::EarlGrey(0.try_into().unwrap(), false),
         }
     }
     pub fn price<D: Direction>(&self, _game: &Game<D>, unit: &NormalUnit) -> Option<u16> {

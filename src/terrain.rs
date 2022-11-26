@@ -7,7 +7,6 @@ use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::G
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
 use crate::units::UnitType;
-use crate::units::normal_trait::NormalUnitTrait;
 
 
 macro_rules! land_units {
@@ -195,9 +194,6 @@ impl<D: Direction> Terrain<D> {
     pub fn defense(&self, unit: &UnitType<D>) -> f32 {
         let movement_type = match unit {
             UnitType::Normal(unit) => {
-                unit.get_movement(self).0
-            }
-            UnitType::Mercenary(unit) => {
                 unit.get_movement(self).0
             }
             UnitType::Chess(_) => {

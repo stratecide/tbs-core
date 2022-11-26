@@ -8,17 +8,15 @@ use crate::map::map::{Map, FieldData};
 use crate::map::point::Point;
 use crate::map::point_map;
 use crate::units::normal_units::{NormalUnits, NormalUnit};
-use crate::units::normal_trait::NormalUnitTrait;
 use crate::{player::*, details};
 use crate::terrain::{Terrain, BuiltThisTurn, Realty};
 use crate::details::Detail;
 use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::*;
-use crate::units::mercenary::Mercenaries;
+use crate::units::mercenary::{Mercenaries, MaybeMercenary};
 use crate::units::chess::*;
 use crate::units::commands::{UnitCommand, UnloadIndex};
-use crate::units::transportable::TransportableTypes;
 use crate::units::movement::{Path, PathStep, PathStepExt};
 
 #[derive(Debug, Zippable)]
@@ -44,7 +42,7 @@ impl<D: Direction> Command<D> {
                                 events.push(Event::UnitExhaust(p.clone()));
                             }
                             for (index, u) in unit.get_boarded().iter().enumerate() {
-                                if u.is_exhausted() {
+                                if u.exhausted {
                                     events.push(Event::UnitExhaustBoarded(p.clone(), (index as u8).try_into().unwrap()));
                                 }
                             }
@@ -106,12 +104,9 @@ impl<D: Direction> Command<D> {
                 // end merc powers
                 for p in handler.get_map().all_points() {
                     match handler.get_map().get_unit(p) {
-                        Some(UnitType::Mercenary(merc)) => {
-                            if merc.unit.owner == owner_id {
-                                match &merc.typ {
-                                    Mercenaries::EarlGrey(true) => handler.add_event(Event::MercenaryPowerSimple(p)),
-                                    _ => {}
-                                }
+                        Some(UnitType::Normal(unit)) => {
+                            if unit.owner == owner_id && unit.mercenary.power_active() {
+                                handler.add_event(Event::MercenaryPowerSimple(p));
                             }
                         }
                         _ => {}
@@ -257,6 +252,7 @@ pub enum Event<D:Direction> {
     UnitCreation(Point, UnitType::<D>),
     UnitDeath(Point, UnitType::<D>),
     UnitReplacement(Point, UnitType::<D>, UnitType::<D>),
+    UnitSetMercenary(Point, Mercenaries),
     MercenaryCharge(Point, I8::<{-(mercenary::MAX_CHARGE as i8)}, {mercenary::MAX_CHARGE as i8}>),
     MercenaryPowerSimple(Point),
     TerrainChange(Point, Terrain::<D>, Terrain::<D>),
@@ -297,8 +293,13 @@ impl<D: Direction> Event<D> {
             Self::HoverPath(unload_index, start, steps, end_visible, unit) => {
                 let mut unit = unit.clone();
                 if let Some((on_sea, _)) = steps.iter().last() {
-                    match unit.as_normal_trait_mut().and_then(|u| Some(u.get_type_mut())) {
-                        Some(NormalUnits::Hovercraft(os)) => *os = *on_sea,
+                    match &mut unit {
+                        UnitType::Normal(unit) => {
+                            match &mut unit.typ {
+                                NormalUnits::Hovercraft(os) => *os = *on_sea,
+                                _ => {}
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -312,7 +313,6 @@ impl<D: Direction> Event<D> {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
                     UnitType::Normal(unit) => unit.exhausted = !unit.exhausted,
-                    UnitType::Mercenary(unit) => unit.unit.exhausted = !unit.unit.exhausted,
                     UnitType::Chess(unit) => unit.exhausted = !unit.exhausted,
                     UnitType::Structure(unit) => unit.exhausted = !unit.exhausted,
                 }
@@ -320,10 +320,8 @@ impl<D: Direction> Event<D> {
             Self::UnitExhaustBoarded(pos, index) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 let mut transported = transporter.get_boarded_mut();
-                match transported.get_mut(**index as usize) {
-                    Some(TransportableTypes::Normal(u)) => u.exhausted = !u.exhausted,
-                    Some(TransportableTypes::Mercenary(m)) => m.unit.exhausted = !m.unit.exhausted,
-                    None => {}
+                if let Some(boarded) = transported.get_mut(**index as usize) {
+                    boarded.exhausted = !boarded.exhausted;
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
@@ -340,18 +338,23 @@ impl<D: Direction> Event<D> {
             Self::UnitReplacement(pos, _, unit) => {
                 game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
             }
+            Self::UnitSetMercenary(pos, merc) => {
+                if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.mercenary = MaybeMercenary::Some{mercenary: merc.clone(), origin: Some(*pos)};
+                }
+            }
             Self::MercenaryCharge(pos, change) => {
-                if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(*pos) {
-                    merc.charge = ((*merc.charge as i8 + **change).max(0).min(merc.typ.max_charge() as i8) as u8).try_into().unwrap();
+                if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.mercenary.then(|m, _| m.add_charge(**change));
                 }
             }
             Self::MercenaryPowerSimple(pos) => {
-                if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(*pos) {
-                    match &mut merc.typ {
-                        Mercenaries::EarlGrey(power_active) => {
+                if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.mercenary.then(|m, _| {
+                        if let Some(power_active) = m.power_active_mut() {
                             *power_active = !*power_active;
                         }
-                    }
+                    });
                 }
             }
             Self::TerrainChange(pos, _, terrain) => {
@@ -453,7 +456,6 @@ impl<D: Direction> Event<D> {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
                     UnitType::Normal(unit) => unit.exhausted = !unit.exhausted,
-                    UnitType::Mercenary(unit) => unit.unit.exhausted = !unit.unit.exhausted,
                     UnitType::Chess(unit) => unit.exhausted = !unit.exhausted,
                     UnitType::Structure(unit) => unit.exhausted = !unit.exhausted,
                 }
@@ -461,10 +463,8 @@ impl<D: Direction> Event<D> {
             Self::UnitExhaustBoarded(pos, index) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 let mut transported = transporter.get_boarded_mut();
-                match transported.get_mut(**index as usize) {
-                    Some(TransportableTypes::Normal(u)) => u.exhausted = !u.exhausted,
-                    Some(TransportableTypes::Mercenary(m)) => m.unit.exhausted = !m.unit.exhausted,
-                    None => {}
+                if let Some(boarded) = transported.get_mut(**index as usize) {
+                    boarded.exhausted = !boarded.exhausted;
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
@@ -481,18 +481,23 @@ impl<D: Direction> Event<D> {
             Self::UnitReplacement(pos, unit, _) => {
                 game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
             }
+            Self::UnitSetMercenary(pos, merc) => {
+                if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.mercenary = MaybeMercenary::None;
+                }
+            }
             Self::MercenaryCharge(pos, change) => {
-                if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(*pos) {
-                    merc.charge = ((*merc.charge as i8 - **change).max(0).min(merc.typ.max_charge() as i8) as u8).try_into().unwrap();
+                if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.mercenary.then(|m, _| m.add_charge(-**change));
                 }
             }
             Self::MercenaryPowerSimple(pos) => {
-                if let Some(UnitType::Mercenary(merc)) = game.get_map_mut().get_unit_mut(*pos) {
-                    match &mut merc.typ {
-                        Mercenaries::EarlGrey(power_active) => {
-                            *power_active = !*power_active;
+                if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.mercenary.then(|m, _| {
+                        if let Some(power_active) = m.power_active_mut() {
+                            *power_active = !*power_active;                            
                         }
-                    }
+                    });
                 }
             }
             Self::TerrainChange(pos, terrain, _) => {
@@ -637,6 +642,13 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::UnitReplacement(pos, _, _) => {
+                if game.has_vision_at(*team, *pos) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitSetMercenary(pos, _) => {
                 if game.has_vision_at(*team, *pos) {
                     Some(self.clone())
                 } else {
@@ -791,9 +803,9 @@ fn apply_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option
     }
     if let Some(into) = end_visible {
         let end = path.end(game.get_map()).unwrap();
-        if into {
+        if let (true, UnitType::Normal(unit)) = (into, unit) {
             let transporter = game.get_map_mut().get_unit_mut(end).unwrap();
-            transporter.board(transporter.get_boarded().len() as u8, unit.clone().as_transportable().unwrap());
+            transporter.board(transporter.get_boarded().len() as u8, unit.clone());
         } else {
             game.get_map_mut().set_unit(end, Some(unit.clone()));
         }
@@ -812,7 +824,7 @@ fn undo_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option<
     }
     if let Some(unload_index) = unload_index {
         if let Some(index) = unload_index {
-            if let (Some(u), Some(b)) = (game.get_map_mut().get_unit_mut(path.start), unit.clone().as_transportable()) {
+            if let (Some(u), UnitType::Normal(b)) = (game.get_map_mut().get_unit_mut(path.start), unit.clone()) {
                 u.board(*index, b);
             }
         } else {

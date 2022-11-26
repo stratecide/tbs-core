@@ -66,12 +66,15 @@ impl<D: Direction> CommonMovement<D> {
         }
     }
     
-    fn get_unit<'a>(&self, map: &'a Map<D>) -> Result<&'a dyn NormalUnitTrait<D>, CommandError> {
+    fn get_unit<'a>(&self, map: &'a Map<D>) -> Result<&'a NormalUnit, CommandError> {
         let unit = map.get_unit(self.path.start).ok_or(CommandError::MissingUnit)?;
-        let unit: &'a dyn NormalUnitTrait<D> = if let Some(index) = self.unload_index {
-            unit.get_boarded().get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?.as_trait()
+        let unit: &'a NormalUnit = if let Some(index) = self.unload_index {
+            unit.get_boarded().get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?
         } else {
-            unit.as_normal_trait().ok_or(CommandError::UnitTypeWrong)?
+            match unit {
+                UnitType::Normal(unit) => unit,
+                _ => return Err(CommandError::UnitTypeWrong),
+            }
         };
         Ok(unit)
     }
@@ -141,39 +144,6 @@ impl<D: Direction> CommonMovement<D> {
         } else {
             Err(CommandError::MissingUnit)
         }
-        /*let unit = self.get_unit(handler.get_map()).expect("Unit command applied without unit, although it should be checked already");
-        let mut path_taken = Path {start: self.path.start, steps: LVec::new()};
-        let mut current = self.path.start;
-        for p in &self.path.steps {
-            current = p.progress(handler.get_map(), current)?;
-            if !unit.can_move_to(current, handler.get_game()) {
-                // the unit is blocked by a fog trap
-                // first make sure no other unit is overwritten
-                while path_taken.steps.len() > 0 && !unit.can_stop_on(current, handler.get_game()) {
-                    path_taken.steps.pop();
-                }
-                // no event for the path is necessary if the unit is unable to move at all
-                if path_taken.steps.len() > 0 {
-                    let unit = unit.as_unit();
-                    handler.add_event(Event::UnitPath(Some(self.unload_index), path_taken.clone(), true, unit.clone()));
-                    after_path(handler, &path_taken, &unit);
-                }
-                // special case of a unit being unable to move that's loaded in a transport
-                if path_taken.steps.len() == 0 && self.unload_index.is_some() {
-                    handler.add_event(Event::UnitExhaustBoarded(self.path.start, self.unload_index.unwrap()));
-                } else {
-                    handler.add_event(Event::UnitExhaust(path_taken.end(handler.get_map())?));
-                }
-                return Ok(None);
-            }
-            path_taken.steps.push(p.clone()).unwrap();
-        }
-        if path_taken.steps.len() > 0 {
-            let unit = unit.as_unit();
-            f(handler, unit.clone(), path_taken.clone());
-            after_path(handler, &path_taken, &unit);
-        }
-        Ok(Some(current))*/
     }
     fn add_path(handler: &mut EventHandler<D>, unload_index: Option<UnloadIndex>, path: &Path<D>, into: bool, unit: UnitType<D>, actively: bool) {
         if actively {
@@ -407,7 +377,7 @@ impl<D: Direction> UnitCommand<D> {
                     };
                     if handler.get_game().can_buy_merc_at(handler.get_game().current_player(), end) && cost <= *handler.get_game().current_player().funds {
                         handler.add_event(Event::MoneyChange(unit.owner, (-(cost as i32)).try_into().unwrap()));
-                        handler.add_event(Event::UnitReplacement(end, UnitType::Normal(unit.clone()), UnitType::mercenary(merc.mercenary(), unit, end)));
+                        handler.add_event(Event::UnitSetMercenary(end, merc.mercenary()));
                         // TODO: update vision ...
                     }
                     handler.add_event(Event::UnitExhaust(end));
@@ -422,7 +392,7 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 let unit = cm.get_unit(handler.get_map())?;
                 let transporter = handler.get_map().get_unit(intended_end).ok_or(CommandError::MissingUnit)?;
-                if !transporter.boardable_by(&unit.as_transportable()) {
+                if !transporter.boardable_by(&unit) {
                     return Err(CommandError::UnitCannotBeBoarded);
                 }
                 let load_index = transporter.get_boarded().len() as u8;
@@ -450,11 +420,15 @@ impl<D: Direction> UnitCommand<D> {
                     return Err(CommandError::NoVision);
                 }
                 match handler.get_map().get_unit(pos) {
-                    Some(UnitType::Mercenary(merc)) => {
-                        if merc.can_use_simple_power(handler.get_game(), pos) {
-                            let change = -(*merc.charge as i8);
-                            handler.add_event(Event::MercenaryCharge(pos, change.try_into().unwrap()));
-                            handler.add_event(Event::MercenaryPowerSimple(pos));
+                    Some(UnitType::Normal(unit)) => {
+                        if let MaybeMercenary::Some{mercenary, ..} = &unit.mercenary {
+                            if mercenary.can_use_simple_power(handler.get_game(), pos) {
+                                let change = -(mercenary.charge() as i8);
+                                handler.add_event(Event::MercenaryCharge(pos, change.try_into().unwrap()));
+                                handler.add_event(Event::MercenaryPowerSimple(pos));
+                            } else {
+                                return Err(CommandError::PowerNotUsable);
+                            }
                         } else {
                             return Err(CommandError::PowerNotUsable);
                         }
@@ -516,9 +490,8 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
 
 pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {
     let attacker = handler.get_map().get_unit(attacker_pos).and_then(|u| Some(u.clone()));
-    let attacker: &dyn NormalUnitTrait<D> = match &attacker {
-        Some(UnitType::Normal(unit)) => Ok(unit.as_trait()),
-        Some(UnitType::Mercenary(unit)) => Ok(unit.as_trait()),
+    let attacker: &NormalUnit = match &attacker {
+        Some(UnitType::Normal(unit)) => Ok(unit),
         Some(UnitType::Chess(_)) => Err(CommandError::UnitTypeWrong),
         Some(UnitType::Structure(_)) => Err(CommandError::UnitTypeWrong),
         None => Err(CommandError::MissingUnit),
@@ -585,10 +558,12 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
         }
     }
     for (p, change) in charges {
-        if let Some(UnitType::Mercenary(merc)) = handler.get_map().get_unit(p) {
-            let change = change.min(merc.typ.max_charge() as i16 - change).max(-(*merc.charge as i16));
-            if change != 0 {
-                handler.add_event(Event::MercenaryCharge(p, (change as i8).try_into().unwrap()));
+        if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(p) {
+            if let MaybeMercenary::Some{mercenary, ..} = &unit.mercenary {
+                let change = change.min(mercenary.max_charge() as i16 - change).max(-(mercenary.charge() as i16));
+                if change != 0 {
+                    handler.add_event(Event::MercenaryCharge(p, (change as i8).try_into().unwrap()));
+                }
             }
         }
     }
@@ -602,9 +577,8 @@ pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: 
     let potential_counters = calculate_attack(handler, attacker_pos, target, false)?;
     // counter attack
     for p in &potential_counters {
-        let unit: &dyn NormalUnitTrait<D> = match handler.get_map().get_unit(*p) {
-            Some(UnitType::Normal(unit)) => unit.as_trait(),
-            Some(UnitType::Mercenary(unit)) => unit.as_trait(),
+        let unit: &NormalUnit = match handler.get_map().get_unit(*p) {
+            Some(UnitType::Normal(unit)) => unit,
             Some(UnitType::Chess(_)) => continue,
             Some(UnitType::Structure(_)) => continue,
             None => continue,
