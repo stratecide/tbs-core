@@ -419,10 +419,6 @@ where D: Direction
         }
     }
 
-    pub fn import(bytes: Vec<u8>) -> Result<Self, ZipperError> {
-        let mut unzipper = Unzipper::new(bytes);
-        Self::import_from_unzipper(&mut unzipper)
-    }
     pub fn import_from_unzipper(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
         let wrapping_logic = WrappingMap::import(unzipper)?;
         let mut terrain = HashMap::new();
@@ -447,6 +443,20 @@ where D: Direction
     }
 }
 
+pub enum MapType {
+    Square(Map<Direction4>),
+    Hex(Map<Direction6>),
+}
+
+pub fn import_map(bytes: Vec<u8>) -> Result<MapType, ZipperError> {
+    let mut unzipper = Unzipper::new(bytes);
+    if unzipper.read_bool()? {
+        Ok(MapType::Hex(Map::import_from_unzipper(&mut unzipper)?))
+    } else {
+        Ok(MapType::Square(Map::import_from_unzipper(&mut unzipper)?))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Zippable)]
 pub struct FieldData<D: Direction> {
     pub terrain: Terrain::<D>,
@@ -466,6 +476,7 @@ impl<D: Direction> FieldData<D> {
 impl<D: Direction> interfaces::Map for Map<D> {
     fn export(&self) -> Vec<u8> {
         let mut zipper = Zipper::new();
+        zipper.write_bool(D::is_hex());
         self.export(&mut zipper, None);
         zipper.finish()
     }
