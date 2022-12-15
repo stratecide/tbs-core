@@ -12,7 +12,8 @@ pub use interfaces;
 #[cfg(test)]
 mod tests {
 
-    use interfaces::Game;
+    use interfaces::*;
+    use interfaces::map_interface::*;
     use crate::game::game::*;
     use crate::map::direction::*;
     use crate::map::map::Map;

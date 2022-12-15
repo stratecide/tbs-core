@@ -61,8 +61,3 @@ impl PlayerSettings {
         }
     }
 }
-
-#[derive(Debug)]
-pub enum NotPlayable {
-    TooFewPlayers,
-}

@@ -341,7 +341,7 @@ impl<D: Direction> interfaces::Game for Game<D> {
     fn export(&self) -> interfaces::ExportedGame {
         // server perspective
         let mut zipper = Zipper::new();
-        self.map.export(&mut zipper, None);
+        self.map.zip(&mut zipper, None);
         zipper.write_u32(self.current_turn, 32);
         zipper.write_bool(self.ended);
         self.fog_mode.export(&mut zipper);
@@ -360,7 +360,7 @@ impl<D: Direction> interfaces::Game for Game<D> {
 
             // "None" perspective, visible to all
             let mut zipper = Zipper::new();
-            self.map.export(&mut zipper, Some(neutral_fog));
+            self.map.zip(&mut zipper, Some(neutral_fog));
             zipper.write_u32(self.current_turn, 32);
             zipper.write_bool(self.ended);
             self.fog_mode.export(&mut zipper);

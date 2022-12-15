@@ -372,24 +372,7 @@ where D: Direction
         owners.sort();
         owners
     }
-    /**
-     * returns Ok(...) if the map is playable
-     * returns Err(...) containing the reason otherwise
-     */
-    pub fn settings(&self) -> Result<settings::GameSettings, settings::NotPlayable> {
-        let owners = self.get_viable_player_ids();
-        if owners.len() < 2 {
-            return Err(settings::NotPlayable::TooFewPlayers);
-        }
-        let players:Vec<PlayerSettings> = owners.into_iter()
-            .map(|owner| PlayerSettings::new(owner))
-            .collect();
-        // TODO: check if playable
-        Ok(settings::GameSettings {
-            fog_mode: FogMode::DarkRegular(0.try_into().unwrap(), 4.try_into().unwrap(), 3.try_into().unwrap()),
-            players: players.try_into().unwrap(),
-        })
-    }
+
     pub fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {
         Game::new_server(self, settings, random)
     }
@@ -412,7 +395,7 @@ where D: Direction
         fd.export(zipper);
     }
 
-    pub fn export(&self, zipper: &mut Zipper, fog: Option<&HashSet<Point>>) {
+    pub fn zip(&self, zipper: &mut Zipper, fog: Option<&HashSet<Point>>) {
         self.wrapping_logic.export(zipper);
         for p in self.all_points() {
             self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p)).is_some());
@@ -473,13 +456,33 @@ impl<D: Direction> FieldData<D> {
     }
 }
 
-impl<D: Direction> interfaces::Map for Map<D> {
+impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
+    type Terrain = Terrain<D>;
+    type Detail = Detail;
+    type Unit = UnitType<D>;
+    type GameSettings = settings::GameSettings;
+
     fn export(&self) -> Vec<u8> {
         let mut zipper = Zipper::new();
         zipper.write_bool(D::is_hex());
-        self.export(&mut zipper, None);
+        self.zip(&mut zipper, None);
         zipper.finish()
     }
+
+    fn settings(&self) -> Result<Self::GameSettings, interfaces::map_interface::NotPlayable> {
+        let owners = self.get_viable_player_ids();
+        if owners.len() < 2 {
+            return Err(interfaces::map_interface::NotPlayable::TooFewPlayers);
+        }
+        let players:Vec<PlayerSettings> = owners.into_iter()
+            .map(|owner| PlayerSettings::new(owner))
+            .collect();
+        Ok(settings::GameSettings {
+            fog_mode: FogMode::DarkRegular(0.try_into().unwrap(), 4.try_into().unwrap(), 3.try_into().unwrap()),
+            players: players.try_into().unwrap(),
+        })
+    }
+
 }
 
 #[derive(Debug, Clone, Copy)]
