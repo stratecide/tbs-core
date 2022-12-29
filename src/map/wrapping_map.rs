@@ -64,6 +64,25 @@ where D: Direction {
             translate_by: translate_by,
         }
     }
+    pub fn transform_point(&self, p: &GlobalPoint, map_center: &GlobalPoint, odd: bool) -> GlobalPoint {
+        let mut x = p.x() - map_center.x();
+        let y = p.y() - map_center.y();
+        if self.distortion.0 {
+            // mirrored
+            x = -x;
+            if D::is_hex() && y % 2 != 0 {
+                if odd {
+                    x += 1;
+                } else {
+                    x -= 1;
+                }
+            }
+        }
+        let p = GlobalPoint::new(x, y);
+        let p = self.distortion.1.rotate_around_center(&p, &GlobalPoint::new(0, 0), odd);
+        let p = self.translate_by.translate_point(&p, odd);
+        GlobalPoint::new(p.x() + map_center.x(), p.y() + map_center.y())
+    }
 }
 
 #[derive(Debug, Clone)]

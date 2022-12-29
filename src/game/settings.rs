@@ -1,15 +1,34 @@
+use std::collections::HashMap;
+
 use crate::commanders::*;
+use crate::map::direction::Direction;
+use crate::map::map::Map;
 use crate::player::*;
 
-use super::game::FogMode;
+use super::game::{FogMode, Game};
+use super::events::Event;
+use interfaces::map_interface::GameSettingsInterface;
 use zipper::*;
 use zipper::{zipper_derive::*, LVec};
+use interfaces::game_interface;
 
 
 #[derive(Debug, Clone, Zippable)]
 pub struct GameSettings {
     pub fog_mode: FogMode,
     pub players: LVec::<PlayerSettings, 16>,
+}
+impl GameSettingsInterface for GameSettings {
+    fn players(&self) -> Vec<game_interface::PlayerData> {
+        self.players.iter()
+        .map(|p| {
+            game_interface::PlayerData {
+                color_id: *p.color_id,
+                team: *p.team,
+                dead: false,
+            }
+        }).collect()
+    }
 }
 
 #[derive(Debug, Clone, Zippable)]

@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use interfaces::game_interface::{GameInterface, CommandInterface, EventInterface, self};
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -26,6 +27,11 @@ pub enum Command<D: Direction> {
     UnitCommand(UnitCommand::<D>),
     BuyUnit(Point, U8::<255>),
     CommanderPowerSimple(CommanderPower),
+}
+impl<D: Direction> CommandInterface for Command<D> {
+    fn end_turn() -> Self {
+        Self::EndTurn
+    }
 }
 impl<D: Direction> Command<D> {
     pub fn convert<R: Fn() -> f32>(self, handler: &mut EventHandler<D>, random: R) -> Result<(), CommandError> {
@@ -74,7 +80,7 @@ impl<D: Direction> Command<D> {
                 // update fog manually if it's random
                 match handler.get_game().get_fog_mode() {
                     FogMode::Random(value, offset, to_bright_chance, to_dark_chance) => {
-                        if handler.get_game().current_turn() >= **offset as u32 {
+                        if handler.get_game().current_turn() as u32 >= **offset as u32 {
                             let random_value= random();
                             if *value && to_bright_chance.check(random_value) || !*value && to_dark_chance.check(random_value) {
                                 handler.add_event(Event::FogFlipRandom);
@@ -270,6 +276,8 @@ pub enum Event<D:Direction> {
     EnPassantOpportunity(Point),
     UnitDirection(Point, D, D),
     UpdateBuiltThisTurn(Point, BuiltThisTurn, BuiltThisTurn),
+}
+impl<D: Direction> EventInterface for Event<D> {
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -951,7 +959,7 @@ fn apply_vision_changes<D: Direction>(game: &mut Game<D>, team: &Perspective, po
 
 pub struct EventHandler<'a, D: Direction> {
     game: &'a mut Game<D>,
-    events: HashMap<Option<Perspective>, Vec<Event<D>>>,
+    events: HashMap<Option<game_interface::Perspective>, Vec<Event<D>>>,
 }
 impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn new(game: &'a mut Game<D>) -> Self {
@@ -959,7 +967,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         events.insert(None, vec![]);
         events.insert(Some(None), vec![]);
         for team in game.get_teams() {
-            events.insert(Some(Some(team)), vec![]);
+            events.insert(Some(Some(*team)), vec![]);
         }
         EventHandler {
             game,
@@ -976,14 +984,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         event.apply(&mut self.game);
         for (key, events) in self.events.iter_mut() {
             if let Some(perspective) = key {
-                if let Some(event) = event.fog_replacement(self.game, perspective) {
+                if let Some(event) = event.fog_replacement(self.game, &perspective.and_then(|p| p.try_into().ok())) {
                     events.push(event);
                 }
             }
         }
         self.events.get_mut(&None).unwrap().push(event);
     }
-    pub fn accept(self) -> HashMap<Option<Perspective>, Vec<Event<D>>> {
+    pub fn accept(self) -> HashMap<Option<game_interface::Perspective>, Vec<Event<D>>> {
         self.events
     }
     pub fn cancel(mut self) {

@@ -12,7 +12,7 @@ pub use interfaces;
 #[cfg(test)]
 mod tests {
 
-    use interfaces::*;
+    use interfaces::game_interface::*;
     use interfaces::map_interface::*;
     use crate::game::game::*;
     use crate::map::direction::*;
@@ -58,13 +58,13 @@ mod tests {
         
         println!("exported server: {:?}", exported_server);
         
-        let imported_server = import_server::<Direction4>(exported_server.clone()).unwrap();
+        let imported_server = *Game::<Direction4>::import_server(exported_server.clone()).unwrap();
         assert_eq!(imported_server, server);
         
         for team in [None, Some(OWNER_0), Some(OWNER_1)] {
             println!("testing client import for perspective {:?}", team);
-            let client = crate::game::game::Game::new_client(map.clone(), &settings, events.get(&Some(team)).unwrap());
-            let client_imported = import_client::<Direction4>(exported_server.public.clone(), team.as_ref().and_then(|team| Some((team.clone(), exported_server.clone().hidden.unwrap().teams.get(&**team).unwrap().clone())))).unwrap();
+            let client = crate::game::game::Game::new_client(map.clone(), &settings, events.get(&Some(team.and_then(|t| Some(*t)))).unwrap());
+            let client_imported = *Game::<Direction4>::import_client(exported_server.public.clone(), team.as_ref().and_then(|team| Some((**team, exported_server.clone().hidden.unwrap().teams.get(&**team).unwrap().clone())))).unwrap();
             assert_eq!(client, client_imported);
         }
     }

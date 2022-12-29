@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use interfaces::game_interface;
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -45,9 +46,9 @@ where D: Direction
             details: HashMap::new(),
         }
     }
-    pub fn odd_if_hex(&self) -> bool {
+    /*pub fn odd_if_hex(&self) -> bool {
         self.wrapping_logic.pointmap().odd_if_hex()
-    }
+    }*/
     pub fn wrapping_logic(&self) -> &WrappingMap<D> {
         &self.wrapping_logic
     }
@@ -373,13 +374,6 @@ where D: Direction
         owners
     }
 
-    pub fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, HashMap<Option<Perspective>, Vec<events::Event<D>>>) {
-        Game::new_server(self, settings, random)
-    }
-    pub fn game_client(self, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Game<D> {
-        Game::new_client(self, settings, events)
-    }
-
     pub fn get_field_data(&self, p: Point) -> FieldData<D> {
         FieldData {
             terrain: self.terrain.get(&p).unwrap().clone(),
@@ -461,6 +455,7 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
     type Detail = Detail;
     type Unit = UnitType<D>;
     type GameSettings = settings::GameSettings;
+    type Game = Game<D>;
 
     fn export(&self) -> Vec<u8> {
         let mut zipper = Zipper::new();
@@ -481,6 +476,13 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
             fog_mode: FogMode::DarkRegular(0.try_into().unwrap(), 4.try_into().unwrap(), 3.try_into().unwrap()),
             players: players.try_into().unwrap(),
         })
+    }
+
+    fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, HashMap<Option<game_interface::Perspective>, Vec<events::Event<D>>>) {
+        Game::new_server(self, settings, random)
+    }
+    fn game_client(self, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Game<D> {
+        Game::new_client(self, settings, events)
     }
 
 }
