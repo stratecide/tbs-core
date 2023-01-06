@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use interfaces::game_interface::{GameInterface, CommandInterface, EventInterface, self};
+use interfaces::game_interface::{GameInterface, CommandInterface, EventInterface, self, Events};
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -278,6 +278,25 @@ pub enum Event<D:Direction> {
     UpdateBuiltThisTurn(Point, BuiltThisTurn, BuiltThisTurn),
 }
 impl<D: Direction> EventInterface for Event<D> {
+    fn export_list(list: &Vec<Self>) -> Vec<u8> {
+        let mut zipper = Zipper::new();
+        for e in list {
+            e.export(&mut zipper);
+        }
+        zipper.finish()
+    }
+    fn import_list(list: Vec<u8>) -> Vec<Self> {
+        let mut unzipper = Unzipper::new(list);
+        let mut result = vec![];
+        loop {
+            match Self::import(&mut unzipper) {
+                Ok(e) => result.push(e),
+                Err(ZipperError::NotEnoughBits) => break,
+                _ => break, // TODO: should probably be handled somehow. Maybe return a Result instead?
+            }
+        }
+        result
+    }
 }
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
@@ -991,8 +1010,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
         self.events.get_mut(&None).unwrap().push(event);
     }
-    pub fn accept(self) -> HashMap<Option<game_interface::Perspective>, Vec<Event<D>>> {
-        self.events
+    pub fn accept(mut self) -> Events<Game<D>> {
+        if self.events.get(&None) == self.events.get(&Some(None)) {
+            // if no info is hidden, there's no need to store multiple identical entries
+            Events::Public(self.events.remove(&None).unwrap())
+        } else {
+            Events::Secrets(self.events)
+        }
     }
     pub fn cancel(mut self) {
         while let Some(event) = self.events.get_mut(&None).unwrap().pop() {

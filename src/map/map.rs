@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use interfaces::game_interface;
+use interfaces::game_interface::Events;
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -478,7 +479,7 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
         })
     }
 
-    fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, HashMap<Option<game_interface::Perspective>, Vec<events::Event<D>>>) {
+    fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, Events<Game<D>>) {
         Game::new_server(self, settings, random)
     }
     fn game_client(self, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Game<D> {

@@ -29,6 +29,15 @@ impl GameSettingsInterface for GameSettings {
             }
         }).collect()
     }
+    fn export(&self) -> Vec<u8> {
+        let mut zipper = Zipper::new();
+        Zippable::export(self, &mut zipper);
+        zipper.finish()
+    }
+    fn import(data: Vec<u8>) -> Self {
+        let mut unzipper = Unzipper::new(data);
+        Zippable::import(&mut unzipper).unwrap() // TODO: remove unwrap! return Result instead
+    }
 }
 
 #[derive(Debug, Clone, Zippable)]

@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use zipper::*;
 use zipper::zipper_derive::*;
-use interfaces::game_interface;
+use interfaces::game_interface::{self, Events};
 use interfaces::game_interface::GameInterface;
 
 use crate::map::map::*;
@@ -48,7 +48,7 @@ impl<D: Direction> Game<D> {
             fog,
         }
     }
-    pub fn new_server<R: Fn() -> f32>(map: Map<D>, settings: &settings::GameSettings, random: R) -> (Self, HashMap<Option<game_interface::Perspective>, Vec<events::Event<D>>>) {
+    pub fn new_server<R: Fn() -> f32>(map: Map<D>, settings: &settings::GameSettings, random: R) -> (Self, Events<Self>) {
         let mut this = Self::new(map, settings);
         let events = this.start_server(random);
         (this, events)
@@ -60,7 +60,7 @@ impl<D: Direction> Game<D> {
         }
         this
     }
-    fn start_server<R: Fn() -> f32>(&mut self, _random: R) -> HashMap<Option<game_interface::Perspective>, Vec<events::Event<D>>> {
+    fn start_server<R: Fn() -> f32>(&mut self, _random: R) -> Events<Self> {
         let mut handler = events::EventHandler::new(self);
         if handler.get_game().fog_mode.is_foggy(0) {
             // TODO: this is duplicated code from EndTurn in events
@@ -329,7 +329,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
         Ok(Box::new(game))
     }
 
-    fn handle_command<R: Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<HashMap<Option<game_interface::Perspective>, Vec<events::Event<D>>>, events::CommandError> {
+    fn handle_command<R: Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<Events<Self>, events::CommandError> {
         let mut handler = events::EventHandler::new(self);
         match command.convert(&mut handler, random) {
             Ok(()) => Ok(handler.accept()),
