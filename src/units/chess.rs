@@ -493,7 +493,7 @@ impl<D: Direction> ChessUnit<D> {
         }
         result
     }
-    pub fn threatens(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+    pub fn threatens(&self, _game: &Game<D>, target: &UnitType<D>) -> bool {
         match target {
             UnitType::Structure(_) => false,
             _ => true,
@@ -507,7 +507,6 @@ impl<D: Direction> ChessUnit<D> {
         if let Some(dp) = game.get_map().get_neighbor(rook_end.point, rook_end.direction) {
             if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(dp.point) {
                 let king = game.get_map().get_unit(dp.point).unwrap();
-                let armor = ChessUnits::<D>::King(false).get_armor().0;
                 let team = game.get_team(Some(&owner)).unwrap();
                 if unit.typ == ChessUnits::King(false) && unit.owner == owner
                     && game.find_visible_threats(dp.point, &king, team).is_empty()

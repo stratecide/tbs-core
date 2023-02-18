@@ -1,5 +1,5 @@
 use std::collections::{BinaryHeap, HashSet, HashMap};
-use std::cmp::{Ordering, Reverse};
+use std::cmp::Ordering;
 use std::hash::Hash;
 
 use zipper::*;

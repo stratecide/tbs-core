@@ -5,8 +5,6 @@ use crate::map::point::*;
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use super::point_map;
-
 
 pub trait Direction: Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display {
     type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;

@@ -1,6 +1,5 @@
 use crate::map::direction::Direction;
 use crate::map::map::Map;
-use crate::terrain::Terrain;
 
 use super::*;
 
@@ -111,13 +110,13 @@ impl Mercenaries {
             Mercenaries::EarlGrey(_, power_active) => Some(power_active),
         }
     }
-    pub fn can_use_simple_power<D: Direction>(&self, game: &Game<D>, pos: Point) -> bool {
+    pub fn can_use_simple_power<D: Direction>(&self, _game: &Game<D>, _pos: Point) -> bool {
         match self {
             Mercenaries::EarlGrey(_, true) => false,
             Mercenaries::EarlGrey(charge, false) => **charge >= self.max_charge(),
         }
     }
-    pub fn add_options_after_path<D: Direction>(&self, unit: &NormalUnit, game: &Game<D>, path: &Path<D>, options: &mut Vec<UnitAction<D>>) {
+    pub fn add_options_after_path<D: Direction>(&self, _unit: &NormalUnit, _game: &Game<D>, path: &Path<D>, options: &mut Vec<UnitAction<D>>) {
         match self {
             Mercenaries::EarlGrey(charge, false) => {
                 if path.steps.len() == 0 && **charge >= charge.max_value() {

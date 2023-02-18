@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use interfaces::game_interface;
 use interfaces::game_interface::Events;
 use zipper::*;
 use zipper::zipper_derive::*;

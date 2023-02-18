@@ -260,7 +260,7 @@ impl NormalUnit {
     pub fn can_attack_unit<D: Direction>(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
         target.get_team(game) != self.get_team(game) && self.threatens(game, target)
     }
-    pub fn threatens<D: Direction>(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+    pub fn threatens<D: Direction>(&self, _game: &Game<D>, target: &UnitType<D>) -> bool {
         self.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
     }
     pub fn attackable_positions<D: Direction>(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {

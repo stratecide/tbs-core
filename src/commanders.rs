@@ -36,7 +36,7 @@ impl Commander {
         }
     }
     
-    pub fn attack_bonus<D: Direction>(&self, game: &Game<D>, attacker: &NormalUnit, _is_counter: bool) -> f32 {
+    pub fn attack_bonus<D: Direction>(&self, _game: &Game<D>, _attacker: &NormalUnit, _is_counter: bool) -> f32 {
         let mut result = match self {
             _ => 0.,
         };
@@ -46,7 +46,7 @@ impl Commander {
         result
     }
 
-    pub fn defense_bonus<D: Direction>(&self, game: &Game<D>, defender: &UnitType<D>, _is_counter: bool) -> f32 {
+    pub fn defense_bonus<D: Direction>(&self, _game: &Game<D>, _defender: &UnitType<D>, _is_counter: bool) -> f32 {
         let mut result = match self {
             _ => 0.,
         };
@@ -56,7 +56,7 @@ impl Commander {
         result
     }
     
-    pub fn after_attacked<D: Direction>(&self, game: &Game<D>, attacker: &NormalUnit, defender: &UnitType<D>, _is_counter: bool) {
+    pub fn after_attacked<D: Direction>(&self, _game: &Game<D>, _attacker: &NormalUnit, _defender: &UnitType<D>, _is_counter: bool) {
         match self {
             _ => {}
         }

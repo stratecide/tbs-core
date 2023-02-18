@@ -4,11 +4,11 @@ use interfaces::game_interface::{GameInterface, CommandInterface, EventInterface
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::commanders::{Charge, MAX_CHARGE, CommanderPower};
+use crate::commanders::{MAX_CHARGE, CommanderPower};
 use crate::map::map::{Map, FieldData};
 use crate::map::point::Point;
 use crate::map::point_map;
-use crate::units::normal_units::{NormalUnits, NormalUnit};
+use crate::units::normal_units::{NormalUnits};
 use crate::{player::*, details};
 use crate::terrain::{Terrain, BuiltThisTurn, Realty};
 use crate::details::Detail;
@@ -508,7 +508,7 @@ impl<D: Direction> Event<D> {
             Self::UnitReplacement(pos, unit, _) => {
                 game.get_map_mut().set_unit(pos.clone(), Some(unit.clone()));
             }
-            Self::UnitSetMercenary(pos, merc) => {
+            Self::UnitSetMercenary(pos, _) => {
                 if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
                     unit.mercenary = MaybeMercenary::None;
                 }

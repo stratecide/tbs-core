@@ -1,12 +1,7 @@
-use std::collections::HashMap;
-
 use crate::commanders::*;
-use crate::map::direction::Direction;
-use crate::map::map::Map;
 use crate::player::*;
 
-use super::game::{FogMode, Game};
-use super::events::Event;
+use super::game::FogMode;
 use interfaces::map_interface::GameSettingsInterface;
 use zipper::*;
 use zipper::{zipper_derive::*, LVec};
