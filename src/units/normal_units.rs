@@ -808,11 +808,11 @@ impl NormalUnits {
             Self::Sniper => AttackType::Ranged(1, 2),
             Self::Bazooka => AttackType::Adjacent,
             Self::DragonHead => AttackType::Straight(1, 2),
-            Self::Artillery => AttackType::Ranged(2, 4),
+            Self::Artillery => AttackType::Ranged(2, 3),
             Self::SmallTank => AttackType::Adjacent,
             Self::BigTank => AttackType::Adjacent,
             Self::AntiAir => AttackType::Adjacent,
-            Self::RocketLauncher => AttackType::Ranged(3, 6),
+            Self::RocketLauncher => AttackType::Ranged(3, 5),
             Self::Magnet => AttackType::Straight(2, 2),
 
             Self::Hovercraft(_) => AttackType::Adjacent,
