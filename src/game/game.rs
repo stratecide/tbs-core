@@ -48,7 +48,7 @@ impl<D: Direction> Game<D> {
             fog,
         }
     }
-    pub fn new_server<R: Fn() -> f32>(map: Map<D>, settings: &settings::GameSettings, random: R) -> (Self, Events<Self>) {
+    pub fn new_server<R: 'static + Fn() -> f32>(map: Map<D>, settings: &settings::GameSettings, random: R) -> (Self, Events<Self>) {
         let mut this = Self::new(map, settings);
         let events = this.start_server(random);
         (this, events)
@@ -60,8 +60,8 @@ impl<D: Direction> Game<D> {
         }
         this
     }
-    fn start_server<R: Fn() -> f32>(&mut self, _random: R) -> Events<Self> {
-        let mut handler = events::EventHandler::new(self);
+    fn start_server<R: 'static + Fn() -> f32>(&mut self, random: R) -> Events<Self> {
+        let mut handler = events::EventHandler::new(self, Box::new(random));
         if handler.get_game().fog_mode.is_foggy(0) {
             // TODO: this is duplicated code from EndTurn in events
             let mut events: Vec<events::Event<D>> = vec![];
@@ -182,14 +182,14 @@ impl<D: Direction> Game<D> {
                         // check if unit is mercenary or transports a mercenary
                         match unit {
                             UnitType::Normal(unit) => {
-                                if unit.mercenary.get_origin() == Some(pos) {
+                                if unit.data.mercenary.get_origin() == Some(pos) {
                                     return false;
                                 }
                             }
                             _ => {}
                         }
                         for unit in unit.get_boarded() {
-                            if unit.mercenary.get_origin() == Some(pos) {
+                            if unit.data.mercenary.get_origin() == Some(pos) {
                                 return false;
                             }
                         }
@@ -329,9 +329,9 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
         Ok(Box::new(game))
     }
 
-    fn handle_command<R: Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<Events<Self>, events::CommandError> {
-        let mut handler = events::EventHandler::new(self);
-        match command.convert(&mut handler, random) {
+    fn handle_command<R: 'static + Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<Events<Self>, events::CommandError> {
+        let mut handler = events::EventHandler::new(self, Box::new(random));
+        match command.convert(&mut handler) {
             Ok(()) => Ok(handler.accept()),
             Err(err) => {
                 handler.cancel();

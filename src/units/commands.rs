@@ -21,11 +21,12 @@ pub enum UnitAction<D: Direction> {
     Capture,
     Attack(AttackInfo::<D>),
     Pull(D),
-    BuyMercenary(Vec<MercenaryOption>),
+    BuyMercenary(MercenaryOption),
     MercenaryPowerSimple,
     Castle,
     PawnUpgrade(chess::PawnUpgrade),
     Repair,
+    BuildDrone(TransportableDrones),
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -40,6 +41,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Castle => write!(f, "Castle"),
             Self::PawnUpgrade(p) => write!(f, "{}", p),
             Self::Repair => write!(f, "Repair"),
+            Self::BuildDrone(o) => write!(f, "Build {}", o.to_normal(Some(DroneId::new(0))).name()),
         }
     }
 }
@@ -66,13 +68,17 @@ impl<D: Direction> CommonMovement<D> {
         }
     }
     
-    fn get_unit<'a>(&self, map: &'a Map<D>) -> Result<&'a NormalUnit, CommandError> {
+    fn get_unit(&self, map: &Map<D>) -> Result<NormalUnit, CommandError> {
         let unit = map.get_unit(self.path.start).ok_or(CommandError::MissingUnit)?;
-        let unit: &'a NormalUnit = if let Some(index) = self.unload_index {
-            unit.get_boarded().get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?
+        let unit: NormalUnit = if let Some(index) = self.unload_index {
+            let mut boarded = unit.get_boarded();
+            if boarded.len() <= *index as usize {
+                return Err(CommandError::MissingBoardedUnit);
+            }
+            boarded.remove(*index as usize)
         } else {
             match unit {
-                UnitType::Normal(unit) => unit,
+                UnitType::Normal(unit) => unit.clone(),
                 _ => return Err(CommandError::UnitTypeWrong),
             }
         };
@@ -101,7 +107,7 @@ impl<D: Direction> CommonMovement<D> {
             let mut path_taken = self.path.clone();
             let mut path_taken_works = false;
             while !path_taken_works {
-                movement_search(handler.get_game(), unit, &path_taken, None, |_path, _, can_stop_here| {
+                movement_search(handler.get_game(), &unit, &path_taken, None, |_path, _, can_stop_here| {
                     if can_stop_here {
                         path_taken_works = true;
                     }
@@ -207,6 +213,7 @@ pub enum UnitCommand<D: Direction> {
     MoveAboard(CommonMovement::<D>),
     MoveChess(Point, ChessCommand::<D>),
     MercenaryPowerSimple(Point),
+    MoveBuildDrone(CommonMovement::<D>, TransportableDrones),
 }
 impl<D: Direction> UnitCommand<D> {
     pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
@@ -328,7 +335,7 @@ impl<D: Direction> UnitCommand<D> {
                 cm.validate_input(handler.get_game())?;
                 let unit = cm.get_unit(handler.get_map())?;
                 if unit.get_hp() == 100 {
-                    return Err(CommandError::UnitCannotCapture);
+                    return Err(CommandError::CannotRepairHere);
                 }
                 match handler.get_map().get_terrain(intended_end) {
                     Some(Terrain::Realty(realty, owner)) => {
@@ -421,7 +428,7 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 match handler.get_map().get_unit(pos) {
                     Some(UnitType::Normal(unit)) => {
-                        if let MaybeMercenary::Some{mercenary, ..} = &unit.mercenary {
+                        if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
                             if mercenary.can_use_simple_power(handler.get_game(), pos) {
                                 let change = -(mercenary.charge() as i8);
                                 handler.add_event(Event::MercenaryCharge(pos, change.try_into().unwrap()));
@@ -436,6 +443,42 @@ impl<D: Direction> UnitCommand<D> {
                     _ => return Err(CommandError::UnitTypeWrong),
                 }
                 None
+            }
+            Self::MoveBuildDrone(cm, option) => {
+                cm.validate_input(handler.get_game())?;
+                let unit = cm.get_unit(handler.get_map())?;
+                let drone_id = match &unit.typ {
+                    NormalUnits::DroneBoat(drones, drone_id) => {
+                        // new drones can't be built if at max-capacity
+                        let mut existing_drones = drones.len();
+                        for p in handler.get_map().all_points() {
+                            match handler.get_map().get_unit(p) {
+                                Some(UnitType::Normal(NormalUnit {typ: NormalUnits::LightDrone(id), ..})) | 
+                                Some(UnitType::Normal(NormalUnit {typ: NormalUnits::HeavyDrone(id), ..})) => {
+                                    if drone_id == id {
+                                        existing_drones += 1;
+                                    }
+                                }
+                                _ => (),
+                            }
+                        }
+                        if existing_drones >= drones.capacity() {
+                            return Err(CommandError::UnitCannotBeBoarded)
+                        }
+                        *drone_id
+                    }
+                    _ => return Err(CommandError::UnitTypeWrong),
+                };
+                if let Some(end) = cm.apply(handler, false, true)? {
+                    let unit = option.to_normal(Some(drone_id));
+                    let cost = unit.value() as i32;
+                    if *handler.get_game().current_player().funds >= cost {
+                        handler.add_event(Event::MoneyChange(handler.get_game().current_player().owner_id, (-cost).try_into().unwrap()));
+                        handler.add_event(Event::BuildDrone(end, option));
+                    }
+                    handler.add_event(Event::UnitExhaust(end));
+                }
+                Some(cm.path.start)
             }
         };
         if let Some(p) = chess_exhaust {
@@ -559,7 +602,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
     }
     for (p, change) in charges {
         if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(p) {
-            if let MaybeMercenary::Some{mercenary, ..} = &unit.mercenary {
+            if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
                 let change = change.min(mercenary.max_charge() as i16 - change).max(-(mercenary.charge() as i16));
                 if change != 0 {
                     handler.add_event(Event::MercenaryCharge(p, (change as i8).try_into().unwrap()));

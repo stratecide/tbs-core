@@ -20,6 +20,7 @@ use crate::units::mercenary::MaybeMercenary;
 use crate::units::mercenary::Mercenaries;
 use crate::units::movement::MovementType;
 use crate::units::movement::PathStep;
+use crate::units::normal_units::DroneId;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Map<D>
@@ -225,14 +226,38 @@ where D: Direction
             self.set_details(p, list);
         }
     }
+
     pub fn remove_detail(&mut self, p: Point, index: usize) -> Option<Detail> {
         if let Some(list) = self.details.get_mut(&p) {
-            if list.len() > index {
-                return Some(list.remove(index));
+            return list.remove(index).ok();
+        } else {
+            None
+        }
+    }
+    
+    // returns a random DroneId that isn't in use yet
+    pub fn new_drone_id(&self, rng: f32) -> DroneId {
+        let mut existing_ids = HashSet::new();
+        for unit in self.units.values() {
+            unit.insert_drone_ids(&mut existing_ids);
+        }
+        for details in self.details.values() {
+            for det in details {
+                match det {
+                    Detail::Skull(_, unit) => {
+                        unit.insert_drone_ids(&mut existing_ids);
+                    }
+                    _ => ()
+                }
             }
         }
-        None
+        let mut drone_id = (DroneId::MAX as f32 * rng) as u16;
+        while existing_ids.contains(&drone_id) {
+            drone_id = (drone_id + 1) % DroneId::MAX;
+        }
+        DroneId::new(drone_id)
     }
+
     pub fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<(Point, D, Option<D>)>> {
         let mut layers: Vec<HashSet<(Point, D, Option<D>)>> = vec![];
         let mut layer = HashSet::new();
@@ -281,7 +306,7 @@ where D: Direction
         let mut result = vec![];
         for p in self.all_points() {
             if let Some(UnitType::Normal(unit)) = self.get_unit(p) {
-                if let MaybeMercenary::Some{mercenary, ..} = &unit.mercenary {
+                if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
                     if (owner.is_none() || owner == Some(&unit.owner)) && mercenary.in_range(self, p, point) {
                         result.push((p.clone(), mercenary));
                     }
@@ -478,7 +503,7 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
         })
     }
 
-    fn game_server<R: Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, Events<Game<D>>) {
+    fn game_server<R: 'static + Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, Events<Game<D>>) {
         Game::new_server(self, settings, random)
     }
     fn game_client(self, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Game<D> {

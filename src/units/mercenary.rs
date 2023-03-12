@@ -50,12 +50,10 @@ impl MaybeMercenary {
         match self {
             Self::None => {
                 if game.can_buy_merc_at(player, destination) {
-                    let mercs:Vec<MercenaryOption> = game.available_mercs(player)
-                        .into_iter()
-                        .filter(|m| m.price(game, unit).filter(|price| *price as i32 <= available_funds).is_some())
-                        .collect();
-                    if mercs.len() > 0 {
-                        options.push(UnitAction::BuyMercenary(mercs));
+                    for merc in game.available_mercs(player) {
+                        if merc.price(game, unit).filter(|price| *price as i32 <= available_funds).is_some() {
+                            options.push(UnitAction::BuyMercenary(merc));
+                        }
                     }
                 }
             }

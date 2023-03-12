@@ -87,14 +87,14 @@ impl Commander {
                 let mut details = handler.get_map().get_details(defender_pos);
                 let old_details = details.clone();
                 if details.len() < MAX_STACK_SIZE as usize && defender.get_team(handler.get_game()) != Some(player.team) {
-                    let mut unit_type = match defender {
-                        UnitType::Normal(unit) => unit.typ.clone(),
+                    let mut unit= match defender {
+                        UnitType::Normal(unit) => unit.clone(),
                         _ => return,
                     };
-                    while unit_type.get_boarded().len() > 0 {
-                        unit_type.unboard(0);
+                    while unit.get_boarded().len() > 0 {
+                        unit.unboard(0);
                     }
-                    details.push(Detail::Skull(owner, unit_type));
+                    details.push(Detail::Skull(owner, unit.typ));
                     handler.add_event(Event::ReplaceDetail(defender_pos.clone(), old_details.try_into().unwrap(), Detail::correct_stack(details).try_into().unwrap()));
                 }
             }
@@ -229,8 +229,8 @@ impl CommanderPower {
                                 if o == owner {
                                     handler.add_event(Event::RemoveDetail(p.clone(), (index as u8).try_into().unwrap(), Detail::Skull(o, unit_type.clone())));
                                     let mut unit = NormalUnit::new_instance(unit_type, owner);
-                                    unit.zombie = true;
-                                    unit.hp = Hp::new(50);
+                                    unit.data.zombie = true;
+                                    unit.data.hp = Hp::new(50);
                                     handler.add_event(Event::UnitCreation(p, UnitType::Normal(unit)));
                                 }
                                 break;

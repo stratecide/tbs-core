@@ -70,7 +70,7 @@ impl<D: Direction> UnitType<D> {
     }
     pub fn get_hp(&self) -> u8 {
         *match self {
-            Self::Normal(unit) => unit.hp,
+            Self::Normal(unit) => unit.data.hp,
             Self::Chess(unit) => unit.hp,
             Self::Structure(unit) => unit.hp,
         }
@@ -78,21 +78,21 @@ impl<D: Direction> UnitType<D> {
     pub fn set_hp(&mut self, hp: u8) {
         let hp = hp.min(100).try_into().unwrap();
         match self {
-            Self::Normal(unit) => unit.hp = hp,
+            Self::Normal(unit) => unit.data.hp = hp,
             Self::Chess(unit) => unit.hp = hp,
             Self::Structure(unit) => unit.hp = hp,
         }
     }
     pub fn is_exhausted(&self) -> bool {
         match self {
-            Self::Normal(unit) => unit.exhausted,
+            Self::Normal(unit) => unit.data.exhausted,
             Self::Chess(unit) => unit.exhausted,
             Self::Structure(_) => false,
         }
     }
     pub fn set_exhausted(&mut self, exhausted: bool) {
         match self {
-            Self::Normal(unit) => unit.exhausted = exhausted,
+            Self::Normal(unit) => unit.data.exhausted = exhausted,
             Self::Chess(unit) => unit.exhausted = exhausted,
             Self::Structure(_) => {},
         }
@@ -104,23 +104,23 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => return false,
         }
     }
-    pub fn get_boarded(&self) -> Vec<&NormalUnit> {
+    pub fn get_boarded(&self) -> Vec<NormalUnit> {
         match self {
-            Self::Normal(unit) => unit.typ.get_boarded(),
+            Self::Normal(unit) => unit.get_boarded(),
             Self::Chess(_) => vec![],
             Self::Structure(_struc) => vec![],
         }
     }
-    pub fn get_boarded_mut(&mut self) -> Vec<&mut NormalUnit> {
+    pub fn get_boarded_mut(&mut self) -> Vec<&mut UnitData> {
         match self {
-            Self::Normal(unit) => unit.typ.get_boarded_mut(),
+            Self::Normal(unit) => unit.get_boarded_mut(),
             Self::Chess(_) => vec![],
             Self::Structure(_struc) => vec![],
         }
     }
     pub fn unboard(&mut self, index: u8) {
         match self {
-            Self::Normal(unit) => unit.typ.unboard(index),
+            Self::Normal(unit) => unit.unboard(index),
             _ => {}
         }
     }
@@ -136,7 +136,7 @@ impl<D: Direction> UnitType<D> {
     }
     pub fn board(&mut self, index: u8, unit: NormalUnit) {
         match self {
-            Self::Normal(u) => u.typ.board(index, unit),
+            Self::Normal(u) => u.board(index, unit),
             _ => {}
         }
     }
@@ -313,6 +313,13 @@ impl<D: Direction> UnitType<D> {
                 unit.update_used_mercs(mercs)
             }
             _ => {}
+        }
+    }
+    pub fn insert_drone_ids(&self, existing_ids: &mut HashSet<u16>) {
+        match self {
+            Self::Normal(unit) => unit.typ.insert_drone_ids(existing_ids),
+            Self::Structure(_structure) => (), // TODO: drone tower
+            _ => (),
         }
     }
 }
