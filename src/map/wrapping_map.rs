@@ -27,7 +27,7 @@ where D: Direction {
     pub fn translate_by(&self) -> &D::T {
         &self.translate_by
     }
-    fn opposite(&self) -> Self {
+    pub fn opposite(&self) -> Self {
         let mut translate_by = self.translate_by.rotate_by(self.distortion.1.mirror_vertically().opposite_direction());
         let angle = if self.distortion.0 {
             translate_by = translate_by.mirror_horizontally();
@@ -162,8 +162,9 @@ where D: Direction
     pub fn adjacent_transformations(&self) -> &Vec<Transformation<D>> {
         &self.adjacent_transformations
     }
+
     #[cfg(feature = "rendering")]
-    pub fn screen_wrap_vectors(&self) -> Vec<(f32, f32)> {
+    pub fn screen_wrap_vectors(&self) -> Vec<D::T> {
         let mut wrap1: Option<D::T> = None;
         let mut wrap2: Option<D::T> = None;
         for list in self.screen_wrap_options.values() {
@@ -190,23 +191,26 @@ where D: Direction
         }
         let mut result = vec![];
         if let Some(w1) = wrap1 {
-            result.push(w1.screen_coordinates());
+            result.push(w1);
             if let Some(w2) = wrap2 {
-                result.push(w2.screen_coordinates());
+                result.push(w2);
             }
         }
         result
     }
+
     pub fn err(&self) -> &Option<TransformationError<D>> {
         &self.error
     }
+
     pub fn build(self) -> Result<WrappingMap<D>, TransformationError<D>> {
         if let Some(err) = self.error {
             Err(err)
         } else {
-            Ok(WrappingMap::new(self.map, self.seed_transformations, self.wrapped_neighbors))
+            Ok(WrappingMap::new(self))
         }
     }
+
     pub fn odd_if_hex(&self) -> bool {
         self.map.odd_if_hex() == (self.map_center.y() % 2 == 0)
     }
@@ -349,7 +353,9 @@ where D: Direction
                 }
             }
         }
-        let wrapping = self.screen_wrap_vectors();
+        let wrapping: Vec<(f32, f32)> = self.screen_wrap_vectors().into_iter()
+            .map(|t| t.screen_coordinates())
+            .collect();
         transformations.into_iter().enumerate().filter(|(i, tran)| {
             if *i == 0 {
                 return false;
@@ -494,26 +500,39 @@ where D: Direction {
     // only needed to save and load the wrapped_neighbors
     seed_transformations: Vec<Transformation<D>>,
     wrapped_neighbors: HashMap<(Point, D), OrientedPoint<D>>,
+#[cfg(feature = "rendering")]
+    screen_wrap_vectors: Vec<D::T>,
 }
 
 impl<D> WrappingMap<D>
 where D: Direction {
-    pub fn new(pointmap: PointMap, seed_transformations: Vec<Transformation<D>>, wrapped_neighbors: HashMap<(Point, D), OrientedPoint<D>>) -> Self {
+    fn new(builder: WrappingMapBuilder<D>) -> Self {
         WrappingMap {
-            pointmap,
-            seed_transformations,
-            wrapped_neighbors,
+#[cfg(feature = "rendering")]
+            screen_wrap_vectors: builder.screen_wrap_vectors(),
+            pointmap: builder.map,
+            seed_transformations: builder.seed_transformations,
+            wrapped_neighbors: builder.wrapped_neighbors,
         }
     }
+
+#[cfg(feature = "rendering")]
+    pub fn screen_wrap_vectors(&self) -> &Vec<D::T> {
+        &self.screen_wrap_vectors
+    }
+
     pub fn pointmap(&self) -> &PointMap {
         &self.pointmap
     }
+
     /*pub fn odd_if_hex(&self) -> bool {
         self.pointmap.odd_if_hex() == ((self.pointmap.height() / 2) % 2 == 0)
     }*/
+
     pub fn seed_transformations(&self) -> &Vec<Transformation<D>> {
         &self.seed_transformations
     }
+
     pub fn get_neighbor(&self, point: Point, direction: D) -> Option<OrientedPoint<D>> {
         if !self.pointmap.is_point_valid(point) {
             None

@@ -186,6 +186,7 @@ where D: Direction {
     fn between<P: Position<i16>>(from: &P, to: &P, odd_if_hex: bool) -> Self;
     fn plus(&self, other: &Self) -> Self;
     fn minus(&self, other: &Self) -> Self;
+    fn multiply(&self, factor: i16) -> Self;
     fn is_parallel(&self, other: &Self) -> bool;
     #[cfg(feature = "rendering")]
     fn screen_coordinates(&self) -> (f32, f32);
@@ -227,6 +228,12 @@ impl Translation<Direction4> for Translation4 {
         Translation4 {
             x: self.x - other.x,
             y: self.y - other.y,
+        }
+    }
+    fn multiply(&self, factor: i16) -> Self {
+        Translation4 {
+            x: self.x * factor,
+            y: self.y * factor,
         }
     }
     fn is_parallel(&self, other: &Self) -> bool {
@@ -322,6 +329,12 @@ impl Translation<Direction6> for Translation6 {
         Translation6 {
             d0: self.d0 - other.d0,
             d60: self.d60 - other.d60,
+        }
+    }
+    fn multiply(&self, factor: i16) -> Self {
+        Translation6 {
+            d0: self.d0 * factor,
+            d60: self.d60 * factor,
         }
     }
     fn is_parallel(&self, other: &Self) -> bool {

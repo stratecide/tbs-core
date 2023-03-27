@@ -47,24 +47,31 @@ where D: Direction
             details: HashMap::new(),
         }
     }
+
     /*pub fn odd_if_hex(&self) -> bool {
         self.wrapping_logic.pointmap().odd_if_hex()
     }*/
+
     pub fn wrapping_logic(&self) -> &WrappingMap<D> {
         &self.wrapping_logic
     }
+
     pub fn width(&self) -> u8 {
         self.wrapping_logic.pointmap().width()
     }
+
     pub fn height(&self) -> u8 {
         self.wrapping_logic.pointmap().height()
     }
+
     pub fn all_points(&self) -> Vec<Point> {
         self.wrapping_logic.pointmap().get_valid_points()
     }
+
     pub fn is_point_valid(&self, point: Point) -> bool {
         self.wrapping_logic.pointmap().is_point_valid(point)
     }
+
     /**
      * checks the pipe at dp.point for whether it can be entered by dp.direction and if true, returns the position of the next pipe tile
      * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
@@ -81,6 +88,7 @@ where D: Direction
             _ => None,
         }
     }
+
     pub fn get_direction(&self, from: Point, to: Point) -> Option<D> {
         for d in D::list() {
             if let Some(dp) = self.get_neighbor(from, d) {
@@ -91,6 +99,7 @@ where D: Direction
         }
         None
     }
+
     pub fn get_neighbor(&self, p: Point, d: D) -> Option<OrientedPoint<D>> {
         if let Some(n) = self.wrapping_logic.get_neighbor(p, d) {
             match self.terrain.get(&n.point) {

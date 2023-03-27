@@ -38,8 +38,8 @@ impl Position<u8> for Point {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct GlobalPoint {
-    x: i16,
-    y: i16,
+    pub x: i16,
+    pub y: i16,
 }
 
 impl Position<i16> for GlobalPoint {
