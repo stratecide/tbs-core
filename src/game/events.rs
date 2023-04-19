@@ -8,7 +8,7 @@ use crate::commanders::{MAX_CHARGE, CommanderPower};
 use crate::map::map::{Map, FieldData};
 use crate::map::point::Point;
 use crate::map::point_map;
-use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, TransportableUnits, UnitData};
+use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, UnitData};
 use crate::{player::*, details};
 use crate::terrain::{Terrain, BuiltThisTurn, Realty};
 use crate::details::Detail;
@@ -203,7 +203,7 @@ impl<D: Direction> Command<D> {
                     if let Some((options, event)) = bubble_data {
                         if let Some((unit, cost)) = options.get(*index as usize) {
                             if *cost as i32 <= *handler.get_game().current_player().funds {
-                                buy_unit(handler, *cost as i32, unit, pos);
+                                buy_unit(handler, *cost as i32, unit.clone(), pos);
                                 handler.add_event(event);
                                 Ok(())
                             } else {
@@ -218,6 +218,8 @@ impl<D: Direction> Command<D> {
                             if let Some((unit, cost)) = options.get(*index as usize) {
                                 if *cost as i32 <= *handler.get_game().current_player().funds {
                                     let realty = realty.clone();
+                                    let mut unit = unit.clone();
+                                    unit.set_exhausted(true);
                                     buy_unit(handler, *cost as i32, unit, pos);
                                     // increment counter for that realty
                                     realty.after_buying(pos, handler);
@@ -255,19 +257,18 @@ impl<D: Direction> Command<D> {
     }
 }
 
-fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: i32, unit: &UnitType<D>, pos: Point) {
+fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: i32, mut unit: UnitType<D>, pos: Point) {
     let owner_id = handler.game.current_player().owner_id;
     let team = Some(handler.get_game().current_player().team);
     handler.add_event(Event::MoneyChange(owner_id, (-cost).try_into().unwrap()));
-    let mut u = unit.clone();
-    match &mut u {
+    match &mut unit {
         UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(_, drone_id), ..}) => {
             *drone_id = handler.get_map().new_drone_id(handler.rng());
         }
         _ => (),
     }
     let vision_changes: Vec<Point> = unit.get_vision(handler.get_game(), pos).into_iter().filter(|p| !handler.get_game().has_vision_at(team, *p)).collect();
-    handler.add_event(Event::UnitCreation(pos, u)); 
+    handler.add_event(Event::UnitCreation(pos, unit)); 
     if vision_changes.len() > 0 {
         handler.add_event(Event::PureFogChange(team, vision_changes.try_into().unwrap()));
     }
