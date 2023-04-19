@@ -17,7 +17,7 @@ impl PointMap {
     pub fn new(width: u8, height: u8, odd_if_hex: bool) -> Self {
         Self::filled(width, height, odd_if_hex, true)
     }
-    fn filled(width: u8, height: u8, odd_if_hex: bool, value: bool) -> Self {
+    pub fn filled(width: u8, height: u8, odd_if_hex: bool, value: bool) -> Self {
         PointMap {
             odd_if_hex: odd_if_hex,
             point_validity: vec![vec![value; width as usize].try_into().unwrap(); height as usize].try_into().unwrap(),
