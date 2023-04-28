@@ -7,8 +7,9 @@ use zipper::zipper_derive::*;
 use crate::commanders::{MAX_CHARGE, CommanderPower};
 use crate::map::map::{Map, FieldData};
 use crate::map::point::Point;
-use crate::map::point_map;
+use crate::map::point_map::{self, MAX_AREA};
 use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, UnitData};
+use crate::units::structures::LASER_CANNON_RANGE;
 use crate::{player::*, details};
 use crate::terrain::{Terrain, BuiltThisTurn, Realty};
 use crate::details::Detail;
@@ -47,6 +48,8 @@ impl<D: Direction> Command<D> {
                     if let Some(unit) = unit {
                         if unit.get_owner() == Some(&owner_id) {
                             match unit {
+                                // Structures have their own start_turn method
+                                UnitType::Structure(_) => continue,
                                 UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(boarded, id), ..}) => {
                                     if boarded.remaining_capacity() > 0 {
                                         drone_parents.insert(*id, (p, boarded.remaining_capacity()));
@@ -327,7 +330,7 @@ pub enum Event<D:Direction> {
     RevealFunds(Owner, Funds), // when fog ends
     RemoveDetail(Point, U8::<{details::MAX_STACK_SIZE as u8 - 1}>, Detail),
     ReplaceDetail(Point, LVec::<Detail, {details::MAX_STACK_SIZE}>, LVec::<Detail, {details::MAX_STACK_SIZE}>),
-    Effect(Effect),
+    Effect(Effect::<D>),
     CommanderCharge(Owner, I32::<{-(MAX_CHARGE as i32)}, {MAX_CHARGE as i32}>),
     CommanderFlipActiveSimple(Owner),
     UnitMovedThisGame(Point),
@@ -1034,14 +1037,16 @@ fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 8)]
-pub enum Effect {
+pub enum Effect<D: Direction> {
     Flame(Point),
     GunFire(Point),
     ShellFire(Point),
     Repair(Point),
+    Laser(LVec::<(Point, D), {LASER_CANNON_RANGE}>),
+    Lightning(LVec::<Point, {MAX_AREA}>),
 }
-impl Effect {
-    pub fn fog_replacement<D: Direction>(&self, game: &Game<D>, team: Option<Team>) -> Option<Self> {
+impl<D: Direction> Effect<D> {
+    pub fn fog_replacement(&self, game: &Game<D>, team: Option<Team>) -> Option<Self> {
         match self {
             Self::Flame(p) |
             Self::GunFire(p) |
@@ -1053,6 +1058,8 @@ impl Effect {
                     None
                 }
             }
+            Self::Lightning(_) |
+            Self::Laser(_) => Some(self.clone()),
         }
     }
 }
@@ -1133,9 +1140,22 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn start_turn(&mut self) {
+        // has to be recalculated before structures, because the effects of some structures on
+        // other players should maybe not be visible
         self.recalculate_fog(false);
 
         self.add_event(Event::MoneyChange(self.game.current_player().owner_id, ((*self.game.current_player().income as isize * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32).try_into().unwrap()));
+
+        // fire structures
+        for p in self.get_map().all_points() {
+            if let Some(UnitType::Structure(structure)) = self.get_map().get_unit(p) {
+                let structure = structure.clone();
+                structure.start_turn(self, p);
+            }
+        }
+
+        // structures may have destroyed some units
+        self.recalculate_fog(false);
     }
     pub fn recalculate_fog(&mut self, keep_current_team: bool) {
         let mut teams:HashSet<Option<Team>> = self.game.get_teams().into_iter().map(|team| Some(team)).collect();

@@ -1,4 +1,4 @@
-use crate::{game::events::Effect, map::point::Point};
+use crate::{game::events::Effect, map::{point::Point, direction::Direction}};
 
 
 
@@ -111,7 +111,7 @@ impl WeaponType {
             (Self::AirMissiles, _) => None,
         }
     }
-    pub fn effect(&self, p: Point) -> Effect {
+    pub fn effect<D: Direction>(&self, p: Point) -> Effect<D> {
         match self {
             Self::Flame => Effect::Flame(p),
             Self::MachineGun => Effect::GunFire(p),
