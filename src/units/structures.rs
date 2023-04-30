@@ -15,6 +15,7 @@ use super::UnitType;
 use super::chess::get_diagonal_neighbor;
 use super::normal_units::*;
 
+use interfaces::game_interface::ClientPerspective;
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -56,7 +57,7 @@ impl<D: Direction> Structure<D> {
                 for (pos, damage) in attack_area {
                     // turn into match if more unit types should be hit
                     if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(pos) {
-                        if unit.get_team(handler.get_game()) != Some(team) {
+                        if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team) {
                             let hp = unit.get_hp() as i8;
                             handler.add_event(Event::UnitHpChange(pos, (-damage.min(hp)).try_into().unwrap(), (-damage as i16).try_into().unwrap()));
                             if hp <= damage {

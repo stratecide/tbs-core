@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use zipper::*;
 use zipper::zipper_derive::*;
-use interfaces::game_interface::{self, Events};
+use interfaces::game_interface::{self, Events, ClientPerspective};
 use interfaces::game_interface::GameInterface;
 
 use crate::map::map::*;
@@ -24,7 +24,7 @@ pub struct Game<D: Direction> {
     ended: bool,
     pub players: LVec<Player, 16>,
     fog_mode: FogMode,
-    fog: HashMap<Option<Team>, HashSet<Point>>,
+    fog: HashMap<ClientPerspective, HashSet<Point>>,
 }
 impl<D: Direction> Game<D> {
     fn new(map: Map<D>, settings: &settings::GameSettings) -> Self {
@@ -34,11 +34,11 @@ impl<D: Direction> Game<D> {
         let mut fog = HashMap::new();
         let neutral_fog = HashSet::new();
         for player in &players {
-            if !fog.contains_key(&Some(player.team)) {
-                fog.insert(Some(player.team), neutral_fog.clone());
+            if !fog.contains_key(&ClientPerspective::Team(*player.team)) {
+                fog.insert(ClientPerspective::Team(*player.team), neutral_fog.clone());
             }
         }
-        fog.insert(None, neutral_fog);
+        fog.insert(ClientPerspective::Neutral, neutral_fog);
         Game {
             current_turn: 0,
             ended: false,
@@ -142,20 +142,20 @@ impl<D: Direction> Game<D> {
     pub fn get_owning_player_mut(&mut self, owner: &Owner) -> Option<&mut Player> {
         self.players.iter_mut().find(|player| &player.owner_id == owner)
     }
-    pub fn get_team(&self, owner: Option<&Owner>) -> Option<Team> {
-        owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(p.team))
+    pub fn get_team(&self, owner: Option<&Owner>) -> ClientPerspective {
+        owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(ClientPerspective::Team(*p.team))).unwrap_or(ClientPerspective::Neutral)
     }
 
     pub fn is_foggy(&self) -> bool {
         self.fog_mode.is_foggy(self.current_turn)
     }
-    pub fn get_fog(&self) -> &HashMap<Option<Team>, HashSet<Point>> {
+    pub fn get_fog(&self) -> &HashMap<ClientPerspective, HashSet<Point>> {
         &self.fog
     }
-    pub fn get_fog_mut(&mut self) -> &mut HashMap<Option<Team>, HashSet<Point>> {
+    pub fn get_fog_mut(&mut self) -> &mut HashMap<ClientPerspective, HashSet<Point>> {
         &mut self.fog
     }
-    pub fn has_vision_at(&self, team: Option<Team>, at: Point) -> bool {
+    pub fn has_vision_at(&self, team: ClientPerspective, at: Point) -> bool {
         !self.fog.get(&team).unwrap().contains(&at)
     }
     
@@ -209,7 +209,7 @@ impl<D: Direction> Game<D> {
     }
     pub fn find_visible_threats(&self, pos: Point, threatened: &UnitType<D>, team: Team) -> HashSet<Point> {
         let mut result = HashSet::new();
-        for p in self.map.all_points().into_iter().filter(|p| self.has_vision_at(Some(team), *p)) {
+        for p in self.map.all_points().into_iter().filter(|p| self.has_vision_at(ClientPerspective::Team(*team), *p)) {
             if let Some(unit) = self.map.get_unit(p) {
                 if unit.threatens(self, threatened) && unit.shortest_path_to_attack(self, &Path::new(p), pos).is_some() {
                     result.insert(p);
@@ -249,9 +249,9 @@ fn import_game_base<D: Direction>(unzipper: &mut Unzipper, is_server: bool) -> R
     let mut fog = HashMap::new();
     let neutral_fog: HashSet<Point> = HashSet::new(); //map.all_points().into_iter().collect();
     for player in &players {
-        fog.insert(Some(player.team.clone()), neutral_fog.clone());
+        fog.insert(ClientPerspective::Team(*player.team.clone()), neutral_fog.clone());
     }
-    fog.insert(None, neutral_fog);
+    fog.insert(ClientPerspective::Neutral, neutral_fog);
     Ok(Game {
         map,
         current_turn,
@@ -274,12 +274,12 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             let mut game = import_game_base(&mut unzipper, true)?;
 
             let points = game.map.all_points();
-            game.fog.insert(None, import_fog(&mut unzipper, &points)?);
+            game.fog.insert(ClientPerspective::Neutral, import_fog(&mut unzipper, &points)?);
             
             for team in game.get_living_teams() {
                 if let Some(data) = hidden_data.teams.remove(&*team) {
                     let mut unzipper = Unzipper::new(data);
-                    game.fog.insert(Some(team), import_fog(&mut unzipper, &points)?);
+                    game.fog.insert(ClientPerspective::Team(*team), import_fog(&mut unzipper, &points)?);
                 }
             }
 
@@ -313,7 +313,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
                     game.map.set_unit(p.clone(), field_data.unit);
                 }
             }
-            game.fog.insert(Some(team.try_into().unwrap()), fog);
+            game.fog.insert(ClientPerspective::Team(team), fog);
             let mut players: Vec<Player> = vec![];
             for player in game.players.iter() {
                 players.push(if *player.team == team {
@@ -324,7 +324,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             }
             game.players = players.try_into().unwrap();
         } else {
-            game.fog.insert(None, neutral_fog);
+            game.fog.insert(ClientPerspective::Neutral, neutral_fog);
         }
         Ok(Box::new(game))
     }
@@ -364,7 +364,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
         if self.is_foggy() {
 
             let points = self.map.all_points();
-            let neutral_fog = self.fog.get(&None).unwrap();
+            let neutral_fog = self.fog.get(&ClientPerspective::Neutral).unwrap();
             // no need to export the teams' fog since it's exported below anyway.
             export_fog(&mut zipper, &points, neutral_fog);
             let server = zipper.finish();
@@ -385,7 +385,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             let mut teams = HashMap::new();
             for team in self.get_living_teams() {
                 // team perspective, one per team
-                if let Some(fog) = self.fog.get(&Some(team)) {
+                if let Some(fog) = self.fog.get(&ClientPerspective::Team(*team)) {
                     let mut zipper = Zipper::new();
                     export_fog(&mut zipper, &points, fog);
                     for p in &points {
@@ -471,6 +471,19 @@ pub enum FogMode {
     BrightRegular(U8::<255>, U8::<255>, U8::<255>),
     Random(bool, U8::<255>, FogChangeChance, FogChangeChance),
 }
+
+impl Display for FogMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Always => write!(f, "Night Only"),
+            Self::Never => write!(f, "Day Only"),
+            Self::Random(_, _, _, _) => write!(f, "Random"),
+            Self::BrightRegular(_, _, _) => write!(f, "Regular (Day)"),
+            Self::DarkRegular(_, _, _) => write!(f, "Regular (Night)"),
+        }
+    }
+}
+
 impl FogMode {
     pub fn is_foggy(&self, turn: u32) -> bool {
         match self {

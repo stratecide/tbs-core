@@ -2,7 +2,7 @@
 use crate::details::Detail;
 use crate::game::events::*;
 use crate::map::point_map::MAX_AREA;
-use crate::map::wrapping_map::{OrientedPoint};
+use crate::map::wrapping_map::OrientedPoint;
 use crate::player::*;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -117,7 +117,7 @@ impl NormalUnit {
     pub fn get_owner(&self) -> &Owner {
         &self.owner
     }
-    pub fn get_team<D: Direction>(&self, game: &Game<D>) -> Option<Team> {
+    pub fn get_team<D: Direction>(&self, game: &Game<D>) -> ClientPerspective {
         game.get_team(Some(&self.owner))
     }
     pub fn can_act(&self, player: &Player) -> bool {
@@ -941,7 +941,7 @@ impl NormalUnits {
 }
 
 pub fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: Point, unload_index: Option<UnloadIndex>) -> Result<(), CommandError> {
-    if !game.has_vision_at(Some(game.current_player().team), at) {
+    if !game.has_vision_at(ClientPerspective::Team(*game.current_player().team), at) {
         return Err(CommandError::NoVision);
     }
     let unit = game.get_map().get_unit(at).ok_or(CommandError::MissingUnit)?;

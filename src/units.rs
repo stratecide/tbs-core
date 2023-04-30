@@ -8,6 +8,7 @@ pub mod combat;
 
 use std::collections::{HashSet, HashMap};
 
+use interfaces::game_interface::ClientPerspective;
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -65,7 +66,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(unit) => unit.owner.as_ref(),
         }
     }
-    pub fn get_team(&self, game: &Game<D>) -> Option<Team> {
+    pub fn get_team(&self, game: &Game<D>) -> ClientPerspective {
         game.get_team(self.get_owner())
     }
     pub fn get_hp(&self) -> u8 {
@@ -177,7 +178,7 @@ impl<D: Direction> UnitType<D> {
     }
     pub fn killable_by_chess(&self, team: Team, game: &Game<D>) -> bool {
         match self {
-            _ => self.get_team(game) != Some(team),
+            _ => self.get_team(game) != ClientPerspective::Team(*team),
         }
     }
     pub fn can_be_moved_through(&self, by: &NormalUnit, game: &Game<D>) -> bool {

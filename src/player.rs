@@ -1,3 +1,4 @@
+use interfaces::game_interface::ClientPerspective;
 use zipper::*;
 use crate::commanders::*;
 
@@ -24,6 +25,20 @@ pub type Income = I16<-1000, 1000>;
 pub type Funds = I32<-1_000_000_000, 1_000_000_000>;
 
 pub type Perspective = Option<Team>;
+
+pub fn from_client_perspective(value: ClientPerspective) -> Perspective {
+    match value {
+        ClientPerspective::Neutral => None,
+        ClientPerspective::Team(team) => Some(Team::try_from(team).unwrap()),
+    }
+}
+
+pub fn to_client_perspective(value: &Perspective) -> ClientPerspective {
+    match value {
+        None => ClientPerspective::Neutral,
+        Some(team) => ClientPerspective::Team(**team),
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Player {

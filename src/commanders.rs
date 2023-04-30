@@ -9,6 +9,7 @@ use crate::player::Owner;
 use crate::units::*;
 use crate::units::normal_units::NormalUnit;
 
+use interfaces::game_interface::ClientPerspective;
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -86,7 +87,7 @@ impl Commander {
             Self::Zombie(_, _) => {
                 let mut details = handler.get_map().get_details(defender_pos);
                 let old_details = details.clone();
-                if details.len() < MAX_STACK_SIZE as usize && defender.get_team(handler.get_game()) != Some(player.team) {
+                if details.len() < MAX_STACK_SIZE as usize && defender.get_team(handler.get_game()) != ClientPerspective::Team(*player.team) {
                     let mut unit= match defender {
                         UnitType::Normal(unit) => unit.clone(),
                         _ => return,
@@ -210,7 +211,7 @@ impl CommanderPower {
                         if unit.get_owner() == Some(&owner) && unit.get_hp() < 100 {
                             let healing = 10.min(100 - unit.get_hp()) as i8;
                             handler.add_event(Event::UnitHpChange(p, healing.try_into().unwrap(), (healing as i16).try_into().unwrap()));
-                        } else if unit.get_team(handler.get_game()) != Some(team) && unit.get_hp() > 1 {
+                        } else if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team) && unit.get_hp() > 1 {
                             // maybe don't affect units without owner if that ever exists?
                             let damage = -(10.min(unit.get_hp() - 1) as i8);
                             handler.add_event(Event::UnitHpChange(p, damage.try_into().unwrap(), (damage as i16).try_into().unwrap()));

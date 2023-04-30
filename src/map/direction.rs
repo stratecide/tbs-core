@@ -320,6 +320,9 @@ impl Translation<Direction6> for Translation6 {
         }
     }
     fn plus(&self, other: &Self) -> Self {
+        if self.d60.abs() > 1000 || other.d60.abs() > 1000 {
+            println!("Translation6 are going too far!, {:?}, {:?}", self, other);
+        }
         Translation6 {
             d0: self.d0 + other.d0,
             d60: self.d60 + other.d60,

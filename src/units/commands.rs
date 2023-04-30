@@ -5,7 +5,7 @@ use zipper::zipper_derive::*;
 
 use crate::details::Detail;
 use crate::game::events::*;
-use crate::map::wrapping_map::{OrientedPoint};
+use crate::map::wrapping_map::OrientedPoint;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
@@ -64,7 +64,7 @@ impl<D: Direction> CommonMovement<D> {
     pub fn new(unload_index: Option<u8>, path: Path<D>) -> Self {
         Self {
             unload_index: unload_index.and_then(|i| Some(i.try_into().unwrap())),
-            path: path,
+            path,
         }
     }
     
@@ -184,11 +184,11 @@ impl<D: Direction> CommonMovement<D> {
 
 fn after_path<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>, unit: &UnitType<D>) {
     let team = handler.get_game().current_player().team;
-    if Some(team) == unit.get_team(handler.get_game()) {
+    if ClientPerspective::Team(*team) == unit.get_team(handler.get_game()) {
         let mut vision_changes = HashSet::new();
         for p in path.points(handler.get_map()).unwrap().into_iter().skip(1) {
             for p in unit.get_vision(handler.get_game(), p) {
-                if !handler.get_game().has_vision_at(Some(team), p) {
+                if !handler.get_game().has_vision_at(ClientPerspective::Team(*team), p) {
                     vision_changes.insert(p);
                 }
             }
@@ -232,7 +232,7 @@ impl<D: Direction> UnitCommand<D> {
                             AttackType::Straight(_, _) => return Err(CommandError::InvalidTarget),
                             _ => {}
                         }
-                        if !handler.get_game().has_vision_at(Some(team), *target) {
+                        if !handler.get_game().has_vision_at(ClientPerspective::Team(*team), *target) {
                             return Err(CommandError::NoVision);
                         }
                         if !unit.attackable_positions(handler.get_game(), intended_end, cm.path.steps.len() > 0).contains(target) {
@@ -282,7 +282,7 @@ impl<D: Direction> UnitCommand<D> {
                         dp = next_dp;
                         if let Some(unit) = handler.get_map().get_unit(dp.point).cloned() {
                             if let Some(end) = cm.apply(handler, false, false)? {
-                                if handler.get_game().has_vision_at(Some(team), dp.point) {
+                                if handler.get_game().has_vision_at(ClientPerspective::Team(*team), dp.point) {
                                     if i < min_dist - 1 || !unit.can_be_pulled(handler.get_map(), dp.point) {
                                         // can't pull if the target is already next to the unit
                                         return Err(CommandError::InvalidTarget);
@@ -314,7 +314,7 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 let realty = match handler.get_map().get_terrain(intended_end) {
                     Some(Terrain::Realty(realty, owner)) => {
-                        if Some(team) != handler.get_game().get_team(owner.as_ref()) {
+                        if ClientPerspective::Team(*team) != handler.get_game().get_team(owner.as_ref()) {
                             realty.clone()
                         } else {
                             return Err(CommandError::CannotCaptureHere);
@@ -394,7 +394,7 @@ impl<D: Direction> UnitCommand<D> {
             Self::MoveAboard(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
                 cm.validate_input(handler.get_game())?;
-                if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), intended_end) {
+                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team), intended_end) {
                     return Err(CommandError::NoVision);
                 }
                 let unit = cm.get_unit(handler.get_map())?;
@@ -423,7 +423,7 @@ impl<D: Direction> UnitCommand<D> {
                 if !handler.get_map().is_point_valid(pos) {
                     return Err(CommandError::InvalidPoint(pos));
                 }
-                if !handler.get_game().has_vision_at(Some(handler.get_game().current_player().team), pos) {
+                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team), pos) {
                     return Err(CommandError::NoVision);
                 }
                 match handler.get_map().get_unit(pos) {
@@ -581,7 +581,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
         let mut charges = HashMap::new();
         for (_, defender, damage) in &defenders {
             if let Some(player) = defender.get_owner().and_then(|owner| handler.get_game().get_owning_player(owner)) {
-                if Some(player.team) != attacker_team {
+                if ClientPerspective::Team(*player.team) != attacker_team {
                     let commander_charge = defender.get_hp().min(*damage as u8) as u32 * defender.type_value() as u32 / 100;
                     let old_charge = charges.remove(&player.owner_id).unwrap_or(0);
                     charges.insert(player.owner_id, commander_charge + old_charge);
