@@ -717,6 +717,8 @@ impl<D: Direction> Event<D> {
             Self::UnitExhaust(pos) => {
                 if game.has_vision_at(team, *pos) {
                     Some(self.clone())
+                } else if let Some(unit) = game.get_map().get_unit(*pos).and_then(|u| u.fog_replacement()) {
+                    Some(self.clone())
                 } else {
                     None
                 }
@@ -728,7 +730,15 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::UnitHpChange(pos, _, _) |
+            Self::UnitHpChange(pos, real_change, displayed_change) => {
+                if game.has_vision_at(team, *pos) {
+                    Some(self.clone())
+                } else if let Some(unit) = game.get_map().get_unit(*pos).and_then(|u| u.fog_replacement()) {
+                    Some(Self::UnitHpChange(*pos, *real_change, *displayed_change))
+                } else {
+                    None
+                }
+            }
             Self::UnitHpChangeBoarded(pos, _, _) => {
                 if game.has_vision_at(team, *pos) {
                     Some(self.clone())
@@ -736,18 +746,18 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::UnitCreation(pos, _) => {
+            Self::UnitCreation(pos, unit) => {
                 if game.has_vision_at(team, *pos) {
                     Some(self.clone())
                 } else {
-                    None
+                    unit.fog_replacement().and_then(|u| Some(Self::UnitCreation(*pos, u)))
                 }
             }
-            Self::UnitDeath(pos, _) => {
+            Self::UnitDeath(pos, unit) => {
                 if game.has_vision_at(team, *pos) {
                     Some(self.clone())
                 } else {
-                    None
+                    unit.fog_replacement().and_then(|u| Some(Self::UnitDeath(*pos, u)))
                 }
             }
             Self::UnitReplacement(pos, _, _) => {

@@ -301,7 +301,10 @@ impl<D: Direction> UnitType<D> {
         }
     }
     pub fn fog_replacement(&self) -> Option<Self> {
-        None
+        match self {
+            Self::Structure(struc) => struc.fog_replacement().and_then(|s| Some(Self::Structure(s))),
+            _ => None,
+        }
     }
     pub fn type_value(&self) -> u16 {
         match self {

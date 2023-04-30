@@ -48,6 +48,19 @@ impl<D: Direction> Structure<D> {
         }
     }
 
+    pub fn fog_replacement(&self) -> Option<Self> {
+        match &self.typ {
+            Structures::DroneTower(Some((owner, _, drone_id))) => {
+                Some(Self {
+                    typ: Structures::DroneTower(Some((*owner, LVec::new(), *drone_id))),
+                    hp: self.hp,
+                    exhausted: self.exhausted,
+                })
+            }
+            _ => Some(self.clone()),
+        }
+    }
+
     pub fn get_owner(&self) -> Option<Owner> {
         self.typ.get_owner()
     }

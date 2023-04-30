@@ -234,7 +234,9 @@ impl<D: Direction> UnitCommand<D> {
                             _ => {}
                         }
                         if !handler.get_game().has_vision_at(ClientPerspective::Team(*team), *target) {
-                            return Err(CommandError::NoVision);
+                            handler.get_map().get_unit(*target)
+                            .and_then(|u| u.fog_replacement())
+                            .ok_or(CommandError::NoVision)?;
                         }
                         if !unit.attackable_positions(handler.get_game(), intended_end, cm.path.steps.len() > 0).contains(target) {
                             return Err(CommandError::InvalidTarget);
