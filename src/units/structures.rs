@@ -180,6 +180,7 @@ impl<D: Direction> Structure<D> {
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 4)]
 pub enum Structures<D: Direction> {
+    Pyramid(Option::<Owner>),
     MegaCannon(Option::<Owner>, D),
     LaserCannon(Option::<Owner>, D),
     DroneTower(Option::<(Owner, LVec::<TransportedUnit<TransportableDrones>, 3>, DroneId)>),
@@ -189,6 +190,7 @@ pub enum Structures<D: Direction> {
 impl<D: Direction> Structures<D> {
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Pyramid(_) => "Pyramid",
             Self::MegaCannon(_, _) => "Mega Cannon",
             Self::LaserCannon(_, _) => "Laser Cannon",
             Self::DroneTower(_) => "Drone Tower",
@@ -198,6 +200,7 @@ impl<D: Direction> Structures<D> {
 
     pub fn get_owner(&self) -> Option<Owner> {
         match self {
+            Self::Pyramid(owner) => *owner,
             Self::MegaCannon(owner, _) => *owner,
             Self::LaserCannon(owner, _) => *owner,
             Self::DroneTower(Some((owner, _, _))) => Some(*owner),
@@ -208,12 +211,14 @@ impl<D: Direction> Structures<D> {
 
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
+            Self::Pyramid(_) => (ArmorType::Heavy, 2.0),
             _ => (ArmorType::Heavy, 2.5),
         }
     }
 
     pub fn value(&self) -> u16 {
         match self {
+            Self::Pyramid(_) => 0,
             Self::MegaCannon(_, _) => 500,
             Self::LaserCannon(_, _) => 500,
             Self::DroneTower(_) => 500,
@@ -225,6 +230,7 @@ impl<D: Direction> Structures<D> {
         let mut result = Vec::new();
         let mut effect = None;
         match self {
+            Self::Pyramid(_) => (),
             Self::MegaCannon(_, d) => {
                 let mut layers = Vec::new();
                 layers.push(HashSet::new());
