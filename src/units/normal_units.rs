@@ -62,8 +62,8 @@ pub struct NormalUnit {
     pub data: UnitData,
 }
 impl NormalUnit {
-    pub fn new_instance(from: NormalUnits, owner: Owner) -> NormalUnit {
-        NormalUnit {
+    pub fn new_instance(from: NormalUnits, owner: Owner) -> Self {
+        Self {
             typ: from,
             owner,
             data: UnitData {
@@ -785,6 +785,7 @@ impl NormalUnits {
             _ => false,
         }
     }
+
     pub fn transport_capacity(&self) -> u8 {
         // TODO: stupid
         match self {
@@ -794,6 +795,7 @@ impl NormalUnits {
             _ => 0,
         }
     }
+
     pub fn could_transport(&self, unit: &NormalUnits) -> bool {
         // TODO: stupid?
         match self {
@@ -809,6 +811,7 @@ impl NormalUnits {
             _ => false
         }
     }
+
     pub fn get_attack_type(&self) -> AttackType {
         match self {
             Self::Sniper => AttackType::Ranged(1, 2),

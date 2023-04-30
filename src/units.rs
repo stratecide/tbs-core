@@ -95,7 +95,7 @@ impl<D: Direction> UnitType<D> {
         match self {
             Self::Normal(unit) => unit.data.exhausted = exhausted,
             Self::Chess(unit) => unit.exhausted = exhausted,
-            Self::Structure(_) => {},
+            Self::Structure(struc) => struc.exhausted = exhausted,
         }
     }
 

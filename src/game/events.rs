@@ -231,6 +231,9 @@ fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: i32, mut unit: Un
         UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(_, drone_id), ..}) => {
             *drone_id = handler.get_map().new_drone_id(handler.rng());
         }
+        UnitType::Structure(Structure {typ: Structures::DroneTower(Some((_, _, drone_id))), ..}) => {
+            *drone_id = handler.get_map().new_drone_id(handler.rng());
+        }
         _ => (),
     }
     let vision_changes: Vec<Point> = unit.get_vision(handler.get_game(), pos).into_iter().filter(|p| !handler.get_game().has_vision_at(to_client_perspective(&team), *p)).collect();

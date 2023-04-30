@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::Game, events::{EventHandler, Event}}, units::normal_units::DroneId};
+use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::Game, events::{EventHandler, Event}}, units::{normal_units::DroneId, structures::{Structures, Structure}}};
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
 use crate::units::UnitType;
@@ -260,6 +260,7 @@ pub enum Realty {
     Factory(BuiltThisTurn),
     Port(BuiltThisTurn),
     Airport(BuiltThisTurn),
+    ConstructionSite(BuiltThisTurn),
 }
 impl Realty {
     pub fn income_factor(&self) -> i16 {
@@ -273,6 +274,7 @@ impl Realty {
             Self::Factory(_) => true,
             Self::Airport(_) => true,
             Self::Port(_) => true,
+            Self::ConstructionSite(_) => true,
             _ => false
         }
     }
@@ -281,6 +283,7 @@ impl Realty {
             Self::Factory(built_this_turn) => build_options_factory(game, owner, **built_this_turn),
             Self::Port(built_this_turn) => build_options_port(game, owner, **built_this_turn),
             Self::Airport(built_this_turn) => build_options_airport(game, owner, **built_this_turn),
+            Self::ConstructionSite(built_this_turn) => build_options_construction_site(game, owner, **built_this_turn),
             _ => vec![],
         }
     }
@@ -296,7 +299,6 @@ impl Realty {
         match (self, movement_type) {
             (Self::Port(_), MovementType::Chess) => None,
             (Self::Port(_), _) => Some(6),
-
             (
                 Self::Hq |
                 Self::City |
@@ -317,6 +319,7 @@ impl Realty {
         match self {
             Self::Factory(built_this_turn) |
             Self::Airport(built_this_turn) |
+            Self::ConstructionSite(built_this_turn) |
             Self::Port(built_this_turn) => {
                 if **built_this_turn < MAX_BUILT_THIS_TURN {
                     handler.add_event(Event::UpdateBuiltThisTurn(pos, *built_this_turn, BuiltThisTurn::new(**built_this_turn + 1)));
@@ -359,3 +362,21 @@ pub fn build_options_airport<D: Direction>(_game: &Game<D>, owner: Owner, built_
         (unit, value)
     }).collect()
 }
+
+pub fn build_options_construction_site<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
+    let mut list = vec![
+        Structures::ShockTower(Some(owner)),
+        Structures::DroneTower(Some((owner, LVec::new(), DroneId::new(0))))
+    ];
+    for d in D::list() {
+        list.push(Structures::MegaCannon(Some(owner), d));
+        list.push(Structures::LaserCannon(Some(owner), d));
+    }
+    list.into_iter()
+    .map(|u| {
+        let value = u.value() + 300 * built_this_turn as u16;
+        let unit = UnitType::Structure(Structure::new_instance(u.clone()));
+        (unit, value)
+    }).collect()
+}
+

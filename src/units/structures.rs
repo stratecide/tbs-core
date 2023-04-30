@@ -40,6 +40,14 @@ pub struct Structure<D: Direction> {
 }
 
 impl<D: Direction> Structure<D> {
+    pub fn new_instance(from: Structures<D>) -> Self {
+        Self {
+            typ: from,
+            hp: 100.try_into().unwrap(),
+            exhausted: false,
+        }
+    }
+
     pub fn get_owner(&self) -> Option<Owner> {
         self.typ.get_owner()
     }
