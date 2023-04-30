@@ -224,7 +224,7 @@ impl<D: Direction> Terrain<D> {
                 }
             }
             Terrain::Realty(_, owner) => {
-                if let Some(player) = owner.and_then(|owner| game.get_owning_player(&owner)) {
+                if let Some(player) = owner.and_then(|owner| game.get_owning_player(owner)) {
                     if Some(player.team) == team {
                         result.insert(pos.clone());
                     }

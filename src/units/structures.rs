@@ -8,11 +8,13 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::player::Owner;
+use crate::player::Player;
 
 use super::ArmorType;
 use super::Hp;
 use super::UnitType;
 use super::chess::get_diagonal_neighbor;
+use super::commands::UnitAction;
 use super::normal_units::*;
 
 use interfaces::game_interface::ClientPerspective;
@@ -33,12 +35,15 @@ pub const SHOCK_TOWER_DAMAGE: i8 = 70;
 #[derive(Debug, PartialEq, Clone, Zippable)]
 pub struct Structure<D: Direction> {
     pub typ: Structures::<D>,
-    pub owner: Option::<Owner>,
     pub hp: Hp,
     pub exhausted: bool,
 }
 
 impl<D: Direction> Structure<D> {
+    pub fn get_owner(&self) -> Option<Owner> {
+        self.typ.get_owner()
+    }
+    
     pub fn attackable_positions(&self, game: &Game<D>, position: Point, _moved: bool) -> HashSet<Point> {
         self.typ.attack_area(game, position).0
             .into_iter()
@@ -47,7 +52,7 @@ impl<D: Direction> Structure<D> {
     }
 
     pub fn start_turn(&self, handler: &mut EventHandler<D>, position: Point) {
-        if Some(handler.get_game().current_player().owner_id) == self.owner {
+        if Some(handler.get_game().current_player().owner_id) == self.typ.get_owner() {
             if !self.exhausted {
                 let team = handler.get_game().current_player().team;
                 let (attack_area, effect) = self.typ.attack_area(handler.get_game(), position);
@@ -68,7 +73,7 @@ impl<D: Direction> Structure<D> {
                 }
             }
             match self.typ {
-                Structures::DroneTower(_, _) => {
+                Structures::DroneTower(_) => {
                     if self.exhausted {
                         handler.add_event(Event::UnitExhaust(position));
                     }
@@ -77,24 +82,106 @@ impl<D: Direction> Structure<D> {
             }
         }
     }
+
+    pub fn available_options(&self, game: &Game<D>) -> Vec<UnitAction<D>> {
+        let mut result = vec![];
+        if self.exhausted {
+            return result;
+        }
+        let player = if let Some(player) = self.typ.get_owner().and_then(|o| game.get_owning_player(o)) {
+            player
+        } else {
+            return result;
+        };
+        match &self.typ {
+            Structures::DroneTower(Some((_, drones, drone_id))) => {
+                if drones.remaining_capacity() > 0 {
+                    for unit in NormalUnits::list() {
+                        if let Some(drone) = TransportableDrones::from_normal(&unit) {
+                            if unit.value() as i32 <= *player.funds {
+                                result.push(UnitAction::BuildDrone(drone));
+                            }
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+        result
+    }
+
+    pub fn can_act(&self, player: &Player) -> bool {
+        match &self.typ {
+            Structures::DroneTower(Some((owner, _, _))) => {
+                !self.exhausted && *owner == player.owner_id
+            }
+            _ => false,
+        }
+    }
+
+    pub fn get_boarded(&self) -> Vec<NormalUnit> {
+        match &self.typ {
+            Structures::DroneTower(Some((owner, units, id))) => units.iter().map(|t| t.to_normal(*owner, Some(*id))).collect(),
+            _ => vec![],
+        }
+    }
+
+    pub fn get_boarded_mut(&mut self) -> Vec<&mut UnitData> {
+        match &mut self.typ {
+            Structures::DroneTower(Some((_, units, _))) => units.iter_mut().map(|u| &mut u.data).collect(),
+            _ => vec![],
+        }
+    }
+
+    pub fn unboard(&mut self, index: u8) {
+        let index = index as usize;
+        match &mut self.typ {
+            Structures::DroneTower(Some((_, units, _))) => {
+                units.remove(index).ok();
+            }
+            _ => (),
+        };
+    }
+
+    pub fn board(&mut self, index: u8, unit: NormalUnit) {
+        let index = index as usize;
+        match &mut self.typ {
+            Structures::DroneTower(Some((_, units, _))) => {
+                TransportedUnit::from_normal(&unit)
+                .and_then(|u| units.insert(index, u).ok());
+            }
+            _ => (),
+        };
+    }
+
 }
 
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 4)]
 pub enum Structures<D: Direction> {
-    MegaCannon(D),
-    LaserCannon(D),
-    DroneTower(LVec::<TransportedUnit<TransportableDrones>, 3>, DroneId),
-    ShockTower,
+    MegaCannon(Option::<Owner>, D),
+    LaserCannon(Option::<Owner>, D),
+    DroneTower(Option::<(Owner, LVec::<TransportedUnit<TransportableDrones>, 3>, DroneId)>),
+    ShockTower(Option::<Owner>),
 }
 
 impl<D: Direction> Structures<D> {
     pub fn name(&self) -> &'static str {
         match self {
-            Self::MegaCannon(_) => "Mega Cannon",
-            Self::LaserCannon(_) => "Laser Cannon",
-            Self::DroneTower(_, _) => "Drone Tower",
-            Self::ShockTower => "Shock Tower",
+            Self::MegaCannon(_, _) => "Mega Cannon",
+            Self::LaserCannon(_, _) => "Laser Cannon",
+            Self::DroneTower(_) => "Drone Tower",
+            Self::ShockTower(_) => "Shock Tower",
+        }
+    }
+
+    pub fn get_owner(&self) -> Option<Owner> {
+        match self {
+            Self::MegaCannon(owner, _) => *owner,
+            Self::LaserCannon(owner, _) => *owner,
+            Self::DroneTower(Some((owner, _, _))) => Some(*owner),
+            Self::DroneTower(None) => None,
+            Self::ShockTower(owner) => *owner,
         }
     }
 
@@ -106,10 +193,10 @@ impl<D: Direction> Structures<D> {
 
     pub fn value(&self) -> u16 {
         match self {
-            Self::MegaCannon(_) => 500,
-            Self::LaserCannon(_) => 500,
-            Self::DroneTower(_, _) => 500,
-            Self::ShockTower => 500,
+            Self::MegaCannon(_, _) => 500,
+            Self::LaserCannon(_, _) => 500,
+            Self::DroneTower(_) => 500,
+            Self::ShockTower(_) => 500,
         }
     }
 
@@ -117,7 +204,7 @@ impl<D: Direction> Structures<D> {
         let mut result = Vec::new();
         let mut effect = None;
         match self {
-            Self::MegaCannon(d) => {
+            Self::MegaCannon(_, d) => {
                 let mut layers = Vec::new();
                 layers.push(HashSet::new());
                 if let Some(dp) = game.get_map().get_neighbor(position, *d) {
@@ -173,7 +260,7 @@ impl<D: Direction> Structures<D> {
                 }
                 // TODO: effect
             }
-            Self::LaserCannon(d) => {
+            Self::LaserCannon(_, d) => {
                 let mut current = OrientedPoint::new(position, false, *d);
                 let mut laser_effect = vec![];
                 for _ in 0..LASER_CANNON_RANGE {
@@ -190,8 +277,8 @@ impl<D: Direction> Structures<D> {
                     effect = Some(Effect::Laser(laser_effect.try_into().unwrap()));
                 }
             }
-            Self::DroneTower(_, _) => (),
-            Self::ShockTower => {
+            Self::DroneTower(_) => (),
+            Self::ShockTower(_) => {
                 let mut visited = HashSet::new();
                 for (i, layer) in game.get_map().range_in_layers(position, SHOCK_TOWER_RANGE)
                 .into_iter()
@@ -215,5 +302,22 @@ impl<D: Direction> Structures<D> {
         (result, effect)
     }
 
+    pub fn transport_capacity(&self) -> u8 {
+        // TODO: stupid
+        match self {
+            Self::DroneTower(_) => 3,
+            _ => 0,
+        }
+    }
+
+    pub fn could_transport(&self, unit: &NormalUnits) -> bool {
+        // TODO: stupid?
+        match self {
+            Self::DroneTower(_) => {
+                TransportableDrones::from_normal(unit).is_some()
+            }
+            _ => false
+        }
+    }
 }
 

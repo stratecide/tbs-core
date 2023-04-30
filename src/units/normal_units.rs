@@ -114,15 +114,17 @@ impl NormalUnit {
         .map(|(weapon, attack)| (weapon, attack + self.data.mercenary.own_attack_bonus()))
         .collect()
     }
-    pub fn get_owner(&self) -> &Owner {
-        &self.owner
+    pub fn get_owner(&self) -> Owner {
+        self.owner
     }
     pub fn get_team<D: Direction>(&self, game: &Game<D>) -> ClientPerspective {
-        game.get_team(Some(&self.owner))
+        game.get_team(Some(self.owner))
     }
+
     pub fn can_act(&self, player: &Player) -> bool {
         !self.data.exhausted && player.owner_id == self.owner
     }
+
     pub fn get_boarded(&self) -> Vec<NormalUnit> {
         match &self.typ {
             NormalUnits::TransportHeli(units) => units.iter().map(|t| t.to_normal(self.owner, None)).collect(),
@@ -131,6 +133,7 @@ impl NormalUnit {
             _ => vec![],
         }
     }
+
     pub fn get_boarded_mut(&mut self) -> Vec<&mut UnitData> {
         match &mut self.typ {
             NormalUnits::TransportHeli(units) => units.iter_mut().map(|u| &mut u.data).collect(),
@@ -139,6 +142,7 @@ impl NormalUnit {
             _ => vec![],
         }
     }
+
     pub fn unboard(&mut self, index: u8) {
         let index = index as usize;
         match &mut self.typ {
@@ -154,6 +158,7 @@ impl NormalUnit {
             _ => (),
         };
     }
+
     pub fn board(&mut self, index: u8, unit: NormalUnit) {
         let index = index as usize;
         match &mut self.typ {
@@ -172,6 +177,7 @@ impl NormalUnit {
             _ => (),
         };
     }
+
     pub fn get_movement<D: Direction>(&self, terrain: &Terrain<D>) -> (MovementType, u8) {
         let factor = 6;
         let (movement_type, movement) = match self.typ {
@@ -233,7 +239,7 @@ impl NormalUnit {
         } else {
             return result;
         };
-        let player = game.get_owning_player(&self.owner).unwrap();
+        let player = game.get_owning_player(self.owner).unwrap();
         if path.start == destination || game.get_map().get_unit(destination).is_none() {
             let mut funds_after_path = *player.funds;
             let path_points: HashSet<Point> = path.points(game.get_map()).unwrap().into_iter().collect();
@@ -278,7 +284,7 @@ impl NormalUnit {
             }
             match game.get_map().get_terrain(destination) {
                 Some(Terrain::Realty(realty, owner)) => {
-                    if self.can_capture() && Some(player.team) != owner.and_then(|o| game.get_owning_player(&o)).and_then(|p| Some(p.team)) {
+                    if self.can_capture() && Some(player.team) != owner.and_then(|o| game.get_owning_player(o)).and_then(|p| Some(p.team)) {
                         result.push(UnitAction::Capture);
                     }
                     if self.get_hp() < 100 && owner == &Some(self.owner) && realty.can_repair(&self.typ) && funds_after_path * 100 >= self.typ.value() as i32 {
@@ -954,7 +960,7 @@ pub fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: Point, unload
             _ => return Err(CommandError::UnitTypeWrong),
         }
     };
-    if &game.current_player().owner_id != unit.get_owner() {
+    if game.current_player().owner_id != unit.get_owner() {
         return Err(CommandError::NotYourUnit);
     }
     if !unit.can_act(game.current_player()) {

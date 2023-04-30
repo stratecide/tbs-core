@@ -82,7 +82,7 @@ impl Commander {
     }
 
     pub fn after_killing_unit<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner, defender_pos: Point, defender: &UnitType<D>) {
-        let player = handler.get_game().get_owning_player(&owner).unwrap();
+        let player = handler.get_game().get_owning_player(owner).unwrap();
         match self {
             Self::Zombie(_, _) => {
                 let mut details = handler.get_map().get_details(defender_pos);
@@ -197,7 +197,7 @@ impl CommanderPower {
     pub fn execute<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner) {
         handler.add_event(Event::CommanderFlipActiveSimple(owner));
         handler.add_event(Event::CommanderCharge(handler.get_game().current_player().owner_id, (-(*self.charge_cost() as i32)).try_into().unwrap()));
-        let player = handler.get_game().get_owning_player(&owner).unwrap();
+        let player = handler.get_game().get_owning_player(owner).unwrap();
         match self {
             Self::VampireBloodStorm => {
                 let team = player.team;
@@ -208,7 +208,7 @@ impl CommanderPower {
                             UnitType::Structure(_) => continue,
                             _ => {}
                         }
-                        if unit.get_owner() == Some(&owner) && unit.get_hp() < 100 {
+                        if unit.get_owner() == Some(owner) && unit.get_hp() < 100 {
                             let healing = 10.min(100 - unit.get_hp()) as i8;
                             handler.add_event(Event::UnitHpChange(p, healing.try_into().unwrap(), (healing as i16).try_into().unwrap()));
                         } else if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team) && unit.get_hp() > 1 {

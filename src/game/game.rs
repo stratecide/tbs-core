@@ -136,13 +136,13 @@ impl<D: Direction> Game<D> {
     pub fn has_ended(&self) -> bool {
         self.ended
     }
-    pub fn get_owning_player(&self, owner: &Owner) -> Option<&Player> {
-        self.players.iter().find(|player| &player.owner_id == owner)
+    pub fn get_owning_player(&self, owner: Owner) -> Option<&Player> {
+        self.players.iter().find(|player| player.owner_id == owner)
     }
-    pub fn get_owning_player_mut(&mut self, owner: &Owner) -> Option<&mut Player> {
-        self.players.iter_mut().find(|player| &player.owner_id == owner)
+    pub fn get_owning_player_mut(&mut self, owner: Owner) -> Option<&mut Player> {
+        self.players.iter_mut().find(|player| player.owner_id == owner)
     }
-    pub fn get_team(&self, owner: Option<&Owner>) -> ClientPerspective {
+    pub fn get_team(&self, owner: Option<Owner>) -> ClientPerspective {
         owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(ClientPerspective::Team(*p.team))).unwrap_or(ClientPerspective::Neutral)
     }
 
@@ -163,7 +163,7 @@ impl<D: Direction> Game<D> {
         let mut used = HashSet::new();
         for p in self.map.all_points() {
             if let Some(unit) = self.map.get_unit(p) {
-                if unit.get_owner() == Some(&player.owner_id) {
+                if unit.get_owner() == Some(player.owner_id) {
                     unit.update_used_mercs(&mut used);
                 }
             }
@@ -178,7 +178,7 @@ impl<D: Direction> Game<D> {
         if self.map.get_terrain(pos) == Some(&Terrain::Tavern) {
             for p in self.map.all_points() {
                 if let Some(unit) = self.map.get_unit(p) {
-                    if unit.get_owner() == Some(&player.owner_id) {
+                    if unit.get_owner() == Some(player.owner_id) {
                         // check if unit is mercenary or transports a mercenary
                         match unit {
                             UnitType::Normal(unit) => {

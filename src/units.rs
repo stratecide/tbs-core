@@ -59,11 +59,11 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(unit) => unit.typ.name(),
         }
     }
-    pub fn get_owner(&self) -> Option<&Owner> {
+    pub fn get_owner(&self) -> Option<Owner> {
         match self {
-            Self::Normal(unit) => Some(&unit.owner),
-            Self::Chess(unit) => Some(&unit.owner),
-            Self::Structure(unit) => unit.owner.as_ref(),
+            Self::Normal(unit) => Some(unit.owner),
+            Self::Chess(unit) => Some(unit.owner),
+            Self::Structure(unit) => unit.get_owner(),
         }
     }
     pub fn get_team(&self, game: &Game<D>) -> ClientPerspective {
@@ -98,33 +98,39 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => {},
         }
     }
+
     pub fn can_act(&self, player: &Player) -> bool {
         match self {
             Self::Normal(unit) => unit.can_act(player),
             Self::Chess(unit) => return !unit.exhausted && unit.owner == player.owner_id,
-            Self::Structure(_) => return false,
+            Self::Structure(structure) => return structure.can_act(player),
         }
     }
+
     pub fn get_boarded(&self) -> Vec<NormalUnit> {
         match self {
             Self::Normal(unit) => unit.get_boarded(),
             Self::Chess(_) => vec![],
-            Self::Structure(_struc) => vec![],
+            Self::Structure(struc) => struc.get_boarded(),
         }
     }
+
     pub fn get_boarded_mut(&mut self) -> Vec<&mut UnitData> {
         match self {
             Self::Normal(unit) => unit.get_boarded_mut(),
             Self::Chess(_) => vec![],
-            Self::Structure(_struc) => vec![],
+            Self::Structure(struc) => struc.get_boarded_mut(),
         }
     }
+
     pub fn unboard(&mut self, index: u8) {
         match self {
             Self::Normal(unit) => unit.unboard(index),
+            Self::Structure(unit) => unit.unboard(index),
             _ => {}
         }
     }
+
     pub fn boardable_by(&self, unit: &NormalUnit) -> bool {
         if self.get_owner() != Some(unit.get_owner()) {
             return false;
@@ -132,15 +138,19 @@ impl<D: Direction> UnitType<D> {
         let boarded_count = self.get_boarded().len() as u8;
         match self {
             Self::Normal(u) => boarded_count < u.typ.transport_capacity() && u.typ.could_transport(&unit.typ),
+            Self::Structure(u) => boarded_count < u.typ.transport_capacity() && u.typ.could_transport(&unit.typ),
             _ => false,
         }
     }
+    
     pub fn board(&mut self, index: u8, unit: NormalUnit) {
         match self {
             Self::Normal(u) => u.board(index, unit),
+            Self::Structure(u) => u.board(index, unit),
             _ => {}
         }
     }
+
     pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
         match self {
             Self::Normal(unit) => unit.movable_positions(game, path_so_far),
@@ -166,7 +176,9 @@ impl<D: Direction> UnitType<D> {
         match self {
             Self::Normal(unit) => unit.options_after_path(game, path),
             Self::Chess(unit) => unit.options_after_path(game, path),
-            Self::Structure(_) => vec![],
+            Self::Structure(structure) => {
+                structure.available_options(game)
+            },
         }
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {

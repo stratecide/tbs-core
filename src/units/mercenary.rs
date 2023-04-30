@@ -45,7 +45,7 @@ impl MaybeMercenary {
         self.and_then(|m, _| Some(m.own_attack_bonus())).unwrap_or(0.)
     }
     pub fn add_options_after_path<D: Direction>(&self, unit: &NormalUnit, game: &Game<D>, path: &Path<D>, available_funds: i32, options: &mut Vec<UnitAction<D>>) {
-        let player = game.get_owning_player(&unit.owner).unwrap();
+        let player = game.get_owning_player(unit.owner).unwrap();
         let destination = path.end(game.get_map()).unwrap();
         match self {
             Self::None => {

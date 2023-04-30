@@ -28,7 +28,7 @@ pub enum ChessCommand<D: Direction> {
 impl<D: Direction> ChessCommand<D> {
     pub fn convert(self, start: Point, unit: &ChessUnit<D>, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         //println!("ChessCommand {:?}", self);
-        let team = match handler.get_game().get_team(Some(&unit.owner)) {
+        let team = match handler.get_game().get_team(Some(unit.owner)) {
             ClientPerspective::Neutral => panic!("Game with chess piece that doesn't belong to a team"),
             ClientPerspective::Team(team) => team,
         };
@@ -133,7 +133,7 @@ impl<D: Direction> ChessCommand<D> {
                             if let Some(UnitType::Chess(unit)) = handler.get_map().get_unit(n.point) {
                                 match unit.typ {
                                     ChessUnits::Pawn(d, _, true) => {
-                                        if n.direction == d && handler.get_game().get_team(Some(&unit.owner)) != ClientPerspective::Team(team) {
+                                        if n.direction == d && handler.get_game().get_team(Some(unit.owner)) != ClientPerspective::Team(team) {
                                             handler.add_event(Event::UnitDeath(n.point, UnitType::Chess(unit.clone())));
                                         }
                                     }
@@ -216,7 +216,7 @@ impl<D: Direction> ChessCommand<D> {
         let mut to_exhaust = HashSet::new();
         handler.get_map().width_search(pos, |p| {
             if let Some(unit) = handler.get_map().get_unit(p) {
-                if !unit.is_exhausted() && unit.get_owner() == Some(&handler.get_game().current_player().owner_id) {
+                if !unit.is_exhausted() && unit.get_owner() == Some(handler.get_game().current_player().owner_id) {
                     to_exhaust.insert(p);
                 }
             }
@@ -300,7 +300,7 @@ impl<D: Direction> ChessUnit<D> {
     }
     fn all_possible_paths<F>(&self, game: &Game<D>, start: Point, ignore_unseen: bool, mut callback: F)
     where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
-        let team = match game.get_team(Some(&self.owner)) {
+        let team = match game.get_team(Some(self.owner)) {
             ClientPerspective::Neutral => panic!("Game with chess piece that doesn't belong to a team"),
             ClientPerspective::Team(team) => team.try_into().unwrap(),
         };
@@ -346,7 +346,7 @@ impl<D: Direction> ChessUnit<D> {
                             if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(n.point) {
                                 match unit.typ {
                                     ChessUnits::Pawn(d, _, true) => {
-                                        en_passant = en_passant || n.direction == d && game.get_team(Some(&unit.owner)) != ClientPerspective::Team(*team);
+                                        en_passant = en_passant || n.direction == d && game.get_team(Some(unit.owner)) != ClientPerspective::Team(*team);
                                     }
                                     _ => {}
                                 }
@@ -513,7 +513,7 @@ impl<D: Direction> ChessUnit<D> {
         if let Some(dp) = game.get_map().get_neighbor(rook_end.point, rook_end.direction) {
             if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(dp.point) {
                 let king = game.get_map().get_unit(dp.point).unwrap();
-                let team = match game.get_team(Some(&owner)) {
+                let team = match game.get_team(Some(owner)) {
                     ClientPerspective::Neutral => panic!("Game with chess piece that doesn't belong to a team"),
                     ClientPerspective::Team(team) => team.try_into().unwrap(),
                 };

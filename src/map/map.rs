@@ -311,12 +311,12 @@ where D: Direction
         layers
     }
 
-    pub fn mercenary_influence_at(&self, point: Point, owner: Option<&Owner>) -> Vec<(Point, &Mercenaries)> {
+    pub fn mercenary_influence_at(&self, point: Point, owner: Option<Owner>) -> Vec<(Point, &Mercenaries)> {
         let mut result = vec![];
         for p in self.all_points() {
             if let Some(UnitType::Normal(unit)) = self.get_unit(p) {
                 if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
-                    if (owner.is_none() || owner == Some(&unit.owner)) && mercenary.in_range(self, p, point) {
+                    if (owner.is_none() || owner == Some(unit.owner)) && mercenary.in_range(self, p, point) {
                         result.push((p.clone(), mercenary));
                     }
                 }
@@ -384,7 +384,7 @@ where D: Direction
         for p in self.all_points() {
             if let Some(unit) = self.get_unit(p) {
                 if let Some(owner) = unit.get_owner() {
-                    owners.insert(*owner);
+                    owners.insert(owner);
                 }
             }
             if let Some(Terrain::Realty(realty, owner)) = self.get_terrain(p) {

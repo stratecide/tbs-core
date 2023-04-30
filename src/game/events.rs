@@ -8,8 +8,8 @@ use crate::commanders::{MAX_CHARGE, CommanderPower};
 use crate::map::map::{Map, FieldData};
 use crate::map::point::Point;
 use crate::map::point_map::{self, MAX_AREA};
-use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, UnitData};
-use crate::units::structures::LASER_CANNON_RANGE;
+use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, UnitData, DroneId};
+use crate::units::structures::{LASER_CANNON_RANGE, Structure, Structures};
 use crate::{player::*, details};
 use crate::terrain::{Terrain, BuiltThisTurn, Realty};
 use crate::details::Detail;
@@ -39,27 +39,20 @@ impl<D: Direction> Command<D> {
         let owner_id = handler.game.current_player().owner_id;
         match self {
             Self::EndTurn => {
-                
-                let mut drone_parents = HashMap::new();
-                
                 // un-exhaust units
                 for p in handler.get_map().all_points() {
                     let unit = handler.get_map().get_unit(p);
                     if let Some(unit) = unit {
-                        if unit.get_owner() == Some(&owner_id) {
-                            match unit {
-                                // Structures have their own start_turn method
-                                UnitType::Structure(_) => continue,
-                                UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(boarded, id), ..}) => {
-                                    if boarded.remaining_capacity() > 0 {
-                                        drone_parents.insert(*id, (p, boarded.remaining_capacity()));
-                                    }
-                                }
-                                _ => (),
-                            }
+                        if unit.get_owner() == Some(owner_id) {
                             let mut events = vec![];
-                            if unit.is_exhausted() {
-                                events.push(Event::UnitExhaust(p));
+                            match unit {
+                                // Structures get un-exhausted during start_turn
+                                UnitType::Structure(_) => (),
+                                _ => {
+                                    if unit.is_exhausted() {
+                                        events.push(Event::UnitExhaust(p));
+                                    }
+                                },
                             }
                             for (index, u) in unit.get_boarded().iter().enumerate() {
                                 if u.data.exhausted {
@@ -79,36 +72,6 @@ impl<D: Direction> Command<D> {
                             for event in events {
                                 handler.add_event(event);
                             }
-                        }
-                    }
-                }
-                
-                // return drones to their origin if possible or destroy them
-                let points = handler.get_map().all_points();
-                // TODO: randomize order? should only matter in predeployed maps...
-                for p in points {
-                    if let Some(unit) = handler.get_map().get_unit(p) {
-                        match unit {
-                            UnitType::Normal(NormalUnit {typ: NormalUnits::HeavyDrone(id), ..}) |
-                            UnitType::Normal(NormalUnit {typ: NormalUnits::LightDrone(id), ..}) => {
-                                if let Some((destination, capacity)) = drone_parents.get_mut(id) {
-                                    // move drone back aboard its parent
-                                    let mut path = Path::new(p);
-                                    path.steps.push(PathStep::Point(*destination)).unwrap();
-                                    let id = *id;
-                                    handler.add_event(Event::UnitPath(Some(None), path, Some(true), unit.clone()));
-                                    // one less space in parent
-                                    if *capacity > 0 {
-                                        *capacity -= 1;
-                                    } else {
-                                        drone_parents.remove(&id);
-                                    }
-                                } else {
-                                    // no parent available, self-destruct
-                                    handler.add_event(Event::UnitDeath(p, unit.clone()))
-                                }
-                            }
-                            _ => (),
                         }
                     }
                 }
@@ -458,19 +421,19 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
             }
             Self::MoneyChange(owner, change) => {
-                if let Some(player) = game.get_owning_player_mut(owner) {
+                if let Some(player) = game.get_owning_player_mut(*owner) {
                     player.funds = (*player.funds + **change).try_into().unwrap();
                 }
             }
             Self::PureHideFunds(_) => {}
             Self::HideFunds(owner, _) => {
-                if let Some(player) = game.get_owning_player_mut(owner) {
+                if let Some(player) = game.get_owning_player_mut(*owner) {
                     player.funds = Funds::new(0);
                 }
             }
             Self::PureRevealFunds(_) => {}
             Self::RevealFunds(owner, value) => {
-                if let Some(player) = game.get_owning_player_mut(owner) {
+                if let Some(player) = game.get_owning_player_mut(*owner) {
                     player.funds = *value;
                 }
             }
@@ -482,10 +445,10 @@ impl<D: Direction> Event<D> {
             }
             Self::Effect(_) => {}
             Self::CommanderCharge(owner, delta) => {
-                game.get_owning_player_mut(owner).unwrap().commander.add_charge(**delta);
+                game.get_owning_player_mut(*owner).unwrap().commander.add_charge(**delta);
             }
             Self::CommanderFlipActiveSimple(owner) => {
-                game.get_owning_player_mut(owner).unwrap().commander.flip_active();
+                game.get_owning_player_mut(*owner).unwrap().commander.flip_active();
             }
             Self::UnitMovedThisGame(p) => {
                 if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
@@ -525,6 +488,18 @@ impl<D: Direction> Event<D> {
             Self::BuildDrone(p, drone) => {
                 match game.get_map_mut().get_unit_mut(*p) {
                     Some(UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(drones, _), ..})) => {
+                        let unit = TransportedUnit {
+                            typ: drone.clone(),
+                            data: UnitData {
+                                exhausted: true,
+                                hp: Hp::new(100),
+                                mercenary: MaybeMercenary::None,
+                                zombie: false,
+                            },
+                        };
+                        drones.push(unit).unwrap();
+                    }
+                    Some(UnitType::Structure(Structure {typ: Structures::DroneTower(Some((_, drones, _))), ..})) => {
                         let unit = TransportedUnit {
                             typ: drone.clone(),
                             data: UnitData {
@@ -626,19 +601,19 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
             }
             Self::MoneyChange(owner, change) => {
-                if let Some(player) = game.get_owning_player_mut(owner) {
+                if let Some(player) = game.get_owning_player_mut(*owner) {
                     player.funds = (*player.funds - **change).try_into().unwrap();
                 }
             }
             Self::PureHideFunds(_) => {}
             Self::HideFunds(owner, value) => {
-                if let Some(player) = game.get_owning_player_mut(owner) {
+                if let Some(player) = game.get_owning_player_mut(*owner) {
                     player.funds = *value;
                 }
             }
             Self::PureRevealFunds(_) => {}
             Self::RevealFunds(owner, _) => {
-                if let Some(player) = game.get_owning_player_mut(owner) {
+                if let Some(player) = game.get_owning_player_mut(*owner) {
                     player.funds = Funds::new(0);
                 }
             }
@@ -650,10 +625,10 @@ impl<D: Direction> Event<D> {
             }
             Self::Effect(_) => {}
             Self::CommanderCharge(owner, delta) => {
-                game.get_owning_player_mut(owner).unwrap().commander.add_charge(-**delta);
+                game.get_owning_player_mut(*owner).unwrap().commander.add_charge(-**delta);
             }
             Self::CommanderFlipActiveSimple(owner) => {
-                game.get_owning_player_mut(owner).unwrap().commander.flip_active();
+                game.get_owning_player_mut(*owner).unwrap().commander.flip_active();
             }
             Self::UnitMovedThisGame(p) => {
                 if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
@@ -814,15 +789,15 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::MoneyChange(owner, _) => {
-                if !game.is_foggy() || team == to_client_perspective(&game.get_owning_player(owner).and_then(|p| Some(p.team))) {
+                if !game.is_foggy() || team == to_client_perspective(&game.get_owning_player(*owner).and_then(|p| Some(p.team))) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::PureHideFunds(owner) => {
-                if team != to_client_perspective(&game.get_owning_player(owner).and_then(|p| Some(p.team))) {
-                    Some(Self::HideFunds(owner.clone(), game.get_owning_player(owner).unwrap().funds))
+                if team != to_client_perspective(&game.get_owning_player(*owner).and_then(|p| Some(p.team))) {
+                    Some(Self::HideFunds(owner.clone(), game.get_owning_player(*owner).unwrap().funds))
                 } else {
                     None
                 }
@@ -831,8 +806,8 @@ impl<D: Direction> Event<D> {
                 panic!("HideFunds should only ever be created as replacement for PureHideFunds. It shouldn't be replaced itself!");
             }
             Self::PureRevealFunds(owner) => {
-                if team != to_client_perspective(&game.get_owning_player(owner).and_then(|p| Some(p.team))) {
-                    Some(Self::RevealFunds(owner.clone(), game.get_owning_player(owner).unwrap().funds))
+                if team != to_client_perspective(&game.get_owning_player(*owner).and_then(|p| Some(p.team))) {
+                    Some(Self::RevealFunds(owner.clone(), game.get_owning_player(*owner).unwrap().funds))
                 } else {
                     None
                 }
@@ -1142,6 +1117,59 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn start_turn(&mut self) {
+        let owner_id = self.game.current_player().owner_id;
+        // return drones to their origin if possible or destroy them
+        let mut drone_parents: HashMap<DroneId, (Point, usize)> = self.get_map().all_points()
+        .into_iter()
+        .filter_map(|p| self.get_map().get_unit(p).and_then(|u| Some((p, u))))
+        .filter(|(_, u)| u.get_owner() == Some(owner_id))
+        .filter_map(|(p, unit)| match unit {
+            UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(boarded, id), ..}) => {
+                if boarded.remaining_capacity() > 0 {
+                    Some((*id, (p, boarded.remaining_capacity())))
+                } else {
+                    None
+                }
+            }
+            UnitType::Structure(Structure {typ: Structures::DroneTower(Some((_, boarded, id))), ..}) => {
+                if boarded.remaining_capacity() > 0 {
+                    Some((*id, (p, boarded.remaining_capacity())))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }).collect();
+        for p in self.get_map().all_points() {
+            if let Some(unit) = self.get_map().get_unit(p) {
+                if unit.get_owner() != Some(self.game.current_player().owner_id) {
+                    continue;
+                }
+                match unit {
+                    UnitType::Normal(NormalUnit {typ: NormalUnits::HeavyDrone(id), ..}) |
+                    UnitType::Normal(NormalUnit {typ: NormalUnits::LightDrone(id), ..}) => {
+                        if let Some((destination, capacity)) = drone_parents.get_mut(id) {
+                            // move drone back aboard its parent
+                            let mut path = Path::new(p);
+                            path.steps.push(PathStep::Point(*destination)).unwrap();
+                            let id = *id;
+                            self.add_event(Event::UnitPath(Some(None), path, Some(true), unit.clone()));
+                            // one less space in parent
+                            if *capacity > 0 {
+                                *capacity -= 1;
+                            } else {
+                                drone_parents.remove(&id);
+                            }
+                        } else {
+                            // no parent available, self-destruct
+                            self.add_event(Event::UnitDeath(p, unit.clone()))
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+
         // has to be recalculated before structures, because the effects of some structures on
         // other players should maybe not be visible
         self.recalculate_fog(false);

@@ -214,6 +214,7 @@ pub enum UnitCommand<D: Direction> {
     MoveChess(Point, ChessCommand::<D>),
     MercenaryPowerSimple(Point),
     MoveBuildDrone(CommonMovement::<D>, TransportableDrones),
+    StructureBuildDrone(Point, TransportableDrones),
 }
 impl<D: Direction> UnitCommand<D> {
     pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
@@ -314,7 +315,7 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 let realty = match handler.get_map().get_terrain(intended_end) {
                     Some(Terrain::Realty(realty, owner)) => {
-                        if ClientPerspective::Team(*team) != handler.get_game().get_team(owner.as_ref()) {
+                        if ClientPerspective::Team(*team) != handler.get_game().get_team(*owner) {
                             realty.clone()
                         } else {
                             return Err(CommandError::CannotCaptureHere);
@@ -339,7 +340,7 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 match handler.get_map().get_terrain(intended_end) {
                     Some(Terrain::Realty(realty, owner)) => {
-                        if owner != &Some(*unit.get_owner()) || !realty.can_repair(unit.get_type()) {
+                        if owner != &Some(unit.get_owner()) || !realty.can_repair(unit.get_type()) {
                             return Err(CommandError::CannotRepairHere);
                         }
                     }
@@ -354,7 +355,7 @@ impl<D: Direction> UnitCommand<D> {
                         .min(*handler.get_game().current_player().funds as u32 * 100 / unit.type_value() as u32);
                     if heal > 0 {
                         let cost = unit.type_value() as i32 * heal as i32 / 100;
-                        handler.add_event(Event::MoneyChange(*unit.get_owner().unwrap(), (-cost).try_into().unwrap()));
+                        handler.add_event(Event::MoneyChange(unit.get_owner().unwrap(), (-cost).try_into().unwrap()));
                         handler.add_event(Event::Effect(Effect::Repair(end)));
                         handler.add_event(Event::UnitHpChange(end, (heal as i8).try_into().unwrap(), (heal as i16).try_into().unwrap()));
                     }
@@ -480,6 +481,50 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 Some(cm.path.start)
             }
+            Self::StructureBuildDrone(pos, option) => {
+                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team), pos) {
+                    // you should have vision of your own structures
+                    return Err(CommandError::NoVision);
+                }
+                let unit = match handler.get_map().get_unit(pos) {
+                    Some(UnitType::Structure(struc)) => struc.clone(),
+                    None => return Err(CommandError::MissingUnit),
+                    _ => return Err(CommandError::UnitTypeWrong),
+                };
+                let drone_id = match &unit.typ {
+                    Structures::DroneTower(Some((owner, drones, drone_id))) => {
+                        if *owner != handler.get_game().current_player().owner_id {
+                            return Err(CommandError::NotYourUnit);
+                        }
+                        // new drones can't be built if at max-capacity
+                        let mut existing_drones = drones.len();
+                        for p in handler.get_map().all_points() {
+                            match handler.get_map().get_unit(p) {
+                                Some(UnitType::Normal(NormalUnit {typ: NormalUnits::LightDrone(id), ..})) | 
+                                Some(UnitType::Normal(NormalUnit {typ: NormalUnits::HeavyDrone(id), ..})) => {
+                                    if drone_id == id {
+                                        existing_drones += 1;
+                                    }
+                                }
+                                _ => (),
+                            }
+                        }
+                        if existing_drones >= drones.capacity() {
+                            return Err(CommandError::UnitCannotBeBoarded)
+                        }
+                        *drone_id
+                    }
+                    _ => return Err(CommandError::UnitTypeWrong),
+                };
+                let unit = option.to_normal(Some(drone_id));
+                let cost = unit.value() as i32;
+                if *handler.get_game().current_player().funds >= cost {
+                    handler.add_event(Event::MoneyChange(handler.get_game().current_player().owner_id, (-cost).try_into().unwrap()));
+                    handler.add_event(Event::BuildDrone(pos, option));
+                }
+                handler.add_event(Event::UnitExhaust(pos));
+                Some(pos)
+            }
         };
         if let Some(p) = chess_exhaust {
             ChessCommand::exhaust_all_on_board(handler, p);
@@ -496,7 +541,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins1 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(*owner, (*player.income as i32 / 2).try_into().unwrap()));
+                            handler.add_event(Event::MoneyChange(owner, (*player.income as i32 / 2).try_into().unwrap()));
                         }
                     }
                     false
@@ -504,7 +549,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins2 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(*owner, (*player.income as i32).try_into().unwrap()));
+                            handler.add_event(Event::MoneyChange(owner, (*player.income as i32).try_into().unwrap()));
                         }
                     }
                     false
@@ -512,16 +557,16 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins4 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(*owner, (*player.income as i32 * 2).try_into().unwrap()));
+                            handler.add_event(Event::MoneyChange(owner, (*player.income as i32 * 2).try_into().unwrap()));
                         }
                     }
                     false
                 }
                 Detail::FactoryBubble(owner) => {
-                    Some(owner) == unit.get_owner()
+                    Some(*owner) == unit.get_owner()
                 }
                 Detail::Skull(owner, _) => {
-                    Some(owner) == unit.get_owner()
+                    Some(*owner) == unit.get_owner()
                 }
             }
         }).collect();
@@ -566,7 +611,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
                     handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(target).unwrap().clone()));
                     if handler.get_game().get_team(Some(attacker.get_owner())) != handler.get_game().get_team(defender.get_owner()) {
                         if let Some(commander) = handler.get_game().get_owning_player(attacker.get_owner()).and_then(|player| Some(player.commander.clone())) {
-                            commander.after_killing_unit(handler, *attacker.get_owner(), target, &defender);
+                            commander.after_killing_unit(handler, attacker.get_owner(), target, &defender);
                         }
                     }
                     recalculate_fog = true;
@@ -585,13 +630,13 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
                     let commander_charge = defender.get_hp().min(*damage as u8) as u32 * defender.type_value() as u32 / 100;
                     let old_charge = charges.remove(&player.owner_id).unwrap_or(0);
                     charges.insert(player.owner_id, commander_charge + old_charge);
-                    let old_charge = charges.remove(attacker.get_owner()).unwrap_or(0);
-                    charges.insert(*attacker.get_owner(), commander_charge / 2 + old_charge);
+                    let old_charge = charges.remove(&attacker.get_owner()).unwrap_or(0);
+                    charges.insert(attacker.get_owner(), commander_charge / 2 + old_charge);
                 }
             }
         }
         for (owner, commander_charge) in charges {
-            let commander_charge = commander_charge.min(handler.get_game().get_owning_player(&owner).and_then(|player| Some(*player.commander.charge_potential())).unwrap_or(0));
+            let commander_charge = commander_charge.min(handler.get_game().get_owning_player(owner).and_then(|player| Some(*player.commander.charge_potential())).unwrap_or(0));
             if commander_charge > 0 {
                 handler.add_event(Event::CommanderCharge(owner, (commander_charge as i32).try_into().unwrap()));
             }
