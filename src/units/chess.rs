@@ -258,7 +258,7 @@ impl<D: Direction> ChessUnit<D> {
             true
         }
     }
-    fn possible_rook_paths<F>(game: &Game<D>, start: Point, team: ClientPerspective, max_cost: u8, ignore_unseen: bool, mut callback: F) -> bool
+    fn possible_rook_paths<F>(game: &Game<D>, start: Point, team: ClientPerspective, max_cost: MovementPoints, ignore_unseen: bool, mut callback: F) -> bool
     where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
         for d in D::list() {
             let mut found = false;
@@ -278,7 +278,7 @@ impl<D: Direction> ChessUnit<D> {
         }
         false
     }
-    fn possible_bishop_paths<F>(game: &Game<D>, start: Point, team: ClientPerspective, max_cost: u8, ignore_unseen: bool, mut callback: F) -> bool
+    fn possible_bishop_paths<F>(game: &Game<D>, start: Point, team: ClientPerspective, max_cost: MovementPoints, ignore_unseen: bool, mut callback: F) -> bool
     where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
         for d in D::list() {
             let mut found = false;
@@ -722,15 +722,14 @@ impl<D: Direction> ChessUnits<D> {
             Self::King(_) => "King",
         }
     }
-    pub fn get_movement(&self) -> u8 {
-        let factor = 6;
+    pub fn get_movement(&self) -> MovementPoints {
         match self {
-            Self::Pawn(_, _, _) => 0,
-            Self::Rook(_) => 8 * factor,
-            Self::Bishop => 8 * factor,
-            Self::Knight => 0,
-            Self::Queen => 8 * factor,
-            Self::King(_) => 0,
+            Self::Pawn(_, _, _) => MovementPoints::from(0.),
+            Self::Rook(_) =>MovementPoints::from(8.),
+            Self::Bishop =>MovementPoints::from(8.),
+            Self::Knight => MovementPoints::from(0.),
+            Self::Queen =>MovementPoints::from(8.),
+            Self::King(_) => MovementPoints::from(0.),
         }
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
@@ -790,9 +789,9 @@ pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D, turn_le
 
 // callback returns true if the search can be aborted
 // if team is None, units will be ignored
-fn straight_search<D, F>(game: &Game<D>, start: Point, direction: D, max_cost: Option<u8>, team: ClientPerspective, ignore_unseen: bool, mut callback: F)
+fn straight_search<D, F>(game: &Game<D>, start: Point, direction: D, max_cost: Option<MovementPoints>, team: ClientPerspective, ignore_unseen: bool, mut callback: F)
 where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
-    let mut cost = 0;
+    let mut cost = MovementPoints::from(0.);
     let mut blocked_positions = HashMap::new();
     blocked_positions.insert(start, direction);
     let mut steps = vec![];
@@ -837,9 +836,9 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
 
 // callback returns true if the search can be aborted
 // if team is None, units will be ignored
-fn diagonal_search<D, F>(game: &Game<D>, start: Point, direction: D, max_cost: Option<u8>, team: ClientPerspective, ignore_unseen: bool, mut callback: F)
+fn diagonal_search<D, F>(game: &Game<D>, start: Point, direction: D, max_cost: Option<MovementPoints>, team: ClientPerspective, ignore_unseen: bool, mut callback: F)
 where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
-    let mut cost = 0;
+    let mut cost = MovementPoints::from(0.);
     let mut blocked_positions = HashMap::new();
     blocked_positions.insert(start, direction);
     let mut steps = vec![];

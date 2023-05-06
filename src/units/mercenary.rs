@@ -35,8 +35,8 @@ impl MaybeMercenary {
     pub fn get_origin(&self) -> Option<Point> {
         self.and_then(|_, origin| *origin)
     }
-    pub fn own_movement_bonus(&self) -> u8 {
-        self.and_then(|m, _| Some(m.own_movement_bonus())).unwrap_or(0)
+    pub fn own_movement_bonus(&self) -> MovementPoints {
+        self.and_then(|m, _| Some(m.own_movement_bonus())).unwrap_or(MovementPoints::from(0.))
     }
     pub fn own_defense_bonus(&self) -> f32 {
         self.and_then(|m, _| Some(m.own_defense_bonus())).unwrap_or(0.)
@@ -110,8 +110,8 @@ impl Mercenaries {
     }
     pub fn can_use_simple_power<D: Direction>(&self, _game: &Game<D>, _pos: Point) -> bool {
         match self {
-            Mercenaries::EarlGrey(_, true) => false,
             Mercenaries::EarlGrey(charge, false) => **charge >= self.max_charge(),
+            _ => false,
         }
     }
     pub fn add_options_after_path<D: Direction>(&self, _unit: &NormalUnit, _game: &Game<D>, path: &Path<D>, options: &mut Vec<UnitAction<D>>) {
@@ -124,29 +124,49 @@ impl Mercenaries {
             _ => {}
         }
     }
+
     pub fn own_defense_bonus(&self) -> f32 {
         0.2
     }
+
+    pub fn defense_bonus<D: Direction>(&self, _defender: &UnitType<D>, _is_counter: bool) -> f32 {
+        match &self {
+            _ => 0.1,
+        }
+    }
+
     pub fn own_attack_bonus(&self) -> f32 {
         match self {
             Mercenaries::EarlGrey(_, false) => 0.5,
             Mercenaries::EarlGrey(_, true) => 0.8,
         }
     }
-    pub fn own_movement_bonus(&self) -> u8 {
-        match self {
-            Mercenaries::EarlGrey(_, true) => 6,
-            _ => 0
+
+    pub fn attack_bonus(&self, _attacker: &NormalUnit, _is_counter: bool) -> f32 {
+        match &self {
+            Mercenaries::EarlGrey(_, false) => 0.3,
+            Mercenaries::EarlGrey(_, true) => 0.5,
+            _ => 0.1,
         }
     }
+
+    pub fn own_movement_bonus(&self) -> MovementPoints {
+        match self {
+            Mercenaries::EarlGrey(_, true) => MovementPoints::from(1.),
+            _ => MovementPoints::from(0.)
+        }
+    }
+
     pub fn aura_range(&self) -> u8 {
         match self {
             Mercenaries::EarlGrey(_, _) => 1,
         }
     }
+
     pub fn in_range<D: Direction>(&self, map: &Map<D>, position: Point, target: Point) -> bool {
         self.aura(map, position).contains(&target)
     }
+
     pub fn aura<D: Direction>(&self, map: &Map<D>, position: Point) -> HashSet<Point> {
         let mut result = HashSet::new();
         result.insert(position.clone());
@@ -157,21 +177,11 @@ impl Mercenaries {
         }
         result
     }
-    pub fn attack_bonus(&self, _attacker: &NormalUnit, _is_counter: bool) -> f32 {
-        match &self {
-            Mercenaries::EarlGrey(_, false) => 0.3,
-            Mercenaries::EarlGrey(_, true) => 0.5,
-            _ => 0.1,
-        }
-    }
-    pub fn defense_bonus<D: Direction>(&self, _defender: &UnitType<D>, _is_counter: bool) -> f32 {
-        match &self {
-            _ => 0.1,
-        }
-    }
+
     pub fn price<D: Direction>(&self, _game: &Game<D>, unit: &NormalUnit) -> Option<u16> {
         Some(unit.typ.value())
     }
+
     pub fn build_option(&self) -> MercenaryOption {
         match self {
             Mercenaries::EarlGrey(_, _) => MercenaryOption::EarlGrey,

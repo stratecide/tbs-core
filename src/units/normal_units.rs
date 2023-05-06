@@ -178,42 +178,41 @@ impl NormalUnit {
         };
     }
 
-    pub fn get_movement<D: Direction>(&self, terrain: &Terrain<D>) -> (MovementType, u8) {
-        let factor = 6;
+    pub fn get_movement<D: Direction>(&self, terrain: &Terrain<D>) -> (MovementType, MovementPoints) {
         let (movement_type, movement) = match self.typ {
-            NormalUnits::Sniper => (MovementType::Foot, 3 * factor),
-            NormalUnits::Bazooka => (MovementType::Foot, 3 * factor),
-            NormalUnits::DragonHead => (MovementType::Wheel, 6 * factor),
-            NormalUnits::Artillery => (MovementType::Treads, 5 * factor),
-            NormalUnits::SmallTank => (MovementType::Treads, 7 * factor),
-            NormalUnits::BigTank => (MovementType::Treads, 6 * factor),
-            NormalUnits::AntiAir => (MovementType::Treads, 7 * factor),
-            NormalUnits::RocketLauncher => (MovementType::Wheel, 5 * factor),
-            NormalUnits::Magnet => (MovementType::Wheel, 7 * factor),
+            NormalUnits::Sniper => (MovementType::Foot,MovementPoints::from(3.)),
+            NormalUnits::Bazooka => (MovementType::Foot,MovementPoints::from(3.)),
+            NormalUnits::DragonHead => (MovementType::Wheel,MovementPoints::from(6.)),
+            NormalUnits::Artillery => (MovementType::Treads,MovementPoints::from(5.)),
+            NormalUnits::SmallTank => (MovementType::Treads,MovementPoints::from(7.)),
+            NormalUnits::BigTank => (MovementType::Treads,MovementPoints::from(6.)),
+            NormalUnits::AntiAir => (MovementType::Treads,MovementPoints::from(7.)),
+            NormalUnits::RocketLauncher => (MovementType::Wheel,MovementPoints::from(5.)),
+            NormalUnits::Magnet => (MovementType::Wheel,MovementPoints::from(7.)),
 
             NormalUnits::Hovercraft(on_sea) => {
                 let mut movement_type = MovementType::Hover(HoverMode::new(on_sea));
                 if terrain.like_beach_for_hovercraft() {
                     movement_type = MovementType::Hover(HoverMode::Beach);
                 }
-                (movement_type, 3 * factor)
+                (movement_type,MovementPoints::from(3.))
             },
             
-            NormalUnits::SharkRider => (MovementType::Boat, 3 * factor),
-            NormalUnits::TransportBoat(_) => (MovementType::Boat, 5 * factor),
-            NormalUnits::WaveBreaker => (MovementType::Ship, 7 * factor),
-            NormalUnits::Submarine => (MovementType::Ship, 7 * factor),
-            NormalUnits::SiegeShip => (MovementType::Ship, 5 * factor),
-            NormalUnits::DroneBoat(_, _) => (MovementType::Boat, 4 * factor),
+            NormalUnits::SharkRider => (MovementType::Boat,MovementPoints::from(3.)),
+            NormalUnits::TransportBoat(_) => (MovementType::Boat,MovementPoints::from(5.)),
+            NormalUnits::WaveBreaker => (MovementType::Ship,MovementPoints::from(7.)),
+            NormalUnits::Submarine => (MovementType::Ship,MovementPoints::from(7.)),
+            NormalUnits::SiegeShip => (MovementType::Ship,MovementPoints::from(5.)),
+            NormalUnits::DroneBoat(_, _) => (MovementType::Boat,MovementPoints::from(4.)),
 
-            NormalUnits::TransportHeli(_) => (MovementType::Heli, 6 * factor),
-            NormalUnits::AttackHeli => (MovementType::Heli, 7 * factor),
-            NormalUnits::Blimp => (MovementType::Heli, 5 * factor),
-            NormalUnits::Bomber => (MovementType::Plane, 8 * factor),
-            NormalUnits::Fighter => (MovementType::Plane, 10 * factor),
+            NormalUnits::TransportHeli(_) => (MovementType::Heli,MovementPoints::from(6.)),
+            NormalUnits::AttackHeli => (MovementType::Heli,MovementPoints::from(7.)),
+            NormalUnits::Blimp => (MovementType::Heli,MovementPoints::from(5.)),
+            NormalUnits::Bomber => (MovementType::Plane,MovementPoints::from(8.)),
+            NormalUnits::Fighter => (MovementType::Plane,MovementPoints::from(10.)),
             
-            NormalUnits::LightDrone(_) => (MovementType::Heli, 4 * factor),
-            NormalUnits::HeavyDrone(_) => (MovementType::Heli, 2 * factor),
+            NormalUnits::LightDrone(_) => (MovementType::Heli,MovementPoints::from(4.)),
+            NormalUnits::HeavyDrone(_) => (MovementType::Heli,MovementPoints::from(2.)),
         };
         (movement_type, movement + self.data.mercenary.own_movement_bonus())
     }

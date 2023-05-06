@@ -1,6 +1,7 @@
 use std::collections::{BinaryHeap, HashSet, HashMap};
 use std::cmp::Ordering;
 use std::hash::Hash;
+use std::ops::{Add, Sub, AddAssign, SubAssign};
 
 use zipper::*;
 use zipper_derive::*;
@@ -38,6 +39,68 @@ impl HoverMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MovementPoints {
+    times_6: u8,
+}
+
+pub enum MovementPointsError {
+    Negative,
+    TooBig,
+    // for cases where input times 6 isn't close enough to an integer?
+    //Imprecise,
+}
+
+impl From<f32> for MovementPoints {
+    fn from(value: f32) -> Self {
+        Self {
+            times_6: (value * 6.).max(0.).min(255.).round() as u8,
+        }
+    }
+}
+
+impl Add<MovementPoints> for MovementPoints {
+    type Output = Self;
+    fn add(self, rhs: MovementPoints) -> Self::Output {
+        Self {
+            times_6: (self.times_6 as u16 + rhs.times_6 as u16).min(255) as u8,
+        }
+    }
+}
+
+impl AddAssign for MovementPoints {
+    fn add_assign(&mut self, rhs: Self) {
+        self.times_6 = (self.times_6 as u16 + rhs.times_6 as u16).min(255) as u8;
+    }
+}
+
+impl Sub<MovementPoints> for MovementPoints {
+    type Output = Self;
+    fn sub(self, rhs: MovementPoints) -> Self::Output {
+        Self {
+            times_6: (self.times_6 as i16 - rhs.times_6 as i16).max(0) as u8,
+        }
+    }
+}
+
+impl SubAssign for MovementPoints {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.times_6 = (self.times_6 as i16 - rhs.times_6 as i16).max(0) as u8;
+    }
+}
+
+impl PartialOrd for MovementPoints {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.times_6.partial_cmp(&other.times_6)
+    }
+}
+
+impl Ord for MovementPoints {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.times_6.cmp(&other.times_6)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MovementType {
     Foot,
     Wheel,
@@ -57,7 +120,7 @@ pub enum MovementType {
 #[derive(PartialEq, Eq)]
 struct WidthSearch<D: Direction> {
     path: Path<D>,
-    path_cost: u8,
+    path_cost: MovementPoints,
     movement_type: MovementType,
 }
 impl<D: Direction> PartialOrd for WidthSearch<D> {
@@ -201,7 +264,7 @@ pub struct MovementSearchMeta<D: Direction> {
     pub movement_type: MovementType,
     pub stealth: bool,
     pub illegal_next_dir: Option<D>, // units aren't allowed to turn around 180°
-    pub remaining_movement: u8,
+    pub remaining_movement: MovementPoints,
     pub path: Path<D>,
 }
 impl<D: Direction> MovementSearchMeta<D> {
