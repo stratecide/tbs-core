@@ -12,8 +12,8 @@ type AreaPoint<D> = (Transformation<D>, Point);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Zippable)]
 pub struct Transformation<D>
 where D: Direction {
-    distortion: Distortion::<D>,
-    translate_by: D::T,
+    pub distortion: Distortion::<D>,
+    pub translate_by: D::T,
 }
 
 impl<D> Transformation<D>
@@ -37,7 +37,7 @@ where D: Direction {
         };
         Transformation {
             distortion: (self.distortion.0, angle),
-            translate_by: translate_by,
+            translate_by,
         }
     }
     pub fn add(&self, other: &Self) -> Self {
@@ -61,7 +61,7 @@ where D: Direction {
         }
         Transformation{
             distortion: (self.distortion.0 != other.distortion.0, angle),
-            translate_by: translate_by,
+            translate_by,
         }
     }
     pub fn transform_point(&self, p: &GlobalPoint, map_center: &GlobalPoint, odd: bool) -> GlobalPoint {
