@@ -331,36 +331,42 @@ impl Realty {
 }
 
 pub fn build_options_factory<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
-    NormalUnits::list()
+    let mut result: Vec<(UnitType<D>, u16)> = NormalUnits::list()
     .iter()
     .filter(|u| u.repairable_factory())
     .map(|u| {
         let value = u.value() + 300 * built_this_turn as u16;
         let unit = UnitType::Normal(NormalUnit::new_instance(u.clone(), owner));
         (unit, value)
-    }).collect()
+    }).collect();
+    result.sort_by(|v1, v2| v1.1.cmp(&v2.1));
+    result
 }
 
 pub fn build_options_port<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
-    NormalUnits::list()
+    let mut result: Vec<(UnitType<D>, u16)> = NormalUnits::list()
     .iter()
     .filter(|u| u.repairable_port())
     .map(|u| {
         let value = u.value() + 300 * built_this_turn as u16;
         let unit = UnitType::Normal(NormalUnit::new_instance(u.clone(), owner));
         (unit, value)
-    }).collect()
+    }).collect();
+    result.sort_by(|v1, v2| v1.1.cmp(&v2.1));
+    result
 }
 
 pub fn build_options_airport<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
-    NormalUnits::list()
+    let mut result: Vec<(UnitType<D>, u16)> = NormalUnits::list()
     .iter()
     .filter(|u| u.repairable_airport())
     .map(|u| {
         let value = u.value() + 300 * built_this_turn as u16;
         let unit = UnitType::Normal(NormalUnit::new_instance(u.clone(), owner));
         (unit, value)
-    }).collect()
+    }).collect();
+    result.sort_by(|v1, v2| v1.1.cmp(&v2.1));
+    result
 }
 
 pub fn build_options_construction_site<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
@@ -372,11 +378,13 @@ pub fn build_options_construction_site<D: Direction>(_game: &Game<D>, owner: Own
         list.push(Structures::MegaCannon(Some(owner), d));
         list.push(Structures::LaserCannon(Some(owner), d));
     }
-    list.into_iter()
+    let mut result: Vec<(UnitType<D>, u16)> = list.into_iter()
     .map(|u| {
         let value = u.value() + 300 * built_this_turn as u16;
         let unit = UnitType::Structure(Structure::new_instance(u.clone()));
         (unit, value)
-    }).collect()
+    }).collect();
+    result.sort_by(|v1, v2| v1.1.cmp(&v2.1));
+    result
 }
 
