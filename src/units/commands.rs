@@ -315,10 +315,15 @@ impl<D: Direction> UnitCommand<D> {
                 if !unit.can_capture() {
                     return Err(CommandError::UnitCannotCapture);
                 }
-                let realty = match handler.get_map().get_terrain(intended_end) {
-                    Some(Terrain::Realty(realty, owner)) => {
+                let (old_progress, new_progress) = match handler.get_map().get_terrain(intended_end) {
+                    Some(Terrain::Realty(_, owner, old_progress)) => {
                         if ClientPerspective::Team(*team) != handler.get_game().get_team(*owner) {
-                            realty.clone()
+                            (*old_progress, match old_progress {
+                                CaptureProgress::Capturing(capturing_owner, _) if *capturing_owner == handler.get_game().current_player().owner_id => {
+                                    *old_progress
+                                }
+                                _ => CaptureProgress::Capturing(handler.get_game().current_player().owner_id, U8::new(0)),
+                            })
                         } else {
                             return Err(CommandError::CannotCaptureHere);
                         }
@@ -328,7 +333,11 @@ impl<D: Direction> UnitCommand<D> {
                     }
                 };
                 if let Some(end) = cm.apply(handler, false, true)? {
-                    handler.add_event(Event::TerrainChange(end, handler.get_map().get_terrain(end).unwrap().clone(), Terrain::Realty(realty, Some(handler.get_game().current_player().owner_id))));
+                    //handler.add_event(Event::TerrainChange(end, handler.get_map().get_terrain(end).unwrap().clone(), Terrain::Realty(realty, Some(handler.get_game().current_player().owner_id))));
+                    if old_progress != new_progress {
+                        handler.add_event(Event::CaptureProgress(end, old_progress, new_progress));
+                    }
+                    handler.add_event(Event::UnitCapturing(end));
                     handler.add_event(Event::UnitExhaust(end));
                 }
                 Some(cm.path.start)
@@ -341,7 +350,7 @@ impl<D: Direction> UnitCommand<D> {
                     return Err(CommandError::CannotRepairHere);
                 }
                 match handler.get_map().get_terrain(intended_end) {
-                    Some(Terrain::Realty(realty, owner)) => {
+                    Some(Terrain::Realty(realty, owner, _)) => {
                         if owner != &Some(unit.get_owner()) || !realty.can_repair(unit.get_type()) {
                             return Err(CommandError::CannotRepairHere);
                         }

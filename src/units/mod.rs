@@ -99,6 +99,20 @@ impl<D: Direction> UnitType<D> {
         }
     }
 
+    pub fn can_capture(&self) -> bool {
+        match self {
+            Self::Normal(unit) => unit.can_capture(),
+            _ => false,
+        }
+    }
+
+    pub fn is_capturing(&self) -> bool {
+        match self {
+            Self::Normal(unit) => unit.typ.capture_status().unwrap_or(false),
+            _ => false,
+        }
+    }
+
     pub fn can_act(&self, player: &Player) -> bool {
         match self {
             Self::Normal(unit) => unit.can_act(player),

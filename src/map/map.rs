@@ -368,7 +368,7 @@ where D: Direction
         let mut income_factor = 0;
         for p in self.all_points() {
             match self.get_terrain(p) {
-                Some(Terrain::Realty(realty, owner)) => {
+                Some(Terrain::Realty(realty, owner, _)) => {
                     if *owner == Some(owner_id) {
                         income_factor += realty.income_factor() as isize;
                     }
@@ -387,7 +387,7 @@ where D: Direction
                     owners.insert(owner);
                 }
             }
-            if let Some(Terrain::Realty(realty, owner)) = self.get_terrain(p) {
+            if let Some(Terrain::Realty(realty, owner, _)) = self.get_terrain(p) {
                 if let Some(owner) = owner {
                     if realty.can_build() {
                         owners.insert(*owner);

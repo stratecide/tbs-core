@@ -11,7 +11,7 @@ use crate::map::point_map::{self, MAX_AREA};
 use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, UnitData, DroneId};
 use crate::units::structures::{LASER_CANNON_RANGE, Structure, Structures};
 use crate::{player::*, details};
-use crate::terrain::{Terrain, BuiltThisTurn, Realty};
+use crate::terrain::{Terrain, BuiltThisTurn, Realty, CaptureProgress};
 use crate::details::Detail;
 use crate::units::*;
 use crate::map::direction::Direction;
@@ -79,14 +79,19 @@ impl<D: Direction> Command<D> {
                 // reset built_this_turn-counter for realties
                 for p in handler.get_map().all_points() {
                     match handler.get_map().get_terrain(p) {
-                        Some(Terrain::Realty(Realty::Factory(built_this_turn), _)) |
-                        Some(Terrain::Realty(Realty::Airport(built_this_turn), _)) |
-                        Some(Terrain::Realty(Realty::Port(built_this_turn), _)) => {
-                            if **built_this_turn > 0 {
-                                handler.add_event(Event::UpdateBuiltThisTurn(p, *built_this_turn, 0.try_into().unwrap()));
+                        Some(Terrain::Realty(realty, _, _)) => {
+                            match realty {
+                                Realty::Factory(built_this_turn) |
+                                Realty::Airport(built_this_turn) |
+                                Realty::Port(built_this_turn) => {
+                                    if **built_this_turn > 0 {
+                                        handler.add_event(Event::UpdateBuiltThisTurn(p, *built_this_turn, 0.try_into().unwrap()));
+                                    }
+                                }
+                                _ => (),
                             }
                         }
-                        _ => {}
+                        _ => (),
                     }
                 }
                 
@@ -94,6 +99,33 @@ impl<D: Direction> Command<D> {
 
                 handler.add_event(Event::NextTurn);
                 
+                // reset capture-progress / finish capturing
+                let current_player_owner = handler.get_game().current_player().owner_id;
+                for p in handler.get_map().all_points() {
+                    match handler.get_map().get_terrain(p) {
+                        Some(terrain @ Terrain::Realty(realty, owner, capture_progress @ CaptureProgress::Capturing(new_owner, progress))) => {
+                            if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner() != *owner && u.get_owner() == Some(*new_owner) && u.is_capturing()) {
+                                if current_player_owner == *new_owner {
+                                    let progress = **progress + (unit.get_hp() as f32 / 10.).ceil() as u8;
+                                    if progress < 10 {
+                                        handler.add_event(Event::CaptureProgress(p, *capture_progress, CaptureProgress::Capturing(*new_owner, U8::new(progress))));
+                                    } else {
+                                        // capture-progress is reset by TerrainChange
+                                        handler.add_event(Event::TerrainChange(p, terrain.clone(), Terrain::Realty(realty.clone(), Some(*new_owner), CaptureProgress::None)));
+                                    }
+                                }
+                                // keep progress otherwise
+                            } else {
+                                handler.add_event(Event::CaptureProgress(p, *capture_progress, CaptureProgress::None));
+                            }
+                        }
+                        _ => (),
+                    }
+                    if let Some(_) = handler.get_map().get_unit(p).filter(|u| u.get_owner() == Some(current_player_owner) && u.is_capturing()) {
+                        handler.add_event(Event::UnitCapturing(p));
+                    }
+                }
+
                 // update fog manually if it's random
                 match handler.get_game().get_fog_mode() {
                     FogMode::Random(value, offset, to_bright_chance, to_dark_chance) => {
@@ -178,7 +210,7 @@ impl<D: Direction> Command<D> {
                         } else {
                             Err(CommandError::InvalidIndex)
                         }
-                    } else if let Some(Terrain::Realty(realty, owner)) = handler.get_map().get_terrain(pos) {
+                    } else if let Some(Terrain::Realty(realty, owner, _)) = handler.get_map().get_terrain(pos) {
                         if owner == &Some(owner_id) {
                             let options = realty.buildable_units(handler.get_game(), owner_id);
                             if let Some((unit, cost)) = options.get(*index as usize) {
@@ -278,6 +310,7 @@ pub enum Event<D:Direction> {
     FogChange(Perspective, LVec::<(Point, FieldData::<D>), {point_map::MAX_AREA}>),
     UnitPath(Option::<Option::<UnloadIndex>>, Path::<D>, Option::<bool>, UnitType::<D>),
     HoverPath(Option::<Option::<UnloadIndex>>, Point, LVec::<(bool, PathStep::<D>), {point_map::MAX_AREA}>, Option::<bool>, UnitType::<D>),
+    UnitCapturing(Point),
     UnitExhaust(Point),
     UnitExhaustBoarded(Point, UnloadIndex),
     UnitHpChange(Point, I8::<-100, 99>, I16::<-999, 999>),
@@ -289,6 +322,7 @@ pub enum Event<D:Direction> {
     MercenaryCharge(Point, I8::<{-(mercenary::MAX_CHARGE as i8)}, {mercenary::MAX_CHARGE as i8}>),
     MercenaryPowerSimple(Point),
     TerrainChange(Point, Terrain::<D>, Terrain::<D>),
+    CaptureProgress(Point, CaptureProgress, CaptureProgress),
     MoneyChange(Owner, Funds),
     PureHideFunds(Owner),
     HideFunds(Owner, Funds), // when fog starts
@@ -352,7 +386,7 @@ impl<D: Direction> Event<D> {
                     match &mut unit {
                         UnitType::Normal(unit) => {
                             match &mut unit.typ {
-                                NormalUnits::Hovercraft(os) => *os = *on_sea,
+                                NormalUnits::Hovercraft(os, _) => *os = *on_sea,
                                 _ => {}
                             }
                         }
@@ -364,6 +398,16 @@ impl<D: Direction> Event<D> {
                     path.steps.push(step.clone()).unwrap();
                 }
                 apply_unit_path(game, *unload_index, &path, *end_visible, &unit);
+            }
+            Self::UnitCapturing(pos) => {
+                match game.get_map_mut().get_unit_mut(*pos) {
+                    Some(UnitType::Normal(unit)) => {
+                        if let Some(capturing) = unit.typ.capture_status_mut() {
+                            *capturing = !*capturing;
+                        }
+                    },
+                    _ => (),
+                }
             }
             Self::UnitExhaust(pos) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
@@ -423,6 +467,14 @@ impl<D: Direction> Event<D> {
             Self::TerrainChange(pos, _, terrain) => {
                 game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
             }
+            Self::CaptureProgress(pos, _, new_progress) => {
+                match game.get_map_mut().get_terrain_mut(*pos) {
+                    Some(Terrain::Realty(_, _, progress)) => {
+                        *progress = *new_progress;
+                    }
+                    _ => (), // shouldn't happen
+                }
+            }
             Self::MoneyChange(owner, change) => {
                 if let Some(player) = game.get_owning_player_mut(*owner) {
                     player.funds = (*player.funds + **change).try_into().unwrap();
@@ -480,9 +532,9 @@ impl<D: Direction> Event<D> {
             }
             Self::UpdateBuiltThisTurn(p, _, val) => {
                 match game.get_map_mut().get_terrain_mut(*p) {
-                    Some(Terrain::Realty(Realty::Factory(built_this_turn), _)) |
-                    Some(Terrain::Realty(Realty::Airport(built_this_turn), _)) |
-                    Some(Terrain::Realty(Realty::Port(built_this_turn), _)) => {
+                    Some(Terrain::Realty(Realty::Factory(built_this_turn), _, _)) |
+                    Some(Terrain::Realty(Realty::Airport(built_this_turn), _, _)) |
+                    Some(Terrain::Realty(Realty::Port(built_this_turn), _, _)) => {
                         *built_this_turn = *val;
                     }
                     _ => {}
@@ -545,6 +597,16 @@ impl<D: Direction> Event<D> {
                 }
                 undo_unit_path(game, *unload_index, &path, *end_visible, unit);
             }
+            Self::UnitCapturing(pos) => {
+                match game.get_map_mut().get_unit_mut(*pos) {
+                    Some(UnitType::Normal(unit)) => {
+                        if let Some(capturing) = unit.typ.capture_status_mut() {
+                            *capturing = !*capturing;
+                        }
+                    },
+                    _ => (),
+                }
+            }
             Self::UnitExhaust(pos) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to (un)exhaust!", pos));
                 match unit {
@@ -603,6 +665,14 @@ impl<D: Direction> Event<D> {
             Self::TerrainChange(pos, terrain, _) => {
                 game.get_map_mut().set_terrain(pos.clone(), terrain.clone());
             }
+            Self::CaptureProgress(pos, old_progress, _) => {
+                match game.get_map_mut().get_terrain_mut(*pos) {
+                    Some(Terrain::Realty(_, _, progress)) => {
+                        *progress = *old_progress;
+                    }
+                    _ => (), // shouldn't happen
+                }
+            }
             Self::MoneyChange(owner, change) => {
                 if let Some(player) = game.get_owning_player_mut(*owner) {
                     player.funds = (*player.funds - **change).try_into().unwrap();
@@ -660,9 +730,9 @@ impl<D: Direction> Event<D> {
             }
             Self::UpdateBuiltThisTurn(p, val, _) => {
                 match game.get_map_mut().get_terrain_mut(*p) {
-                    Some(Terrain::Realty(Realty::Factory(built_this_turn), _)) |
-                    Some(Terrain::Realty(Realty::Airport(built_this_turn), _)) |
-                    Some(Terrain::Realty(Realty::Port(built_this_turn), _)) => {
+                    Some(Terrain::Realty(Realty::Factory(built_this_turn), _, _)) |
+                    Some(Terrain::Realty(Realty::Airport(built_this_turn), _, _)) |
+                    Some(Terrain::Realty(Realty::Port(built_this_turn), _, _)) => {
                         *built_this_turn = *val;
                     }
                     _ => {}
@@ -714,10 +784,17 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
+            Self::UnitCapturing(pos) => {
+                if game.has_vision_at(team, *pos) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
             Self::UnitExhaust(pos) => {
                 if game.has_vision_at(team, *pos) {
                     Some(self.clone())
-                } else if let Some(unit) = game.get_map().get_unit(*pos).and_then(|u| u.fog_replacement()) {
+                } else if let Some(_) = game.get_map().get_unit(*pos).and_then(|u| u.fog_replacement()) {
                     Some(self.clone())
                 } else {
                     None
@@ -733,7 +810,7 @@ impl<D: Direction> Event<D> {
             Self::UnitHpChange(pos, real_change, displayed_change) => {
                 if game.has_vision_at(team, *pos) {
                     Some(self.clone())
-                } else if let Some(unit) = game.get_map().get_unit(*pos).and_then(|u| u.fog_replacement()) {
+                } else if let Some(_) = game.get_map().get_unit(*pos).and_then(|u| u.fog_replacement()) {
                     Some(Self::UnitHpChange(*pos, *real_change, *displayed_change))
                 } else {
                     None
@@ -799,6 +876,13 @@ impl<D: Direction> Event<D> {
                     } else {
                         None
                     }
+                }
+            }
+            Self::CaptureProgress(pos, _, _) => {
+                if game.has_vision_at(team, *pos) {
+                    Some(self.clone())
+                } else {
+                    None
                 }
             }
             Self::MoneyChange(owner, _) => {

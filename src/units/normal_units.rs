@@ -77,15 +77,14 @@ impl NormalUnit {
     pub fn value<D: Direction>(&self, game: &Game<D>) -> u16 {
         self.typ.value() + self.data.mercenary.and_then(|m, _| m.price(game, self)).unwrap_or(0)
     }
+
     pub fn can_capture(&self) -> bool {
         if self.data.zombie {
             return false;
         }
-        match self.typ {
-            NormalUnits::Hovercraft(_) => true,
-            _ => false,
-        }
+        self.typ.capture_status().is_some()
     }
+
     pub fn can_pull(&self) -> bool {
         match self.typ {
             NormalUnits::Magnet => true,
@@ -180,8 +179,8 @@ impl NormalUnit {
 
     pub fn get_movement<D: Direction>(&self, terrain: &Terrain<D>) -> (MovementType, MovementPoints) {
         let (movement_type, movement) = match self.typ {
-            NormalUnits::Sniper => (MovementType::Foot,MovementPoints::from(3.)),
-            NormalUnits::Bazooka => (MovementType::Foot,MovementPoints::from(3.)),
+            NormalUnits::Sniper(_) => (MovementType::Foot,MovementPoints::from(3.)),
+            NormalUnits::Bazooka(_) => (MovementType::Foot,MovementPoints::from(3.)),
             NormalUnits::DragonHead => (MovementType::Wheel,MovementPoints::from(6.)),
             NormalUnits::Artillery => (MovementType::Treads,MovementPoints::from(5.)),
             NormalUnits::SmallTank => (MovementType::Treads,MovementPoints::from(7.)),
@@ -190,15 +189,15 @@ impl NormalUnit {
             NormalUnits::RocketLauncher => (MovementType::Wheel,MovementPoints::from(5.)),
             NormalUnits::Magnet => (MovementType::Wheel,MovementPoints::from(7.)),
 
-            NormalUnits::Hovercraft(on_sea) => {
+            NormalUnits::Hovercraft(_, on_sea) => {
                 let mut movement_type = MovementType::Hover(HoverMode::new(on_sea));
                 if terrain.like_beach_for_hovercraft() {
                     movement_type = MovementType::Hover(HoverMode::Beach);
                 }
-                (movement_type,MovementPoints::from(3.))
+                (movement_type,MovementPoints::from(4.))
             },
             
-            NormalUnits::SharkRider => (MovementType::Boat,MovementPoints::from(3.)),
+            NormalUnits::SharkRider(_) => (MovementType::Boat,MovementPoints::from(3.)),
             NormalUnits::TransportBoat(_) => (MovementType::Boat,MovementPoints::from(5.)),
             NormalUnits::WaveBreaker => (MovementType::Ship,MovementPoints::from(7.)),
             NormalUnits::Submarine => (MovementType::Ship,MovementPoints::from(7.)),
@@ -282,7 +281,7 @@ impl NormalUnit {
                 }
             }
             match game.get_map().get_terrain(destination) {
-                Some(Terrain::Realty(realty, owner)) => {
+                Some(Terrain::Realty(realty, owner, _)) => {
                     if self.can_capture() && Some(player.team) != owner.and_then(|o| game.get_owning_player(o)).and_then(|p| Some(p.team)) {
                         result.push(UnitAction::Capture);
                     }
@@ -516,8 +515,8 @@ pub enum TransportableHeli {
 impl TransportableUnits for TransportableHeli {
     fn from_normal(unit: &NormalUnits) -> Option<Self> {
         Some(match unit {
-            NormalUnits::Sniper => Self::Sniper,
-            NormalUnits::Bazooka => Self::Bazooka,
+            NormalUnits::Sniper(_) => Self::Sniper,
+            NormalUnits::Bazooka(_) => Self::Bazooka,
             NormalUnits::DragonHead => Self::DragonHead,
             NormalUnits::Artillery => Self::Artillery,
             NormalUnits::SmallTank => Self::SmallTank,
@@ -526,9 +525,9 @@ impl TransportableUnits for TransportableHeli {
             NormalUnits::RocketLauncher => Self::RocketLauncher,
             NormalUnits::Magnet => Self::Magnet,
 
-            NormalUnits::Hovercraft(on_sea) => Self::Hovercraft(*on_sea),
+            NormalUnits::Hovercraft(_, on_sea) => Self::Hovercraft(*on_sea),
 
-            NormalUnits::SharkRider => Self::SharkRider,
+            NormalUnits::SharkRider(_) => Self::SharkRider,
             NormalUnits::TransportBoat(units) => {
                 if units.len() != 0 {
                     return None;
@@ -549,8 +548,8 @@ impl TransportableUnits for TransportableHeli {
     }
     fn to_normal(&self, _drone_id: Option<DroneId>) -> NormalUnits {
         match self {
-            Self::Sniper => NormalUnits::Sniper,
-            Self::Bazooka => NormalUnits::Bazooka,
+            Self::Sniper => NormalUnits::Sniper(false),
+            Self::Bazooka => NormalUnits::Bazooka(false),
             Self::DragonHead => NormalUnits::DragonHead,
             Self::Artillery => NormalUnits::Artillery,
             Self::SmallTank => NormalUnits::SmallTank,
@@ -559,9 +558,9 @@ impl TransportableUnits for TransportableHeli {
             Self::RocketLauncher => NormalUnits::RocketLauncher,
             Self::Magnet => NormalUnits::Magnet,
             
-            Self::Hovercraft(on_sea) => NormalUnits::Hovercraft(*on_sea),
+            Self::Hovercraft(on_sea) => NormalUnits::Hovercraft(*on_sea, false),
             
-            Self::SharkRider => NormalUnits::SharkRider,
+            Self::SharkRider => NormalUnits::SharkRider(false),
             Self::TransportBoat => NormalUnits::TransportBoat(LVec::new()),
             Self::WaveBreaker => NormalUnits::WaveBreaker,
             Self::Submarine => NormalUnits::Submarine,
@@ -591,14 +590,23 @@ pub enum TransportableBoat {
 impl TransportableUnits for TransportableBoat {
     fn from_normal(unit: &NormalUnits) -> Option<Self> {
         Some(match unit {
-            NormalUnits::Sniper => Self::Sniper,
+            NormalUnits::Sniper(_) => Self::Sniper,
+            NormalUnits::Bazooka(_) => Self::Bazooka,
+            NormalUnits::DragonHead => Self::DragonHead,
+            NormalUnits::Artillery => Self::Artillery,
+            NormalUnits::SmallTank => Self::SmallTank,
+            NormalUnits::BigTank => Self::BigTank,
+            NormalUnits::AntiAir => Self::AntiAir,
+            NormalUnits::RocketLauncher => Self::RocketLauncher,
+            NormalUnits::Magnet => Self::Magnet,
+            NormalUnits::Hovercraft(on_sea, _) => Self::Hovercraft(*on_sea),
             _ => return None,
         })
     }
     fn to_normal(&self, _drone_id: Option<DroneId>) -> NormalUnits {
         match self {
-            Self::Sniper => NormalUnits::Sniper,
-            Self::Bazooka => NormalUnits::Bazooka,
+            Self::Sniper => NormalUnits::Sniper(false),
+            Self::Bazooka => NormalUnits::Bazooka(false),
             Self::DragonHead => NormalUnits::DragonHead,
             Self::Artillery => NormalUnits::Artillery,
             Self::SmallTank => NormalUnits::SmallTank,
@@ -607,7 +615,7 @@ impl TransportableUnits for TransportableBoat {
             Self::RocketLauncher => NormalUnits::RocketLauncher,
             Self::Magnet => NormalUnits::Magnet,
             
-            Self::Hovercraft(on_sea) => NormalUnits::Hovercraft(*on_sea),
+            Self::Hovercraft(on_sea) => NormalUnits::Hovercraft(*on_sea, false),
         }
     }
 }
@@ -648,8 +656,8 @@ pub fn buildable_drones<D: Direction>(_game: &Game<D>, _owner: Owner) -> Vec<Tra
 #[zippable(bits = 8)]
 pub enum NormalUnits {
     // ground units
-    Sniper,
-    Bazooka,
+    Sniper(bool),
+    Bazooka(bool),
     DragonHead,
     Artillery,
     SmallTank,
@@ -659,10 +667,10 @@ pub enum NormalUnits {
     Magnet,
 
     // hover units
-    Hovercraft(bool), // bool is only relevant on e.g. bridges. true if HoverMode::Sea, false if HoverMode::Land
+    Hovercraft(bool, bool), // first bool is only relevant on e.g. bridges. true if HoverMode::Sea, false if HoverMode::Land
 
     // sea units
-    SharkRider,
+    SharkRider(bool),
     //ChargeBoat,
     TransportBoat(LVec::<TransportedUnit<TransportableBoat>, 2>),
     WaveBreaker,
@@ -684,8 +692,8 @@ pub enum NormalUnits {
 impl NormalUnits {
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Sniper => "Sniper",
-            Self::Bazooka => "Bazooka",
+            Self::Sniper(_) => "Sniper",
+            Self::Bazooka(_) => "Bazooka",
             Self::DragonHead => "Dragon Head",
             Self::Artillery => "Artillery",
             Self::SmallTank => "Small Tank",
@@ -694,9 +702,9 @@ impl NormalUnits {
             Self::RocketLauncher => "Rocket Launcher",
             Self::Magnet => "Magnet",
 
-            Self::Hovercraft(_) => "Hovercraft",
+            Self::Hovercraft(_, _) => "Hovercraft",
             
-            Self::SharkRider => "Shark Rider",
+            Self::SharkRider(_) => "Shark Rider",
             //Self::ChargeBoat => "Charge Boat",
             Self::TransportBoat(_) => "Transport Boat",
             Self::WaveBreaker => "Wavebreaker",
@@ -714,10 +722,11 @@ impl NormalUnits {
             Self::HeavyDrone(_) => "Heavy Drone",
         }
     }
+
     pub fn list() -> Vec<Self> {
         vec![
-            Self::Sniper,
-            Self::Bazooka,
+            Self::Sniper(false),
+            Self::Bazooka(false),
             Self::DragonHead,
             Self::Artillery,
             Self::SmallTank,
@@ -727,10 +736,10 @@ impl NormalUnits {
             Self::Magnet,
 
             // needs both versions here, since one can be built by port and the other by factory.
-            Self::Hovercraft(true),
-            Self::Hovercraft(false),
+            Self::Hovercraft(true, false),
+            Self::Hovercraft(false, false),
 
-            Self::SharkRider,
+            Self::SharkRider(false),
             Self::TransportBoat(LVec::new()),
             Self::WaveBreaker,
             Self::Submarine,
@@ -747,10 +756,11 @@ impl NormalUnits {
             Self::HeavyDrone(DroneId::new(0)),
         ]
     }
+
     pub fn repairable_factory(&self) -> bool {
         match self {
-            Self::Sniper |
-            Self::Bazooka |
+            Self::Sniper(_) |
+            Self::Bazooka(_) |
             Self::DragonHead |
             Self::Artillery |
             Self::SmallTank |
@@ -758,14 +768,15 @@ impl NormalUnits {
             Self::AntiAir |
             Self::RocketLauncher |
             Self::Magnet => true,
-            Self::Hovercraft(false) => true,
+            Self::Hovercraft(false, _) => true,
             _ => false,
         }
     }
+
     pub fn repairable_port(&self) -> bool {
         match self {
-            Self::Hovercraft(true) => true,
-            Self::SharkRider |
+            Self::Hovercraft(true, _) => true,
+            Self::SharkRider(_) |
             Self::TransportBoat(_) |
             Self::WaveBreaker |
             Self::Submarine |
@@ -774,6 +785,7 @@ impl NormalUnits {
             _ => false,
         }
     }
+
     pub fn repairable_airport(&self) -> bool {
         match self {
             Self::TransportHeli(_) |
@@ -782,6 +794,30 @@ impl NormalUnits {
             Self::Bomber |
             Self::Fighter => true,
             _ => false,
+        }
+    }
+
+    /**
+     * None if the unit can't capture
+     * Some(false) if the unit can capture but isn't currently trying to
+     * Some(true) if the unit is currently trying to capture
+     */
+    pub fn capture_status(&self) -> Option<bool> {
+        match self {
+            Self::Sniper(capturing) |
+            Self::Bazooka(capturing) |
+            Self::SharkRider(capturing) |
+            Self::Hovercraft(_, capturing) => Some(*capturing),
+            _ => None
+        }
+    }
+    pub fn capture_status_mut(&mut self) -> Option<&mut bool> {
+        match self {
+            Self::Sniper(capturing) |
+            Self::Bazooka(capturing) |
+            Self::SharkRider(capturing) |
+            Self::Hovercraft(_, capturing) => Some(capturing),
+            _ => None
         }
     }
 
@@ -813,8 +849,8 @@ impl NormalUnits {
 
     pub fn get_attack_type(&self) -> AttackType {
         match self {
-            Self::Sniper => AttackType::Ranged(1, 2),
-            Self::Bazooka => AttackType::Adjacent,
+            Self::Sniper(_) => AttackType::Ranged(1, 2),
+            Self::Bazooka(_) => AttackType::Adjacent,
             Self::DragonHead => AttackType::Straight(1, 2),
             Self::Artillery => AttackType::Ranged(2, 3),
             Self::SmallTank => AttackType::Adjacent,
@@ -823,9 +859,9 @@ impl NormalUnits {
             Self::RocketLauncher => AttackType::Ranged(3, 5),
             Self::Magnet => AttackType::Straight(2, 2),
 
-            Self::Hovercraft(_) => AttackType::Adjacent,
+            Self::Hovercraft(_, _) => AttackType::Adjacent,
 
-            Self::SharkRider => AttackType::Adjacent,
+            Self::SharkRider(_) => AttackType::Adjacent,
             //Self::ChargeBoat => AttackType::Adjacent,
             Self::TransportBoat(_) => AttackType::None,
             Self::WaveBreaker => AttackType::Adjacent,
@@ -845,8 +881,8 @@ impl NormalUnits {
     }
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         match self {
-            Self::Sniper => vec![(WeaponType::Rifle, 1.)],
-            Self::Bazooka => vec![(WeaponType::Shells, 1.)],
+            Self::Sniper(_) => vec![(WeaponType::Rifle, 1.)],
+            Self::Bazooka(_) => vec![(WeaponType::Shells, 1.)],
             Self::DragonHead => vec![(WeaponType::Flame, 1.)],
             Self::Artillery => vec![(WeaponType::SurfaceMissiles, 1.)],
             Self::SmallTank => vec![(WeaponType::Shells, 1.)],
@@ -855,9 +891,9 @@ impl NormalUnits {
             Self::RocketLauncher => vec![(WeaponType::SurfaceMissiles, 1.)],
             Self::Magnet => vec![],
 
-            Self::Hovercraft(_) => vec![(WeaponType::MachineGun, 1.)],
+            Self::Hovercraft(_, _) => vec![(WeaponType::MachineGun, 1.)],
 
-            Self::SharkRider => vec![(WeaponType::Rifle, 1.)],
+            Self::SharkRider(_) => vec![(WeaponType::Rifle, 1.)],
             Self::TransportBoat(_) => vec![],
             Self::WaveBreaker => vec![(WeaponType::Shells, 1.)],
             Self::Submarine => vec![(WeaponType::Torpedo, 1.)],
@@ -875,9 +911,9 @@ impl NormalUnits {
         }
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
-        match self {
-            Self::Sniper => (ArmorType::Infantry, 1.2),
-            Self::Bazooka => (ArmorType::Infantry, 1.6),
+        let (typ, mut multiplier) = match self {
+            Self::Sniper(_) => (ArmorType::Infantry, 1.2),
+            Self::Bazooka(_) => (ArmorType::Infantry, 1.6),
             Self::DragonHead => (ArmorType::Light, 1.5),
             Self::Artillery => (ArmorType::Light, 1.5),
             Self::SmallTank => (ArmorType::Light, 2.0),
@@ -886,9 +922,9 @@ impl NormalUnits {
             Self::RocketLauncher => (ArmorType::Light, 1.2),
             Self::Magnet => (ArmorType::Light, 1.5),
 
-            Self::Hovercraft(_) => (ArmorType::Infantry, 1.5),
+            Self::Hovercraft(_, _) => (ArmorType::Infantry, 1.5),
             
-            Self::SharkRider => (ArmorType::Infantry, 1.5),
+            Self::SharkRider(_) => (ArmorType::Infantry, 1.5),
             Self::TransportBoat(_) => (ArmorType::Boat, 1.0),
             Self::WaveBreaker => (ArmorType::Boat, 2.0),
             Self::Submarine => (ArmorType::Submarine, 2.0),
@@ -903,23 +939,27 @@ impl NormalUnits {
             
             Self::LightDrone(_) => (ArmorType::Heli, 0.8),
             Self::HeavyDrone(_) => (ArmorType::Heli, 0.8),
+        };
+        if self.capture_status() == Some(true) {
+            multiplier *= 0.8;
         }
+        (typ, multiplier)
     }
     pub fn value(&self) -> u16 {
         match self {
-            Self::Sniper => 150,
-            Self::Bazooka => 250,
+            Self::Sniper(_) => 150,
+            Self::Bazooka(_) => 250,
             Self::DragonHead => 400,
             Self::Artillery => 600,
-            Self::SmallTank => 800,
+            Self::SmallTank => 700,
             Self::BigTank => 1500,
-            Self::AntiAir => 800,
+            Self::AntiAir => 700,
             Self::RocketLauncher => 1500,
             Self::Magnet => 500,
 
-            Self::Hovercraft(_) => 100,
+            Self::Hovercraft(_, _) => 100,
             
-            Self::SharkRider => 150,
+            Self::SharkRider(_) => 150,
             Self::TransportBoat(_) => 1000,
             Self::WaveBreaker => 800,
             Self::Submarine => 1000,

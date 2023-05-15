@@ -94,6 +94,7 @@ impl<D: Direction> Structure<D> {
                 }
             }
             match self.typ {
+                Structures::Pyramid(_) |
                 Structures::DroneTower(_) => {
                     if self.exhausted {
                         handler.add_event(Event::UnitExhaust(position));

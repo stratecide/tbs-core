@@ -18,7 +18,6 @@ mod tests {
     use crate::map::direction::*;
     use crate::map::map::Map;
     use crate::map::wrapping_map::WrappingMapBuilder;
-    use crate::player::*;
     use crate::units::UnitType;
     use crate::units::normal_units::NormalUnits;
 
@@ -48,8 +47,8 @@ mod tests {
         let wrapping = WrappingMapBuilder::new(pointmap, vec![]).build().unwrap();
         let mut map = Map::<Direction4>::new(wrapping);
         
-        map.set_unit(Point::new(0, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true), OWNER_0)));
-        map.set_unit(Point::new(6, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true), OWNER_1)));
+        map.set_unit(Point::new(0, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true, false), crate::player::OWNER_0)));
+        map.set_unit(Point::new(6, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true, false), crate::player::OWNER_1)));
 
         let mut settings = map.settings().unwrap();
         settings.fog_mode = FogMode::Always;
@@ -61,10 +60,14 @@ mod tests {
         let imported_server = *Game::<Direction4>::import_server(exported_server.clone()).unwrap();
         assert_eq!(imported_server, server);
         
-        for team in [None, Some(OWNER_0), Some(OWNER_1)] {
+        for team in [Perspective::Neutral, Perspective::Team(0), Perspective::Team(1)] {
             println!("testing client import for perspective {:?}", team);
-            let client = crate::game::game::Game::new_client(map.clone(), &settings, events.get(&Some(team.and_then(|t| Some(*t)))).unwrap());
-            let client_imported = *Game::<Direction4>::import_client(exported_server.public.clone(), team.as_ref().and_then(|team| Some((**team, exported_server.clone().hidden.unwrap().teams.get(&**team).unwrap().clone())))).unwrap();
+            let client = crate::game::game::Game::new_client(map.clone(), &settings, events.get(&team).unwrap());
+            let hidden = match team {
+                Perspective::Team(team) => Some((team, exported_server.hidden.as_ref().unwrap().teams.get(&team).unwrap().clone())),
+                _ => None,
+            };
+            let client_imported = *Game::<Direction4>::import_client(exported_server.public.clone(), hidden).unwrap();
             assert_eq!(client, client_imported);
         }
     }

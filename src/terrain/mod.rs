@@ -47,7 +47,7 @@ pub enum Terrain<D: Direction> {
     Grass,
     Mountain,
     Pipe(D::P),
-    Realty(Realty, Option::<Owner>),
+    Realty(Realty, Option::<Owner>, CaptureProgress),
     Reef,
     Ruins,
     Sea,
@@ -101,7 +101,7 @@ impl<D: Direction> Terrain<D> {
                 
             (Self::Flame, _) => None,
             
-            (Self::Realty(realty, _), movement_type) => return realty.movement_cost(movement_type),
+            (Self::Realty(realty, _, _), movement_type) => return realty.movement_cost(movement_type),
 
             (Self::Tavern, MovementType::Chess) => None,
             (Self::Tavern, _) => Some(MovementPoints::from(1.)),
@@ -121,7 +121,7 @@ impl<D: Direction> Terrain<D> {
     pub fn like_beach_for_hovercraft(&self) -> bool {
         match self {
             Self::Beach => true,
-            Self::Realty(realty, _) => realty.like_beach_for_hovercraft(),
+            Self::Realty(realty, _, _) => realty.like_beach_for_hovercraft(),
             Self::Tavern => true,
             _ => false,
         }
@@ -152,7 +152,7 @@ impl<D: Direction> Terrain<D> {
                         Self::Grass => HoverMode::Land,
                         Self::Mountain => HoverMode::Land,
                         Self::Pipe(_) => mode,
-                        Self::Realty(_, _) => HoverMode::Land,
+                        Self::Realty(_, _, _) => HoverMode::Land,
                         Self::Reef => HoverMode::Sea,
                         Self::Ruins => HoverMode::Land,
                         Self::Sea => HoverMode::Sea,
@@ -204,7 +204,7 @@ impl<D: Direction> Terrain<D> {
         match (self, movement_type) {
             (Self::Grass, land_units!()) => 0.1,
             (Self::Forest, land_units!()) => 0.3,
-            (Self::Realty(_, _), land_units!()) => 0.2,
+            (Self::Realty(_, _, _), land_units!()) => 0.2,
             (Self::Ruins, land_units!()) => 0.2,
             (_, _) => 0.,
         }
@@ -223,7 +223,7 @@ impl<D: Direction> Terrain<D> {
                     }
                 }
             }
-            Terrain::Realty(_, owner) => {
+            Terrain::Realty(_, owner, _) => {
                 if let Some(player) = owner.and_then(|owner| game.get_owning_player(owner)) {
                     if Some(player.team) == team {
                         result.insert(pos.clone());
@@ -236,7 +236,7 @@ impl<D: Direction> Terrain<D> {
     }
     pub fn fog_replacement(&self) -> Terrain<D> {
         match self {
-            Terrain::Realty(realty, _) => Terrain::Realty(realty.clone(), None),
+            Terrain::Realty(realty, _, _) => Terrain::Realty(realty.clone(), None, CaptureProgress::None),
             _ => self.clone(),
         }
     }
@@ -251,6 +251,12 @@ impl<D: Direction> Terrain<D> {
 
 const MAX_BUILT_THIS_TURN: u8 = 9;
 pub type BuiltThisTurn = U8<{MAX_BUILT_THIS_TURN}>;
+#[derive(Debug, PartialEq, Clone, Copy, Zippable)]
+#[zippable(bits = 1)]
+pub enum CaptureProgress {
+    None,
+    Capturing(Owner, U8::<9>),
+}
 
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 6)]
