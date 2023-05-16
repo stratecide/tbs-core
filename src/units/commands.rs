@@ -89,7 +89,7 @@ impl<D: Direction> CommonMovement<D> {
         self.path.end(map)
     }
 
-    fn validate_input(&self, game: &Game<D>) -> Result<(), CommandError> {
+    fn validate_input(&self, game: &Game<D>, board_at_the_end: bool) -> Result<(), CommandError> {
         if !game.get_map().is_point_valid(self.path.start) {
             return Err(CommandError::InvalidPoint(self.path.start));
         }
@@ -98,17 +98,21 @@ impl<D: Direction> CommonMovement<D> {
             return Err(CommandError::InvalidPath);
         }
         let unit = self.get_unit(game.get_map())?;
-        unit.check_path(game, &self.path)
+        unit.check_path(game, &self.path, board_at_the_end)
     }
     
     // returns the point the unit ends on unless it is stopped by a fog trap
-    fn apply(&self, handler: &mut EventHandler<D>, into: bool, actively: bool) -> Result<Option<Point>, CommandError> {
+    fn apply(&self, handler: &mut EventHandler<D>, board_at_the_end: bool, actively: bool) -> Result<Option<Point>, CommandError> {
         if let Ok(unit) = self.get_unit(handler.get_map()) {
             let mut path_taken = self.path.clone();
             let mut path_taken_works = false;
             while !path_taken_works {
-                movement_search(handler.get_game(), &unit, &path_taken, None, |_path, _, can_stop_here| {
-                    if can_stop_here {
+                movement_search(handler.get_game(), &unit, &path_taken, None, |path, p, can_stop_here| {
+                    if path == &self.path && board_at_the_end {
+                        if let Some(transporter) = handler.get_map().get_unit(p) {
+                            path_taken_works = p != path.start && transporter.boardable_by(&unit);
+                        }
+                    } else if !board_at_the_end && can_stop_here {
                         path_taken_works = true;
                     }
                     PathSearchFeedback::Found
@@ -125,7 +129,7 @@ impl<D: Direction> CommonMovement<D> {
                     // no event for the path is necessary if the unit is unable to move at all
                     if path_taken.steps.len() > 0 {
                         let unit = unit.as_unit();
-                        Self::add_path(handler, self.unload_index, &path_taken, into, unit.clone(), actively);
+                        Self::add_path(handler, self.unload_index, &path_taken, board_at_the_end, unit.clone(), actively);
                         after_path(handler, &path_taken, &unit);
                     }
                     // special case of a unit being unable to move that's loaded in a transport
@@ -138,7 +142,7 @@ impl<D: Direction> CommonMovement<D> {
                 } else {
                     if path_taken.steps.len() > 0 {
                         let unit = unit.as_unit();
-                        Self::add_path(handler, self.unload_index, &path_taken, into, unit.clone(), actively);
+                        Self::add_path(handler, self.unload_index, &path_taken, board_at_the_end, unit.clone(), actively);
                         after_path(handler, &path_taken, &unit);
                     }
                     Ok(Some(path_taken.end(handler.get_map())?))
@@ -151,7 +155,8 @@ impl<D: Direction> CommonMovement<D> {
             Err(CommandError::MissingUnit)
         }
     }
-    fn add_path(handler: &mut EventHandler<D>, unload_index: Option<UnloadIndex>, path: &Path<D>, into: bool, unit: UnitType<D>, actively: bool) {
+
+    fn add_path(handler: &mut EventHandler<D>, unload_index: Option<UnloadIndex>, path: &Path<D>, board_at_the_end: bool, unit: UnitType<D>, actively: bool) {
         if actively {
             match &unit {
                 UnitType::Normal(u) => {
@@ -169,7 +174,7 @@ impl<D: Direction> CommonMovement<D> {
                                 steps.push((on_sea, step.clone())).unwrap();
                                 prev_terrain = terrain;
                             }
-                            handler.add_event(Event::HoverPath(Some(unload_index), path.start, steps, Some(into), unit));
+                            handler.add_event(Event::HoverPath(Some(unload_index), path.start, steps, Some(board_at_the_end), unit));
                             return;
                         }
                         _ => {}
@@ -178,7 +183,7 @@ impl<D: Direction> CommonMovement<D> {
                 _ => {}
             }
         }
-        handler.add_event(Event::UnitPath(Some(unload_index), path.clone(), Some(into), unit));
+        handler.add_event(Event::UnitPath(Some(unload_index), path.clone(), Some(board_at_the_end), unit));
     }
 }
 
@@ -222,7 +227,7 @@ impl<D: Direction> UnitCommand<D> {
         let chess_exhaust = match self {
             Self::MoveAttack(cm, target) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
-                cm.validate_input(handler.get_game())?;
+                cm.validate_input(handler.get_game(), false)?;
                 let unit = cm.get_unit(handler.get_map())?;
                 match &target {
                     AttackInfo::Point(target) => {
@@ -267,7 +272,7 @@ impl<D: Direction> UnitCommand<D> {
             }
             Self::MovePull(cm, dir) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
-                cm.validate_input(handler.get_game())?;
+                cm.validate_input(handler.get_game(), false)?;
                 let unit = cm.get_unit(handler.get_map())?;
                 if !unit.can_pull() {
                     return Err(CommandError::UnitCannotPull);
@@ -310,7 +315,7 @@ impl<D: Direction> UnitCommand<D> {
             }
             Self::MoveCapture(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
-                cm.validate_input(handler.get_game())?;
+                cm.validate_input(handler.get_game(), false)?;
                 let unit = cm.get_unit(handler.get_map())?;
                 if !unit.can_capture() {
                     return Err(CommandError::UnitCannotCapture);
@@ -344,7 +349,7 @@ impl<D: Direction> UnitCommand<D> {
             }
             Self::MoveRepair(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
-                cm.validate_input(handler.get_game())?;
+                cm.validate_input(handler.get_game(), false)?;
                 let unit = cm.get_unit(handler.get_map())?;
                 if unit.get_hp() == 100 {
                     return Err(CommandError::CannotRepairHere);
@@ -375,14 +380,14 @@ impl<D: Direction> UnitCommand<D> {
                 Some(cm.path.start)
             }
             Self::MoveWait(cm) => {
-                cm.validate_input(handler.get_game())?;
+                cm.validate_input(handler.get_game(), false)?;
                 if let Some(end) = cm.apply(handler, false, true)? {
                     handler.add_event(Event::UnitExhaust(end));
                 }
                 Some(cm.path.start)
             }
             Self::MoveBuyMerc(cm, merc) => {
-                cm.validate_input(handler.get_game())?;
+                cm.validate_input(handler.get_game(), false)?;
                 if let Some(end) = cm.apply(handler, false, true)? {
                     let unit = if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(end) {
                         unit.clone()
@@ -405,7 +410,7 @@ impl<D: Direction> UnitCommand<D> {
             }
             Self::MoveAboard(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
-                cm.validate_input(handler.get_game())?;
+                cm.validate_input(handler.get_game(), true)?;
                 if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team), intended_end) {
                     return Err(CommandError::NoVision);
                 }
@@ -457,7 +462,7 @@ impl<D: Direction> UnitCommand<D> {
                 None
             }
             Self::MoveBuildDrone(cm, option) => {
-                cm.validate_input(handler.get_game())?;
+                cm.validate_input(handler.get_game(), false)?;
                 let unit = cm.get_unit(handler.get_map())?;
                 let drone_id = match &unit.typ {
                     NormalUnits::DroneBoat(drones, drone_id) => {

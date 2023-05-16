@@ -104,8 +104,8 @@ impl<D: Direction> Command<D> {
                 for p in handler.get_map().all_points() {
                     match handler.get_map().get_terrain(p) {
                         Some(terrain @ Terrain::Realty(realty, owner, capture_progress @ CaptureProgress::Capturing(new_owner, progress))) => {
-                            if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner() != *owner && u.get_owner() == Some(*new_owner) && u.is_capturing()) {
-                                if current_player_owner == *new_owner {
+                            if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner() != *owner && u.get_owner() == Some(*new_owner) && u.can_capture()) {
+                                if current_player_owner == *new_owner && unit.is_capturing() {
                                     let progress = **progress + (unit.get_hp() as f32 / 10.).ceil() as u8;
                                     if progress < 10 {
                                         handler.add_event(Event::CaptureProgress(p, *capture_progress, CaptureProgress::Capturing(*new_owner, U8::new(progress))));

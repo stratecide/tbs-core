@@ -329,6 +329,7 @@ impl NormalUnit {
         });
         result
     }
+
     pub fn can_move_to<D: Direction>(&self, p: Point, game: &Game<D>) -> bool {
         // doesn't check terrain
         if let Some(unit) = game.get_map().get_unit(p) {
@@ -338,6 +339,7 @@ impl NormalUnit {
         }
         true
     }
+
     pub fn movable_positions<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
         let mut result = HashSet::new();
         movement_search(game, self, path_so_far, None, |_path, p, _can_stop_here| {
@@ -346,13 +348,20 @@ impl NormalUnit {
         });
         result
     }
-    pub fn check_path<D: Direction>(&self, game: &Game<D>, path_to_check: &Path<D>) -> Result<(), CommandError> {
+
+    pub fn check_path<D: Direction>(&self, game: &Game<D>, path_to_check: &Path<D>, board_at_the_end: bool) -> Result<(), CommandError> {
         let team = self.get_team(game);
         let fog = game.get_fog().get(&team);
         let mut path_is_valid = false;
-        movement_search(game, self, path_to_check, fog, |path, _p, can_stop_here| {
+        movement_search(game, self, path_to_check, fog, |path, p, can_stop_here| {
             if path == path_to_check {
-                path_is_valid = can_stop_here;
+                if board_at_the_end {
+                    if let Some(unit) = game.get_map().get_unit(p) {
+                        path_is_valid = p != path_to_check.start && unit.boardable_by(self);
+                    }
+                } else {
+                    path_is_valid = can_stop_here;
+                }
             }
             // if path_to_check will be found at all, it would be the first one this callback gets called with
             PathSearchFeedback::Found
@@ -388,15 +397,15 @@ impl NormalUnit {
             }
             AttackType::Straight(min_range, max_range) => {
                 for d in D::list() {
-                    let mut current_pos = None;
+                    let mut current_pos = OrientedPoint::new(position, false, d);
                     for i in 0..max_range {
-                        if let Some(dp) = game.get_map().get_neighbor(current_pos.and_then(|dp: OrientedPoint<D>| Some(dp.point)).unwrap_or(position), d) {
+                        if let Some(dp) = game.get_map().get_neighbor(current_pos.point, current_pos.direction) {
                             if i + 1 >= min_range {
                                 result.insert(dp.point);
                             } else if game.get_map().get_unit(dp.point).is_some() {
                                 break;
                             }
-                            current_pos = Some(dp);
+                            current_pos = dp;
                         } else {
                             break;
                         }
