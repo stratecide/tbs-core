@@ -113,10 +113,10 @@ impl<D: Direction> UnitType<D> {
         }
     }
 
-    pub fn can_act(&self, player: &Player) -> bool {
+    pub fn can_act(&self, player: Owner) -> bool {
         match self {
             Self::Normal(unit) => unit.can_act(player),
-            Self::Chess(unit) => return !unit.exhausted && unit.owner == player.owner_id,
+            Self::Chess(unit) => return !unit.exhausted && unit.owner == player,
             Self::Structure(structure) => return structure.can_act(player),
         }
     }

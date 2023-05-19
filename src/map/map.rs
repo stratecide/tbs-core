@@ -192,6 +192,7 @@ where D: Direction
             self.terrain.insert(p, t);
         }
     }
+
     pub fn get_unit(&self, p: Point) -> Option<&UnitType<D>> {
         self.units.get(&p)
     }
@@ -210,6 +211,7 @@ where D: Direction
             self.units.remove(&p)
         }
     }
+
     pub fn get_details(&self, p: Point) -> Vec<Detail> {
         self.details.get(&p).and_then(|v| Some(v.clone().into())).unwrap_or(vec![])
     }
@@ -235,7 +237,6 @@ where D: Direction
             self.set_details(p, list);
         }
     }
-
     pub fn remove_detail(&mut self, p: Point, index: usize) -> Option<Detail> {
         if let Some(list) = self.details.get_mut(&p) {
             return list.remove(index).ok();
@@ -324,6 +325,19 @@ where D: Direction
         }
         result
     }
+
+    /*
+     * maybe in the future
+     *
+    pub fn available_player_actions(&self, point: Point, player: Owner) -> bool {
+        if let Some(unit) = self.get_unit(point) {
+            return unit.can_act(player);
+        }
+        for det in self.details.get(&point).unwrap_or(&vec![]) {
+            if det.can_act(player) {
+            }
+        }
+    }*/
 
     pub fn validate_terrain(&mut self) -> Vec<(Point, Terrain<D>)> {
         let mut corrected = vec![];

@@ -120,8 +120,8 @@ impl NormalUnit {
         game.get_team(Some(self.owner))
     }
 
-    pub fn can_act(&self, player: &Player) -> bool {
-        !self.data.exhausted && player.owner_id == self.owner
+    pub fn can_act(&self, player: Owner) -> bool {
+        !self.data.exhausted && player == self.owner
     }
 
     pub fn get_boarded(&self) -> Vec<NormalUnit> {
@@ -1014,7 +1014,7 @@ pub fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: Point, unload
     if game.current_player().owner_id != unit.get_owner() {
         return Err(CommandError::NotYourUnit);
     }
-    if !unit.can_act(game.current_player()) {
+    if !unit.can_act(game.current_player().owner_id) {
         return Err(CommandError::UnitCannotMove);
     }
     Ok(())

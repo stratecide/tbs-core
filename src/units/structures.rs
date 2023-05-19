@@ -132,10 +132,10 @@ impl<D: Direction> Structure<D> {
         result
     }
 
-    pub fn can_act(&self, player: &Player) -> bool {
+    pub fn can_act(&self, player: Owner) -> bool {
         match &self.typ {
             Structures::DroneTower(Some((owner, _, _))) => {
-                !self.exhausted && *owner == player.owner_id
+                !self.exhausted && *owner == player
             }
             _ => false,
         }
