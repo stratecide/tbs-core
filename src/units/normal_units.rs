@@ -186,10 +186,10 @@ impl NormalUnit {
             NormalUnits::SmallTank => (MovementType::Treads,MovementPoints::from(5.)),
             NormalUnits::BigTank => (MovementType::Treads,MovementPoints::from(4.)),
             NormalUnits::AntiAir => (MovementType::Treads,MovementPoints::from(5.)),
-            NormalUnits::RocketLauncher => (MovementType::Wheel,MovementPoints::from(4.)),
+            NormalUnits::RocketLauncher => (MovementType::Wheel,MovementPoints::from(5.)),
             NormalUnits::Magnet => (MovementType::Wheel,MovementPoints::from(7.)),
 
-            NormalUnits::Hovercraft(_, on_sea) => {
+            NormalUnits::Hovercraft(on_sea, _) => {
                 let mut movement_type = MovementType::Hover(HoverMode::new(on_sea));
                 if terrain.like_beach_for_hovercraft() {
                     movement_type = MovementType::Hover(HoverMode::Beach);
@@ -534,7 +534,7 @@ impl TransportableUnits for TransportableHeli {
             NormalUnits::RocketLauncher => Self::RocketLauncher,
             NormalUnits::Magnet => Self::Magnet,
 
-            NormalUnits::Hovercraft(_, on_sea) => Self::Hovercraft(*on_sea),
+            NormalUnits::Hovercraft(on_sea, _) => Self::Hovercraft(*on_sea),
 
             NormalUnits::SharkRider(_) => Self::SharkRider,
             NormalUnits::TransportBoat(units) => {
