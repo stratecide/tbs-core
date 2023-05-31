@@ -58,15 +58,15 @@ impl<D: Direction> Terrain<D> {
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<MovementPoints> {
         match (self, movement_type) {
             (Self::Grass, sea_units!()) => None,
-            (Self::Grass, MovementType::Hover(HoverMode::Beach)) => Some(MovementPoints::from(1.)),
+            (Self::Grass, MovementType::Hover(_)) => Some(MovementPoints::from(1.5)),
             (Self::Grass, MovementType::Wheel) => Some(MovementPoints::from(1.5)),
             (Self::Grass, land_units!()) => Some(MovementPoints::from(1.)),
             (Self::Grass, air_units!()) => Some(MovementPoints::from(1.)),
             
             (Self::Forest, sea_units!()) => None,
-            (Self::Forest, MovementType::Hover(HoverMode::Beach)) => Some(MovementPoints::from(1.5)),
-            (Self::Forest, MovementType::Foot) => Some(MovementPoints::from(1.)),
+            (Self::Forest, MovementType::Hover(_)) => Some(MovementPoints::from(2.)),
             (Self::Forest, MovementType::Wheel) => Some(MovementPoints::from(2.)),
+            (Self::Forest, MovementType::Foot) => Some(MovementPoints::from(1.)),
             (Self::Forest, land_units!()) => Some(MovementPoints::from(1.5)),
             (Self::Forest, air_units!()) => Some(MovementPoints::from(1.)),
 
@@ -108,7 +108,7 @@ impl<D: Direction> Terrain<D> {
 
             (Self::Fountain, land_units!()) => None,
             (Self::Fountain, sea_units!()) => Some(MovementPoints::from(1.)),
-            (Self::Fountain, MovementType::Hover(HoverMode::Beach)) => Some(MovementPoints::from(1.)),
+            (Self::Fountain, MovementType::Hover(_)) => Some(MovementPoints::from(1.)),
             (Self::Fountain, MovementType::Heli) => Some(MovementPoints::from(1.5)),
             (Self::Fountain, MovementType::Plane) => Some(MovementPoints::from(1.)),
 

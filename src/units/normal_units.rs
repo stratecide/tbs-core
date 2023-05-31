@@ -181,12 +181,12 @@ impl NormalUnit {
         let (movement_type, movement) = match self.typ {
             NormalUnits::Sniper(_) => (MovementType::Foot,MovementPoints::from(3.)),
             NormalUnits::Bazooka(_) => (MovementType::Foot,MovementPoints::from(3.)),
-            NormalUnits::DragonHead => (MovementType::Wheel,MovementPoints::from(6.)),
+            NormalUnits::DragonHead => (MovementType::Wheel,MovementPoints::from(5.)),
             NormalUnits::Artillery => (MovementType::Treads,MovementPoints::from(5.)),
-            NormalUnits::SmallTank => (MovementType::Treads,MovementPoints::from(7.)),
-            NormalUnits::BigTank => (MovementType::Treads,MovementPoints::from(6.)),
-            NormalUnits::AntiAir => (MovementType::Treads,MovementPoints::from(7.)),
-            NormalUnits::RocketLauncher => (MovementType::Wheel,MovementPoints::from(5.)),
+            NormalUnits::SmallTank => (MovementType::Treads,MovementPoints::from(5.)),
+            NormalUnits::BigTank => (MovementType::Treads,MovementPoints::from(4.)),
+            NormalUnits::AntiAir => (MovementType::Treads,MovementPoints::from(5.)),
+            NormalUnits::RocketLauncher => (MovementType::Wheel,MovementPoints::from(4.)),
             NormalUnits::Magnet => (MovementType::Wheel,MovementPoints::from(7.)),
 
             NormalUnits::Hovercraft(_, on_sea) => {
@@ -194,7 +194,7 @@ impl NormalUnit {
                 if terrain.like_beach_for_hovercraft() {
                     movement_type = MovementType::Hover(HoverMode::Beach);
                 }
-                (movement_type,MovementPoints::from(4.))
+                (movement_type,MovementPoints::from(4.5))
             },
             
             NormalUnits::SharkRider(_) => (MovementType::Boat,MovementPoints::from(3.)),
