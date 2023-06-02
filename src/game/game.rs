@@ -62,7 +62,8 @@ impl<D: Direction> Game<D> {
     }
     fn start_server<R: 'static + Fn() -> f32>(&mut self, random: R) -> Events<Self> {
         let mut handler = events::EventHandler::new(self, Box::new(random));
-        if handler.get_game().fog_mode.is_foggy(0) {
+        FogMode::forecast(&mut handler);
+        if handler.get_game().is_foggy() {
             // TODO: this is duplicated code from EndTurn in events
             let mut events: Vec<events::Event<D>> = vec![];
             for player in handler.get_game().players.iter() {
@@ -78,13 +79,8 @@ impl<D: Direction> Game<D> {
     pub fn get_fog_mode(&self) -> &FogMode {
         &self.fog_mode
     }
-    pub fn flip_fog_state(&mut self) {
-        match &mut self.fog_mode {
-            FogMode::Random(value, _, _, _) => {
-                *value = !*value;
-            }
-            _ => {}
-        }
+    pub fn get_fog_mode_mut(&mut self) -> &mut FogMode {
+        &mut self.fog_mode
     }
     pub fn recalculate_fog(&self, perspective: Perspective) -> HashSet<Point> {
         let mut fog = HashSet::new();
@@ -147,7 +143,10 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn is_foggy(&self) -> bool {
-        self.fog_mode.is_foggy(self.current_turn)
+        self.fog_mode.is_foggy(self.current_turn, 0).expect("the game should always know whether it's currently foggy")
+    }
+    pub fn will_be_foggy(&self, turns_later: usize) -> Option<bool> {
+        self.fog_mode.is_foggy(self.current_turn, turns_later)
     }
     pub fn get_fog(&self) -> &HashMap<ClientPerspective, HashSet<Point>> {
         &self.fog
@@ -244,7 +243,7 @@ fn import_game_base<D: Direction>(unzipper: &mut Unzipper, is_server: bool) -> R
     let player_len = unzipper.read_u8(4)? + 1;
     let mut players = vec![];
     for _ in 0..player_len {
-        players.push(Player::import(unzipper, !is_server && fog_mode.is_foggy(current_turn))?);
+        players.push(Player::import(unzipper, !is_server && fog_mode.is_foggy(current_turn, 0).ok_or(ZipperError::InconsistentData)?)?);
     }
     let mut fog = HashMap::new();
     let neutral_fog: HashSet<Point> = HashSet::new(); //map.all_points().into_iter().collect();
@@ -458,9 +457,11 @@ impl FogChangeChance {
 }
 impl Display for FogChangeChance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("{}", self.get_chance()))
+        f.write_str(&format!("{} %", (self.get_chance() * 100.).round() as u8))
     }
 }
+
+pub const MAX_FOG_FORECAST_TURNS: u32 = 255 + 33;
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 3)]
@@ -469,7 +470,7 @@ pub enum FogMode {
     Always,
     DarkRegular(U8::<255>, U8::<255>, U8::<255>),
     BrightRegular(U8::<255>, U8::<255>, U8::<255>),
-    Random(bool, U8::<255>, FogChangeChance, FogChangeChance),
+    Random(FogChangeChance, FogChangeChance, U8::<255>, LVec::<bool, {MAX_FOG_FORECAST_TURNS}>),
 }
 
 impl Display for FogMode {
@@ -485,25 +486,45 @@ impl Display for FogMode {
 }
 
 impl FogMode {
-    pub fn is_foggy(&self, turn: u32) -> bool {
+    pub fn forecast<D: Direction>(handler: &mut events::EventHandler<D>) {
+        loop {
+            match &handler.get_game().fog_mode {
+                FogMode::Random(to_bright_chance, to_dark_chance, _, forecast) => {
+                    if forecast.len() >= handler.get_game().players.len() * 2 + 1 {
+                        break;
+                    }
+                    let next_value = if *forecast.last().unwrap_or(&false) {
+                        to_bright_chance.check(handler.rng())
+                    } else {
+                        to_dark_chance.check(handler.rng())
+                    };
+                    handler.add_event(events::Event::RandomFogForecast(next_value));
+                }
+                _ => break,
+            }
+        }
+    }
+
+    fn is_foggy(&self, current_turn: u32, additional_turns: usize) -> Option<bool> {
+        let turn = current_turn + additional_turns as u32;
         match self {
-            Self::Never => false,
-            Self::Always => true,
+            Self::Never => Some(false),
+            Self::Always => Some(true),
             Self::DarkRegular(offset, bright, dark) => {
                 if **offset as u32 > turn {
-                    true
+                    Some(true)
                 } else {
-                    ((turn - **offset as u32) % (**bright + **dark) as u32) >= **bright as u32
+                    Some(((turn - **offset as u32) % (**bright + **dark) as u32) >= **bright as u32)
                 }
             }
             Self::BrightRegular(offset, dark, bright) => {
                 if **offset as u32 > turn {
-                    false
+                    Some(false)
                 } else {
-                    ((turn - **offset as u32) % (**dark + **bright) as u32) < **dark as u32
+                    Some(((turn - **offset as u32) % (**dark + **bright) as u32) < **dark as u32)
                 }
             }
-            Self::Random(value, _, _, _) => *value,
+            Self::Random(_, _, _, forecast) => forecast.get(additional_turns).cloned(),
         }
     }
 }

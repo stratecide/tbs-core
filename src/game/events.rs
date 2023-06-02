@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use interfaces::game_interface::{GameInterface, CommandInterface, EventInterface, Events, Perspective as IPerspective, ClientPerspective};
+use interfaces::game_interface::{CommandInterface, EventInterface, Events, Perspective as IPerspective, ClientPerspective};
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -98,6 +98,15 @@ impl<D: Direction> Command<D> {
                 let was_foggy = handler.get_game().is_foggy();
 
                 handler.add_event(Event::NextTurn);
+
+                // update fog manually if it's random
+                match handler.get_game().get_fog_mode() {
+                    FogMode::Random(_, _, _, forecast) => {
+                        handler.add_event(Event::RandomFogNextTurn(forecast[0]));
+                        FogMode::forecast(handler);
+                    }
+                    _ => (),
+                }
                 
                 // reset capture-progress / finish capturing
                 let current_player_owner = handler.get_game().current_player().owner_id;
@@ -126,18 +135,6 @@ impl<D: Direction> Command<D> {
                     }
                 }
 
-                // update fog manually if it's random
-                match handler.get_game().get_fog_mode() {
-                    FogMode::Random(value, offset, to_bright_chance, to_dark_chance) => {
-                        if handler.get_game().current_turn() as u32 >= **offset as u32 {
-                            let random_value= handler.rng();
-                            if *value && to_bright_chance.check(random_value) || !*value && to_dark_chance.check(random_value) {
-                                handler.add_event(Event::FogFlipRandom);
-                            }
-                        }
-                    }
-                    _ => {}
-                }
                 // hide / reveal player funds if fog started / ended
                 if was_foggy != handler.get_game().is_foggy() {
                     // usually events have to be added immediately, but this list of events can't influence each other
@@ -305,7 +302,8 @@ pub enum CommandError {
 #[zippable(bits = 8)]
 pub enum Event<D:Direction> {
     NextTurn,
-    FogFlipRandom,
+    RandomFogNextTurn(bool),
+    RandomFogForecast(bool),
     PureFogChange(Perspective, LVec::<Point, {point_map::MAX_AREA}>),
     FogChange(Perspective, LVec::<(Point, FieldData::<D>), {point_map::MAX_AREA}>),
     UnitPath(Option::<Option::<UnloadIndex>>, Path::<D>, Option::<bool>, UnitType::<D>),
@@ -366,8 +364,23 @@ impl<D: Direction> Event<D> {
             Self::PureFogChange(team, points) => {
                 flip_fog(game, to_client_perspective(&team), points.iter());
             }
-            Self::FogFlipRandom => {
-                game.flip_fog_state();
+            Self::RandomFogNextTurn(_) => {
+                match game.get_fog_mode_mut() {
+                    FogMode::Random(_, _, _, forecast) => {
+                        forecast.remove(0).expect("Forecast for random fog is empty");
+                    }
+                    _ => panic!("Received RandomFogNextTurn event but fog isn't random"),
+                }
+            }
+            Self::RandomFogForecast(new_value) => {
+                match game.get_fog_mode_mut() {
+                    FogMode::Random(_, _, turns_between_changes, forecast) => {
+                        for _ in 0..1.max(**turns_between_changes) {
+                            forecast.push(*new_value).unwrap();
+                        }
+                    }
+                    _ => panic!("Received FogUpdateRandom event but fog isn't random"),
+                }
             }
             Self::FogChange(team, changes) => {
                 let team = to_client_perspective(&team);
@@ -576,8 +589,23 @@ impl<D: Direction> Event<D> {
             Self::PureFogChange(team, points) => {
                 flip_fog(game, to_client_perspective(&team), points.iter());
             }
-            Self::FogFlipRandom => {
-                game.flip_fog_state();
+            Self::RandomFogNextTurn(old_value) => {
+                match game.get_fog_mode_mut() {
+                    FogMode::Random(_, _, _, forecast) => {
+                        forecast.insert(0, *old_value).unwrap();
+                    }
+                    _ => panic!("Received RandomFogNextTurn event but fog isn't random"),
+                }
+            }
+            Self::RandomFogForecast(_) => {
+                match game.get_fog_mode_mut() {
+                    FogMode::Random(_, _, turns_between_changes, forecast) => {
+                        for _ in 0..1.max(**turns_between_changes) {
+                            forecast.pop().expect("Forecast for random fog is empty");
+                        }
+                    }
+                    _ => panic!("Received FogUpdateRandom event but fog isn't random"),
+                }
             }
             Self::FogChange(team, changes) => {
                 let team = to_client_perspective(&team);
@@ -761,8 +789,9 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::FogFlipRandom => {
-                Some(Self::FogFlipRandom)
+            Self::RandomFogNextTurn(_) |
+            Self::RandomFogForecast(_) => {
+                Some(self.clone())
             }
             Self::FogChange(_, _) => {
                 panic!("FogChange should only ever be created as replacement for PureFogChange. It shouldn't be replaced itself!");
