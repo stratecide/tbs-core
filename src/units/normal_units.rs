@@ -107,12 +107,18 @@ impl NormalUnit {
         let (armor, defense) = self.typ.get_armor();
         (armor, defense + self.data.mercenary.own_defense_bonus())
     }
+
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         self.typ.get_weapons()
         .into_iter()
         .map(|(weapon, attack)| (weapon, attack + self.data.mercenary.own_attack_bonus()))
         .collect()
     }
+
+    pub fn attack_factor_from_path<D: Direction>(&self, game: &Game<D>, path: &Path<D>) -> f32 {
+        self.typ.attack_factor_from_path(game.get_map(), path)
+    }
+
     pub fn get_owner(&self) -> Owner {
         self.owner
     }
@@ -888,13 +894,14 @@ impl NormalUnits {
             Self::HeavyDrone(_) => AttackType::Adjacent,
         }
     }
+
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         match self {
             Self::Sniper(_) => vec![(WeaponType::Rifle, 1.)],
             Self::Bazooka(_) => vec![(WeaponType::Shells, 1.)],
             Self::DragonHead => vec![(WeaponType::Flame, 1.)],
             Self::Artillery => vec![(WeaponType::SurfaceMissiles, 1.)],
-            Self::SmallTank => vec![(WeaponType::Shells, 1.)],
+            Self::SmallTank => vec![(WeaponType::Shells, 1.2)],
             Self::BigTank => vec![(WeaponType::Shells, 1.8)],
             Self::AntiAir => vec![(WeaponType::AntiAir, 1.)],
             Self::RocketLauncher => vec![(WeaponType::SurfaceMissiles, 1.)],
@@ -919,6 +926,7 @@ impl NormalUnits {
             Self::HeavyDrone(_) => vec![(WeaponType::Shells, 1.)],
         }
     }
+
     pub fn get_armor(&self) -> (ArmorType, f32) {
         let (typ, mut multiplier) = match self {
             Self::Sniper(_) => (ArmorType::Infantry, 1.2),
@@ -931,7 +939,7 @@ impl NormalUnits {
             Self::RocketLauncher => (ArmorType::Light, 1.2),
             Self::Magnet => (ArmorType::Light, 1.5),
 
-            Self::Hovercraft(_, _) => (ArmorType::Infantry, 1.5),
+            Self::Hovercraft(_, _) => (ArmorType::Infantry, 1.6),
             
             Self::SharkRider(_) => (ArmorType::Infantry, 1.5),
             Self::TransportBoat(_) => (ArmorType::Boat, 1.0),
@@ -954,6 +962,20 @@ impl NormalUnits {
         }
         (typ, multiplier)
     }
+
+    pub fn attack_factor_from_path<D: Direction>(&self, _map: &Map<D>, path: &Path<D>) -> f32 {
+        match self {
+            Self::Sniper(_) => {
+                if path.steps.len() > 0 {
+                    0.5
+                } else {
+                    1.
+                }
+            }
+            _ => 1.,
+        }
+    }
+
     pub fn value(&self) -> u16 {
         match self {
             Self::Sniper(_) => 150,

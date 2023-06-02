@@ -262,7 +262,7 @@ impl<D: Direction> UnitCommand<D> {
                     }
                 }
                 if let Some(end) = cm.apply(handler, false, true)? {
-                    handle_attack(handler, end, &target)?;
+                    handle_attack(handler, &cm.path, &target)?;
                     if handler.get_game().get_map().get_unit(end).is_some() {
                         // ensured that the unit didn't die from counter attack
                         handler.add_event(Event::UnitExhaust(end));
@@ -592,7 +592,9 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
     }
 }
 
-pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: Point, target: &AttackInfo<D>, is_counter: bool) -> Result<Vec<Point>, CommandError> {
+// set path to None if this is a counter-attack
+pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: Point, target: &AttackInfo<D>, path: Option<&Path<D>>) -> Result<Vec<Point>, CommandError> {
+    let is_counter = path.is_none();
     let attacker = handler.get_map().get_unit(attacker_pos).and_then(|u| Some(u.clone()));
     let attacker: &NormalUnit = match &attacker {
         Some(UnitType::Normal(unit)) => Ok(unit),
@@ -606,7 +608,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
     let mut defenders = vec![];
     for target in attacker.attack_splash(handler.get_map(), attacker_pos, target)? {
         if let Some(defender) = handler.get_map().get_unit(target) {
-            let damage = defender.calculate_attack_damage(handler.get_game(), target, attacker_pos, attacker, is_counter);
+            let damage = defender.calculate_attack_damage(handler.get_game(), target, attacker_pos, attacker, path);
             if let Some((weapon, damage)) = damage {
                 let hp = defender.get_hp();
                 if !is_counter && defender.get_owner() != Some(attacker.get_owner()) {
@@ -677,8 +679,9 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
     Ok(potential_counters)
 }
 
-pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: Point, target: &AttackInfo<D>) -> Result<(), CommandError> {
-    let potential_counters = calculate_attack(handler, attacker_pos, target, false)?;
+pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>, target: &AttackInfo<D>) -> Result<(), CommandError> {
+    let attacker_pos = path.end(handler.get_map()).unwrap();
+    let potential_counters = calculate_attack(handler, attacker_pos, target, Some(path))?;
     // counter attack
     for p in &potential_counters {
         let unit: &NormalUnit = match handler.get_map().get_unit(*p) {
@@ -696,7 +699,7 @@ pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_pos: 
         // todo: if a straight attacker is counter-attacking another straight attacker, it should first try to reverse the direction
         let attack_info = unit.make_attack_info(handler.get_game(), *p, attacker_pos).ok_or(CommandError::InvalidTarget)?;
         // this may return an error, but we don't care about that
-        calculate_attack(handler, *p, &attack_info, true).ok();
+        calculate_attack(handler, *p, &attack_info, None).ok();
     }
 
     Ok(())

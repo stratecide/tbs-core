@@ -214,7 +214,10 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => false,
         }
     }
-    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &NormalUnit, is_counter: bool) -> Option<(WeaponType, u16)> {
+
+    // set path to None if this is a counter-attack
+    pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &NormalUnit, path: Option<&Path<D>>) -> Option<(WeaponType, u16)> {
+        let is_counter = path.is_none();
         let (armor_type, defense) = self.get_armor();
         let terrain_defense = if let Some(t) = game.get_map().get_terrain(pos) {
             1. + t.defense_bonus(self)
@@ -235,7 +238,10 @@ impl<D: Direction> UnitType<D> {
 
         let mut highest_damage: f32 = 0.;
         let mut used_weapon = None;
-        for (weapon, attack) in attacker.get_weapons() {
+        for (weapon, mut attack) in attacker.get_weapons() {
+            if let Some(path) = path {
+                attack *= attacker.attack_factor_from_path(game, path);
+            }
             if let Some(factor) = weapon.damage_factor(&armor_type) {
                 let mut attack_bonus = 1.;
                 attack_bonus += game.get_owning_player(attacker.get_owner()).unwrap().commander.attack_bonus(game, attacker, is_counter);

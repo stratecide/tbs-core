@@ -27,8 +27,8 @@ impl WeaponType {
     pub fn damage_factor(&self, armor: &ArmorType) -> Option<f32> {
         match (self, armor) {
             (Self::MachineGun, ArmorType::Infantry) => Some(1.00),
-            (Self::MachineGun, ArmorType::Light) => Some(0.25),
-            (Self::MachineGun, ArmorType::Heavy) => Some(0.10),
+            (Self::MachineGun, ArmorType::Light) => Some(0.15),
+            (Self::MachineGun, ArmorType::Heavy) => Some(0.05),
             (Self::MachineGun, ArmorType::Heli) => Some(0.20),
             (Self::MachineGun, ArmorType::Plane) => None,
             (Self::MachineGun, ArmorType::Boat) => None,
@@ -115,6 +115,7 @@ impl WeaponType {
         match self {
             Self::Flame => Effect::Flame(p),
             Self::MachineGun => Effect::GunFire(p),
+            Self::Rifle => Effect::GunFire(p),
             Self::Shells => Effect::ShellFire(p),
             _ => Effect::ShellFire(p), // TODO
         }
