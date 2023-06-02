@@ -219,12 +219,34 @@ impl<D: Direction> Path<D> {
         }
         Ok(points)
     }
+
+    pub fn hover_steps(&self, map: &Map<D>, hover_mode: HoverMode) -> LVec<HoverStep<D>, {crate::map::point_map::MAX_AREA}> {
+        let mut steps = LVec::new();
+        let mut current = self.start;
+        let mut prev_terrain = map.get_terrain(current).unwrap();
+        let mut movement_type = MovementType::Hover(hover_mode);
+        for step in &self.steps {
+            current = step.progress(map, current).unwrap();
+            let terrain = map.get_terrain(current).unwrap();
+            movement_type = terrain.update_movement_type(movement_type, prev_terrain).unwrap();
+            let on_sea = movement_type != MovementType::Hover(HoverMode::Land);
+            steps.push((on_sea, step.clone())).unwrap();
+            prev_terrain = terrain;
+        }
+        steps
+    }
 }
 
 pub trait PathStepExt<D: Direction>: Clone {
     fn step(&self) -> &PathStep<D>;
     fn skip_to(&self, p: Point) -> Self;
-    fn update_unit(&self, unit: &mut UnitType<D>);
+    fn update_unit(&self, unit: &mut UnitType<D>) {
+        match unit {
+            UnitType::Normal(unit) => self.update_normal_unit(unit),
+            _ => (),
+        }
+    }
+    fn update_normal_unit(&self, unit: &mut NormalUnit);
 }
 impl<D: Direction> PathStepExt<D> for PathStep<D> {
     fn step(&self) -> &PathStep<D> {
@@ -233,7 +255,7 @@ impl<D: Direction> PathStepExt<D> for PathStep<D> {
     fn skip_to(&self, p: Point) -> Self {
         PathStep::Point(p)
     }
-    fn update_unit(&self, _: &mut UnitType<D>) {
+    fn update_normal_unit(&self, _: &mut NormalUnit) {
         // do nothing
     }
 }
@@ -246,15 +268,10 @@ impl<D: Direction> PathStepExt<D> for HoverStep<D> {
     fn skip_to(&self, p: Point) -> Self {
         (self.0, self.1.skip_to(p))
     }
-    fn update_unit(&self, unit: &mut UnitType<D>) {
-        match unit {
-            UnitType::Normal(unit) => {
-                match &mut unit.typ {
-                    NormalUnits::Hovercraft(on_sea, _) => *on_sea = self.0,
-                    _ => {}
-                }
-            }
-            _ => {} // should not happen
+    fn update_normal_unit(&self, unit: &mut NormalUnit) {
+        match &mut unit.typ {
+            NormalUnits::Hovercraft(on_sea, _) => *on_sea = self.0,
+            _ => {}
         }
     }
 }

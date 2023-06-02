@@ -244,20 +244,29 @@ impl NormalUnit {
             return result;
         };
         let player = game.get_owning_player(self.owner).unwrap();
-        if path.start == destination || game.get_map().get_unit(destination).is_none() {
-            let mut funds_after_path = *player.funds;
-            let path_points: HashSet<Point> = path.points(game.get_map()).unwrap().into_iter().collect();
-            for p in path_points {
-                for detail in game.get_map().get_details(p) {
-                    match detail {
-                        Detail::Coins1 => funds_after_path += *player.income as i32 / 2,
-                        Detail::Coins2 => funds_after_path += *player.income as i32,
-                        Detail::Coins4 => funds_after_path += *player.income as i32 * 2,
-                        _ => {}
-                    }
+        let mut funds_after_path = *player.funds;
+        let mut this = self.clone();
+        match self.get_movement(game.get_map().get_terrain(path.start).unwrap()).0 {
+            MovementType::Hover(hover_mode) => {
+                for step in &path.hover_steps(game.get_map(), hover_mode) {
+                    step.update_normal_unit(&mut this);
                 }
             }
-            match &self.typ {
+            _ => (),
+        }
+        let path_points: HashSet<Point> = path.points(game.get_map()).unwrap().into_iter().collect();
+        for p in path_points {
+            for detail in game.get_map().get_details(p) {
+                match detail {
+                    Detail::Coins1 => funds_after_path += *player.income as i32 / 2,
+                    Detail::Coins2 => funds_after_path += *player.income as i32,
+                    Detail::Coins4 => funds_after_path += *player.income as i32 * 2,
+                    _ => {}
+                }
+            }
+        }
+        if path.start == destination || game.get_map().get_unit(destination).is_none() {
+            match &this.typ {
                 NormalUnits::DroneBoat(drones, _) => {
                     if drones.remaining_capacity() > 0 {
                         for unit in NormalUnits::list() {
@@ -271,13 +280,13 @@ impl NormalUnit {
                 }
                 _ => (),
             }
-            self.data.mercenary.add_options_after_path(self, game, path, funds_after_path, &mut result);
-            for target in self.attackable_positions(game, destination, path.steps.len() > 0) {
-                if let Some(attack_info) = self.make_attack_info(game, destination, target) {
-                    if !self.can_pull() {
+            this.data.mercenary.add_options_after_path(&this, game, path, funds_after_path, &mut result);
+            for target in this.attackable_positions(game, destination, path.steps.len() > 0) {
+                if let Some(attack_info) = this.make_attack_info(game, destination, target) {
+                    if !this.can_pull() {
                         result.push(UnitAction::Attack(attack_info));
                     } else {
-                        match self.make_attack_info(game, destination, target) {
+                        match this.make_attack_info(game, destination, target) {
                             Some(AttackInfo::Direction(d)) => {
                                 result.push(UnitAction::Pull(d));
                             }
@@ -288,10 +297,10 @@ impl NormalUnit {
             }
             match game.get_map().get_terrain(destination) {
                 Some(Terrain::Realty(realty, owner, _)) => {
-                    if self.can_capture() && Some(player.team) != owner.and_then(|o| game.get_owning_player(o)).and_then(|p| Some(p.team)) {
+                    if this.can_capture() && Some(player.team) != owner.and_then(|o| game.get_owning_player(o)).and_then(|p| Some(p.team)) {
                         result.push(UnitAction::Capture);
                     }
-                    if self.get_hp() < 100 && owner == &Some(self.owner) && realty.can_repair(&self.typ) && funds_after_path * 100 >= self.typ.value() as i32 {
+                    if this.get_hp() < 100 && owner == &Some(this.owner) && realty.can_repair(&this.typ) && funds_after_path * 100 >= this.typ.value() as i32 {
                         result.push(UnitAction::Repair);
                     }
                 }
@@ -301,7 +310,7 @@ impl NormalUnit {
         } else if path.steps.len() > 0 {
             if let Some(transporter) = game.get_map().get_unit(destination) {
                 // this is called indirectly by mercenaries, so using ::Normal could theoretically give wrong results
-                if transporter.boardable_by(self) {
+                if transporter.boardable_by(&this) {
                     result.push(UnitAction::Enter);
                 }
             }

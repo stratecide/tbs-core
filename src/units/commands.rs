@@ -160,20 +160,10 @@ impl<D: Direction> CommonMovement<D> {
         if actively {
             match &unit {
                 UnitType::Normal(u) => {
-                    let mut movement_type = u.get_movement(handler.get_map().get_terrain(path.start).unwrap()).0;
+                    let movement_type = u.get_movement(handler.get_map().get_terrain(path.start).unwrap()).0;
                     match movement_type {
-                        MovementType::Hover(_) => {
-                            let mut steps = LVec::new();
-                            let mut current = path.start;
-                            let mut prev_terrain = handler.get_map().get_terrain(current).unwrap();
-                            for step in &path.steps {
-                                current = step.progress(handler.get_map(), current).unwrap();
-                                let terrain = handler.get_map().get_terrain(current).unwrap();
-                                movement_type = terrain.update_movement_type(movement_type, prev_terrain).unwrap();
-                                let on_sea = movement_type != MovementType::Hover(HoverMode::Land);
-                                steps.push((on_sea, step.clone())).unwrap();
-                                prev_terrain = terrain;
-                            }
+                        MovementType::Hover(hover_mode) => {
+                            let steps = path.hover_steps(handler.get_map(), hover_mode);
                             handler.add_event(Event::HoverPath(Some(unload_index), path.start, steps, Some(board_at_the_end), unit));
                             return;
                         }
@@ -350,9 +340,17 @@ impl<D: Direction> UnitCommand<D> {
             Self::MoveRepair(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
                 cm.validate_input(handler.get_game(), false)?;
-                let unit = cm.get_unit(handler.get_map())?;
+                let mut unit = cm.get_unit(handler.get_map())?;
                 if unit.get_hp() == 100 {
                     return Err(CommandError::CannotRepairHere);
+                }
+                match unit.get_movement(handler.get_map().get_terrain(cm.path.start).unwrap()).0 {
+                    MovementType::Hover(hover_mode) => {
+                        for step in &cm.path.hover_steps(handler.get_map(), hover_mode) {
+                            step.update_normal_unit(&mut unit);
+                        }
+                    }
+                    _ => (),
                 }
                 match handler.get_map().get_terrain(intended_end) {
                     Some(Terrain::Realty(realty, owner, _)) => {
