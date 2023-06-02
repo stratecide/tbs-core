@@ -489,16 +489,21 @@ impl FogMode {
     pub fn forecast<D: Direction>(handler: &mut events::EventHandler<D>) {
         loop {
             match &handler.get_game().fog_mode {
-                FogMode::Random(to_bright_chance, to_dark_chance, _, forecast) => {
+                FogMode::Random(to_bright_chance, to_dark_chance, turns_between_changes, forecast) => {
                     if forecast.len() >= handler.get_game().players.len() * 2 + 1 {
                         break;
                     }
-                    let next_value = if *forecast.last().unwrap_or(&false) {
+                    let current_last = *forecast.last().unwrap_or(&false);
+                    let change = if current_last {
                         to_bright_chance.check(handler.rng())
                     } else {
                         to_dark_chance.check(handler.rng())
                     };
-                    handler.add_event(events::Event::RandomFogForecast(next_value));
+                    if change {
+                        handler.add_event(events::Event::RandomFogForecast(!current_last, 1.max(**turns_between_changes).try_into().unwrap()));
+                    } else {
+                        handler.add_event(events::Event::RandomFogForecast(current_last, U8::new(1)));
+                    }
                 }
                 _ => break,
             }

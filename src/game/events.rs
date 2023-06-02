@@ -303,7 +303,7 @@ pub enum CommandError {
 pub enum Event<D:Direction> {
     NextTurn,
     RandomFogNextTurn(bool),
-    RandomFogForecast(bool),
+    RandomFogForecast(bool, U8::<255>),
     PureFogChange(Perspective, LVec::<Point, {point_map::MAX_AREA}>),
     FogChange(Perspective, LVec::<(Point, FieldData::<D>), {point_map::MAX_AREA}>),
     UnitPath(Option::<Option::<UnloadIndex>>, Path::<D>, Option::<bool>, UnitType::<D>),
@@ -372,10 +372,10 @@ impl<D: Direction> Event<D> {
                     _ => panic!("Received RandomFogNextTurn event but fog isn't random"),
                 }
             }
-            Self::RandomFogForecast(new_value) => {
+            Self::RandomFogForecast(new_value, repetitions) => {
                 match game.get_fog_mode_mut() {
-                    FogMode::Random(_, _, turns_between_changes, forecast) => {
-                        for _ in 0..1.max(**turns_between_changes) {
+                    FogMode::Random(_, _, _, forecast) => {
+                        for _ in 0..**repetitions {
                             forecast.push(*new_value).unwrap();
                         }
                     }
@@ -597,10 +597,10 @@ impl<D: Direction> Event<D> {
                     _ => panic!("Received RandomFogNextTurn event but fog isn't random"),
                 }
             }
-            Self::RandomFogForecast(_) => {
+            Self::RandomFogForecast(_, repetitions) => {
                 match game.get_fog_mode_mut() {
-                    FogMode::Random(_, _, turns_between_changes, forecast) => {
-                        for _ in 0..1.max(**turns_between_changes) {
+                    FogMode::Random(_, _, _, forecast) => {
+                        for _ in 0..**repetitions {
                             forecast.pop().expect("Forecast for random fog is empty");
                         }
                     }
@@ -790,7 +790,7 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::RandomFogNextTurn(_) |
-            Self::RandomFogForecast(_) => {
+            Self::RandomFogForecast(_, _) => {
                 Some(self.clone())
             }
             Self::FogChange(_, _) => {
