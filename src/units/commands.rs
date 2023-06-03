@@ -332,7 +332,7 @@ impl<D: Direction> UnitCommand<D> {
                     if old_progress != new_progress {
                         handler.add_event(Event::CaptureProgress(end, old_progress, new_progress));
                     }
-                    handler.add_event(Event::UnitCapturing(end));
+                    handler.add_event(Event::UnitActionStatus(end, unit.action_status, UnitActionStatus::Capturing));
                     handler.add_event(Event::UnitExhaust(end));
                 }
                 Some(cm.path.start)
@@ -372,6 +372,7 @@ impl<D: Direction> UnitCommand<D> {
                         handler.add_event(Event::MoneyChange(unit.get_owner().unwrap(), (-cost).try_into().unwrap()));
                         handler.add_event(Event::Effect(Effect::Repair(end)));
                         handler.add_event(Event::UnitHpChange(end, (heal as i8).try_into().unwrap(), (heal as i16).try_into().unwrap()));
+                        handler.add_event(Event::UnitActionStatus(end, UnitActionStatus::Normal, UnitActionStatus::Repairing));
                     }
                     handler.add_event(Event::UnitExhaust(end));
                 }

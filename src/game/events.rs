@@ -8,7 +8,7 @@ use crate::commanders::{MAX_CHARGE, CommanderPower};
 use crate::map::map::{Map, FieldData};
 use crate::map::point::Point;
 use crate::map::point_map::{self, MAX_AREA};
-use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, UnitData, DroneId};
+use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, UnitData, DroneId, UnitActionStatus};
 use crate::units::structures::{LASER_CANNON_RANGE, Structure, Structures};
 use crate::{player::*, details};
 use crate::terrain::{Terrain, BuiltThisTurn, Realty, CaptureProgress};
@@ -130,8 +130,10 @@ impl<D: Direction> Command<D> {
                         }
                         _ => (),
                     }
-                    if let Some(_) = handler.get_map().get_unit(p).filter(|u| u.get_owner() == Some(current_player_owner) && u.is_capturing()) {
-                        handler.add_event(Event::UnitCapturing(p));
+                    if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(p) {
+                        if unit.get_owner() == current_player_owner && unit.action_status != UnitActionStatus::Normal {
+                            handler.add_event(Event::UnitActionStatus(p, unit.action_status, UnitActionStatus::Normal));
+                        }
                     }
                 }
 
@@ -308,7 +310,7 @@ pub enum Event<D:Direction> {
     FogChange(Perspective, LVec::<(Point, FieldData::<D>), {point_map::MAX_AREA}>),
     UnitPath(Option::<Option::<UnloadIndex>>, Path::<D>, Option::<bool>, UnitType::<D>),
     HoverPath(Option::<Option::<UnloadIndex>>, Point, LVec::<(bool, PathStep::<D>), {point_map::MAX_AREA}>, Option::<bool>, UnitType::<D>),
-    UnitCapturing(Point),
+    UnitActionStatus(Point, UnitActionStatus, UnitActionStatus),
     UnitExhaust(Point),
     UnitExhaustBoarded(Point, UnloadIndex),
     UnitHpChange(Point, I8::<-100, 99>, I16::<-999, 999>),
@@ -399,7 +401,7 @@ impl<D: Direction> Event<D> {
                     match &mut unit {
                         UnitType::Normal(unit) => {
                             match &mut unit.typ {
-                                NormalUnits::Hovercraft(os, _) => *os = *on_sea,
+                                NormalUnits::Hovercraft(os) => *os = *on_sea,
                                 _ => {}
                             }
                         }
@@ -412,12 +414,10 @@ impl<D: Direction> Event<D> {
                 }
                 apply_unit_path(game, *unload_index, &path, *end_visible, &unit);
             }
-            Self::UnitCapturing(pos) => {
+            Self::UnitActionStatus(pos, _, action_status) => {
                 match game.get_map_mut().get_unit_mut(*pos) {
                     Some(UnitType::Normal(unit)) => {
-                        if let Some(capturing) = unit.typ.capture_status_mut() {
-                            *capturing = !*capturing;
-                        }
+                        unit.action_status = *action_status;
                     },
                     _ => (),
                 }
@@ -625,12 +625,10 @@ impl<D: Direction> Event<D> {
                 }
                 undo_unit_path(game, *unload_index, &path, *end_visible, unit);
             }
-            Self::UnitCapturing(pos) => {
+            Self::UnitActionStatus(pos, action_status, _) => {
                 match game.get_map_mut().get_unit_mut(*pos) {
                     Some(UnitType::Normal(unit)) => {
-                        if let Some(capturing) = unit.typ.capture_status_mut() {
-                            *capturing = !*capturing;
-                        }
+                        unit.action_status = *action_status;
                     },
                     _ => (),
                 }
@@ -813,7 +811,7 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::UnitCapturing(pos) => {
+            Self::UnitActionStatus(pos, _, _) => {
                 if game.has_vision_at(team, *pos) {
                     Some(self.clone())
                 } else {

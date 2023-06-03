@@ -108,7 +108,7 @@ impl<D: Direction> UnitType<D> {
 
     pub fn is_capturing(&self) -> bool {
         match self {
-            Self::Normal(unit) => unit.typ.capture_status().unwrap_or(false),
+            Self::Normal(unit) => unit.action_status == UnitActionStatus::Capturing,
             _ => false,
         }
     }

@@ -270,7 +270,7 @@ impl<D: Direction> PathStepExt<D> for HoverStep<D> {
     }
     fn update_normal_unit(&self, unit: &mut NormalUnit) {
         match &mut unit.typ {
-            NormalUnits::Hovercraft(on_sea, _) => *on_sea = self.0,
+            NormalUnits::Hovercraft(on_sea) => *on_sea = self.0,
             _ => {}
         }
     }
