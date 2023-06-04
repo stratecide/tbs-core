@@ -382,7 +382,9 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
             continue;
         }
         if meta.path.steps.len() >= path_so_far.steps.len() {
-            match callback(&meta.path, pos, blocking_unit == None || path_so_far.start == pos && blocking_unit.unwrap() == &unit.as_unit()) {
+            let hidden_by_fog = fog.and_then(|fog| Some(fog.contains(&pos))).unwrap_or(false);
+            let can_stop_here = hidden_by_fog || (blocking_unit == None || path_so_far.start == pos && blocking_unit.unwrap() == &unit.as_unit());
+            match callback(&meta.path, pos, can_stop_here) {
                 PathSearchFeedback::Found => return,
                 PathSearchFeedback::Rejected => continue,
                 PathSearchFeedback::Continue => {}
