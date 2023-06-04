@@ -208,15 +208,15 @@ impl NormalUnit {
 
     pub fn get_movement<D: Direction>(&self, terrain: &Terrain<D>) -> (MovementType, MovementPoints) {
         let (movement_type, movement) = match self.typ {
-            NormalUnits::Sniper => (MovementType::Foot,MovementPoints::from(3.)),
-            NormalUnits::Bazooka => (MovementType::Foot,MovementPoints::from(3.)),
-            NormalUnits::DragonHead => (MovementType::Wheel,MovementPoints::from(5.)),
-            NormalUnits::Artillery => (MovementType::Treads,MovementPoints::from(5.)),
-            NormalUnits::SmallTank => (MovementType::Treads,MovementPoints::from(5.)),
-            NormalUnits::BigTank => (MovementType::Treads,MovementPoints::from(4.)),
-            NormalUnits::AntiAir => (MovementType::Treads,MovementPoints::from(5.)),
-            NormalUnits::RocketLauncher => (MovementType::Wheel,MovementPoints::from(5.)),
-            NormalUnits::Magnet => (MovementType::Wheel,MovementPoints::from(7.)),
+            NormalUnits::Sniper => (MovementType::Foot, MovementPoints::from(3.)),
+            NormalUnits::Bazooka => (MovementType::Foot, MovementPoints::from(3.)),
+            NormalUnits::DragonHead => (MovementType::Wheel, MovementPoints::from(5.)),
+            NormalUnits::Artillery => (MovementType::Treads, MovementPoints::from(5.)),
+            NormalUnits::SmallTank => (MovementType::Treads, MovementPoints::from(5.)),
+            NormalUnits::BigTank => (MovementType::Treads, MovementPoints::from(4.)),
+            NormalUnits::AntiAir => (MovementType::Treads, MovementPoints::from(5.)),
+            NormalUnits::RocketLauncher => (MovementType::Wheel, MovementPoints::from(4.)),
+            NormalUnits::Magnet => (MovementType::Wheel, MovementPoints::from(6.)),
 
             NormalUnits::Hovercraft(on_sea) => {
                 let mut movement_type = MovementType::Hover(HoverMode::new(on_sea));
@@ -226,21 +226,21 @@ impl NormalUnit {
                 (movement_type,MovementPoints::from(4.5))
             },
             
-            NormalUnits::SharkRider => (MovementType::Boat,MovementPoints::from(3.)),
-            NormalUnits::TransportBoat(_) => (MovementType::Boat,MovementPoints::from(5.)),
-            NormalUnits::WaveBreaker => (MovementType::Ship,MovementPoints::from(7.)),
-            NormalUnits::Submarine => (MovementType::Ship,MovementPoints::from(7.)),
-            NormalUnits::SiegeShip => (MovementType::Ship,MovementPoints::from(5.)),
-            NormalUnits::DroneBoat(_, _) => (MovementType::Boat,MovementPoints::from(4.)),
+            NormalUnits::SharkRider => (MovementType::Boat, MovementPoints::from(3.)),
+            NormalUnits::TransportBoat(_) => (MovementType::Boat, MovementPoints::from(5.)),
+            NormalUnits::WaveBreaker => (MovementType::Ship, MovementPoints::from(7.)),
+            NormalUnits::Submarine => (MovementType::Ship, MovementPoints::from(7.)),
+            NormalUnits::SiegeShip => (MovementType::Ship, MovementPoints::from(5.)),
+            NormalUnits::DroneBoat(_, _) => (MovementType::Boat, MovementPoints::from(4.)),
 
-            NormalUnits::TransportHeli(_) => (MovementType::Heli,MovementPoints::from(6.)),
-            NormalUnits::AttackHeli => (MovementType::Heli,MovementPoints::from(7.)),
-            NormalUnits::Blimp => (MovementType::Heli,MovementPoints::from(5.)),
-            NormalUnits::Bomber => (MovementType::Plane,MovementPoints::from(8.)),
-            NormalUnits::Fighter => (MovementType::Plane,MovementPoints::from(10.)),
+            NormalUnits::TransportHeli(_) => (MovementType::Heli, MovementPoints::from(5.)),
+            NormalUnits::AttackHeli => (MovementType::Heli, MovementPoints::from(5.)),
+            NormalUnits::Blimp => (MovementType::Heli, MovementPoints::from(5.)),
+            NormalUnits::Bomber => (MovementType::Plane, MovementPoints::from(7.)),
+            NormalUnits::Fighter => (MovementType::Plane, MovementPoints::from(7.)),
             
-            NormalUnits::LightDrone(_) => (MovementType::Heli,MovementPoints::from(4.)),
-            NormalUnits::HeavyDrone(_) => (MovementType::Heli,MovementPoints::from(2.)),
+            NormalUnits::LightDrone(_) => (MovementType::Heli, MovementPoints::from(4.)),
+            NormalUnits::HeavyDrone(_) => (MovementType::Heli, MovementPoints::from(2.)),
         };
         (movement_type, movement + self.data.mercenary.own_movement_bonus())
     }

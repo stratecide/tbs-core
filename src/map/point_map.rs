@@ -19,7 +19,7 @@ impl PointMap {
     }
     pub fn filled(width: u8, height: u8, odd_if_hex: bool, value: bool) -> Self {
         PointMap {
-            odd_if_hex: odd_if_hex,
+            odd_if_hex,
             point_validity: vec![vec![value; width as usize].try_into().unwrap(); height as usize].try_into().unwrap(),
         }
     }
@@ -42,13 +42,13 @@ impl PointMap {
         }
         // from top
         while self.height() > MIN_SIZE && !self.point_validity[0].iter().any(|b| *b) {
-            self.point_validity.remove(0);
+            self.point_validity.remove(0).expect("PointMap was emptied during crop");
             self.odd_if_hex = !self.odd_if_hex;
         }
         // from left
         while self.width() > MIN_SIZE && !self.point_validity.iter().any(|b| b[0]) {
             for row in self.point_validity.iter_mut() {
-                row.remove(0);
+                row.remove(0).expect("Pointmap row was emptied during crop");
             }
         }
         // from right

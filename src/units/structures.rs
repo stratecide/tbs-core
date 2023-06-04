@@ -8,7 +8,6 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::player::Owner;
-use crate::player::Player;
 
 use super::ArmorType;
 use super::Hp;
@@ -116,7 +115,7 @@ impl<D: Direction> Structure<D> {
             return result;
         };
         match &self.typ {
-            Structures::DroneTower(Some((_, drones, drone_id))) => {
+            Structures::DroneTower(Some((_, drones, _))) => {
                 if drones.remaining_capacity() > 0 {
                     for unit in NormalUnits::list() {
                         if let Some(drone) = TransportableDrones::from_normal(&unit) {

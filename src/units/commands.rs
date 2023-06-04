@@ -696,9 +696,10 @@ pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>
             continue;
         }
         // todo: if a straight attacker is counter-attacking another straight attacker, it should first try to reverse the direction
-        let attack_info = unit.make_attack_info(handler.get_game(), *p, attacker_pos).ok_or(CommandError::InvalidTarget)?;
-        // this may return an error, but we don't care about that
-        calculate_attack(handler, *p, &attack_info, None).ok();
+        if let Some(attack_info) = unit.make_attack_info(handler.get_game(), *p, attacker_pos) {
+            // this may return an error, but we don't care about that
+            calculate_attack(handler, *p, &attack_info, None).ok();
+        }
     }
 
     Ok(())
