@@ -37,8 +37,8 @@ impl WeaponType {
             (Self::MachineGun, ArmorType::Structure) => Some(0.20),
 
             (Self::Rifle, ArmorType::Infantry) => Some(1.20),
-            (Self::Rifle, ArmorType::Light) => Some(0.35),
-            (Self::Rifle, ArmorType::Heavy) => Some(0.05),
+            (Self::Rifle, ArmorType::Light) => Some(0.25),
+            (Self::Rifle, ArmorType::Heavy) => Some(0.15),
             (Self::Rifle, ArmorType::Heli) => Some(0.30),
             (Self::Rifle, ArmorType::Plane) => Some(0.15),
             (Self::Rifle, ArmorType::Boat) => Some(0.10),
@@ -48,7 +48,7 @@ impl WeaponType {
 
             (Self::Shells, ArmorType::Infantry) => Some(0.90),
             (Self::Shells, ArmorType::Light) => Some(1.10),
-            (Self::Shells, ArmorType::Heavy) => Some(1.00),
+            (Self::Shells, ArmorType::Heavy) => Some(0.70),
             (Self::Shells, ArmorType::Heli) => None,
             (Self::Shells, ArmorType::Plane) => None,
             (Self::Shells, ArmorType::Boat) => Some(0.30),

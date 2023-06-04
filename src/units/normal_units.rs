@@ -934,7 +934,7 @@ impl NormalUnits {
             Self::DragonHead => vec![(WeaponType::Flame, 1.)],
             Self::Artillery => vec![(WeaponType::SurfaceMissiles, 1.)],
             Self::SmallTank => vec![(WeaponType::Shells, 1.2)],
-            Self::BigTank => vec![(WeaponType::Shells, 1.8)],
+            Self::BigTank => vec![(WeaponType::Shells, 1.85)],
             Self::AntiAir => vec![(WeaponType::AntiAir, 1.)],
             Self::RocketLauncher => vec![(WeaponType::SurfaceMissiles, 1.)],
             Self::Magnet => vec![],
@@ -960,13 +960,13 @@ impl NormalUnits {
     }
 
     pub fn get_armor(&self) -> (ArmorType, f32) {
-        let (typ, mut multiplier) = match self {
-            Self::Sniper => (ArmorType::Infantry, 1.2),
+        let (typ, multiplier) = match self {
+            Self::Sniper => (ArmorType::Infantry, 1.4),
             Self::Bazooka => (ArmorType::Infantry, 1.6),
             Self::DragonHead => (ArmorType::Light, 1.5),
             Self::Artillery => (ArmorType::Light, 1.5),
             Self::SmallTank => (ArmorType::Light, 2.0),
-            Self::BigTank => (ArmorType::Heavy, 1.5),
+            Self::BigTank => (ArmorType::Heavy, 2.5),
             Self::AntiAir => (ArmorType::Light, 1.5),
             Self::RocketLauncher => (ArmorType::Light, 1.2),
             Self::Magnet => (ArmorType::Light, 1.5),
