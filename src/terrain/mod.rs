@@ -45,18 +45,29 @@ pub enum Terrain<D: Direction> {
     Forest,
     Fountain,
     Grass,
+    Hill,
+    Icebergs,
+    Lillypads,
     Mountain,
     Pipe(D::P),
     Realty(Realty, Option::<Owner>, CaptureProgress),
     Reef,
     Ruins,
     Sea,
+    ShallowSea,
     Street,
     Tavern,
 }
 impl<D: Direction> Terrain<D> {
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<MovementPoints> {
         match (self, movement_type) {
+            (Self::Beach, MovementType::Chess) => None,
+            (Self::Beach, MovementType::Ship) => None,
+            (Self::Beach, _) => Some(MovementPoints::from(1.)),
+
+            (Self::Bridge, MovementType::Chess) => None,
+            (Self::Bridge, _) => Some(MovementPoints::from(1.)),
+
             (Self::Grass, sea_units!()) => None,
             (Self::Grass, MovementType::Hover(_)) => Some(MovementPoints::from(1.5)),
             (Self::Grass, MovementType::Wheel) => Some(MovementPoints::from(1.5)),
@@ -69,6 +80,26 @@ impl<D: Direction> Terrain<D> {
             (Self::Forest, MovementType::Foot) => Some(MovementPoints::from(1.)),
             (Self::Forest, land_units!()) => Some(MovementPoints::from(1.5)),
             (Self::Forest, air_units!()) => Some(MovementPoints::from(1.)),
+
+            (Self::Hill, sea_units!()) => None,
+            (Self::Hill, MovementType::Hover(_)) => Some(MovementPoints::from(2.)),
+            (Self::Hill, MovementType::Wheel) => Some(MovementPoints::from(2.)),
+            (Self::Hill, MovementType::Foot) => Some(MovementPoints::from(1.)),
+            (Self::Hill, land_units!()) => Some(MovementPoints::from(1.5)),
+            (Self::Hill, air_units!()) => Some(MovementPoints::from(1.)),
+
+            (Self::Icebergs, MovementType::Boat) => Some(MovementPoints::from(1.5)),
+            (Self::Icebergs, MovementType::Ship) => Some(MovementPoints::from(2.)),
+            (Self::Icebergs, MovementType::Hover(_)) => Some(MovementPoints::from(1.5)),
+            (Self::Icebergs, land_units!()) => None,
+            (Self::Icebergs, air_units!()) => Some(MovementPoints::from(1.)),
+
+            (Self::Lillypads, MovementType::Foot) => Some(MovementPoints::from(2.)),
+            (Self::Lillypads, MovementType::Boat) => Some(MovementPoints::from(1.5)),
+            (Self::Lillypads, MovementType::Ship) => Some(MovementPoints::from(1.)),
+            (Self::Lillypads, land_units!()) => None,
+            (Self::Lillypads, air_units!()) => Some(MovementPoints::from(1.)),
+            (Self::Lillypads, MovementType::Hover(_)) => Some(MovementPoints::from(2.)),
 
             (Self::Mountain, sea_units!()) => None,
             (Self::Mountain, MovementType::Foot) => Some(MovementPoints::from(1.5)),
@@ -83,9 +114,9 @@ impl<D: Direction> Terrain<D> {
             (Self::Sea, land_units!()) => None,
             (Self::Sea, _) => Some(MovementPoints::from(1.)),
 
-            (Self::Beach, MovementType::Chess) => None,
-            (Self::Beach, MovementType::Ship) => None,
-            (Self::Beach, _) => Some(MovementPoints::from(1.)),
+            (Self::ShallowSea, land_units!()) => None,
+            (Self::ShallowSea, MovementType::Ship) => Some(MovementPoints::from(1.5)),
+            (Self::ShallowSea, _) => Some(MovementPoints::from(1.)),
 
             (Self::Reef, land_units!()) => None,
             (Self::Reef, _) => Some(MovementPoints::from(1.)),
@@ -96,9 +127,6 @@ impl<D: Direction> Terrain<D> {
             (Self::Ruins, sea_units!()) => None,
             (Self::Ruins, _) => Some(MovementPoints::from(1.)),
 
-            (Self::Bridge, MovementType::Chess) => None,
-            (Self::Bridge, _) => Some(MovementPoints::from(1.)),
-                
             (Self::Flame, _) => None,
             
             (Self::Realty(realty, _, _), movement_type) => return realty.movement_cost(movement_type),
@@ -150,12 +178,16 @@ impl<D: Direction> Terrain<D> {
                         Self::Forest => HoverMode::Land,
                         Self::Fountain => HoverMode::Sea,
                         Self::Grass => HoverMode::Land,
+                        Self::Hill => HoverMode::Land,
+                        Self::Icebergs => HoverMode::Sea,
+                        Self::Lillypads => HoverMode::Sea,
                         Self::Mountain => HoverMode::Land,
                         Self::Pipe(_) => mode,
                         Self::Realty(_, _, _) => HoverMode::Land,
                         Self::Reef => HoverMode::Sea,
                         Self::Ruins => HoverMode::Land,
                         Self::Sea => HoverMode::Sea,
+                        Self::ShallowSea => HoverMode::Sea,
                         Self::Street => HoverMode::Land,
                         Self::Tavern => HoverMode::Beach,
                     })
@@ -168,6 +200,7 @@ impl<D: Direction> Terrain<D> {
             }
         })
     }
+
     pub fn update_movement(&self, movement_meta: &MovementSearchMeta<D>, prev_terrain: &Self) -> Option<MovementSearchMeta<D>> {
         let remaining_movement = if let Some(cost) = self.movement_cost(movement_meta.movement_type) {
             if cost <= movement_meta.remaining_movement {
@@ -191,6 +224,7 @@ impl<D: Direction> Terrain<D> {
             stealth: movement_meta.stealth,
         })
     }
+
     pub fn defense_bonus(&self, unit: &UnitType<D>) -> f32 {
         let movement_type = match unit {
             UnitType::Normal(unit) => {
@@ -204,18 +238,35 @@ impl<D: Direction> Terrain<D> {
         match (self, movement_type) {
             (Self::Grass, land_units!()) => 0.1,
             (Self::Forest, land_units!()) => 0.2,
+            (Self::Fountain, sea_units!()) => -0.2,
+            (Self::Hill, land_units!()) => 0.1,
+            (Self::Icebergs, sea_units!()) => 0.2,
+            (Self::Lillypads, sea_units!()) => -0.1,
             (Self::Realty(_, _, _), land_units!()) => 0.3,
+            (Self::Reef, sea_units!()) => 0.1,
             (Self::Ruins, land_units!()) => 0.3,
             (Self::Tavern, land_units!()) => 0.2,
             (_, _) => 0.,
         }
     }
+
+    pub fn range_bonus(&self) -> u8 {
+        match self {
+            Self::Hill => 1,
+            Self::Mountain => 1,
+            Self::Fountain => 1,
+            _ => 0,
+        }
+    }
+
     pub fn requires_true_sight(&self) -> bool {
         match self {
             Self::Forest => true,
+            Self::Icebergs => true,
             _ => false
         }
     }
+
     pub fn get_vision(&self, game: &Game<D>, pos: Point, team: Perspective) -> HashSet<Point> {
         let mut result = HashSet::new();
         match self {
@@ -238,6 +289,7 @@ impl<D: Direction> Terrain<D> {
         }
         result
     }
+
     pub fn fog_replacement(&self) -> Terrain<D> {
         match self {
             Terrain::Realty(realty, _, _) => Terrain::Realty(realty.clone(), None, CaptureProgress::None),
@@ -267,6 +319,7 @@ pub enum CaptureProgress {
 pub enum Realty {
     Hq,
     City,
+    OilPlatform,
     Factory(BuiltThisTurn),
     Port(BuiltThisTurn),
     Airport(BuiltThisTurn),
@@ -276,6 +329,7 @@ impl Realty {
     pub fn income_factor(&self) -> i16 {
         match self {
             Self::City => 1,
+            Self::OilPlatform => 2,
             _ => 0,
         }
     }
@@ -300,7 +354,7 @@ impl Realty {
     pub fn can_repair(&self, unit_type: &NormalUnits) -> bool {
         match self {
             Self::Factory(_) | Self::City => unit_type.repairable_factory(),
-            Self::Port(_) => unit_type.repairable_port(),            
+            Self::Port(_) | Self::OilPlatform => unit_type.repairable_port(),
             Self::Airport(_) => unit_type.repairable_airport(),            
             _ => false,
         }
@@ -308,7 +362,9 @@ impl Realty {
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<MovementPoints> {
         match (self, movement_type) {
             (Self::Port(_), MovementType::Chess) => None,
+            (Self::OilPlatform, MovementType::Chess) => None,
             (Self::Port(_), _) => Some(MovementPoints::from(1.)),
+            (Self::OilPlatform, _) => Some(MovementPoints::from(1.)),
             (
                 Self::Hq |
                 Self::City |
@@ -322,6 +378,7 @@ impl Realty {
     pub fn like_beach_for_hovercraft(&self) -> bool {
         match self {
             Self::Port(_) => true,
+            Self::OilPlatform => true,
             _ => false,
         }
     }

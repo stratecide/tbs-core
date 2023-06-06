@@ -429,6 +429,7 @@ impl NormalUnit {
     pub fn threatens<D: Direction>(&self, _game: &Game<D>, target: &UnitType<D>) -> bool {
         self.get_weapons().iter().any(|(weapon, _)| weapon.damage_factor(&target.get_armor().0).is_some())
     }
+
     pub fn attackable_positions<D: Direction>(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         let mut result = HashSet::new();
         if moved && !self.can_attack_after_moving() {
@@ -459,6 +460,9 @@ impl NormalUnit {
                 }
             }
             AttackType::Ranged(min_range, max_range) => {
+                let range_bonus = game.get_map().get_terrain(position).unwrap().range_bonus();
+                let min_range = min_range + range_bonus;
+                let max_range = max_range + range_bonus;
                 // each point in a layer is probably in it 2 times
                 let mut layers = game.get_map().range_in_layers(position, max_range as usize);
                 for _ in min_range-1..max_range {
@@ -470,6 +474,7 @@ impl NormalUnit {
         }
         result
     }
+
     pub fn attack_splash<D: Direction>(&self, map: &Map<D>, from: Point, to: &AttackInfo<D>) -> Result<Vec<Point>, CommandError> {
         match (&self.typ, to) {
             (NormalUnits::DragonHead, AttackInfo::Direction(dir)) => {
@@ -976,7 +981,7 @@ impl NormalUnits {
             Self::SmallTank => (ArmorType::Light, 2.0),
             Self::BigTank => (ArmorType::Heavy, 2.5),
             Self::AntiAir => (ArmorType::Light, 1.5),
-            Self::RocketLauncher => (ArmorType::Light, 1.2),
+            Self::RocketLauncher => (ArmorType::Light, 0.8),
             Self::Magnet => (ArmorType::Light, 1.5),
 
             Self::Hovercraft(_) => (ArmorType::Infantry, 1.6),
