@@ -241,6 +241,8 @@ impl<D: Direction> UnitType<D> {
         for (weapon, mut attack) in attacker.get_weapons() {
             if let Some(path) = path {
                 attack *= attacker.attack_factor_from_path(game, path);
+            } else {
+                attack *= attacker.attack_factor_from_counter(game);
             }
             if let Some(factor) = weapon.damage_factor(&armor_type) {
                 let mut attack_bonus = 1.;
@@ -263,8 +265,12 @@ impl<D: Direction> UnitType<D> {
     fn true_vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         1
     }
-    fn vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
-        2
+    fn vision_range(&self, game: &Game<D>, pos: Point) -> usize {
+        match self {
+            Self::Normal(unit) => unit.vision_range(game, pos),
+            Self::Chess(_) => 0,
+            Self::Structure(_) => 0,
+        }
     }
     pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashSet<Point> {
         match self {

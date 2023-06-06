@@ -131,6 +131,10 @@ impl NormalUnit {
         (armor, defense)
     }
 
+    pub fn vision_range<D: Direction>(&self, game: &Game<D>, pos: Point) -> usize {
+        self.typ.vision_range(game, pos)
+    }
+
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         self.typ.get_weapons()
         .into_iter()
@@ -140,6 +144,10 @@ impl NormalUnit {
 
     pub fn attack_factor_from_path<D: Direction>(&self, game: &Game<D>, path: &Path<D>) -> f32 {
         self.typ.attack_factor_from_path(game.get_map(), path)
+    }
+
+    pub fn attack_factor_from_counter<D: Direction>(&self, game: &Game<D>) -> f32 {
+        self.typ.attack_factor_from_counter(game.get_map())
     }
 
     pub fn get_owner(&self) -> Owner {
@@ -209,7 +217,7 @@ impl NormalUnit {
     pub fn get_movement<D: Direction>(&self, terrain: &Terrain<D>) -> (MovementType, MovementPoints) {
         let (movement_type, movement) = match self.typ {
             NormalUnits::Sniper => (MovementType::Foot, MovementPoints::from(3.)),
-            NormalUnits::Bazooka => (MovementType::Foot, MovementPoints::from(3.)),
+            NormalUnits::Bazooka => (MovementType::Foot, MovementPoints::from(2.5)),
             NormalUnits::DragonHead => (MovementType::Wheel, MovementPoints::from(5.)),
             NormalUnits::Artillery => (MovementType::Treads, MovementPoints::from(5.)),
             NormalUnits::SmallTank => (MovementType::Treads, MovementPoints::from(5.)),
@@ -929,7 +937,7 @@ impl NormalUnits {
 
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
         match self {
-            Self::Sniper => vec![(WeaponType::Rifle, 1.)],
+            Self::Sniper => vec![(WeaponType::Rifle, 1.5)],
             Self::Bazooka => vec![(WeaponType::Shells, 1.)],
             Self::DragonHead => vec![(WeaponType::Flame, 1.)],
             Self::Artillery => vec![(WeaponType::SurfaceMissiles, 1.)],
@@ -992,6 +1000,16 @@ impl NormalUnits {
         (typ, multiplier)
     }
 
+    pub fn vision_range<D: Direction>(&self, _game: &Game<D>, _pos: Point) -> usize {
+        match self {
+            Self::Sniper => 3,
+            Self::Artillery => 1,
+            Self::RocketLauncher => 1,
+            Self::BigTank => 1,
+            _ => 2,
+        }
+    }
+
     pub fn attack_factor_from_path<D: Direction>(&self, _map: &Map<D>, path: &Path<D>) -> f32 {
         match self {
             Self::Sniper => {
@@ -1001,6 +1019,13 @@ impl NormalUnits {
                     1.
                 }
             }
+            _ => 1.,
+        }
+    }
+
+    pub fn attack_factor_from_counter<D: Direction>(&self, _map: &Map<D>) -> f32 {
+        match self {
+            Self::Sniper => 0.5,
             _ => 1.,
         }
     }

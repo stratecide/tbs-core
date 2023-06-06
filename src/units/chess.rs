@@ -549,7 +549,8 @@ impl<D: Direction> ChessUnit<D> {
     fn true_vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         1
     }
-    fn vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
+
+    pub fn vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         match self.typ {
             ChessUnits::Pawn(_, _, _) => 2,
             ChessUnits::Rook(_) => 8,
@@ -559,6 +560,7 @@ impl<D: Direction> ChessUnit<D> {
             ChessUnits::King(_) => 2,
         }
     }
+
     pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashSet<Point> {
         let mut result = HashSet::new();
         result.insert(pos);
