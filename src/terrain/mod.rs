@@ -203,9 +203,9 @@ impl<D: Direction> Terrain<D> {
         };
         match (self, movement_type) {
             (Self::Grass, land_units!()) => 0.1,
-            (Self::Forest, land_units!()) => 0.3,
-            (Self::Realty(_, _, _), land_units!()) => 0.2,
-            (Self::Ruins, land_units!()) => 0.2,
+            (Self::Forest, land_units!()) => 0.2,
+            (Self::Realty(_, _, _), land_units!()) => 0.3,
+            (Self::Ruins, land_units!()) => 0.3,
             (Self::Tavern, land_units!()) => 0.2,
             (_, _) => 0.,
         }
