@@ -307,15 +307,15 @@ impl<D: Direction> UnitType<D> {
     pub fn can_be_pulled(&self, _map: &Map<D>, _pos: Point) -> bool {
         true
     }
-    pub fn can_attack_unit(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+    pub fn can_attack_unit(&self, game: &Game<D>, target: &UnitType<D>, target_pos: Point) -> bool {
         match self {
-            Self::Normal(unit) => unit.can_attack_unit(game, target),
+            Self::Normal(unit) => unit.can_attack_unit(game, target, target_pos),
             _ => false
         }
     }
-    pub fn threatens(&self, game: &Game<D>, target: &UnitType<D>) -> bool {
+    pub fn threatens(&self, game: &Game<D>, target: &UnitType<D>, target_pos: Point) -> bool {
         self.get_team(game) != target.get_team(game) && match self {
-            Self::Normal(unit) => unit.threatens(game, target),
+            Self::Normal(unit) => unit.threatens(game, target, target_pos),
             Self::Chess(unit) => unit.threatens(game, target),
             Self::Structure(_unit) => false,
         }

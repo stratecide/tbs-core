@@ -185,12 +185,30 @@ impl<D: Direction> Command<D> {
                     let details = handler.get_map().get_details(pos);
                     for (index, detail) in details.into_iter().enumerate() {
                         match detail {
+                            Detail::AirportBubble(owner) => {
+                                if owner != owner_id {
+                                    return Err(CommandError::NotYourBubble);
+                                }
+                                bubble_data = Some((
+                                    crate::terrain::build_options_airport(handler.get_game(), owner_id, 0),
+                                    Event::RemoveDetail(pos.clone(), (index as u8).try_into().unwrap(), detail.clone())
+                                ));
+                            }
                             Detail::FactoryBubble(owner) => {
                                 if owner != owner_id {
                                     return Err(CommandError::NotYourBubble);
                                 }
                                 bubble_data = Some((
                                     crate::terrain::build_options_factory(handler.get_game(), owner_id, 0),
+                                    Event::RemoveDetail(pos.clone(), (index as u8).try_into().unwrap(), detail.clone())
+                                ));
+                            }
+                            Detail::PortBubble(owner) => {
+                                if owner != owner_id {
+                                    return Err(CommandError::NotYourBubble);
+                                }
+                                bubble_data = Some((
+                                    crate::terrain::build_options_port(handler.get_game(), owner_id, 0),
                                     Event::RemoveDetail(pos.clone(), (index as u8).try_into().unwrap(), detail.clone())
                                 ));
                             }

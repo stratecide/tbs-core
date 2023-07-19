@@ -12,7 +12,9 @@ pub enum Detail {
     Coins1,
     Coins2,
     Coins4,
+    AirportBubble(Owner),
     FactoryBubble(Owner),
+    PortBubble(Owner),
     Skull(Owner, NormalUnits),
 }
 impl Detail {
@@ -21,6 +23,8 @@ impl Detail {
             Self::Coins1 | Self::Coins2 | Self::Coins4 => {
                 Some(self.clone())
             }
+            Self::AirportBubble(_) |
+            Self::PortBubble(_) |
             Self::FactoryBubble(_) => {
                 Some(self.clone())
             }
@@ -43,6 +47,8 @@ impl Detail {
                     remove = skull;
                     skull = true;
                 }
+                Self::AirportBubble(_) |
+                Self::PortBubble(_) |
                 Self::FactoryBubble(_) => {
                     remove = bubble;
                     bubble = true;

@@ -237,7 +237,7 @@ impl<D: Direction> UnitCommand<D> {
                             return Err(CommandError::InvalidTarget);
                         }
                         let target_unit = handler.get_map().get_unit(*target).ok_or(CommandError::MissingUnit)?;
-                        if !unit.can_attack_unit(handler.get_game(), target_unit) {
+                        if !unit.can_attack_unit(handler.get_game(), target_unit, *target) {
                             return Err(CommandError::InvalidTarget);
                         }
                     }
@@ -577,6 +577,8 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                     }
                     false
                 }
+                Detail::AirportBubble(owner) |
+                Detail::PortBubble(owner) |
                 Detail::FactoryBubble(owner) => {
                     Some(*owner) == unit.get_owner()
                 }

@@ -210,7 +210,7 @@ impl<D: Direction> Game<D> {
         let mut result = HashSet::new();
         for p in self.map.all_points().into_iter().filter(|p| self.has_vision_at(ClientPerspective::Team(*team), *p)) {
             if let Some(unit) = self.map.get_unit(p) {
-                if unit.threatens(self, threatened) && unit.shortest_path_to_attack(self, &Path::new(p), pos).is_some() {
+                if unit.threatens(self, threatened, pos) && unit.shortest_path_to_attack(self, &Path::new(p), pos).is_some() {
                     result.insert(p);
                 }
             }

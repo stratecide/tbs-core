@@ -112,13 +112,15 @@ impl<D: Direction> Terrain<D> {
                 MovementType::Chess) => None,
 
             (Self::Sea, land_units!()) => None,
+            (Self::Sea, MovementType::Hover(_)) => Some(MovementPoints::from(1.5)),
             (Self::Sea, _) => Some(MovementPoints::from(1.)),
 
             (Self::ShallowSea, land_units!()) => None,
-            (Self::ShallowSea, MovementType::Ship) => Some(MovementPoints::from(1.5)),
             (Self::ShallowSea, _) => Some(MovementPoints::from(1.)),
 
             (Self::Reef, land_units!()) => None,
+            (Self::Reef, MovementType::Ship) => None,
+            (Self::Reef, MovementType::Boat) => Some(MovementPoints::from(1.5)),
             (Self::Reef, _) => Some(MovementPoints::from(1.)),
 
             (Self::Street, sea_units!()) => None,
@@ -145,6 +147,9 @@ impl<D: Direction> Terrain<D> {
             (Self::ChessTile, sea_units!()) => None,
             (Self::ChessTile, _) => Some(MovementPoints::from(1.)),
         }
+    }
+    pub fn is_water(&self) -> bool {
+        self.movement_cost(MovementType::Boat).is_some()
     }
     pub fn like_beach_for_hovercraft(&self) -> bool {
         match self {
@@ -361,12 +366,13 @@ impl Realty {
     }
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<MovementPoints> {
         match (self, movement_type) {
+            (Self::Hq, MovementType::Chess) => None,
             (Self::Port(_), MovementType::Chess) => None,
             (Self::OilPlatform, MovementType::Chess) => None,
+            (Self::Hq, _) => Some(MovementPoints::from(1.)),
             (Self::Port(_), _) => Some(MovementPoints::from(1.)),
             (Self::OilPlatform, _) => Some(MovementPoints::from(1.)),
             (
-                Self::Hq |
                 Self::City |
                 Self::Factory(_) |
                 Self::Airport(_),
@@ -377,6 +383,7 @@ impl Realty {
     }
     pub fn like_beach_for_hovercraft(&self) -> bool {
         match self {
+            Self::Hq => true,
             Self::Port(_) => true,
             Self::OilPlatform => true,
             _ => false,
