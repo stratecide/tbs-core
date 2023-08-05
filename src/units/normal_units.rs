@@ -361,13 +361,11 @@ impl NormalUnit {
         }
     }
     pub fn shortest_path_to_attack<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
-        if !self.can_attack_after_moving() {
+        if path_so_far.steps.len() == 0 && self.attackable_positions(game, path_so_far.start, false).contains(&goal) {
+            return Some(path_so_far.clone());
+        } else if !self.can_attack_after_moving() {
             // no need to look for paths if the unit can't attack after moving
-            if path_so_far.steps.len() == 0 && self.attackable_positions(game, path_so_far.start, false).contains(&goal) {
-                return Some(path_so_far.clone());
-            } else {
-                return None;
-            }
+            return None;
         }
         let mut result = None;
         movement_search(game, self, path_so_far, None, |path, p, can_stop_here| {
@@ -401,9 +399,12 @@ impl NormalUnit {
     }
 
     pub fn check_path<D: Direction>(&self, game: &Game<D>, path_to_check: &Path<D>, board_at_the_end: bool) -> Result<(), CommandError> {
+        if path_to_check.steps.len() == 0 && !board_at_the_end {
+            return Ok(())
+        }
         let team = self.get_team(game);
         let fog = game.get_fog().get(&team);
-        let mut path_is_valid = false;
+        let mut path_is_valid = path_to_check.steps.len() == 0 && !board_at_the_end;
         movement_search(game, self, path_to_check, fog, |path, p, can_stop_here| {
             if path == path_to_check {
                 if board_at_the_end {
@@ -1005,12 +1006,12 @@ impl NormalUnits {
             Self::Hovercraft(_) => (ArmorType::Infantry, 1.6),
             
             Self::SharkRider => (ArmorType::Light, 1.5),
-            Self::TransportBoat(_) => (ArmorType::Light, 1.0),
+            Self::TransportBoat(_) => (ArmorType::Light, 1.2),
             Self::WaveBreaker => (ArmorType::Light, 2.0),
             Self::Submarine => (ArmorType::Submarine, 2.0),
             Self::Cruiser => (ArmorType::Heavy, 2.5),
-            Self::DroneBoat(_, _) => (ArmorType::Light, 1.0),
-            Self::Battleship => (ArmorType::Light, 0.8),
+            Self::DroneBoat(_, _) => (ArmorType::Light, 1.5),
+            Self::Battleship => (ArmorType::Light, 1.1),
             
             Self::TransportHeli(_) => (ArmorType::Heli, 1.2),
             Self::AttackHeli => (ArmorType::Heli, 1.8),

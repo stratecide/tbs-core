@@ -105,7 +105,7 @@ impl<D: Direction> CommonMovement<D> {
     fn apply(&self, handler: &mut EventHandler<D>, board_at_the_end: bool, actively: bool) -> Result<Option<Point>, CommandError> {
         if let Ok(unit) = self.get_unit(handler.get_map()) {
             let mut path_taken = self.path.clone();
-            let mut path_taken_works = false;
+            let mut path_taken_works = !board_at_the_end && self.unload_index.is_none() && path_taken.steps.len() == 0;
             while !path_taken_works {
                 movement_search(handler.get_game(), &unit, &path_taken, None, |path, p, can_stop_here| {
                     if path == &self.path && board_at_the_end {
