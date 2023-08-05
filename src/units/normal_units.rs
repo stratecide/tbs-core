@@ -356,6 +356,7 @@ impl NormalUnit {
         match self.typ {
             NormalUnits::Artillery => false,
             NormalUnits::RocketLauncher => false,
+            NormalUnits::Battleship => false,
             _ => true,
         }
     }
@@ -941,7 +942,7 @@ impl NormalUnits {
             Self::TransportBoat(_) => AttackType::None,
             Self::WaveBreaker => AttackType::Adjacent,
             Self::Submarine => AttackType::Adjacent,
-            Self::Cruiser => AttackType::Ranged(1, 2),
+            Self::Cruiser => AttackType::Adjacent,
             Self::DroneBoat(_, _) => AttackType::None,
             Self::Battleship => AttackType::Ranged(3, 5),
 
@@ -1007,7 +1008,7 @@ impl NormalUnits {
             Self::TransportBoat(_) => (ArmorType::Light, 1.0),
             Self::WaveBreaker => (ArmorType::Light, 2.0),
             Self::Submarine => (ArmorType::Submarine, 2.0),
-            Self::Cruiser => (ArmorType::Heavy, 1.0),
+            Self::Cruiser => (ArmorType::Heavy, 2.5),
             Self::DroneBoat(_, _) => (ArmorType::Light, 1.0),
             Self::Battleship => (ArmorType::Light, 0.8),
             
@@ -1049,7 +1050,6 @@ impl NormalUnits {
     pub fn attack_factor_from_counter<D: Direction>(&self, _map: &Map<D>) -> f32 {
         match self {
             Self::Sniper => 0.5,
-            Self::Cruiser => 0.5,
             _ => 1.,
         }
     }

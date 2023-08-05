@@ -298,6 +298,8 @@ fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: i32, mut unit: Un
         if vision_changes.len() > 0 {
             handler.add_event(Event::PureFogChange(team, vision_changes.try_into().unwrap()));
         }
+    } else {
+        handler.add_event(Event::UnitCreation(pos, unit)); 
     }
 }
 
