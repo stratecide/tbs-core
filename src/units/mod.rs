@@ -220,11 +220,9 @@ impl<D: Direction> UnitType<D> {
     pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &NormalUnit, path: Option<&Path<D>>) -> Option<(WeaponType, u16)> {
         let is_counter = path.is_none();
         let (armor_type, defense) = self.get_armor();
-        let terrain_defense = if let Some(t) = game.get_map().get_terrain(pos) {
-            1. + t.defense_bonus(self)
-        } else {
-            1.
-        };
+        let terrain = game.get_map().get_terrain(pos).unwrap();
+        let terrain_defense = 1. + terrain.defense_bonus(self);
+        let in_water = terrain.is_water();
 
         let mut defense_bonus = 1.;
         if let Some(owner) = self.get_owner().and_then(|owner| game.get_owning_player(owner)) {
@@ -245,7 +243,7 @@ impl<D: Direction> UnitType<D> {
             } else {
                 attack *= attacker.attack_factor_from_counter(game);
             }
-            if let Some(factor) = weapon.damage_factor(&armor_type) {
+            if let Some(factor) = weapon.damage_factor(&armor_type, in_water) {
                 let mut attack_bonus = 1.;
                 attack_bonus += game.get_owning_player(attacker.get_owner()).unwrap().commander.attack_bonus(game, attacker, is_counter);
                 for (p, merc) in game.get_map().mercenary_influence_at(attacker_pos, Some(attacker.get_owner())) {

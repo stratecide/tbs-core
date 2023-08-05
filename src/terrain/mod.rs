@@ -148,6 +148,9 @@ impl<D: Direction> Terrain<D> {
             (Self::ChessTile, _) => Some(MovementPoints::from(1.)),
         }
     }
+    pub fn is_land(&self) -> bool {
+        self.movement_cost(MovementType::Foot).is_some()
+    }
     pub fn is_water(&self) -> bool {
         self.movement_cost(MovementType::Boat).is_some()
     }

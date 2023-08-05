@@ -236,8 +236,8 @@ impl NormalUnit {
             
             NormalUnits::SharkRider => (MovementType::Boat, MovementPoints::from(5.)),
             NormalUnits::TransportBoat(_) => (MovementType::Boat, MovementPoints::from(5.)),
-            NormalUnits::WaveBreaker => (MovementType::Ship, MovementPoints::from(7.)),
-            NormalUnits::Submarine => (MovementType::Ship, MovementPoints::from(7.)),
+            NormalUnits::WaveBreaker => (MovementType::Ship, MovementPoints::from(6.)),
+            NormalUnits::Submarine => (MovementType::Ship, MovementPoints::from(6.)),
             NormalUnits::Cruiser => (MovementType::Ship, MovementPoints::from(5.)),
             NormalUnits::DroneBoat(_, _) => (MovementType::Boat, MovementPoints::from(4.)),
             NormalUnits::Battleship => (MovementType::Ship, MovementPoints::from(5.)),
@@ -431,12 +431,10 @@ impl NormalUnit {
         target.get_team(game) != self.get_team(game) && self.threatens(game, target, target_pos)
     }
     pub fn threatens<D: Direction>(&self, game: &Game<D>, target: &UnitType<D>, target_pos: Point) -> bool {
+        let terrain = game.get_map().get_terrain(target_pos).unwrap();
+        let in_water = terrain.is_water();
         self.get_weapons().iter().any(|(weapon, _)| {
-            weapon.damage_factor(&target.get_armor().0).is_some()
-            && match weapon {
-                WeaponType::Torpedo => game.get_map().get_terrain(target_pos).unwrap().is_water(),
-                _ => true,
-            }
+            weapon.damage_factor(&target.get_armor().0, in_water).is_some()
         })
     }
 
@@ -974,9 +972,9 @@ impl NormalUnits {
 
             Self::SharkRider => vec![(WeaponType::MachineGun, 1.5), (WeaponType::AntiAir, 0.9)],
             Self::TransportBoat(_) => vec![],
-            Self::WaveBreaker => vec![(WeaponType::Shells, 1.)],
+            Self::WaveBreaker => vec![(WeaponType::Torpedo, 1.), (WeaponType::Shells, 0.5)],
             Self::Submarine => vec![(WeaponType::Torpedo, 1.)],
-            Self::Cruiser => vec![(WeaponType::Shells, 1.9)],
+            Self::Cruiser => vec![(WeaponType::Torpedo, 1.9), (WeaponType::Shells, 0.95)],
             Self::DroneBoat(_, _) => vec![],
             Self::Battleship => vec![(WeaponType::SurfaceMissiles, 1.)],
 
@@ -1008,7 +1006,7 @@ impl NormalUnits {
             Self::SharkRider => (ArmorType::Light, 1.5),
             Self::TransportBoat(_) => (ArmorType::Light, 1.0),
             Self::WaveBreaker => (ArmorType::Light, 2.0),
-            Self::Submarine => (ArmorType::Light, 2.0),
+            Self::Submarine => (ArmorType::Submarine, 2.0),
             Self::Cruiser => (ArmorType::Heavy, 1.0),
             Self::DroneBoat(_, _) => (ArmorType::Light, 1.0),
             Self::Battleship => (ArmorType::Light, 0.8),
