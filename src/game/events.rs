@@ -285,10 +285,19 @@ fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: i32, mut unit: Un
         }
         _ => (),
     }
-    let vision_changes: Vec<Point> = unit.get_vision(handler.get_game(), pos).into_iter().filter(|p| !handler.get_game().has_vision_at(to_client_perspective(&team), *p)).collect();
-    handler.add_event(Event::UnitCreation(pos, unit)); 
-    if vision_changes.len() > 0 {
-        handler.add_event(Event::PureFogChange(team, vision_changes.try_into().unwrap()));
+    if handler.get_game().is_foggy() {
+        let unit_vision = unit.get_vision(handler.get_game(), pos);
+        let perspective = to_client_perspective(&team);
+        let vision_changes: Vec<(Point, U8<2>)> = unit_vision.iter()
+        .filter_map(|(p, v)| {
+            fog_change_index(handler.get_game().get_vision(perspective, *p), Some(*v))
+                .and_then(|i| Some((*p, i)))
+        })
+        .collect();
+        handler.add_event(Event::UnitCreation(pos, unit)); 
+        if vision_changes.len() > 0 {
+            handler.add_event(Event::PureFogChange(team, vision_changes.try_into().unwrap()));
+        }
     }
 }
 
@@ -319,13 +328,43 @@ pub enum CommandError {
 }
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(bits = 2)]
+pub enum FogChange<D: Direction> {
+    NoneToSome(FieldData::<D>),
+    NoneToTrue(FieldData::<D>),
+    SomeToTrue(Option::<UnitType::<D>>),
+}
+impl<D: Direction> FogChange<D> {
+    pub fn index(&self) -> U8<2> {
+        U8::new(match self {
+            Self::NoneToSome(_) => 0,
+            Self::NoneToTrue(_) => 1,
+            Self::SomeToTrue(_) => 2,
+        })
+    }
+}
+pub fn fog_change_index(before: Option<Vision>, after: Option<Vision>) -> Option<U8<2>> {
+    match (before, after) {
+        (None, None) => None,
+        (Some(Vision::Normal), Some(Vision::Normal)) => None,
+        (Some(Vision::TrueSight), Some(Vision::TrueSight)) => None,
+        (None, Some(Vision::Normal)) => Some(U8::new(0)),
+        (Some(Vision::Normal), None) => Some(U8::new(0)),
+        (None, Some(Vision::TrueSight)) => Some(U8::new(1)),
+        (Some(Vision::TrueSight), None) => Some(U8::new(1)),
+        (Some(Vision::Normal), Some(Vision::TrueSight)) => Some(U8::new(2)),
+        (Some(Vision::TrueSight), Some(Vision::Normal)) => Some(U8::new(2)),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 8)]
 pub enum Event<D:Direction> {
     NextTurn,
     RandomFogNextTurn(bool),
     RandomFogForecast(bool, U8::<255>),
-    PureFogChange(Perspective, LVec::<Point, {point_map::MAX_AREA}>),
-    FogChange(Perspective, LVec::<(Point, FieldData::<D>), {point_map::MAX_AREA}>),
+    PureFogChange(Perspective, LVec::<(Point, U8<2>), {point_map::MAX_AREA}>),
+    FogChange(Perspective, LVec::<(Point, FogChange<D>), {point_map::MAX_AREA}>),
     UnitPath(Option::<Option::<UnloadIndex>>, Path::<D>, Option::<bool>, UnitType::<D>),
     HoverPath(Option::<Option::<UnloadIndex>>, Point, LVec::<(bool, PathStep::<D>), {point_map::MAX_AREA}>, Option::<bool>, UnitType::<D>),
     UnitActionStatus(Point, UnitActionStatus, UnitActionStatus),
@@ -381,8 +420,8 @@ impl<D: Direction> EventInterface for Event<D> {
 impl<D: Direction> Event<D> {
     pub fn apply(&self, game: &mut Game<D>) {
         match self {
-            Self::PureFogChange(team, points) => {
-                flip_fog(game, to_client_perspective(&team), points.iter());
+            Self::PureFogChange(team, vision_changes) => {
+                flip_fog(game, to_client_perspective(&team), vision_changes.iter().cloned());
             }
             Self::RandomFogNextTurn(_) => {
                 match game.get_fog_mode_mut() {
@@ -404,7 +443,7 @@ impl<D: Direction> Event<D> {
             }
             Self::FogChange(team, changes) => {
                 let team = to_client_perspective(&team);
-                flip_fog(game, team, changes.iter().map(|change| &change.0));
+                flip_fog(game, team, changes.iter().map(|change| (change.0, change.1.index())));
                 for (pos, change) in changes.iter() {
                     apply_vision_changes(game, team, *pos, change.clone());
                 }
@@ -605,7 +644,7 @@ impl<D: Direction> Event<D> {
     pub fn undo(&self, game: &mut Game<D>) {
         match self {
             Self::PureFogChange(team, points) => {
-                flip_fog(game, to_client_perspective(&team), points.iter());
+                flip_fog(game, to_client_perspective(&team), points.iter().cloned());
             }
             Self::RandomFogNextTurn(old_value) => {
                 match game.get_fog_mode_mut() {
@@ -627,7 +666,7 @@ impl<D: Direction> Event<D> {
             }
             Self::FogChange(team, changes) => {
                 let team = to_client_perspective(&team);
-                flip_fog(game, team, changes.iter().map(|change| &change.0));
+                flip_fog(game, team, changes.iter().map(|change| (change.0, change.1.index())));
                 for (pos, change) in changes.iter() {
                     apply_vision_changes(game, team, *pos, change.clone());
                 }
@@ -797,8 +836,14 @@ impl<D: Direction> Event<D> {
             Self::PureFogChange(t, points) => {
                 if to_client_perspective(t) == team {
                     let mut changes = LVec::new();
-                    for p in points.iter() {
-                        changes.push((p.clone(), game.get_map().get_field_data(*p))).unwrap();
+                    for (p, index) in points.iter() {
+                        let change = match **index {
+                            0 => FogChange::NoneToSome(game.get_map().get_field_data(*p).stealth_replacement()),
+                            1 => FogChange::NoneToTrue(game.get_map().get_field_data(*p)),
+                            2 => FogChange::SomeToTrue(game.get_map().get_unit(*p).cloned()),
+                            _ => panic!("U8<2> contains a value > 2"),
+                        };
+                        changes.push((*p, change)).unwrap();
                     }
                     Some(Self::FogChange(t.clone(), changes))
                 } else {
@@ -830,81 +875,79 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::UnitActionStatus(pos, _, _) => {
-                if game.has_vision_at(team, *pos) {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::UnitExhaust(pos) => {
-                if game.has_vision_at(team, *pos) {
-                    Some(self.clone())
-                } else if let Some(_) = game.get_map().get_unit(*pos).and_then(|u| u.fog_replacement()) {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::UnitExhaustBoarded(pos, _) => {
-                if game.has_vision_at(team, *pos) {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
-            Self::UnitHpChange(pos, real_change, displayed_change) => {
-                if game.has_vision_at(team, *pos) {
+            Self::UnitHpChange(pos, _, _) => {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
-                } else if let Some(_) = game.get_map().get_unit(*pos).and_then(|u| u.fog_replacement()) {
-                    Some(Self::UnitHpChange(*pos, *real_change, *displayed_change))
                 } else {
                     None
                 }
             }
             Self::UnitHpChangeBoarded(pos, _, _) => {
-                if game.has_vision_at(team, *pos) {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::UnitCreation(pos, unit) => {
-                if game.has_vision_at(team, *pos) {
-                    Some(self.clone())
-                } else {
-                    unit.fog_replacement().and_then(|u| Some(Self::UnitCreation(*pos, u)))
-                }
-            }
-            Self::UnitDeath(pos, unit) => {
-                if game.has_vision_at(team, *pos) {
-                    Some(self.clone())
-                } else {
-                    unit.fog_replacement().and_then(|u| Some(Self::UnitDeath(*pos, u)))
-                }
-            }
-            Self::UnitReplacement(pos, _, _) => {
-                if game.has_vision_at(team, *pos) {
+                if game.can_see_unit_at(team, *pos, unit) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
+            Self::UnitDeath(pos, unit) => {
+                if game.can_see_unit_at(team, *pos, unit) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitReplacement(pos, before, after) => {
+                match (game.can_see_unit_at(team, *pos, before), game.can_see_unit_at(team, *pos, after)) {
+                    (true, true) => Some(self.clone()),
+                    (false, false) => None,
+                    (true, false) => Some(Self::UnitDeath(*pos, before.clone())),
+                    (false, true) => Some(Self::UnitCreation(*pos, after.clone())),
+                }
+            }
+            // TODO: should use UnitReplacement instead
             Self::UnitSetMercenary(pos, _) => {
-                if game.has_vision_at(team, *pos) {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::MercenaryCharge(pos, _) => {
-                if game.has_vision_at(team, *pos) {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::MercenaryPowerSimple(pos) => {
-                if game.has_vision_at(team, *pos) {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
@@ -1007,8 +1050,8 @@ impl<D: Direction> Event<D> {
             Self::CommanderFlipActiveSimple(_) => {
                 Some(self.clone())
             }
-            Self::UnitMovedThisGame(p) => {
-                if game.has_vision_at(team, *p) {
+            Self::UnitMovedThisGame(pos) => {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
@@ -1021,8 +1064,8 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::UnitDirection(p, _, _) => {
-                if game.has_vision_at(team, *p) {
+            Self::UnitDirection(pos, _, _) => {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
@@ -1035,8 +1078,8 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::BuildDrone(p, _) => {
-                if game.has_vision_at(team, *p) {
+            Self::BuildDrone(pos, _) => {
+                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap()) {
                     Some(self.clone())
                 } else {
                     None
@@ -1089,12 +1132,8 @@ fn undo_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option<
 }
 
 fn fog_replacement_unit_path<D: Direction, S: PathStepExt<D>>(game: &Game<D>, team: ClientPerspective, unload_index: Option<Option<UnloadIndex>>, start: Point, steps: &LVec<S, {point_map::MAX_AREA}>, end_visible: Option<bool>, unit: UnitType<D>) -> Option<(Option<Option<UnloadIndex>>, Point, LVec<S, {point_map::MAX_AREA}>, Option<bool>, UnitType<D>)> {
-    let visible_path = if unit.get_team(game) != team {
-        unit_path_fog_replacement(game, team, unit, start, steps)
-    } else {
-        Some((unit, start, steps.clone()))
-    };
-    let unload_index = if game.has_vision_at(team, start) {
+    // TODO: doesn't work if the transporter has stealth
+    let unload_index = if game.can_see_unit_at(team, start, &unit) {
         Some(unload_index.unwrap_or(None))
     } else {
         None
@@ -1103,10 +1142,16 @@ fn fog_replacement_unit_path<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
     for step in steps {
         path.steps.push(step.step().clone()).unwrap();
     }
-    let into = if game.has_vision_at(team, path.end(game.get_map()).unwrap()) {
+    // TODO: doesn't work if the transporter has stealth
+    let into = if game.can_see_unit_at(team, path.end(game.get_map()).unwrap(), &unit) {
         end_visible
     } else {
         None
+    };
+    let visible_path = if unit.get_team(game) != team {
+        unit_path_fog_replacement(game, team, unit, start, steps)
+    } else {
+        Some((unit, start, steps.clone()))
     };
     if let Some((unit, start, steps)) = visible_path {
         Some((unload_index, start, steps, into, unit))
@@ -1120,7 +1165,7 @@ fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
     let mut current = start;
     let mut previous_visible = false;
     let mut last_visible = None;
-    if game.has_vision_at(team, current) {
+    if game.can_see_unit_at(team, current, &unit) {
         result = Some((start, LVec::new()));
         previous_visible = true;
         last_visible = Some(start);
@@ -1131,7 +1176,7 @@ fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
         }
         let previous = current;
         current = step.step().progress(game.get_map(), current).expect(&format!("unable to find next point after {:?}", current));
-        let visible = game.has_vision_at(team, current);
+        let visible = game.can_see_unit_at(team, current, &unit);
         if visible && !previous_visible {
             // either the unit appears out of fog or this is the first step
             if let Some(result) = &mut result {
@@ -1183,29 +1228,52 @@ impl<D: Direction> Effect<D> {
     }
 }
 
-fn flip_fog<'a, D: Direction, I: Iterator<Item = &'a Point>>(game: &mut Game<D>, team: ClientPerspective, positions: I) {
-    let fog = game.get_fog_mut().get_mut(&team).unwrap();
-    for pos in positions {
-        if fog.contains(pos) {
-            fog.remove(pos);
-        } else {
-            fog.insert(pos.clone());
-        }
+fn flip_fog<D: Direction, I: Iterator<Item = (Point, U8<2>)>>(game: &mut Game<D>, team: ClientPerspective, vision_changes: I) {
+    for (pos, change_index) in vision_changes {
+        let vision = match (*change_index, game.get_vision(team, pos)) {
+            (0, None) => Some(Vision::Normal),
+            (0, Some(Vision::Normal)) => None,
+            (1, None) => Some(Vision::TrueSight),
+            (1, Some(Vision::TrueSight)) => None,
+            (2, Some(Vision::Normal)) => Some(Vision::TrueSight),
+            (2, Some(Vision::TrueSight)) => Some(Vision::Normal),
+            _ => panic!("pattern not covered at {:?}: {}", pos, *change_index),
+        };
+        game.set_vision(team, pos, vision);
     }
 }
 
-fn apply_vision_changes<D: Direction>(game: &mut Game<D>, team: ClientPerspective, pos: Point, mut change: FieldData<D>) {
-    if !game.has_vision_at(team, pos) {
-        change = change.fog_replacement();
+fn apply_vision_changes<D: Direction>(game: &mut Game<D>, team: ClientPerspective, pos: Point, change: FogChange<D>) {
+    match change {
+        FogChange::NoneToSome(mut change) |
+        FogChange::NoneToTrue(mut change) => {
+            if !game.has_vision_at(team, pos) {
+                change = change.fog_replacement();
+            }
+            let FieldData {
+                terrain,
+                details,
+                unit,
+            } = change;
+            game.get_map_mut().set_terrain(pos.clone(), terrain);
+            game.get_map_mut().set_details(pos.clone(), details.to_vec());
+            game.get_map_mut().set_unit(pos.clone(), unit);
+        }
+        FogChange::SomeToTrue(mut change) => {
+            if !game.has_true_sight_at(team, pos) {
+                change = if let Some(unit) = change {
+                    if unit.fog_replacement().is_none() && game.get_map().get_terrain(pos).unwrap().hides_unit(&unit) {
+                        None
+                    } else {
+                        unit.stealth_replacement()
+                    }
+                } else {
+                    None
+                };
+            }
+            game.get_map_mut().set_unit(pos.clone(), change);
+        }
     }
-    let FieldData {
-        terrain,
-        details,
-        unit,
-    } = change;
-    game.get_map_mut().set_terrain(pos.clone(), terrain);
-    game.get_map_mut().set_details(pos.clone(), details.to_vec());
-    game.get_map_mut().set_unit(pos.clone(), unit);
 }
 
 pub struct EventHandler<'a, D: Direction> {
@@ -1316,7 +1384,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         // other players should maybe not be visible
         self.recalculate_fog(false);
 
-        self.add_event(Event::MoneyChange(self.game.current_player().owner_id, ((*self.game.current_player().income as isize * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32).try_into().unwrap()));
+        let income = (*self.game.current_player().income as isize * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32;
+        if income != 0 {
+            self.add_event(Event::MoneyChange(self.game.current_player().owner_id, income.try_into().unwrap()));
+        }
 
         // fire structures
         for p in self.get_map().all_points() {
@@ -1335,18 +1406,17 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             perspectives.remove(&Some(self.game.current_player().team));
         }
         perspectives.insert(None);
-        for perspective in perspectives {
-            let fog = self.game.recalculate_fog(perspective);
-            let mut changes = HashSet::new();
-            for p in fog.difference(self.game.get_fog().get(&to_client_perspective(&perspective)).unwrap()) {
-                changes.insert(p.clone());
-            }
-            for p in self.game.get_fog().get(&to_client_perspective(&perspective)).unwrap().difference(&fog) {
-                changes.insert(p.clone());
+        for team in perspectives {
+            let perspective = to_client_perspective(&team);
+            let fog = self.game.recalculate_fog(team);
+            let mut changes = Vec::new();
+            for p in self.get_map().all_points() {
+                if let Some(index) = fog_change_index(self.game.get_vision(perspective, p), fog.get(&p).cloned()) {
+                    changes.push((p, index));
+                }
             }
             if changes.len() > 0 {
-                let changes: Vec<Point> = changes.into_iter().collect();
-                self.add_event(Event::PureFogChange(perspective, changes.try_into().unwrap()));
+                self.add_event(Event::PureFogChange(team, changes.try_into().unwrap()));
             }
         }
     }

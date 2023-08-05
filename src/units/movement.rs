@@ -9,7 +9,7 @@ use zipper_derive::*;
 use crate::game::events::CommandError;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
-use crate::game::game::Game;
+use crate::game::game::{Game, Vision};
 use crate::map::map::*;
 
 use super::normal_units::{NormalUnits, NormalUnit};
@@ -279,7 +279,6 @@ impl<D: Direction> PathStepExt<D> for HoverStep<D> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MovementSearchMeta<D: Direction> {
     pub movement_type: MovementType,
-    pub stealth: bool,
     pub illegal_next_dir: Option<D>, // units aren't allowed to turn around 180°
     pub remaining_movement: MovementPoints,
     pub path: Path<D>,
@@ -288,13 +287,6 @@ impl<D: Direction> MovementSearchMeta<D> {
     fn order(&self, other: &Self) -> Ordering {
         if self.movement_type == other.movement_type {
             let mut orderings = HashSet::new();
-            orderings.insert(if self.stealth == other.stealth {
-                Ordering::Equal
-            } else if self.stealth {
-                Ordering::Greater
-            } else {
-                Ordering::Less
-            });
             orderings.insert(self.remaining_movement.cmp(&other.remaining_movement));
             orderings.insert(if self.illegal_next_dir.is_some() == other.illegal_next_dir.is_some() {
                 Ordering::Equal
@@ -343,7 +335,7 @@ impl<D: Direction> Ord for MovementSearch<D> {
     }
 }
 
-pub fn movement_search<D, F>(game: &Game<D>, unit: &NormalUnit, path_so_far: &Path<D>, fog: Option<&HashSet<Point>>, mut callback: F)
+pub fn movement_search<D, F>(game: &Game<D>, unit: &NormalUnit, path_so_far: &Path<D>, vision: Option<&HashMap<Point, Vision>>, mut callback: F)
 where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
     // if the unit can't move from it's position, no need to go further
     let (movement_type, remaining_movement) = match game.get_map().get_terrain(path_so_far.start) {
@@ -370,20 +362,26 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
         meta: MovementSearchMeta {
             movement_type,
             remaining_movement,
-            stealth: unit.has_stealth(),
             illegal_next_dir: None,
             path: Path::new(path_so_far.start),
         }
     });
     while let Some(MovementSearch{pos, meta}) = next_checks.pop() {
-        let blocking_unit = game.get_map().get_unit(pos);
         if meta.path.steps.len() <= path_so_far.steps.len() && meta.path.steps[..] != path_so_far.steps[..meta.path.steps.len()] {
             // only follow path_so_far until its end, then the search can start
             continue;
         }
         if meta.path.steps.len() >= path_so_far.steps.len() {
-            let hidden_by_fog = fog.and_then(|fog| Some(fog.contains(&pos))).unwrap_or(false);
-            let can_stop_here = hidden_by_fog || (blocking_unit == None || path_so_far.start == pos && blocking_unit.unwrap() == &unit.as_unit());
+            let can_stop_here = if let Some(blocking_unit) = game.get_map().get_unit(pos) {
+                path_so_far.start == pos && blocking_unit == &unit.as_unit()
+                || vision.and_then(|vision| Some(match vision.get(&pos) {
+                    None => true,
+                    Some(Vision::Normal) => blocking_unit.has_stealth() || game.get_map().get_terrain(pos).unwrap().hides_unit(blocking_unit),
+                    Some(Vision::TrueSight) => false,
+                })).unwrap_or(false)
+            } else {
+                true
+            };
             match callback(&meta.path, pos, can_stop_here) {
                 PathSearchFeedback::Found => return,
                 PathSearchFeedback::Rejected => continue,
@@ -415,15 +413,14 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
                 // don't turn around 180°
                 continue;
             }
-            let hidden_by_fog = fog.and_then(|fog| Some(fog.contains(&neighbor.point))).unwrap_or(false);
-            if !hidden_by_fog {
-                match game.get_map().get_unit(neighbor.point) {
-                    Some(other) => {
-                        if !other.can_be_moved_through(unit, game) {
-                            continue;
-                        }
-                    }
-                    _ => {}
+            if let Some(blocking_unit) = game.get_map().get_unit(neighbor.point) {
+                let hidden_by_fog = vision.and_then(|vision| Some(match vision.get(&neighbor.point) {
+                    None => true,
+                    Some(Vision::Normal) => blocking_unit.has_stealth() || game.get_map().get_terrain(neighbor.point).unwrap().hides_unit(&blocking_unit),
+                    Some(Vision::TrueSight) => false,
+                })).unwrap_or(false);
+                if !hidden_by_fog && !blocking_unit.can_be_moved_through(unit, game) {
+                    continue;
                 }
             }
             if let Some(mut meta) = game.get_map().get_terrain(neighbor.point).and_then(|t| t.update_movement(&meta, prev_terrain)) {

@@ -429,18 +429,25 @@ where D: Direction
             unit: self.units.get(&p).cloned(),
         }
     }
-    pub fn export_field(&self, zipper: &mut Zipper, p: Point, fog: bool) {
+    pub fn export_field(&self, zipper: &mut Zipper, p: Point, vision: Option<&Vision>) {
         let mut fd = self.get_field_data(p);
-        if fog {
-            fd = fd.fog_replacement();
-        }
+        fd = match vision {
+            Some(Vision::TrueSight) => fd,
+            Some(Vision::Normal) => fd.stealth_replacement(),
+            None => fd.fog_replacement(),
+        };
         fd.export(zipper);
     }
 
-    pub fn zip(&self, zipper: &mut Zipper, fog: Option<&HashSet<Point>>) {
+    pub fn zip(&self, zipper: &mut Zipper, vision: Option<&HashMap<Point, Vision>>) {
         self.wrapping_logic.export(zipper);
         for p in self.all_points() {
-            self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p)).is_some());
+            let vision = if let Some(vision) = vision {
+                vision.get(&p)
+            } else {
+                Some(&Vision::TrueSight)
+            };
+            self.export_field(zipper, p, vision);
         }
     }
 
@@ -494,6 +501,22 @@ impl<D: Direction> FieldData<D> {
             terrain: self.terrain.fog_replacement(),
             details: details_fog_replacement(&self.details),
             unit: self.unit.clone().and_then(|unit| unit.fog_replacement())
+        }
+    }
+    pub fn stealth_replacement(&self) -> Self {
+        let unit = if let Some(unit) = self.unit.as_ref() {
+            if unit.fog_replacement().is_none() && self.terrain.hides_unit(unit) {
+                None
+            } else {
+                unit.stealth_replacement()
+            }
+        } else {
+            None
+        };
+        Self {
+            terrain: self.terrain.clone(),
+            details: self.details.clone(),
+            unit
         }
     }
 }

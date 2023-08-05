@@ -179,17 +179,23 @@ impl<D: Direction> CommonMovement<D> {
 
 fn after_path<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>, unit: &UnitType<D>) {
     let team = handler.get_game().current_player().team;
-    if ClientPerspective::Team(*team) == unit.get_team(handler.get_game()) {
-        let mut vision_changes = HashSet::new();
+    if handler.get_game().is_foggy() && ClientPerspective::Team(*team) == unit.get_team(handler.get_game()) {
+        let perspective = ClientPerspective::Team(*team);
+        let mut vision_changes = HashMap::new();
         for p in path.points(handler.get_map()).unwrap().into_iter().skip(1) {
-            for p in unit.get_vision(handler.get_game(), p) {
-                if !handler.get_game().has_vision_at(ClientPerspective::Team(*team), p) {
-                    vision_changes.insert(p);
+            for (p, vision) in unit.get_vision(handler.get_game(), p) {
+                if vision == Vision::TrueSight && !handler.get_game().has_true_sight_at(perspective, p)
+                || !handler.get_game().has_vision_at(perspective, p) && !vision_changes.contains_key(&p) {
+                    vision_changes.insert(p, vision);
                 }
             }
         }
+        let vision_changes: Vec<(Point, U8<2>)> = vision_changes.into_iter()
+        .filter_map(|(p, v)| 
+             fog_change_index(handler.get_game().get_vision(perspective, p), Some(v))
+             .and_then(|vi| Some((p, vi))))
+        .collect();
         if vision_changes.len() > 0 {
-            let vision_changes: Vec<Point> = vision_changes.into_iter().collect();
             handler.add_event(Event::PureFogChange(Some(team), vision_changes.try_into().unwrap()));
         }
     }

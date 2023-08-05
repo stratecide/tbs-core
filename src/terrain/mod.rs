@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::Game, events::{EventHandler, Event}}, units::{normal_units::DroneId, structures::{Structures, Structure}}};
+use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::{Game, Vision}, events::{EventHandler, Event}}, units::{normal_units::DroneId, structures::{Structures, Structure}}};
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
 use crate::units::UnitType;
@@ -226,7 +226,6 @@ impl<D: Direction> Terrain<D> {
             movement_type,
             illegal_next_dir: None,
             path: movement_meta.path.clone(),
-            stealth: movement_meta.stealth,
         })
     }
 
@@ -264,29 +263,47 @@ impl<D: Direction> Terrain<D> {
         }
     }
 
-    pub fn requires_true_sight(&self) -> bool {
+    /*pub fn requires_true_sight(&self) -> bool {
         match self {
             Self::Forest => true,
             Self::Icebergs => true,
             _ => false
         }
+    }*/
+    pub fn hides_unit(&self, unit: &UnitType<D>) -> bool {
+        if match self {
+            Self::Forest => false,
+            Self::Icebergs => false,
+            _ => true
+        } {
+            return false;
+        }
+        match unit {
+            UnitType::Structure(_) => false,
+            UnitType::Chess(_) => true,
+            UnitType::Normal(unit) => {
+                let movement_type = unit.get_movement(self).0;
+                movement_type != MovementType::Plane
+                && movement_type != MovementType::Heli
+            }
+        }
     }
 
-    pub fn get_vision(&self, game: &Game<D>, pos: Point, team: Perspective) -> HashSet<Point> {
-        let mut result = HashSet::new();
+    pub fn get_vision(&self, game: &Game<D>, pos: Point, team: Perspective) -> HashMap<Point, Vision> {
+        let mut result = HashMap::new();
         match self {
             Terrain::Flame => {
-                result.insert(pos);
                 for layer in game.get_map().range_in_layers(pos, 2) {
                     for (p, _, _) in layer {
-                        result.insert(p);
+                        result.insert(p, Vision::Normal);
                     }
                 }
+                result.insert(pos, Vision::TrueSight);
             }
             Terrain::Realty(_, owner, _) => {
                 if let Some(player) = owner.and_then(|owner| game.get_owning_player(owner)) {
                     if Some(player.team) == team {
-                        result.insert(pos.clone());
+                        result.insert(pos, Vision::TrueSight);
                     }
                 }
             }

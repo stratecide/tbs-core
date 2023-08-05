@@ -14,6 +14,7 @@ use zipper::zipper_derive::*;
 
 use crate::commanders::Commander;
 use crate::game::events::*;
+use crate::game::game::Vision;
 use crate::player::*;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -209,7 +210,7 @@ impl<D: Direction> UnitType<D> {
     }
     pub fn can_be_moved_through(&self, by: &NormalUnit, game: &Game<D>) -> bool {
         match self {
-            Self::Normal(_) => by.has_stealth() || self.get_team(game) == by.get_team(game),
+            Self::Normal(_) => by.has_stealth() && !game.is_foggy() || self.get_team(game) == by.get_team(game),
             Self::Chess(_) => false,
             Self::Structure(_) => false,
         }
@@ -272,17 +273,19 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => 0,
         }
     }
-    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashSet<Point> {
+    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, Vision> {
         match self {
             Self::Chess(unit) => unit.get_vision(game, pos),
             _ => {
-                let mut result = HashSet::new();
-                result.insert(pos.clone());
+                let mut result = HashMap::new();
+                result.insert(pos, Vision::TrueSight);
                 let layers = game.get_map().range_in_layers(pos, self.vision_range(game, pos));
                 for (i, layer) in layers.into_iter().enumerate() {
                     for (p, _, _) in layer {
-                        if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(p).unwrap().requires_true_sight() {
-                            result.insert(p);
+                        if i < self.true_vision_range(game, pos) {
+                            result.insert(p, Vision::TrueSight);
+                        } else if !result.contains_key(&p) {
+                            result.insert(p, Vision::Normal);
                         }
                     }
                 }
@@ -331,6 +334,24 @@ impl<D: Direction> UnitType<D> {
         match self {
             Self::Structure(struc) => struc.fog_replacement().and_then(|s| Some(Self::Structure(s))),
             _ => None,
+        }
+    }
+    pub fn has_stealth(&self) -> bool {
+        match self {
+            Self::Normal(unit) => unit.has_stealth(),
+            _ => false,
+        }
+    }
+    pub fn stealth_replacement(&self) -> Option<Self> {
+        match self {
+            Self::Normal(unit) => {
+                if unit.has_stealth() {
+                    None
+                } else {
+                    Some(self.clone())
+                }
+            },
+            _ => Some(self.clone()),
         }
     }
 

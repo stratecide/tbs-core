@@ -116,12 +116,16 @@ impl<D: Direction> ChessCommand<D> {
             handler.add_event(Event::UnitDeath(end, other.clone()));
         }
         handler.add_event(Event::UnitPath(Some(None), path.clone(), Some(false), UnitType::Chess::<D>(unit.clone())));
-        let vision_changes: HashSet<Point> = unit.get_vision(handler.get_game(), end).into_iter().filter(|p| {
-            !handler.get_game().has_vision_at(ClientPerspective::Team(team), *p)
-        }).collect();
-        if vision_changes.len() > 0 {
-            let vision_changes: Vec<Point> = vision_changes.into_iter().collect();
-            handler.add_event(Event::PureFogChange(Some(team.try_into().unwrap()), vision_changes.try_into().unwrap()));
+        let perspective = ClientPerspective::Team(team);
+        if handler.get_game().is_foggy() {
+            let vision_changes: Vec<(Point, U8<2>)> = unit.get_vision(handler.get_game(), end).into_iter()
+            .filter_map(|(p, vision)| {
+                fog_change_index(handler.get_game().get_vision(perspective, p), Some(vision))
+                .and_then(|vi| Some((p, vi)))
+            }).collect();
+            if vision_changes.len() > 0 {
+                handler.add_event(Event::PureFogChange(Some(team.try_into().unwrap()), vision_changes.try_into().unwrap()));
+            }
         }
         super::on_path_details(handler, &path, &UnitType::Chess::<D>(unit.clone()));
         match unit.typ {
@@ -133,7 +137,7 @@ impl<D: Direction> ChessCommand<D> {
                             if let Some(UnitType::Chess(unit)) = handler.get_map().get_unit(n.point) {
                                 match unit.typ {
                                     ChessUnits::Pawn(d, _, true) => {
-                                        if n.direction == d && handler.get_game().get_team(Some(unit.owner)) != ClientPerspective::Team(team) {
+                                        if n.direction == d && handler.get_game().get_team(Some(unit.owner)) != perspective {
                                             handler.add_event(Event::UnitDeath(n.point, UnitType::Chess(unit.clone())));
                                         }
                                     }
@@ -181,12 +185,15 @@ impl<D: Direction> ChessCommand<D> {
                                     king_path.steps.push(PathStep::Jump(dp.direction.opposite_direction())).unwrap();
                                     let king = handler.get_map().get_unit(dp.point).unwrap().clone();
                                     handler.add_event(Event::UnitPath(Some(None), king_path.clone(), Some(false), king.clone()));
-                                    let vision_changes: HashSet<Point> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter().filter(|p| {
-                                        !handler.get_game().has_vision_at(ClientPerspective::Team(team), *p)
-                                    }).collect();
-                                    if vision_changes.len() > 0 {
-                                        let vision_changes: Vec<Point> = vision_changes.into_iter().collect();
-                                        handler.add_event(Event::PureFogChange(Some(team.try_into().unwrap()), vision_changes.try_into().unwrap()));
+                                    if handler.get_game().is_foggy() {
+                                        let vision_changes: Vec<(Point, U8<2>)> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter()
+                                            .filter_map(|(p, vision)| {
+                                                fog_change_index(handler.get_game().get_vision(perspective, p), Some(vision))
+                                                    .and_then(|vi| Some((p, vi)))
+                                            }).collect();
+                                        if vision_changes.len() > 0 {
+                                            handler.add_event(Event::PureFogChange(Some(team.try_into().unwrap()), vision_changes.try_into().unwrap()));
+                                        }
                                     }
                                     super::on_path_details(handler, &path, &king);
                                 }
@@ -561,12 +568,20 @@ impl<D: Direction> ChessUnit<D> {
         }
     }
 
-    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashSet<Point> {
-        let mut result = HashSet::new();
-        result.insert(pos);
-        for p in game.get_map().get_neighbors(pos, NeighborMode::FollowPipes) {
-            result.insert(p.point);
+    fn add_path_to_vision(&self, game: &Game<D>, start: Point, path: &[PathStep<D>], end: Point, vision: &mut HashMap<Point, Vision>) {
+        if path.len() <= self.true_vision_range(game, start) {
+            vision.insert(end, Vision::TrueSight);
+        } else {
+            vision.insert(end, Vision::Normal);
         }
+    }
+
+    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, Vision> {
+        let mut result = HashMap::new();
+        result.insert(pos, Vision::TrueSight);
+        /*for p in game.get_map().get_neighbors(pos, NeighborMode::FollowPipes) {
+            result.insert(p.point);
+        }*/
         match self.typ {
             ChessUnits::Rook(_) => {
                 for d in D::list() {
@@ -574,10 +589,7 @@ impl<D: Direction> ChessUnit<D> {
                         if path.len() > self.vision_range(game, pos) {
                             true
                         } else {
-                            let terrain = game.get_map().get_terrain(p).unwrap();
-                            if path.len() <= self.true_vision_range(game, pos) || !terrain.requires_true_sight() {
-                                result.insert(p);
-                            }
+                            self.add_path_to_vision(game, pos, path, p, &mut result);
                             false
                         }
                     });
@@ -589,21 +601,35 @@ impl<D: Direction> ChessUnit<D> {
                         if path.len() > self.vision_range(game, pos) {
                             true
                         } else {
-                            let terrain = game.get_map().get_terrain(p).unwrap();
-                            if path.len() <= self.true_vision_range(game, pos) || !terrain.requires_true_sight() {
-                                result.insert(p);
-                            }
+                            self.add_path_to_vision(game, pos, path, p, &mut result);
                             false
                         }
                     });
                 }
             }
-            ChessUnits::Pawn(_, _, _) | ChessUnits::Knight => {
-                let layers = game.get_map().range_in_layers(pos, self.vision_range(game, pos));
-                for (i, layer) in layers.into_iter().enumerate() {
-                    for (p, _, _) in layer {
-                        if i < self.true_vision_range(game, pos) || !game.get_map().get_terrain(p).unwrap().requires_true_sight() {
-                            result.insert(p);
+            ChessUnits::Pawn(dir, moved_this_game, _) => {
+                let mut directions = vec![];
+                if game.get_map().get_terrain(pos) == Some(&Terrain::ChessTile) {
+                    directions.push(dir);
+                } else {
+                    directions = D::list();
+                }
+                for d in directions.clone() {
+                    if let Some(dp) = game.get_map().get_neighbor(pos, d) {
+                        result.insert(dp.point, Vision::TrueSight);
+                        if !moved_this_game {
+                            if let Some(dp) = game.get_map().get_neighbor(dp.point, dp.direction) {
+                                result.insert(dp.point, Vision::Normal);
+                            }
+                        }
+                    }
+                }
+            }
+            ChessUnits::Knight => {
+                for d in D::list() {
+                    for turn_left in vec![true, false] {
+                        if let Some(dp) = get_knight_neighbor(game.get_map(), pos, d, turn_left) {
+                            result.insert(dp.point, Vision::TrueSight);
                         }
                     }
                 }
@@ -614,10 +640,7 @@ impl<D: Direction> ChessUnit<D> {
                         if path.len() > self.vision_range(game, pos) {
                             true
                         } else {
-                            let terrain = game.get_map().get_terrain(p).unwrap();
-                            if path.len() <= self.true_vision_range(game, pos) || !terrain.requires_true_sight() {
-                                result.insert(p);
-                            }
+                            self.add_path_to_vision(game, pos, path, p, &mut result);
                             false
                         }
                     });
@@ -625,19 +648,19 @@ impl<D: Direction> ChessUnit<D> {
                         if path.len() > self.vision_range(game, pos) {
                             true
                         } else {
-                            let terrain = game.get_map().get_terrain(p).unwrap();
-                            if path.len() <= self.true_vision_range(game, pos) || !terrain.requires_true_sight() {
-                                result.insert(p);
-                            }
+                            self.add_path_to_vision(game, pos, path, p, &mut result);
                             false
                         }
                     });
                 }
             }
             ChessUnits::King(_) => {
+                for p in game.get_map().get_neighbors(pos, NeighborMode::FollowPipes) {
+                    result.insert(p.point, Vision::TrueSight);
+                }
                 for d in D::list() {
                     if let Some(dp) = get_diagonal_neighbor(game.get_map(), pos, d) {
-                        result.insert(dp.point);
+                        result.insert(dp.point, Vision::TrueSight);
                     }
                 }
             }

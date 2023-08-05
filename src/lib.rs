@@ -56,12 +56,14 @@ mod tests {
         let exported_server = server.export();
         
         println!("exported server: {:?}", exported_server);
+        println!("events: {:?}", events.get(&Perspective::Server));
         
         let imported_server = *Game::<Direction4>::import_server(exported_server.clone()).unwrap();
         assert_eq!(imported_server, server);
         
         for team in [Perspective::Neutral, Perspective::Team(0), Perspective::Team(1)] {
             println!("testing client import for perspective {:?}", team);
+            println!("events: {:?}", events.get(&team));
             let client = crate::game::game::Game::new_client(map.clone(), &settings, events.get(&team).unwrap());
             let hidden = match team {
                 Perspective::Team(team) => Some((team, exported_server.hidden.as_ref().unwrap().teams.get(&team).unwrap().clone())),
