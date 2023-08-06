@@ -124,7 +124,7 @@ impl<D: Direction> ChessCommand<D> {
                 .and_then(|vi| Some((p, vi)))
             }).collect();
             if vision_changes.len() > 0 {
-                handler.add_event(Event::PureFogChange(Some(team.try_into().unwrap()), vision_changes.try_into().unwrap()));
+                handler.add_event(Event::PureFogChange(Some(team.into()), vision_changes.try_into().unwrap()));
             }
         }
         super::on_path_details(handler, &path, &UnitType::Chess::<D>(unit.clone()));
@@ -192,7 +192,7 @@ impl<D: Direction> ChessCommand<D> {
                                                     .and_then(|vi| Some((p, vi)))
                                             }).collect();
                                         if vision_changes.len() > 0 {
-                                            handler.add_event(Event::PureFogChange(Some(team.try_into().unwrap()), vision_changes.try_into().unwrap()));
+                                            handler.add_event(Event::PureFogChange(Some(team.into()), vision_changes.try_into().unwrap()));
                                         }
                                     }
                                     super::on_path_details(handler, &path, &king);
@@ -247,7 +247,7 @@ impl<D: Direction> ChessUnit<D> {
         ChessUnit {
             typ: from,
             owner,
-            hp: 100.try_into().unwrap(),
+            hp: 100.into(),
             exhausted: false,
         }
     }
@@ -309,7 +309,7 @@ impl<D: Direction> ChessUnit<D> {
     where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
         let team = match game.get_team(Some(self.owner)) {
             ClientPerspective::Neutral => panic!("Game with chess piece that doesn't belong to a team"),
-            ClientPerspective::Team(team) => team.try_into().unwrap(),
+            ClientPerspective::Team(team) => team.into(),
         };
         match self.typ {
             ChessUnits::Pawn(dir, moved_this_game, _) => {
@@ -522,7 +522,7 @@ impl<D: Direction> ChessUnit<D> {
                 let king = game.get_map().get_unit(dp.point).unwrap();
                 let team = match game.get_team(Some(owner)) {
                     ClientPerspective::Neutral => panic!("Game with chess piece that doesn't belong to a team"),
-                    ClientPerspective::Team(team) => team.try_into().unwrap(),
+                    ClientPerspective::Team(team) => team.into(),
                 };
                 if unit.typ == ChessUnits::King(false) && unit.owner == owner
                     && game.find_visible_threats(dp.point, &king, team).is_empty()
@@ -836,7 +836,7 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                 if let ClientPerspective::Team(team) = team {
                     if let Some(unit) = game.get_map().get_unit(next_dp.point) {
                         if !ignore_unseen || game.has_vision_at(ClientPerspective::Team(team), next_dp.point) {
-                            if unit.killable_by_chess(team.try_into().unwrap(), game) {
+                            if unit.killable_by_chess(team.into(), game) {
                                 callback(next_dp.point, &steps);
                             }
                             break;
@@ -883,7 +883,7 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                 if let ClientPerspective::Team(team) = team {
                     if let Some(unit) = game.get_map().get_unit(next_dp.point) {
                         if !ignore_unseen || game.has_vision_at(ClientPerspective::Team(team), next_dp.point) {
-                            if unit.killable_by_chess(team.try_into().unwrap(), game) {
+                            if unit.killable_by_chess(team.into(), game) {
                                 callback(next_dp.point, &steps);
                             }
                             break;

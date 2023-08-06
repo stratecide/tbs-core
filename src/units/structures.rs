@@ -42,7 +42,7 @@ impl<D: Direction> Structure<D> {
     pub fn new_instance(from: Structures<D>) -> Self {
         Self {
             typ: from,
-            hp: 100.try_into().unwrap(),
+            hp: 100.into(),
             exhausted: false,
         }
     }
@@ -84,7 +84,7 @@ impl<D: Direction> Structure<D> {
                     if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(pos) {
                         if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) {
                             let hp = unit.get_hp() as i8;
-                            handler.add_event(Event::UnitHpChange(pos, (-damage.min(hp)).try_into().unwrap(), (-damage as i16).try_into().unwrap()));
+                            handler.add_event(Event::UnitHpChange(pos, (-damage.min(hp)).into(), (-damage as i16).into()));
                             if hp <= damage {
                                 handler.add_event(Event::UnitDeath(pos, handler.get_map().get_unit(pos).cloned().unwrap()));
                             }

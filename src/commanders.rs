@@ -73,7 +73,7 @@ impl Commander {
                     }
                     let lifesteal = ((damage * 0.15 + 0.5).floor() as i8).min(100 - attacker.get_hp() as i8);
                     if lifesteal > 0 {
-                        handler.add_event(Event::UnitHpChange(attacker_pos.clone(), lifesteal.try_into().unwrap(), (lifesteal as i16).try_into().unwrap()));
+                        handler.add_event(Event::UnitHpChange(attacker_pos.clone(), lifesteal.into(), lifesteal.into()));
                     }
                 }
             }

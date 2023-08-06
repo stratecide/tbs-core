@@ -56,13 +56,13 @@ impl<D: Direction> Command<D> {
                             }
                             for (index, u) in unit.get_boarded().iter().enumerate() {
                                 if u.data.exhausted {
-                                    events.push(Event::UnitExhaustBoarded(p, (index as u8).try_into().unwrap()));
+                                    events.push(Event::UnitExhaustBoarded(p, index.into()));
                                 } else {
                                     match &u.typ {
                                         NormalUnits::LightDrone(_) |
                                         NormalUnits::HeavyDrone(_) => {
                                             if u.get_hp() < 100 {
-                                                events.push(Event::UnitHpChangeBoarded(p, (index as u8).try_into().unwrap(), 30.min(100 - u.get_hp() as i8).try_into().unwrap()));
+                                                events.push(Event::UnitHpChangeBoarded(p, index.into(), 30.min(100 - u.get_hp() as i8).into()));
                                             }
                                         }
                                         _ => (),
@@ -85,7 +85,7 @@ impl<D: Direction> Command<D> {
                                 Realty::Airport(built_this_turn) |
                                 Realty::Port(built_this_turn) => {
                                     if **built_this_turn > 0 {
-                                        handler.add_event(Event::UpdateBuiltThisTurn(p, *built_this_turn, 0.try_into().unwrap()));
+                                        handler.add_event(Event::UpdateBuiltThisTurn(p, *built_this_turn, 0.into()));
                                     }
                                 }
                                 _ => (),
@@ -191,7 +191,7 @@ impl<D: Direction> Command<D> {
                                 }
                                 bubble_data = Some((
                                     crate::terrain::build_options_airport(handler.get_game(), owner_id, 0),
-                                    Event::RemoveDetail(pos.clone(), (index as u8).try_into().unwrap(), detail.clone())
+                                    Event::RemoveDetail(pos.clone(), index.into(), detail.clone())
                                 ));
                             }
                             Detail::FactoryBubble(owner) => {
@@ -200,7 +200,7 @@ impl<D: Direction> Command<D> {
                                 }
                                 bubble_data = Some((
                                     crate::terrain::build_options_factory(handler.get_game(), owner_id, 0),
-                                    Event::RemoveDetail(pos.clone(), (index as u8).try_into().unwrap(), detail.clone())
+                                    Event::RemoveDetail(pos.clone(), index.into(), detail.clone())
                                 ));
                             }
                             Detail::PortBubble(owner) => {
@@ -209,7 +209,7 @@ impl<D: Direction> Command<D> {
                                 }
                                 bubble_data = Some((
                                     crate::terrain::build_options_port(handler.get_game(), owner_id, 0),
-                                    Event::RemoveDetail(pos.clone(), (index as u8).try_into().unwrap(), detail.clone())
+                                    Event::RemoveDetail(pos.clone(), index.into(), detail.clone())
                                 ));
                             }
                             _ => {}
@@ -275,7 +275,7 @@ impl<D: Direction> Command<D> {
 fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: i32, mut unit: UnitType<D>, pos: Point) {
     let owner_id = handler.game.current_player().owner_id;
     let team = Some(handler.get_game().current_player().team);
-    handler.add_event(Event::MoneyChange(owner_id, (-cost).try_into().unwrap()));
+    handler.add_event(Event::MoneyChange(owner_id, (-cost).into()));
     match &mut unit {
         UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(_, drone_id), ..}) => {
             *drone_id = handler.get_map().new_drone_id(handler.rng());
@@ -549,7 +549,7 @@ impl<D: Direction> Event<D> {
             }
             Self::MoneyChange(owner, change) => {
                 if let Some(player) = game.get_owning_player_mut(*owner) {
-                    player.funds = (*player.funds + **change).try_into().unwrap();
+                    player.funds += **change;
                 }
             }
             Self::PureHideFunds(_) => {}
@@ -760,7 +760,7 @@ impl<D: Direction> Event<D> {
             }
             Self::MoneyChange(owner, change) => {
                 if let Some(player) = game.get_owning_player_mut(*owner) {
-                    player.funds = (*player.funds - **change).try_into().unwrap();
+                    player.funds -= **change;
                 }
             }
             Self::PureHideFunds(_) => {}
@@ -1015,7 +1015,7 @@ impl<D: Direction> Event<D> {
                             new_index += 1;
                         }
                     }
-                    Some(Self::RemoveDetail(p.clone(), new_index.try_into().unwrap(), detail))
+                    Some(Self::RemoveDetail(p.clone(), new_index.into(), detail))
                 } else {
                     None
                 }
@@ -1388,7 +1388,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
         let income = (*self.game.current_player().income as isize * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32;
         if income != 0 {
-            self.add_event(Event::MoneyChange(self.game.current_player().owner_id, income.try_into().unwrap()));
+            self.add_event(Event::MoneyChange(self.game.current_player().owner_id, income.into()));
         }
 
         // fire structures

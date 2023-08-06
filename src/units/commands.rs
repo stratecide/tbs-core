@@ -63,7 +63,7 @@ pub struct CommonMovement<D: Direction> {
 impl<D: Direction> CommonMovement<D> {
     pub fn new(unload_index: Option<u8>, path: Path<D>) -> Self {
         Self {
-            unload_index: unload_index.and_then(|i| Some(i.try_into().unwrap())),
+            unload_index: unload_index.and_then(|i| Some(i.into())),
             path,
         }
     }
@@ -375,9 +375,9 @@ impl<D: Direction> UnitCommand<D> {
                         .min(*handler.get_game().current_player().funds as u32 * 100 / unit.type_value() as u32);
                     if heal > 0 {
                         let cost = unit.type_value() as i32 * heal as i32 / 100;
-                        handler.add_event(Event::MoneyChange(unit.get_owner().unwrap(), (-cost).try_into().unwrap()));
+                        handler.add_event(Event::MoneyChange(unit.get_owner().unwrap(), (-cost).into()));
                         handler.add_event(Event::Effect(Effect::Repair(end)));
-                        handler.add_event(Event::UnitHpChange(end, (heal as i8).try_into().unwrap(), (heal as i16).try_into().unwrap()));
+                        handler.add_event(Event::UnitHpChange(end, heal.into(), heal.into()));
                         handler.add_event(Event::UnitActionStatus(end, UnitActionStatus::Normal, UnitActionStatus::Repairing));
                     }
                     handler.add_event(Event::UnitExhaust(end));
@@ -405,7 +405,7 @@ impl<D: Direction> UnitCommand<D> {
                         return Err(CommandError::UnitTypeWrong);
                     };
                     if handler.get_game().can_buy_merc_at(handler.get_game().current_player(), end) && cost <= *handler.get_game().current_player().funds {
-                        handler.add_event(Event::MoneyChange(unit.owner, (-(cost as i32)).try_into().unwrap()));
+                        handler.add_event(Event::MoneyChange(unit.owner, (-(cost as i32)).into()));
                         handler.add_event(Event::UnitSetMercenary(end, merc.mercenary()));
                         // TODO: update vision ...
                     }
@@ -426,7 +426,7 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 let load_index = transporter.get_boarded().len() as u8;
                 if let Some(end) = cm.apply(handler, true, true)? {
-                    handler.add_event(Event::UnitExhaustBoarded(end, load_index.try_into().unwrap()));
+                    handler.add_event(Event::UnitExhaustBoarded(end, load_index.into()));
                 }
                 Some(cm.path.start)
             }
@@ -453,7 +453,7 @@ impl<D: Direction> UnitCommand<D> {
                         if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
                             if mercenary.can_use_simple_power(handler.get_game(), pos) {
                                 let change = -(mercenary.charge() as i8);
-                                handler.add_event(Event::MercenaryCharge(pos, change.try_into().unwrap()));
+                                handler.add_event(Event::MercenaryCharge(pos, change.into()));
                                 handler.add_event(Event::MercenaryPowerSimple(pos));
                             } else {
                                 return Err(CommandError::PowerNotUsable);
@@ -495,7 +495,7 @@ impl<D: Direction> UnitCommand<D> {
                     let unit = option.to_normal(Some(drone_id));
                     let cost = unit.value() as i32;
                     if *handler.get_game().current_player().funds >= cost {
-                        handler.add_event(Event::MoneyChange(handler.get_game().current_player().owner_id, (-cost).try_into().unwrap()));
+                        handler.add_event(Event::MoneyChange(handler.get_game().current_player().owner_id, (-cost).into()));
                         handler.add_event(Event::BuildDrone(end, option));
                     }
                     handler.add_event(Event::UnitExhaust(end));
@@ -540,7 +540,7 @@ impl<D: Direction> UnitCommand<D> {
                 let unit = option.to_normal(Some(drone_id));
                 let cost = unit.value() as i32;
                 if *handler.get_game().current_player().funds >= cost {
-                    handler.add_event(Event::MoneyChange(handler.get_game().current_player().owner_id, (-cost).try_into().unwrap()));
+                    handler.add_event(Event::MoneyChange(handler.get_game().current_player().owner_id, (-cost).into()));
                     handler.add_event(Event::BuildDrone(pos, option));
                 }
                 handler.add_event(Event::UnitExhaust(pos));
@@ -562,7 +562,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins1 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(owner, (*player.income as i32 / 2).try_into().unwrap()));
+                            handler.add_event(Event::MoneyChange(owner, (*player.income / 2).into()));
                         }
                     }
                     false
@@ -570,7 +570,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins2 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(owner, (*player.income as i32).try_into().unwrap()));
+                            handler.add_event(Event::MoneyChange(owner, (*player.income).into()));
                         }
                     }
                     false
@@ -578,7 +578,7 @@ pub fn on_path_details<D: Direction>(handler: &mut EventHandler<D>, path_taken: 
                 Detail::Coins4 => {
                     if let Some(owner) = unit.get_owner() {
                         if let Some(player) = handler.get_game().get_owning_player(owner) {
-                            handler.add_event(Event::MoneyChange(owner, (*player.income as i32 * 2).try_into().unwrap()));
+                            handler.add_event(Event::MoneyChange(owner, (*player.income * 2).into()));
                         }
                     }
                     false
@@ -631,7 +631,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
                 defenders.push((target.clone(), defender.clone(), damage));
                 let defender = defender.clone();
                 handler.add_event(Event::Effect(weapon.effect(target)));
-                handler.add_event(Event::UnitHpChange(target.clone(), (-(damage.min(hp as u16) as i8)).try_into().unwrap(), (-(damage as i16)).max(-999).try_into().unwrap()));
+                handler.add_event(Event::UnitHpChange(target.clone(), (-(damage.min(hp as u16) as i8)).into(), (-(damage as i16)).max(-999).into()));
                 if damage >= hp as u16 {
                     handler.add_event(Event::UnitDeath(target, handler.get_map().get_unit(target).unwrap().clone()));
                     if handler.get_game().get_team(Some(attacker.get_owner())) != handler.get_game().get_team(defender.get_owner()) {
@@ -663,7 +663,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
         for (owner, commander_charge) in charges {
             let commander_charge = commander_charge.min(handler.get_game().get_owning_player(owner).and_then(|player| Some(*player.commander.charge_potential() as u32)).unwrap_or(0));
             if commander_charge > 0 {
-                handler.add_event(Event::CommanderCharge(owner, (commander_charge as i32).try_into().unwrap()));
+                handler.add_event(Event::CommanderCharge(owner, commander_charge.into()));
             }
         }
         if let Some(commander) = handler.get_game().get_owning_player(attacker.get_owner()).and_then(|player| Some(player.commander.clone())) {
@@ -675,7 +675,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
             if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
                 let change = change.min(mercenary.max_charge() as i16 - change).max(-(mercenary.charge() as i16));
                 if change != 0 {
-                    handler.add_event(Event::MercenaryCharge(p, (change as i8).try_into().unwrap()));
+                    handler.add_event(Event::MercenaryCharge(p, change.into()));
                 }
             }
         }

@@ -78,7 +78,7 @@ impl<D: Direction> UnitType<D> {
         } as u8
     }
     pub fn set_hp(&mut self, hp: u8) {
-        let hp = hp.min(100).try_into().unwrap();
+        let hp = hp.min(100).into();
         match self {
             Self::Normal(unit) => unit.data.hp = hp,
             Self::Chess(unit) => unit.hp = hp,

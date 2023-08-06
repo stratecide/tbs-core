@@ -78,7 +78,7 @@ impl NormalUnit {
             owner,
             data: UnitData {
                 mercenary: MaybeMercenary::None,
-                hp: 100.try_into().unwrap(),
+                hp: 100.into(),
                 exhausted: false,
                 zombie: false,
             },

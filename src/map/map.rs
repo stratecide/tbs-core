@@ -544,7 +544,7 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
             .map(|owner| PlayerSettings::new(owner))
             .collect();
         Ok(settings::GameSettings {
-            fog_mode: FogMode::DarkRegular(0.try_into().unwrap(), (players.len() as u8 * 2).try_into().unwrap(), (players.len() as u8 * 2 + 1).try_into().unwrap()),
+            fog_mode: FogMode::DarkRegular(0.into(), (players.len() as u8 * 2).into(), (players.len() as u8 * 2 + 1).into()),
             players: players.try_into().unwrap(),
         })
     }

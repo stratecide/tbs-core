@@ -95,7 +95,7 @@ impl Mercenaries {
     pub fn add_charge(&mut self, add: i8) {
         let value = (self.charge() as i8 + add).min(self.max_charge() as i8).max(0) as u8;
         match self {
-            Mercenaries::EarlGrey(charge, _) => *charge = value.try_into().unwrap(),
+            Mercenaries::EarlGrey(charge, _) => *charge = value.into(),
         }
     }
     pub fn power_active(&self) -> bool {
@@ -110,7 +110,7 @@ impl Mercenaries {
     }
     pub fn can_use_simple_power<D: Direction>(&self, _game: &Game<D>, _pos: Point) -> bool {
         match self {
-            Mercenaries::EarlGrey(charge, false) => self.charge() >= self.max_charge(),
+            Mercenaries::EarlGrey(_, false) => self.charge() >= self.max_charge(),
             _ => false,
         }
     }
@@ -197,7 +197,7 @@ pub enum MercenaryOption {
 impl MercenaryOption {
     pub fn mercenary(&self) -> Mercenaries {
         match self {
-            MercenaryOption::EarlGrey => Mercenaries::EarlGrey(0.try_into().unwrap(), false),
+            MercenaryOption::EarlGrey => Mercenaries::EarlGrey(0.into(), false),
         }
     }
     pub fn price<D: Direction>(&self, _game: &Game<D>, unit: &NormalUnit) -> Option<u16> {
