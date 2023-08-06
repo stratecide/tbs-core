@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::{Game, Vision}, events::{EventHandler, Event}}, units::{normal_units::DroneId, structures::{Structures, Structure}}};
+use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::{Game, Vision}, events::{EventHandler, Event}}, units::{structures::{Structures, Structure}}};
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
 use crate::units::UnitType;
@@ -206,29 +206,6 @@ impl<D: Direction> Terrain<D> {
             _ => {
                 movement_type
             }
-        })
-    }
-
-    pub fn update_movement(&self, movement_meta: &MovementSearchMeta<D>, prev_terrain: &Self) -> Option<MovementSearchMeta<D>> {
-        let remaining_movement = if let Some(cost) = self.movement_cost(movement_meta.movement_type) {
-            if cost <= movement_meta.remaining_movement {
-                movement_meta.remaining_movement - cost
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        };
-        let movement_type = if let Some(m) = self.update_movement_type(movement_meta.movement_type, prev_terrain) {
-            m
-        } else {
-            return None;
-        };
-        Some(MovementSearchMeta {
-            remaining_movement,
-            movement_type,
-            illegal_next_dir: None,
-            path: movement_meta.path.clone(),
         })
     }
 

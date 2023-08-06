@@ -165,16 +165,16 @@ where D: Direction
         result
     }
     
-    pub fn get_unit_movement_neighbors(&self, p: Point, _mov: MovementType) -> Vec<(OrientedPoint<D>, PathStep<D>)> {
-        let mut result = vec![];
+    pub fn get_unit_movement_neighbors(&self, p: Point, _mov: MovementType) -> HashSet<(OrientedPoint<D>, PathStep<D>)> {
+        let mut result = HashSet::new();
         for d in D::list() {
             if let Some(neighbor) = self.get_neighbor(p, d) {
                 if self.terrain.get(&p) == Some(&Terrain::Fountain) {
                     if let Some(neighbor) = self.get_neighbor(neighbor.point, neighbor.direction) {
-                        result.push((neighbor, PathStep::Jump(d)));
+                        result.insert((neighbor, PathStep::Jump(d)));
                     }
                 }
-                result.push((neighbor, PathStep::Dir(d)));
+                result.insert((neighbor, PathStep::Dir(d)));
             }
         }
         result

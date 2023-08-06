@@ -12,6 +12,8 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::{Game, Vision};
 use crate::map::map::*;
+use crate::map::wrapping_map::OrientedPoint;
+use crate::terrain::Terrain;
 
 use super::normal_units::{NormalUnits, NormalUnit};
 use super::{chess, UnitType};
@@ -278,45 +280,58 @@ impl<D: Direction> PathStepExt<D> for HoverStep<D> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MovementSearchMeta<D: Direction> {
-    pub movement_type: MovementType,
-    pub illegal_next_dir: Option<D>, // units aren't allowed to turn around 180°
-    pub remaining_movement: MovementPoints,
-    pub path: Path<D>,
+struct MovementSearchMeta<D: Direction> {
+    movement_type: MovementType,
+    illegal_next_dir: Option<D>, // units aren't allowed to turn around 180°
+    previous_turns: Vec<Path<D>>,
+    remaining_movement: MovementPoints,
+    path: Path<D>,
 }
 impl<D: Direction> MovementSearchMeta<D> {
-    fn order(&self, other: &Self) -> Ordering {
-        if self.movement_type == other.movement_type {
-            let mut orderings = HashSet::new();
-            orderings.insert(self.remaining_movement.cmp(&other.remaining_movement));
-            orderings.insert(if self.illegal_next_dir.is_some() == other.illegal_next_dir.is_some() {
-                Ordering::Equal
-            } else if self.illegal_next_dir.is_some() {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            });
-            if orderings.len() == 1 || orderings.len() == 2 && orderings.contains(&Ordering::Equal) {
-                for ord in orderings {
-                    if ord != Ordering::Equal {
-                        return ord;
-                    }
+    fn heap_order(&self, other: &Self) -> Ordering {
+        if self.previous_turns.len() == other.previous_turns.len() {
+            self.remaining_movement.cmp(&other.remaining_movement)
+        } else {
+            self.previous_turns.len().cmp(&other.previous_turns.len())
+        }
+    }
+    fn compare(&self, other: &Self) -> Option<Ordering> {
+        if self.movement_type != other.movement_type {
+            return None;
+        }
+        let mut is_better = false;
+        let mut is_worse = false;
+        match (self.illegal_next_dir, other.illegal_next_dir) {
+            (None, None) => (),
+            (None, Some(_)) => is_better = true,
+            (Some(_), None) => is_worse = true,
+            (Some(a), Some(b)) => {
+                if a != b {
+                    return None;
                 }
             }
-            Ordering::Equal
-        } else {
-            Ordering::Equal
+        }
+        match self.heap_order(other) {
+            Ordering::Less => is_better = true,
+            Ordering::Greater => is_worse = true,
+            _ => (),
+        }
+        match (is_better, is_worse) {
+            (false, false) => Some(Ordering::Equal),
+            (true, false) => Some(Ordering::Less),
+            (false, true) => Some(Ordering::Greater),
+            (true, true) => None,
         }
     }
 }
 impl<D: Direction> PartialOrd for MovementSearchMeta<D> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.order(other))
+        Some(self.heap_order(other))
     }
 }
 impl<D: Direction> Ord for MovementSearchMeta<D> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.order(other)
+        self.heap_order(other)
     }
 }
 
@@ -336,108 +351,179 @@ impl<D: Direction> Ord for MovementSearch<D> {
     }
 }
 
-pub fn movement_search<D, F>(game: &Game<D>, unit: &NormalUnit, path_so_far: &Path<D>, vision: Option<&HashMap<Point, Vision>>, mut callback: F)
-where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
+fn search_path<D>(
+    map: &Map<D>,
+    start: Point,
+    additional_turns: usize,
+    base_movement: impl Fn(&Terrain<D>, Option<MovementType>) -> (MovementType, MovementPoints),
+    update_movement: impl Fn(&Terrain<D>, &Terrain<D>, MovementType, MovementPoints, MovementPoints) -> Option<(MovementType, MovementPoints)>,
+    find_steps: impl Fn(Point, MovementType) -> HashSet<(OrientedPoint<D>, PathStep<D>)>,
+    mut callback: impl FnMut(&Path<D>, Point) -> PathSearchFeedback
+) -> Option<Path<D>>
+where
+    D: Direction,
+{
     // if the unit can't move from it's position, no need to go further
-    let (movement_type, remaining_movement) = match game.get_map().get_terrain(path_so_far.start) {
-        Some(t) => {
-            let (movement_type, remaining_movement) = unit.get_movement(t);
-            if let Some(cost) = t.movement_cost(movement_type) {
-                if cost > remaining_movement {
-                    return
-                } else {
-                    (movement_type, remaining_movement)
-                }
-            } else {
-                return
-            }
-        }
-        None => return,
+    let (movement_type, points) = if let Some(terrain) = map.get_terrain(start) {
+        base_movement(terrain, None)
+    } else {
+        return None;
     };
-
-    // start width-search
+    // some ways that arrive at the same point may be incomparable
+    // (better in one way, worse in another)
+    // so for each point, a HashSet is used to store the best paths
     let mut best_metas: HashMap<Point, HashSet<MovementSearchMeta<D>>> = HashMap::new();
-    let mut next_checks = BinaryHeap::new();
+    let mut next_checks: BinaryHeap<MovementSearch<D>> = BinaryHeap::new();
     next_checks.push(MovementSearch {
-        pos: path_so_far.start,
+        pos: start,
         meta: MovementSearchMeta {
             movement_type,
-            remaining_movement,
+            remaining_movement: points,
+            previous_turns: Vec::new(),
             illegal_next_dir: None,
-            path: Path::new(path_so_far.start),
+            path: Path::new(start),
         }
     });
-    while let Some(MovementSearch{pos, meta}) = next_checks.pop() {
-        if meta.path.steps.len() <= path_so_far.steps.len() && meta.path.steps[..] != path_so_far.steps[..meta.path.steps.len()] {
-            // only follow path_so_far until its end, then the search can start
-            continue;
+    while let Some(MovementSearch { pos, meta }) = next_checks.pop() {
+        // check if our current meta is accepted by the callback
+        match callback(&meta.path, pos) {
+            PathSearchFeedback::Found => return Some(meta.path),
+            PathSearchFeedback::Rejected => continue,
+            PathSearchFeedback::Continue => (),
         }
-        if meta.path.steps.len() >= path_so_far.steps.len() {
-            let can_stop_here = if let Some(blocking_unit) = game.get_map().get_unit(pos) {
-                path_so_far.start == pos && blocking_unit == &unit.as_unit()
-                || vision.and_then(|vision| Some(match vision.get(&pos) {
-                    None => true,
-                    Some(Vision::Normal) => blocking_unit.has_stealth() || game.get_map().get_terrain(pos).unwrap().hides_unit(blocking_unit),
-                    Some(Vision::TrueSight) => false,
-                })).unwrap_or(false)
-            } else {
-                true
-            };
-            match callback(&meta.path, pos, can_stop_here) {
-                PathSearchFeedback::Found => return,
-                PathSearchFeedback::Rejected => continue,
-                PathSearchFeedback::Continue => {}
-            }
-            if let Some(metas) = best_metas.get_mut(&pos) {
-                // check if this pos already has a MovementSearchMeta that's superior in every way
-                // if so, skip this MovementSearch, it can't be useful
-                if metas.iter().any(|m| meta.order(m) == Ordering::Less) {
-                    continue;
-                }
-                let mut set = HashSet::new();
-                for m in metas.drain() {
-                    if meta.order(&m) != Ordering::Greater {
-                        set.insert(m);
-                    }
-                }
-                *metas = set;
-                metas.insert(meta.clone());
-            } else {
-                let mut set = HashSet::new();
-                set.insert(meta.clone());
-                best_metas.insert(pos, set);
-            }
-        }
-        let prev_terrain = game.get_map().get_terrain(pos).unwrap();
-        for (neighbor, step) in game.get_map().get_unit_movement_neighbors(pos, meta.movement_type) {
-            if step.dir().is_some() && step.dir() == meta.illegal_next_dir {
-                // don't turn around 180°
+        // the meta was acceptable, attempt to add it to best_metas
+        if let Some(metas) = best_metas.get(&pos) {
+            if metas.iter().any(|m| m.compare(&meta) == Some(Ordering::Less)) {
+                // we already found a strictly better meta
                 continue;
             }
-            if let Some(blocking_unit) = game.get_map().get_unit(neighbor.point) {
-                let hidden_by_fog = vision.and_then(|vision| Some(match vision.get(&neighbor.point) {
-                    None => true,
-                    Some(Vision::Normal) => blocking_unit.has_stealth() || game.get_map().get_terrain(neighbor.point).unwrap().hides_unit(&blocking_unit),
-                    Some(Vision::TrueSight) => false,
-                })).unwrap_or(false);
-                if !hidden_by_fog && !blocking_unit.can_be_moved_through(unit, game) {
-                    continue;
+        }
+        let mut set = HashSet::new();
+        if let Some(mut metas) = best_metas.remove(&pos) {
+            for m in metas.drain() {
+                if meta.compare(&m) != Some(Ordering::Less) {
+                    // new meta isn't strictly better
+                    set.insert(m);
                 }
             }
-            if let Some(mut meta) = game.get_map().get_terrain(neighbor.point).and_then(|t| t.update_movement(&meta, prev_terrain)) {
-                // todo: check if maybe the PathStep is disallowed by some Detail at neighbor.point
-                if meta.path.steps.try_push(step.clone()).is_ok() {
-                    meta.illegal_next_dir = None;
+        }
+        set.insert(meta.clone());
+        best_metas.insert(pos, set);
+        // the meta was good enough, let's find its next neighbors
+        let prev_terrain = map.get_terrain(pos).unwrap();
+        for (dp, step) in find_steps(pos, meta.movement_type) {
+            let terrain = if let Some(terrain) = map.get_terrain(dp.point) {
+                terrain
+            } else {
+                continue;
+            };
+            let mut next_meta = if let Some(cost) = terrain.movement_cost(meta.movement_type) {
+                if step.dir().is_some() && step.dir() == meta.illegal_next_dir {
+                    // don't turn around 180°
+                    None
+                } else if let Some((movement_type, remaining_movement)) = update_movement(prev_terrain, terrain, meta.movement_type, meta.remaining_movement, cost) {
+                    let mut illegal_next_dir = None;
                     if step.dir().is_some() {
-                        meta.illegal_next_dir = Some(neighbor.direction.opposite_direction());
+                        illegal_next_dir = Some(dp.direction.opposite_direction());
                     }
-                    next_checks.push(MovementSearch {
-                        pos: neighbor.point,
-                        meta,
+                    let mut path = meta.path.clone();
+                    path.steps.push(step.clone());
+                    Some(MovementSearchMeta {
+                        previous_turns: meta.previous_turns.clone(),
+                        movement_type,
+                        remaining_movement,
+                        path,
+                        illegal_next_dir,
+                    })
+                } else {
+                    None
+                }
+            } else {
+                // doesn't allow automatic changing of movement_type between turns
+                None
+            };
+            if next_meta.is_none() && meta.previous_turns.len() < additional_turns {
+                // no meta was found, but maybe next turn we'll have enough moveement
+                // points. the illegal_next_dir also gets reset
+                let (movement_type, points) = base_movement(prev_terrain, Some(meta.movement_type));
+                if let Some((movement_type, remaining_movement)) = terrain.movement_cost(movement_type)
+                .and_then(|cost| update_movement(prev_terrain, terrain, movement_type, points, cost)) {
+                    let mut previous_turns = meta.previous_turns.clone();
+                    previous_turns.push(meta.path.clone());
+                    let mut illegal_next_dir = None;
+                    if step.dir().is_some() {
+                        illegal_next_dir = Some(dp.direction.opposite_direction());
+                    }
+                    let mut path = Path::new(pos);
+                    path.steps.push(step);
+                    next_meta = Some(MovementSearchMeta {
+                        previous_turns,
+                        movement_type,
+                        remaining_movement,
+                        path,
+                        illegal_next_dir,
                     });
                 }
             }
+            if let Some(meta) = next_meta {
+                next_checks.push(MovementSearch {
+                    pos: dp.point,
+                    meta,
+                });
+            }
         }
     }
+    None
+}
+
+pub fn movement_search<D, F>(game: &Game<D>, unit: &NormalUnit, path_so_far: &Path<D>, vision: Option<&HashMap<Point, Vision>>, mut callback: F)
+where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
+    search_path(
+        game.get_map(),
+        path_so_far.start,
+        0,
+        |terrain, _| unit.get_movement(terrain),
+        |prev_terrain, next_terrain, movement_type, remaining_points, cost| {
+            let remaining_points = if cost <= remaining_points {
+                remaining_points - cost
+            } else {
+                return None;
+            };
+            let movement_type = if let Some(m) = next_terrain.update_movement_type(movement_type, prev_terrain) {
+                m
+            } else {
+                return None;
+            };
+            Some((movement_type, remaining_points))
+        },
+        |point, movement_type| {
+            game.get_map().get_unit_movement_neighbors(point, movement_type)
+        },
+        |path, destination| {
+            if path.steps.len() <= path_so_far.steps.len() {
+                // first follow path_so_far until its end, then the search can start
+                if path.steps[..] != path_so_far.steps[..path.steps.len()] {
+                    return PathSearchFeedback::Rejected;
+                } else if path.steps.len() < path_so_far.steps.len() {
+                    return PathSearchFeedback::Continue;
+                }
+            }
+            let can_stop_here = if let Some(blocking_unit) = game.get_map().get_unit(destination) {
+                let hidden_by_fog = vision.and_then(|vision| Some(match vision.get(&destination) {
+                    None => true,
+                    Some(Vision::Normal) => blocking_unit.has_stealth() || game.get_map().get_terrain(destination).unwrap().hides_unit(&blocking_unit),
+                    Some(Vision::TrueSight) => false,
+                })).unwrap_or(false);
+                let is_self = path_so_far.start == destination && blocking_unit == &unit.as_unit();
+                if !hidden_by_fog && !is_self && !blocking_unit.can_be_moved_through(unit, game) {
+                    return PathSearchFeedback::Rejected;
+                }
+                is_self || hidden_by_fog
+            } else {
+                true
+            };
+            callback(path, destination, can_stop_here)
+        },
+    );
 }
 
