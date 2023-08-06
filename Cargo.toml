@@ -10,5 +10,5 @@ rendering = []
 
 [dependencies]
 interfaces = { path = "../interfaces" }
-zipper = { path = "../../zipper" }
+zipper = { path = "../../zipper", features = ["debug"] }
 zipper_derive = { path = "../../zipper/zipper_derive" }
