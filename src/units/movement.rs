@@ -496,17 +496,24 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
             };
             Some((movement_type, remaining_points))
         },
-        |point, movement_type| {
-            game.get_map().get_unit_movement_neighbors(point, movement_type)
+        |point, _movement_type| {
+            let mut result = HashSet::new();
+            for d in D::list() {
+                if let Some(neighbor) = game.get_map().get_neighbor(point, d) {
+                    if game.get_map().get_terrain(point) == Some(&Terrain::Fountain) {
+                        if let Some(neighbor) = game.get_map().get_neighbor(neighbor.point, neighbor.direction) {
+                            result.insert((neighbor, PathStep::Jump(d)));
+                        }
+                    }
+                    result.insert((neighbor, PathStep::Dir(d)));
+                }
+            }
+            result
         },
         |path, destination| {
-            if path.steps.len() <= path_so_far.steps.len() {
+            if path.steps.len() <= path_so_far.steps.len() && path.steps[..] != path_so_far.steps[..path.steps.len()] {
                 // first follow path_so_far until its end, then the search can start
-                if path.steps[..] != path_so_far.steps[..path.steps.len()] {
-                    return PathSearchFeedback::Rejected;
-                } else if path.steps.len() < path_so_far.steps.len() {
-                    return PathSearchFeedback::Continue;
-                }
+                return PathSearchFeedback::Rejected;
             }
             let can_stop_here = if let Some(blocking_unit) = game.get_map().get_unit(destination) {
                 let hidden_by_fog = vision.and_then(|vision| Some(match vision.get(&destination) {
@@ -522,6 +529,10 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
             } else {
                 true
             };
+            if path.steps.len() < path_so_far.steps.len() {
+                // first follow path_so_far until its end, then the search can start
+                return PathSearchFeedback::Continue;
+            }
             callback(path, destination, can_stop_here)
         },
     );
