@@ -214,7 +214,7 @@ impl<D: Direction> ChessCommand<D> {
         Ok(())
     }
     pub fn exhaust_all_on_board(handler: &mut EventHandler<D>, pos: Point) {
-        if handler.get_map().get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
+        if !handler.get_map().get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
             return;
         }
         let mut to_exhaust = HashSet::new();
