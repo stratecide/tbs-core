@@ -267,19 +267,19 @@ impl Translation<Direction4> for Translation4 {
     }
 }
 
-const MAX_TRANSLATION4: i16 = 257;
+const MAX_TRANSLATION4: i32 = 257;
 impl Zippable for Translation4 {
     fn export(&self, zipper: &mut Zipper) {
         // custom implementation because Translation can be bigger during calculations than they are allowed to during export
-        I16::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::try_from(self.x.max(-MAX_TRANSLATION4).min(MAX_TRANSLATION4)).unwrap().export(zipper);
-        I16::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::try_from(self.y.max(-MAX_TRANSLATION4).min(MAX_TRANSLATION4)).unwrap().export(zipper);
+        I::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::from(self.x.max(-MAX_TRANSLATION4 as i16).min(MAX_TRANSLATION4 as i16)).export(zipper);
+        I::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::from(self.y.max(-MAX_TRANSLATION4 as i16).min(MAX_TRANSLATION4 as i16)).export(zipper);
     }
     fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
-        let x = I16::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::import(unzipper)?;
-        let y = I16::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::import(unzipper)?;
+        let x = I::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::import(unzipper)?;
+        let y = I::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::import(unzipper)?;
         Ok(Self {
-            x: *x,
-            y: *y,
+            x: *x as i16,
+            y: *y as i16,
         })
     }
 }
@@ -383,19 +383,19 @@ impl Translation<Direction6> for Translation6 {
     }
 }
 
-const MAX_TRANSLATION6: i16 = 511;
+const MAX_TRANSLATION6: i32 = 511;
 impl Zippable for Translation6 {
     fn export(&self, zipper: &mut Zipper) {
         // custom implementation because Translation can be bigger during calculations than they are allowed to during export
-        I16::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::try_from(self.d0.max(-MAX_TRANSLATION6).min(MAX_TRANSLATION6)).unwrap().export(zipper);
-        I16::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::try_from(self.d60.max(-MAX_TRANSLATION6).min(MAX_TRANSLATION6)).unwrap().export(zipper);
+        I::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::from(self.d0.max(-MAX_TRANSLATION6 as i16).min(MAX_TRANSLATION6 as i16)).export(zipper);
+        I::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::from(self.d60.max(-MAX_TRANSLATION6 as i16).min(MAX_TRANSLATION6 as i16)).export(zipper);
     }
     fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
-        let x = I16::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::import(unzipper)?;
-        let y = I16::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::import(unzipper)?;
+        let x = I::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::import(unzipper)?;
+        let y = I::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::import(unzipper)?;
         Ok(Self {
-            d0: *x,
-            d60: *y,
+            d0: *x as i16,
+            d60: *y as i16,
         })
     }
 }

@@ -47,8 +47,8 @@ mod tests {
         let wrapping = WrappingMapBuilder::new(pointmap, vec![]).build().unwrap();
         let mut map = Map::<Direction4>::new(wrapping);
         
-        map.set_unit(Point::new(0, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true), crate::player::OWNER_0)));
-        map.set_unit(Point::new(6, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true), crate::player::OWNER_1)));
+        map.set_unit(Point::new(0, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true), 0.into())));
+        map.set_unit(Point::new(6, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true), 1.into())));
 
         let mut settings = map.settings().unwrap();
         settings.fog_mode = FogMode::Always;

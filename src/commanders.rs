@@ -10,15 +10,15 @@ use crate::units::*;
 use crate::units::normal_units::NormalUnit;
 
 use interfaces::game_interface::ClientPerspective;
-use zipper::*;
+use zipper::U;
 use zipper::zipper_derive::*;
 
 pub const DEFAULT_ATTACK_BONUS_POWER: f32 = 0.1;
 pub const DEFAULT_DEFENSE_BONUS_POWER: f32 = 0.1;
 
-pub const CHARGE_UNIT: u32 = 100;
-pub const MAX_CHARGE: u32 = CHARGE_UNIT * 12;
-pub type Charge = U32<{MAX_CHARGE}>;
+pub const CHARGE_UNIT: i32 = 100;
+pub const MAX_CHARGE: i32 = CHARGE_UNIT * 12;
+pub type Charge = U<{MAX_CHARGE}>;
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 8)]
@@ -87,7 +87,7 @@ impl Commander {
             Self::Zombie(_, _) => {
                 let mut details = handler.get_map().get_details(defender_pos);
                 let old_details = details.clone();
-                if details.len() < MAX_STACK_SIZE as usize && defender.get_team(handler.get_game()) != ClientPerspective::Team(*player.team) {
+                if details.len() < MAX_STACK_SIZE as usize && defender.get_team(handler.get_game()) != ClientPerspective::Team(*player.team as u8) {
                     let mut unit= match defender {
                         UnitType::Normal(unit) => unit.clone(),
                         _ => return,
@@ -105,7 +105,7 @@ impl Commander {
 
     pub fn max_charge(&self) -> Charge {
         match self {
-            Self::None => Charge::new(0),
+            Self::None => 0.into(),
             Self::Vampire(_, _) => CommanderPower::VampireBloodStorm.charge_cost(),
             Self::Zombie(_, _) => CommanderPower::ZombieResurrection.charge_cost(),
         }
@@ -113,7 +113,7 @@ impl Commander {
     
     pub fn charge(&self) -> Charge {
         match self {
-            Self::None => Charge::new(0),
+            Self::None => 0.into(),
             Self::Vampire(charge, _) => *charge,
             Self::Zombie(charge, _) => *charge,
         }
@@ -121,16 +121,16 @@ impl Commander {
     
     pub fn charge_potential(&self) -> Charge {
         if self.power_active() {
-            return Charge::new(0);
+            return 0.into();
         }
-        Charge::new(*self.max_charge() - *self.charge())
+        self.max_charge() - self.charge()
     }
     
     pub fn add_charge(&mut self, delta: i32) {
         match self {
             Self::None => {},
-            Self::Vampire(charge, _) => *charge = ((**charge as i32 + delta) as u32).try_into().unwrap(),
-            Self::Zombie(charge, _) => *charge = ((**charge as i32 + delta) as u32).try_into().unwrap(),
+            Self::Vampire(charge, _) => *charge += delta,
+            Self::Zombie(charge, _) => *charge += delta,
         }
     }
     
@@ -159,8 +159,8 @@ impl Commander {
     pub fn list_all() -> Vec<Self> {
         vec![
             Self::None,
-            Self::Vampire(Charge::new(0), false),
-            Self::Zombie(Charge::new(0), false),
+            Self::Vampire(0.into(), false),
+            Self::Zombie(0.into(), false),
         ]
     }
 }
@@ -182,10 +182,10 @@ impl Display for CommanderPower {
 }
 impl CommanderPower {
     pub fn charge_cost(&self) -> Charge {
-        Charge::new(match self {
+        (match self {
             Self::VampireBloodStorm => 5,
             Self::ZombieResurrection => 6,
-        } * CHARGE_UNIT)
+        } * CHARGE_UNIT).into()
     }
     
     pub fn is_simple(&self) -> bool {
@@ -196,7 +196,7 @@ impl CommanderPower {
 
     pub fn execute<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner) {
         handler.add_event(Event::CommanderFlipActiveSimple(owner));
-        handler.add_event(Event::CommanderCharge(handler.get_game().current_player().owner_id, (-(*self.charge_cost() as i32)).try_into().unwrap()));
+        handler.add_event(Event::CommanderCharge(handler.get_game().current_player().owner_id, (-*self.charge_cost()).into()));
         let player = handler.get_game().get_owning_player(owner).unwrap();
         match self {
             Self::VampireBloodStorm => {
@@ -209,12 +209,12 @@ impl CommanderPower {
                             _ => {}
                         }
                         if unit.get_owner() == Some(owner) && unit.get_hp() < 100 {
-                            let healing = 10.min(100 - unit.get_hp()) as i8;
-                            handler.add_event(Event::UnitHpChange(p, healing.try_into().unwrap(), (healing as i16).try_into().unwrap()));
-                        } else if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team) && unit.get_hp() > 1 {
+                            let healing = 10.min(100 - unit.get_hp());
+                            handler.add_event(Event::UnitHpChange(p, healing.into(), healing.into()));
+                        } else if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) && unit.get_hp() > 1 {
                             // maybe don't affect units without owner if that ever exists?
                             let damage = -(10.min(unit.get_hp() - 1) as i8);
-                            handler.add_event(Event::UnitHpChange(p, damage.try_into().unwrap(), (damage as i16).try_into().unwrap()));
+                            handler.add_event(Event::UnitHpChange(p, damage.into(), damage.into()));
                         }
                     }
                 }
@@ -228,10 +228,10 @@ impl CommanderPower {
                         match detail {
                             Detail::Skull(o, unit_type) => {
                                 if o == owner {
-                                    handler.add_event(Event::RemoveDetail(p.clone(), (index as u8).try_into().unwrap(), Detail::Skull(o, unit_type.clone())));
+                                    handler.add_event(Event::RemoveDetail(p.clone(), index.into(), Detail::Skull(o, unit_type.clone())));
                                     let mut unit = NormalUnit::new_instance(unit_type, owner);
                                     unit.data.zombie = true;
-                                    unit.data.hp = Hp::new(50);
+                                    unit.data.hp = 50.into();
                                     handler.add_event(Event::UnitCreation(p, UnitType::Normal(unit)));
                                 }
                                 break;

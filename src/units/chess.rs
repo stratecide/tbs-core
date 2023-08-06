@@ -19,11 +19,11 @@ use zipper::zipper_derive::*;
 #[derive(Debug, Zippable)]
 #[zippable(bits = 6)]
 pub enum ChessCommand<D: Direction> {
-    Pawn(LVec::<PathStep::<D>, 2>, PawnUpgrade),
-    Rook(D, U16::<{point_map::MAX_AREA as u16}>, bool),
-    Bishop(D, U16::<{point_map::MAX_AREA as u16}>),
-    Knight(PathStep::<D>),
-    King(PathStep::<D>),
+    Pawn(LVec<PathStep<D>, 2>, PawnUpgrade),
+    Rook(D, U<{point_map::MAX_AREA as i32}>, bool),
+    Bishop(D, U<{point_map::MAX_AREA as i32}>),
+    Knight(PathStep<D>),
+    King(PathStep<D>),
 }
 impl<D: Direction> ChessCommand<D> {
     pub fn convert(self, start: Point, unit: &ChessUnit<D>, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
@@ -118,7 +118,7 @@ impl<D: Direction> ChessCommand<D> {
         handler.add_event(Event::UnitPath(Some(None), path.clone(), Some(false), UnitType::Chess::<D>(unit.clone())));
         let perspective = ClientPerspective::Team(team);
         if handler.get_game().is_foggy() {
-            let vision_changes: Vec<(Point, U8<2>)> = unit.get_vision(handler.get_game(), end).into_iter()
+            let vision_changes: Vec<(Point, U<2>)> = unit.get_vision(handler.get_game(), end).into_iter()
             .filter_map(|(p, vision)| {
                 fog_change_index(handler.get_game().get_vision(perspective, p), Some(vision))
                 .and_then(|vi| Some((p, vi)))
@@ -182,11 +182,11 @@ impl<D: Direction> ChessCommand<D> {
                             if *path_len as usize == path.steps.len() {
                                 if let Some(dp) = ChessUnit::find_king_for_castling(handler.get_game(), start, dir, *path_len as usize, unit.owner) {
                                     let mut king_path = Path::new(dp.point);
-                                    king_path.steps.push(PathStep::Jump(dp.direction.opposite_direction())).unwrap();
+                                    king_path.steps.push(PathStep::Jump(dp.direction.opposite_direction()));
                                     let king = handler.get_map().get_unit(dp.point).unwrap().clone();
                                     handler.add_event(Event::UnitPath(Some(None), king_path.clone(), Some(false), king.clone()));
                                     if handler.get_game().is_foggy() {
-                                        let vision_changes: Vec<(Point, U8<2>)> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter()
+                                        let vision_changes: Vec<(Point, U<2>)> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter()
                                             .filter_map(|(p, vision)| {
                                                 fog_change_index(handler.get_game().get_vision(perspective, p), Some(vision))
                                                     .and_then(|vi| Some((p, vi)))
@@ -237,7 +237,7 @@ impl<D: Direction> ChessCommand<D> {
 
 #[derive(Debug, PartialEq, Clone, Zippable)]
 pub struct ChessUnit<D: Direction> {
-    pub typ: ChessUnits::<D>,
+    pub typ: ChessUnits<D>,
     pub owner: Owner,
     pub hp: Hp,
     pub exhausted: bool,
@@ -253,7 +253,7 @@ impl<D: Direction> ChessUnit<D> {
     }
     fn can_move_through(game: &Game<D>, p: Point, team: Team, ignore_unseen: bool) -> bool {
         game.get_map().get_terrain(p).and_then(|t| t.movement_cost(MovementType::Chess)).is_some() &&
-        (game.get_map().get_unit(p).is_none() || ignore_unseen && !game.has_vision_at(ClientPerspective::Team(*team), p))
+        (game.get_map().get_unit(p).is_none() || ignore_unseen && !game.has_vision_at(ClientPerspective::Team(*team as u8), p))
     }
     fn can_stop_on(game: &Game<D>, p: Point, team: Team) -> bool {
         if game.get_map().get_terrain(p).and_then(|t| t.movement_cost(MovementType::Chess)).is_none() {
@@ -353,14 +353,14 @@ impl<D: Direction> ChessUnit<D> {
                             if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(n.point) {
                                 match unit.typ {
                                     ChessUnits::Pawn(d, _, true) => {
-                                        en_passant = en_passant || n.direction == d && game.get_team(Some(unit.owner)) != ClientPerspective::Team(*team);
+                                        en_passant = en_passant || n.direction == d && game.get_team(Some(unit.owner)) != ClientPerspective::Team(*team as u8);
                                     }
                                     _ => {}
                                 }
                             }
                         }
                         if Self::can_stop_on(game, dp.point, team) &&
-                        (en_passant || game.get_map().get_unit(dp.point).is_some() && game.has_vision_at(ClientPerspective::Team(*team), dp.point)) {
+                        (en_passant || game.get_map().get_unit(dp.point).is_some() && game.has_vision_at(ClientPerspective::Team(*team as u8), dp.point)) {
                             // kill unit diagonally
                             let steps = vec![PathStep::Diagonal(dp.direction)];
                             match callback(dp.point, &steps) {
@@ -372,10 +372,10 @@ impl<D: Direction> ChessUnit<D> {
                 }
             }
             ChessUnits::Rook(_) => {
-                Self::possible_rook_paths(game, start, ClientPerspective::Team(*team), self.typ.get_movement(), ignore_unseen, callback);
+                Self::possible_rook_paths(game, start, ClientPerspective::Team(*team as u8), self.typ.get_movement(), ignore_unseen, callback);
             }
             ChessUnits::Bishop => {
-                Self::possible_bishop_paths(game, start, ClientPerspective::Team(*team), self.typ.get_movement(), ignore_unseen, callback);
+                Self::possible_bishop_paths(game, start, ClientPerspective::Team(*team as u8), self.typ.get_movement(), ignore_unseen, callback);
             }
             ChessUnits::Knight => {
                 for d in D::list() {
@@ -393,8 +393,8 @@ impl<D: Direction> ChessUnit<D> {
                 }
             }
             ChessUnits::Queen => {
-                if !Self::possible_rook_paths(game, start, ClientPerspective::Team(*team), self.typ.get_movement(), ignore_unseen, &mut callback) {
-                    Self::possible_bishop_paths(game, start, ClientPerspective::Team(*team), self.typ.get_movement(), ignore_unseen, callback);
+                if !Self::possible_rook_paths(game, start, ClientPerspective::Team(*team as u8), self.typ.get_movement(), ignore_unseen, &mut callback) {
+                    Self::possible_bishop_paths(game, start, ClientPerspective::Team(*team as u8), self.typ.get_movement(), ignore_unseen, callback);
                 }
             }
             ChessUnits::King(_) => {
@@ -670,7 +670,7 @@ impl<D: Direction> ChessUnit<D> {
 }
 
 pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: Point) -> Result<(), CommandError> {
-    if !game.has_vision_at(ClientPerspective::Team(*game.current_player().team), at) {
+    if !game.has_vision_at(ClientPerspective::Team(*game.current_player().team as u8), at) {
         return Err(CommandError::NoVision);
     }
     let unit = match game.get_map().get_unit(at).ok_or(CommandError::MissingUnit)? {

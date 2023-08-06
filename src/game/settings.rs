@@ -11,15 +11,15 @@ use interfaces::game_interface;
 #[derive(Debug, Clone, Zippable)]
 pub struct GameSettings {
     pub fog_mode: FogMode,
-    pub players: LVec::<PlayerSettings, 16>,
+    pub players: LVec<PlayerSettings, 16>,
 }
 impl GameSettingsInterface for GameSettings {
     fn players(&self) -> Vec<game_interface::PlayerData> {
         self.players.iter()
         .map(|p| {
             game_interface::PlayerData {
-                color_id: *p.color_id,
-                team: *p.team,
+                color_id: *p.color_id as u8,
+                team: *p.team as u8,
                 dead: false,
             }
         }).collect()
@@ -37,13 +37,13 @@ impl GameSettingsInterface for GameSettings {
 
 #[derive(Debug, Clone, Zippable)]
 pub struct PlayerSettings {
-    commander_options: LVec::<Commander, 255>,
+    commander_options: LVec<Commander, 255>,
     commander: Commander,
     pub funds: Funds,
     pub income: Income,
     pub team: Team,
     pub owner_id: Owner,
-    pub color_id: U8::<15>,
+    pub color_id: U<15>,
 }
 impl PlayerSettings {
     pub fn new(owner_id: Owner) -> Self {
@@ -53,9 +53,9 @@ impl PlayerSettings {
         Self {
             commander_options: commander_options.try_into().unwrap(),
             commander,
-            income: Income::new(100),
-            funds: Funds::new(0),
-            team: Team::new(*owner_id),
+            income: 100.into(),
+            funds: 0.into(),
+            team: owner_id,
             owner_id,
             color_id: owner_id,
         }
@@ -79,7 +79,7 @@ impl PlayerSettings {
             income: self.income,
             team: self.team,
             dead: false,
-            color_id: *self.color_id,
+            color_id: *self.color_id as u8,
             owner_id: self.owner_id,
         }
     }

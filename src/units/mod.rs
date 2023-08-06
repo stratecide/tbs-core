@@ -29,14 +29,14 @@ use self::movement::*;
 use self::combat::*;
 use self::commands::*;
 
-pub type Hp = U8<100>;
+pub type Hp = U<100>;
 
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 3)]
 pub enum UnitType<D: Direction> {
     Normal(NormalUnit),
-    Chess(ChessUnit::<D>),
-    Structure(Structure::<D>),
+    Chess(ChessUnit<D>),
+    Structure(Structure<D>),
 }
 impl<D: Direction> UnitType<D> {
     pub fn normal(typ: NormalUnits, owner: Owner) -> Self {
@@ -75,7 +75,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.data.hp,
             Self::Chess(unit) => unit.hp,
             Self::Structure(unit) => unit.hp,
-        }
+        } as u8
     }
     pub fn set_hp(&mut self, hp: u8) {
         let hp = hp.min(100).try_into().unwrap();
@@ -205,7 +205,7 @@ impl<D: Direction> UnitType<D> {
     }
     pub fn killable_by_chess(&self, team: Team, game: &Game<D>) -> bool {
         match self {
-            _ => self.get_team(game) != ClientPerspective::Team(*team),
+            _ => self.get_team(game) != ClientPerspective::Team(*team as u8),
         }
     }
     pub fn can_be_moved_through(&self, by: &NormalUnit, game: &Game<D>) -> bool {

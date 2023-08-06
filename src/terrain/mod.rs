@@ -50,7 +50,7 @@ pub enum Terrain<D: Direction> {
     Lillypads,
     Mountain,
     Pipe(D::P),
-    Realty(Realty, Option::<Owner>, CaptureProgress),
+    Realty(Realty, Option<Owner>, CaptureProgress),
     Reef,
     Ruins,
     Sea,
@@ -331,12 +331,12 @@ impl<D: Direction> Terrain<D> {
 
 
 const MAX_BUILT_THIS_TURN: u8 = 9;
-pub type BuiltThisTurn = U8<{MAX_BUILT_THIS_TURN}>;
+pub type BuiltThisTurn = U<{MAX_BUILT_THIS_TURN as i32}>;
 #[derive(Debug, PartialEq, Clone, Copy, Zippable)]
 #[zippable(bits = 1)]
 pub enum CaptureProgress {
     None,
-    Capturing(Owner, U8::<9>),
+    Capturing(Owner, U<9>),
 }
 
 #[derive(Debug, PartialEq, Clone, Zippable)]
@@ -369,10 +369,10 @@ impl Realty {
     }
     pub fn buildable_units<D: Direction>(&self, game: &Game<D>, owner: Owner) -> Vec<(UnitType<D>, u16)> {
         match self {
-            Self::Factory(built_this_turn) => build_options_factory(game, owner, **built_this_turn),
-            Self::Port(built_this_turn) => build_options_port(game, owner, **built_this_turn),
-            Self::Airport(built_this_turn) => build_options_airport(game, owner, **built_this_turn),
-            Self::ConstructionSite(built_this_turn) => build_options_construction_site(game, owner, **built_this_turn),
+            Self::Factory(built_this_turn) => build_options_factory(game, owner, **built_this_turn as u8),
+            Self::Port(built_this_turn) => build_options_port(game, owner, **built_this_turn as u8),
+            Self::Airport(built_this_turn) => build_options_airport(game, owner, **built_this_turn as u8),
+            Self::ConstructionSite(built_this_turn) => build_options_construction_site(game, owner, **built_this_turn as u8),
             _ => vec![],
         }
     }
@@ -415,8 +415,8 @@ impl Realty {
             Self::Airport(built_this_turn) |
             Self::ConstructionSite(built_this_turn) |
             Self::Port(built_this_turn) => {
-                if **built_this_turn < MAX_BUILT_THIS_TURN {
-                    handler.add_event(Event::UpdateBuiltThisTurn(pos, *built_this_turn, BuiltThisTurn::new(**built_this_turn + 1)));
+                if **built_this_turn < MAX_BUILT_THIS_TURN as i32 {
+                    handler.add_event(Event::UpdateBuiltThisTurn(pos, *built_this_turn, (**built_this_turn + 1).into()));
                 }
             }
             _ => {}
@@ -466,7 +466,7 @@ pub fn build_options_airport<D: Direction>(_game: &Game<D>, owner: Owner, built_
 pub fn build_options_construction_site<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
     let mut list = vec![
         Structures::ShockTower(Some(owner)),
-        Structures::DroneTower(Some((owner, LVec::new(), DroneId::new(0))))
+        Structures::DroneTower(Some((owner, LVec::new(), 0.into())))
     ];
     for d in D::list() {
         list.push(Structures::MegaCannon(Some(owner), d));

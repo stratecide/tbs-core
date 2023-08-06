@@ -34,7 +34,7 @@ impl UnitData {
     pub fn new() -> Self {
         UnitData {
             mercenary: MaybeMercenary::None,
-            hp: Hp::new(100),
+            hp: 100.into(),
             exhausted: false,
             zombie: false,
         }
@@ -118,7 +118,7 @@ impl NormalUnit {
         &mut self.typ
     }
     pub fn get_hp(&self) -> u8 {
-        *self.data.hp
+        *self.data.hp as u8
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         let (armor, mut defense) = self.typ.get_armor();
@@ -716,7 +716,7 @@ impl TransportableUnits for TransportableDrones {
     }
 }
 
-pub type DroneId = U16::<{MAX_AREA as u16 * 2}>;
+pub type DroneId = U::<{MAX_AREA as i32 * 2}>;
 
 pub fn buildable_drones<D: Direction>(_game: &Game<D>, _owner: Owner) -> Vec<TransportableDrones> {
     vec![
@@ -745,15 +745,15 @@ pub enum NormalUnits {
     // sea units
     SharkRider,
     //ChargeBoat,
-    TransportBoat(LVec::<TransportedUnit<TransportableBoat>, 1>),
-    DroneBoat(LVec::<TransportedUnit<TransportableDrones>, 2>, DroneId),
+    TransportBoat(LVec<TransportedUnit<TransportableBoat>, 1>),
+    DroneBoat(LVec<TransportedUnit<TransportableDrones>, 2>, DroneId),
     WaveBreaker,
     Submarine,
     Cruiser,
     Battleship,
 
     // air units
-    TransportHeli(LVec::<TransportedUnit<TransportableHeli>, 1>),
+    TransportHeli(LVec<TransportedUnit<TransportableHeli>, 1>),
     AttackHeli,
     Blimp,
     Bomber,
@@ -819,7 +819,7 @@ impl NormalUnits {
             Self::WaveBreaker,
             Self::Submarine,
             Self::Cruiser,
-            Self::DroneBoat(LVec::new(), DroneId::new(0)),
+            Self::DroneBoat(LVec::new(), 0.into()),
             Self::Battleship,
 
             Self::TransportHeli(LVec::new()),
@@ -828,8 +828,8 @@ impl NormalUnits {
             Self::Bomber,
             Self::Fighter,
 
-            Self::LightDrone(DroneId::new(0)),
-            Self::HeavyDrone(DroneId::new(0)),
+            Self::LightDrone(0.into()),
+            Self::HeavyDrone(0.into()),
         ]
     }
 
@@ -1092,7 +1092,7 @@ impl NormalUnits {
             Self::DroneBoat(_, id) |
             Self::LightDrone(id) |
             Self::HeavyDrone(id) => {
-                existing_ids.insert(**id);
+                existing_ids.insert(**id as u16);
             }
             _ => (),
         }
@@ -1100,7 +1100,7 @@ impl NormalUnits {
 }
 
 pub fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: Point, unload_index: Option<UnloadIndex>) -> Result<(), CommandError> {
-    if !game.has_vision_at(ClientPerspective::Team(*game.current_player().team), at) {
+    if !game.has_vision_at(ClientPerspective::Team(*game.current_player().team as u8), at) {
         return Err(CommandError::NoVision);
     }
     let unit = game.get_map().get_unit(at).ok_or(CommandError::MissingUnit)?;

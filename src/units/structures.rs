@@ -33,7 +33,7 @@ pub const SHOCK_TOWER_DAMAGE: i8 = 70;
 
 #[derive(Debug, PartialEq, Clone, Zippable)]
 pub struct Structure<D: Direction> {
-    pub typ: Structures::<D>,
+    pub typ: Structures<D>,
     pub hp: Hp,
     pub exhausted: bool,
 }
@@ -82,7 +82,7 @@ impl<D: Direction> Structure<D> {
                 for (pos, damage) in attack_area {
                     // turn into match if more unit types should be hit
                     if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(pos) {
-                        if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team) {
+                        if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) {
                             let hp = unit.get_hp() as i8;
                             handler.add_event(Event::UnitHpChange(pos, (-damage.min(hp)).try_into().unwrap(), (-damage as i16).try_into().unwrap()));
                             if hp <= damage {
@@ -180,11 +180,11 @@ impl<D: Direction> Structure<D> {
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 4)]
 pub enum Structures<D: Direction> {
-    Pyramid(Option::<Owner>),
-    MegaCannon(Option::<Owner>, D),
-    LaserCannon(Option::<Owner>, D),
-    DroneTower(Option::<(Owner, LVec::<TransportedUnit<TransportableDrones>, 3>, DroneId)>),
-    ShockTower(Option::<Owner>),
+    Pyramid(Option<Owner>),
+    MegaCannon(Option<Owner>, D),
+    LaserCannon(Option<Owner>, D),
+    DroneTower(Option<(Owner, LVec<TransportedUnit<TransportableDrones>, 3>, DroneId)>),
+    ShockTower(Option<Owner>),
 }
 
 impl<D: Direction> Structures<D> {

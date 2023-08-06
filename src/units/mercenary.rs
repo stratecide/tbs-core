@@ -16,7 +16,7 @@ pub enum MaybeMercenary {
     None,
     Some {
         mercenary: Mercenaries,
-        origin: Option::<Point>
+        origin: Option<Point>
     },    
 }
 impl MaybeMercenary {
@@ -70,7 +70,7 @@ impl MaybeMercenary {
 #[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 6)]
 pub enum Mercenaries {
-    EarlGrey(U8::<10>, bool),
+    EarlGrey(U<10>, bool),
 }
 impl Mercenaries {
     pub fn name(&self) -> &'static str {
@@ -84,12 +84,12 @@ impl Mercenaries {
             return 0;
         }
         match self {
-            Self::EarlGrey(charge, _) => charge.max_value(),
+            Self::EarlGrey(charge, _) => charge.max_value() as u8,
         }
     }
     pub fn charge(&self) -> u8 {
         match self {
-            Self::EarlGrey(charge, _) => **charge,
+            Self::EarlGrey(charge, _) => **charge as u8,
         }
     }
     pub fn add_charge(&mut self, add: i8) {
@@ -110,7 +110,7 @@ impl Mercenaries {
     }
     pub fn can_use_simple_power<D: Direction>(&self, _game: &Game<D>, _pos: Point) -> bool {
         match self {
-            Mercenaries::EarlGrey(charge, false) => **charge >= self.max_charge(),
+            Mercenaries::EarlGrey(charge, false) => self.charge() >= self.max_charge(),
             _ => false,
         }
     }

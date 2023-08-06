@@ -2,27 +2,10 @@ use interfaces::game_interface::ClientPerspective;
 use zipper::*;
 use crate::commanders::*;
 
-pub type Owner = U8<15>;
-pub const OWNER_0: Owner = Owner::new(0);
-pub const OWNER_1: Owner = Owner::new(1);
-pub const OWNER_2: Owner = Owner::new(2);
-pub const OWNER_3: Owner = Owner::new(3);
-pub const OWNER_4: Owner = Owner::new(4);
-pub const OWNER_5: Owner = Owner::new(5);
-pub const OWNER_6: Owner = Owner::new(6);
-pub const OWNER_7: Owner = Owner::new(7);
-pub const OWNER_8: Owner = Owner::new(8);
-pub const OWNER_9: Owner = Owner::new(9);
-pub const OWNER_10: Owner = Owner::new(10);
-pub const OWNER_11: Owner = Owner::new(11);
-pub const OWNER_12: Owner = Owner::new(12);
-pub const OWNER_13: Owner = Owner::new(13);
-pub const OWNER_14: Owner = Owner::new(14);
-pub const OWNER_15: Owner = Owner::new(15);
-
-pub type Team = U8<15>;
-pub type Income = I16<-1000, 1000>;
-pub type Funds = I32<-1_000_000_000, 1_000_000_000>;
+pub type Owner = U<15>;
+pub type Team = U<15>;
+pub type Income = I<-1000, 1000>;
+pub type Funds = I<-1_000_000_000, 1_000_000_000>;
 
 pub type Perspective = Option<Team>;
 
@@ -36,7 +19,7 @@ pub fn from_client_perspective(value: ClientPerspective) -> Perspective {
 pub fn to_client_perspective(value: &Perspective) -> ClientPerspective {
     match value {
         None => ClientPerspective::Neutral,
-        Some(team) => ClientPerspective::Team(**team),
+        Some(team) => ClientPerspective::Team(**team as u8),
     }
 }
 
@@ -81,7 +64,7 @@ impl Player {
         let commander = Commander::import(unzipper)?;
         let income = Income::import(unzipper)?;
         let funds = if hidden {
-            Funds::new(0)
+            0.into()
         } else {
             Funds::import(unzipper)?
         };

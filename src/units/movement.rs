@@ -1,5 +1,6 @@
 use std::collections::{BinaryHeap, HashSet, HashMap};
 use std::cmp::Ordering;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::{Add, Sub, AddAssign, SubAssign};
 
@@ -230,14 +231,14 @@ impl<D: Direction> Path<D> {
             let terrain = map.get_terrain(current).unwrap();
             movement_type = terrain.update_movement_type(movement_type, prev_terrain).unwrap();
             let on_sea = movement_type != MovementType::Hover(HoverMode::Land);
-            steps.push((on_sea, step.clone())).unwrap();
+            steps.push((on_sea, step.clone()));
             prev_terrain = terrain;
         }
         steps
     }
 }
 
-pub trait PathStepExt<D: Direction>: Clone {
+pub trait PathStepExt<D: Direction>: Debug + Clone {
     fn step(&self) -> &PathStep<D>;
     fn skip_to(&self, p: Point) -> Self;
     fn update_unit(&self, unit: &mut UnitType<D>) {
@@ -425,7 +426,7 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
             }
             if let Some(mut meta) = game.get_map().get_terrain(neighbor.point).and_then(|t| t.update_movement(&meta, prev_terrain)) {
                 // todo: check if maybe the PathStep is disallowed by some Detail at neighbor.point
-                if meta.path.steps.push(step.clone()).is_ok() {
+                if meta.path.steps.try_push(step.clone()).is_ok() {
                     meta.illegal_next_dir = None;
                     if step.dir().is_some() {
                         meta.illegal_next_dir = Some(neighbor.direction.opposite_direction());

@@ -25,8 +25,8 @@ use crate::units::movement::{Path, PathStep, PathStepExt};
 #[zippable(bits = 8)]
 pub enum Command<D: Direction> {
     EndTurn,
-    UnitCommand(UnitCommand::<D>),
-    BuyUnit(Point, U8::<255>),
+    UnitCommand(UnitCommand<D>),
+    BuyUnit(Point, U<255>),
     CommanderPowerSimple(CommanderPower),
 }
 impl<D: Direction> CommandInterface for Command<D> {
@@ -115,9 +115,9 @@ impl<D: Direction> Command<D> {
                         Some(terrain @ Terrain::Realty(realty, owner, capture_progress @ CaptureProgress::Capturing(new_owner, progress))) => {
                             if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner() != *owner && u.get_owner() == Some(*new_owner) && u.can_capture()) {
                                 if current_player_owner == *new_owner && unit.is_capturing() {
-                                    let progress = **progress + (unit.get_hp() as f32 / 10.).ceil() as u8;
+                                    let progress = **progress + (unit.get_hp() as f32 / 10.).ceil() as i32;
                                     if progress < 10 {
-                                        handler.add_event(Event::CaptureProgress(p, *capture_progress, CaptureProgress::Capturing(*new_owner, U8::new(progress))));
+                                        handler.add_event(Event::CaptureProgress(p, *capture_progress, CaptureProgress::Capturing(*new_owner, progress.into())));
                                     } else {
                                         // capture-progress is reset by TerrainChange
                                         handler.add_event(Event::TerrainChange(p, terrain.clone(), Terrain::Realty(realty.clone(), Some(*new_owner), CaptureProgress::None)));
@@ -288,7 +288,7 @@ fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: i32, mut unit: Un
     if handler.get_game().is_foggy() {
         let unit_vision = unit.get_vision(handler.get_game(), pos);
         let perspective = to_client_perspective(&team);
-        let vision_changes: Vec<(Point, U8<2>)> = unit_vision.iter()
+        let vision_changes: Vec<(Point, U<2>)> = unit_vision.iter()
         .filter_map(|(p, v)| {
             fog_change_index(handler.get_game().get_vision(perspective, *p), Some(*v))
                 .and_then(|i| Some((*p, i)))
@@ -332,30 +332,30 @@ pub enum CommandError {
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 2)]
 pub enum FogChange<D: Direction> {
-    NoneToSome(FieldData::<D>),
-    NoneToTrue(FieldData::<D>),
-    SomeToTrue(Option::<UnitType::<D>>),
+    NoneToSome(FieldData<D>),
+    NoneToTrue(FieldData<D>),
+    SomeToTrue(Option<UnitType<D>>),
 }
 impl<D: Direction> FogChange<D> {
-    pub fn index(&self) -> U8<2> {
-        U8::new(match self {
+    pub fn index(&self) -> U<2> {
+        match self {
             Self::NoneToSome(_) => 0,
             Self::NoneToTrue(_) => 1,
             Self::SomeToTrue(_) => 2,
-        })
+        }.into()
     }
 }
-pub fn fog_change_index(before: Option<Vision>, after: Option<Vision>) -> Option<U8<2>> {
+pub fn fog_change_index(before: Option<Vision>, after: Option<Vision>) -> Option<U<2>> {
     match (before, after) {
         (None, None) => None,
         (Some(Vision::Normal), Some(Vision::Normal)) => None,
         (Some(Vision::TrueSight), Some(Vision::TrueSight)) => None,
-        (None, Some(Vision::Normal)) => Some(U8::new(0)),
-        (Some(Vision::Normal), None) => Some(U8::new(0)),
-        (None, Some(Vision::TrueSight)) => Some(U8::new(1)),
-        (Some(Vision::TrueSight), None) => Some(U8::new(1)),
-        (Some(Vision::Normal), Some(Vision::TrueSight)) => Some(U8::new(2)),
-        (Some(Vision::TrueSight), Some(Vision::Normal)) => Some(U8::new(2)),
+        (None, Some(Vision::Normal)) => Some(0.into()),
+        (Some(Vision::Normal), None) => Some(0.into()),
+        (None, Some(Vision::TrueSight)) => Some(1.into()),
+        (Some(Vision::TrueSight), None) => Some(1.into()),
+        (Some(Vision::Normal), Some(Vision::TrueSight)) => Some(2.into()),
+        (Some(Vision::TrueSight), Some(Vision::Normal)) => Some(2.into()),
     }
 }
 
@@ -364,33 +364,33 @@ pub fn fog_change_index(before: Option<Vision>, after: Option<Vision>) -> Option
 pub enum Event<D:Direction> {
     NextTurn,
     RandomFogNextTurn(bool),
-    RandomFogForecast(bool, U8::<255>),
-    PureFogChange(Perspective, LVec::<(Point, U8<2>), {point_map::MAX_AREA}>),
-    FogChange(Perspective, LVec::<(Point, FogChange<D>), {point_map::MAX_AREA}>),
-    UnitPath(Option::<Option::<UnloadIndex>>, Path::<D>, Option::<bool>, UnitType::<D>),
-    HoverPath(Option::<Option::<UnloadIndex>>, Point, LVec::<(bool, PathStep::<D>), {point_map::MAX_AREA}>, Option::<bool>, UnitType::<D>),
+    RandomFogForecast(bool, U<255>),
+    PureFogChange(Perspective, LVec<(Point, U<2>), {point_map::MAX_AREA}>),
+    FogChange(Perspective, LVec<(Point, FogChange<D>), {point_map::MAX_AREA}>),
+    UnitPath(Option<Option<UnloadIndex>>, Path<D>, Option<bool>, UnitType<D>),
+    HoverPath(Option<Option<UnloadIndex>>, Point, LVec<(bool, PathStep<D>), {point_map::MAX_AREA}>, Option<bool>, UnitType<D>),
     UnitActionStatus(Point, UnitActionStatus, UnitActionStatus),
     UnitExhaust(Point),
     UnitExhaustBoarded(Point, UnloadIndex),
-    UnitHpChange(Point, I8::<-100, 99>, I16::<-999, 999>),
-    UnitHpChangeBoarded(Point, UnloadIndex, I8::<-100, 99>),
-    UnitCreation(Point, UnitType::<D>),
-    UnitDeath(Point, UnitType::<D>),
-    UnitReplacement(Point, UnitType::<D>, UnitType::<D>),
+    UnitHpChange(Point, I<-100, 99>, I<-999, 999>),
+    UnitHpChangeBoarded(Point, UnloadIndex, I<-100, 99>),
+    UnitCreation(Point, UnitType<D>),
+    UnitDeath(Point, UnitType<D>),
+    UnitReplacement(Point, UnitType<D>, UnitType<D>),
     UnitSetMercenary(Point, Mercenaries),
-    MercenaryCharge(Point, I8::<{-(mercenary::MAX_CHARGE as i8)}, {mercenary::MAX_CHARGE as i8}>),
+    MercenaryCharge(Point, I<{-(mercenary::MAX_CHARGE as i32)}, {mercenary::MAX_CHARGE as i32}>),
     MercenaryPowerSimple(Point),
-    TerrainChange(Point, Terrain::<D>, Terrain::<D>),
+    TerrainChange(Point, Terrain<D>, Terrain<D>),
     CaptureProgress(Point, CaptureProgress, CaptureProgress),
     MoneyChange(Owner, Funds),
     PureHideFunds(Owner),
     HideFunds(Owner, Funds), // when fog starts
     PureRevealFunds(Owner),
     RevealFunds(Owner, Funds), // when fog ends
-    RemoveDetail(Point, U8::<{details::MAX_STACK_SIZE as u8 - 1}>, Detail),
-    ReplaceDetail(Point, LVec::<Detail, {details::MAX_STACK_SIZE}>, LVec::<Detail, {details::MAX_STACK_SIZE}>),
-    Effect(Effect::<D>),
-    CommanderCharge(Owner, I32::<{-(MAX_CHARGE as i32)}, {MAX_CHARGE as i32}>),
+    RemoveDetail(Point, U<{details::MAX_STACK_SIZE as i32 - 1}>, Detail),
+    ReplaceDetail(Point, LVec<Detail, {details::MAX_STACK_SIZE}>, LVec<Detail, {details::MAX_STACK_SIZE}>),
+    Effect(Effect<D>),
+    CommanderCharge(Owner, I<{-(MAX_CHARGE as i32)}, {MAX_CHARGE as i32}>),
     CommanderFlipActiveSimple(Owner),
     UnitMovedThisGame(Point),
     EnPassantOpportunity(Point),
@@ -437,7 +437,7 @@ impl<D: Direction> Event<D> {
                 match game.get_fog_mode_mut() {
                     FogMode::Random(_, _, _, forecast) => {
                         for _ in 0..**repetitions {
-                            forecast.push(*new_value).unwrap();
+                            forecast.push(*new_value);
                         }
                     }
                     _ => panic!("Received FogUpdateRandom event but fog isn't random"),
@@ -469,7 +469,7 @@ impl<D: Direction> Event<D> {
                 }
                 let mut path = Path::new(*start);
                 for (_, step) in steps {
-                    path.steps.push(step.clone()).unwrap();
+                    path.steps.push(step.clone());
                 }
                 apply_unit_path(game, *unload_index, &path, *end_visible, &unit);
             }
@@ -499,13 +499,13 @@ impl<D: Direction> Event<D> {
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
                 let hp = unit.get_hp();
-                unit.set_hp((hp as i8 + **hp_change) as u8);
+                unit.set_hp((hp as i32 + **hp_change) as u8);
             }
             Self::UnitHpChangeBoarded(pos, index, hp_change) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_boarded_mut();
                 if let Some(boarded) = transported.get_mut(**index as usize) {
-                    boarded.hp = ((*boarded.hp as i8 + **hp_change) as u8).try_into().unwrap();
+                    boarded.hp = (*boarded.hp + **hp_change).into();
                 }
             }
             Self::UnitCreation(pos, unit) => {
@@ -524,7 +524,7 @@ impl<D: Direction> Event<D> {
             }
             Self::MercenaryCharge(pos, change) => {
                 if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
-                    unit.data.mercenary.then(|m, _| m.add_charge(**change));
+                    unit.data.mercenary.then(|m, _| m.add_charge(**change as i8));
                 }
             }
             Self::MercenaryPowerSimple(pos) => {
@@ -555,7 +555,7 @@ impl<D: Direction> Event<D> {
             Self::PureHideFunds(_) => {}
             Self::HideFunds(owner, _) => {
                 if let Some(player) = game.get_owning_player_mut(*owner) {
-                    player.funds = Funds::new(0);
+                    player.funds = 0.into();
                 }
             }
             Self::PureRevealFunds(_) => {}
@@ -619,24 +619,24 @@ impl<D: Direction> Event<D> {
                             typ: drone.clone(),
                             data: UnitData {
                                 exhausted: true,
-                                hp: Hp::new(100),
+                                hp: 100.into(),
                                 mercenary: MaybeMercenary::None,
                                 zombie: false,
                             },
                         };
-                        drones.push(unit).unwrap();
+                        drones.push(unit);
                     }
                     Some(UnitType::Structure(Structure {typ: Structures::DroneTower(Some((_, drones, _))), ..})) => {
                         let unit = TransportedUnit {
                             typ: drone.clone(),
                             data: UnitData {
                                 exhausted: true,
-                                hp: Hp::new(100),
+                                hp: 100.into(),
                                 mercenary: MaybeMercenary::None,
                                 zombie: false,
                             },
                         };
-                        drones.push(unit).unwrap();
+                        drones.push(unit);
                     }
                     _ => (),
                 }
@@ -680,7 +680,7 @@ impl<D: Direction> Event<D> {
             Self::HoverPath(unload_index, start, steps, end_visible, unit) => {
                 let mut path = Path::new(*start);
                 for (_, step) in steps {
-                    path.steps.push(step.clone()).unwrap();
+                    path.steps.push(step.clone());
                 }
                 undo_unit_path(game, *unload_index, &path, *end_visible, unit);
             }
@@ -710,13 +710,13 @@ impl<D: Direction> Event<D> {
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, -**hp_change));
                 let hp = unit.get_hp();
-                unit.set_hp((hp as i8 - **hp_change) as u8);
+                unit.set_hp((hp as i32 - **hp_change) as u8);
             }
             Self::UnitHpChangeBoarded(pos, index, hp_change) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_boarded_mut();
                 if let Some(boarded) = transported.get_mut(**index as usize) {
-                    boarded.hp = ((*boarded.hp as i8 - **hp_change) as u8).try_into().unwrap();
+                    boarded.hp = (*boarded.hp - **hp_change).into();
                 }
             }
             Self::UnitCreation(pos, _) => {
@@ -735,7 +735,7 @@ impl<D: Direction> Event<D> {
             }
             Self::MercenaryCharge(pos, change) => {
                 if let Some(UnitType::Normal(unit)) = game.get_map_mut().get_unit_mut(*pos) {
-                    unit.data.mercenary.then(|m, _| m.add_charge(-**change));
+                    unit.data.mercenary.then(|m, _| m.add_charge(-**change as i8));
                 }
             }
             Self::MercenaryPowerSimple(pos) => {
@@ -772,7 +772,7 @@ impl<D: Direction> Event<D> {
             Self::PureRevealFunds(_) => {}
             Self::RevealFunds(owner, _) => {
                 if let Some(player) = game.get_owning_player_mut(*owner) {
-                    player.funds = Funds::new(0);
+                    player.funds = 0.into();
                 }
             }
             Self::RemoveDetail(p, index, detail) => {
@@ -843,9 +843,9 @@ impl<D: Direction> Event<D> {
                             0 => FogChange::NoneToSome(game.get_map().get_field_data(*p).stealth_replacement()),
                             1 => FogChange::NoneToTrue(game.get_map().get_field_data(*p)),
                             2 => FogChange::SomeToTrue(game.get_map().get_unit(*p).cloned()),
-                            _ => panic!("U8<2> contains a value > 2"),
+                            _ => panic!("U<2> contains a value > 2"),
                         };
-                        changes.push((*p, change)).unwrap();
+                        changes.push((*p, change));
                     }
                     Some(Self::FogChange(t.clone(), changes))
                 } else {
@@ -1095,7 +1095,7 @@ fn apply_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option
     if let Some(unload_index) = unload_index {
         if let Some(index) = unload_index {
             if let Some(unit) = game.get_map_mut().get_unit_mut(path.start) {
-                unit.unboard(*index);
+                unit.unboard(*index as u8);
             }
         } else {
             game.get_map_mut().set_unit(path.start.clone(), None);
@@ -1125,7 +1125,7 @@ fn undo_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option<
     if let Some(unload_index) = unload_index {
         if let Some(index) = unload_index {
             if let (Some(u), UnitType::Normal(b)) = (game.get_map_mut().get_unit_mut(path.start), unit.clone()) {
-                u.board(*index, b);
+                u.board(*index as u8, b);
             }
         } else {
             game.get_map_mut().set_unit(path.start.clone(), Some(unit.clone()));
@@ -1142,7 +1142,7 @@ fn fog_replacement_unit_path<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
     };
     let mut path = Path::new(start);
     for step in steps {
-        path.steps.push(step.step().clone()).unwrap();
+        path.steps.push(step.step().clone());
     }
     // TODO: doesn't work if the transporter has stealth
     let into = if game.can_see_unit_at(team, path.end(game.get_map()).unwrap(), &unit) {
@@ -1184,7 +1184,7 @@ fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
             if let Some(result) = &mut result {
                 // not necessary to skip ahead if the unit reappears in the same field where it last vanished
                 if last_visible != Some(previous) {
-                    result.1.push(step.skip_to(previous)).unwrap();
+                    result.1.push(step.skip_to(previous));
                 }
             } else {
                 result = Some((previous, LVec::new()));
@@ -1194,7 +1194,7 @@ fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
             // if the previous step was visible, this one should be too
             // CAUTION: should not be visible if teleporting into fog
             last_visible = Some(current);
-            result.as_mut().unwrap().1.push(step.clone()).unwrap();
+            result.as_mut().unwrap().1.push(step.clone());
         }
         previous_visible = visible;
     }
@@ -1208,8 +1208,8 @@ pub enum Effect<D: Direction> {
     GunFire(Point),
     ShellFire(Point),
     Repair(Point),
-    Laser(LVec::<(Point, D), {LASER_CANNON_RANGE}>),
-    Lightning(LVec::<Point, {MAX_AREA}>),
+    Laser(LVec<(Point, D), {LASER_CANNON_RANGE}>),
+    Lightning(LVec<Point, {MAX_AREA}>),
 }
 impl<D: Direction> Effect<D> {
     pub fn fog_replacement(&self, game: &Game<D>, team: ClientPerspective) -> Option<Self> {
@@ -1230,7 +1230,7 @@ impl<D: Direction> Effect<D> {
     }
 }
 
-fn flip_fog<D: Direction, I: Iterator<Item = (Point, U8<2>)>>(game: &mut Game<D>, team: ClientPerspective, vision_changes: I) {
+fn flip_fog<D: Direction, I: Iterator<Item = (Point, U<2>)>>(game: &mut Game<D>, team: ClientPerspective, vision_changes: I) {
     for (pos, change_index) in vision_changes {
         let vision = match (*change_index, game.get_vision(team, pos)) {
             (0, None) => Some(Vision::Normal),
@@ -1289,7 +1289,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         events.insert(IPerspective::Server, vec![]);
         events.insert(IPerspective::Neutral, vec![]);
         for team in game.get_teams() {
-            events.insert(IPerspective::Team(*team), vec![]);
+            events.insert(IPerspective::Team(*team as u8), vec![]);
         }
         EventHandler {
             game,
@@ -1363,7 +1363,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                         if let Some((destination, capacity)) = drone_parents.get_mut(id) {
                             // move drone back aboard its parent
                             let mut path = Path::new(p);
-                            path.steps.push(PathStep::Point(*destination)).unwrap();
+                            path.steps.push(PathStep::Point(*destination));
                             let id = *id;
                             self.add_event(Event::UnitPath(Some(None), path, Some(true), unit.clone()));
                             // one less space in parent

@@ -38,8 +38,8 @@ impl<D: Direction> Game<D> {
         for player in &players {
             // TODO: maybe only vision-maps should be added for visible teams
             // (so all for the server but only yours for client)
-            if !vision.contains_key(&ClientPerspective::Team(*player.team)) {
-                vision.insert(ClientPerspective::Team(*player.team), neutral_fog.clone());
+            if !vision.contains_key(&ClientPerspective::Team(*player.team as u8)) {
+                vision.insert(ClientPerspective::Team(*player.team as u8), neutral_fog.clone());
             }
         }
         vision.insert(ClientPerspective::Neutral, neutral_fog);
@@ -146,7 +146,7 @@ impl<D: Direction> Game<D> {
         self.players.iter_mut().find(|player| player.owner_id == owner)
     }
     pub fn get_team(&self, owner: Option<Owner>) -> ClientPerspective {
-        owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(ClientPerspective::Team(*p.team))).unwrap_or(ClientPerspective::Neutral)
+        owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(ClientPerspective::Team(*p.team as u8))).unwrap_or(ClientPerspective::Neutral)
     }
 
     pub fn is_foggy(&self) -> bool {
@@ -239,7 +239,7 @@ impl<D: Direction> Game<D> {
     }
     pub fn find_visible_threats(&self, pos: Point, threatened: &UnitType<D>, team: Team) -> HashSet<Point> {
         let mut result = HashSet::new();
-        for p in self.map.all_points().into_iter().filter(|p| self.has_vision_at(ClientPerspective::Team(*team), *p)) {
+        for p in self.map.all_points().into_iter().filter(|p| self.has_vision_at(ClientPerspective::Team(*team as u8), *p)) {
             if let Some(unit) = self.map.get_unit(p) {
                 if unit.threatens(self, threatened, pos) && unit.shortest_path_to_attack(self, &Path::new(p), pos).is_some() {
                     result.insert(p);
@@ -297,8 +297,8 @@ fn import_game_base<D: Direction>(unzipper: &mut Unzipper, is_server: bool) -> R
         .map(|p| (p, Vision::TrueSight))
         .collect();
     for player in &players {
-        if !vision.contains_key(&ClientPerspective::Team(*player.team)) {
-            vision.insert(ClientPerspective::Team(*player.team.clone()), neutral_fog.clone());
+        if !vision.contains_key(&ClientPerspective::Team(*player.team as u8)) {
+            vision.insert(ClientPerspective::Team(*player.team as u8), neutral_fog.clone());
         }
     }
     vision.insert(ClientPerspective::Neutral, neutral_fog);
@@ -327,9 +327,9 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             game.vision.insert(ClientPerspective::Neutral, import_fog(&mut unzipper, &points)?);
             
             for team in game.get_living_teams() {
-                if let Some(data) = hidden_data.teams.remove(&*team) {
+                if let Some(data) = hidden_data.teams.remove(&(*team as u8)) {
                     let mut unzipper = Unzipper::new(data);
-                    game.vision.insert(ClientPerspective::Team(*team), import_fog(&mut unzipper, &points)?);
+                    game.vision.insert(ClientPerspective::Team(*team as u8), import_fog(&mut unzipper, &points)?);
                 }
             }
 
@@ -366,7 +366,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             game.vision.insert(ClientPerspective::Team(team), vision);
             let mut players: Vec<Player> = vec![];
             for player in game.players.iter() {
-                players.push(if *player.team == team {
+                players.push(if *player.team as u8 == team {
                     Player::import(&mut unzipper, false)?
                 } else {
                     player.clone()
@@ -435,7 +435,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             let mut teams = HashMap::new();
             for team in self.get_living_teams() {
                 // team perspective, one per team
-                if let Some(vision) = self.vision.get(&ClientPerspective::Team(*team)) {
+                if let Some(vision) = self.vision.get(&ClientPerspective::Team(*team as u8)) {
                     let mut zipper = Zipper::new();
                     export_fog(&mut zipper, &points, vision);
                     for p in &points {
@@ -448,7 +448,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
                             player.export(&mut zipper, false);
                         }
                     }
-                    teams.insert(*team, zipper.finish());
+                    teams.insert(*team as u8, zipper.finish());
                 }
             }
 
@@ -473,7 +473,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
         .map(|p| {
             game_interface::PlayerData {
                 color_id: p.color_id,
-                team: *p.team,
+                team: *p.team as u8,
                 dead: p.dead,
             }
         }).collect()
@@ -485,18 +485,18 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
         let player = self.current_player();
         game_interface::PlayerData {
             color_id: player.color_id,
-            team: *player.team,
+            team: *player.team as u8,
             dead: player.dead,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Zippable)]
-pub struct FogChangeChance (U8::<240>);
+pub struct FogChangeChance (U<240>);
 impl FogChangeChance {
     pub fn new(chance: f32) -> Self {
         Self (
-            U8::new((chance.max(0.).min(1.) * 240.) as u8)
+            ((chance.max(0.).min(1.) * 240.) as u8).into()
         )
     }
     pub fn check(&self, value: f32) -> bool {
@@ -519,9 +519,9 @@ pub const MAX_FOG_FORECAST_TURNS: u32 = 255 + 33;
 pub enum FogMode {
     Never,
     Always,
-    DarkRegular(U8::<255>, U8::<255>, U8::<255>),
-    BrightRegular(U8::<255>, U8::<255>, U8::<255>),
-    Random(FogChangeChance, FogChangeChance, U8::<255>, LVec::<bool, {MAX_FOG_FORECAST_TURNS}>),
+    DarkRegular(U<255>, U<255>, U<255>),
+    BrightRegular(U<255>, U<255>, U<255>),
+    Random(FogChangeChance, FogChangeChance, U<255>, LVec<bool, {MAX_FOG_FORECAST_TURNS}>),
 }
 
 impl Display for FogMode {
@@ -551,9 +551,9 @@ impl FogMode {
                         to_dark_chance.check(handler.rng())
                     };
                     if change {
-                        handler.add_event(events::Event::RandomFogForecast(!current_last, 1.max(**turns_between_changes).try_into().unwrap()));
+                        handler.add_event(events::Event::RandomFogForecast(!current_last, 1.max(**turns_between_changes).into()));
                     } else {
-                        handler.add_event(events::Event::RandomFogForecast(current_last, U8::new(1)));
+                        handler.add_event(events::Event::RandomFogForecast(current_last, 1.into()));
                     }
                 }
                 _ => break,

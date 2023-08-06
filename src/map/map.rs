@@ -213,7 +213,7 @@ where D: Direction
     }
 
     pub fn get_details(&self, p: Point) -> Vec<Detail> {
-        self.details.get(&p).and_then(|v| Some(v.clone().into())).unwrap_or(vec![])
+        self.details.get(&p).and_then(|v| Some(v.to_vec())).unwrap_or(Vec::new())
     }
     pub fn set_details(&mut self, p: Point, value: Vec<Detail>) {
         if self.is_point_valid(p) {
@@ -263,9 +263,9 @@ where D: Direction
         }
         let mut drone_id = (DroneId::MAX as f32 * rng) as u16;
         while existing_ids.contains(&drone_id) {
-            drone_id = (drone_id + 1) % DroneId::MAX;
+            drone_id = (drone_id + 1) % DroneId::MAX as u16;
         }
-        DroneId::new(drone_id)
+        drone_id.into()
     }
 
     pub fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<(Point, D, Option<D>)>> {
@@ -491,9 +491,9 @@ pub fn import_map(bytes: Vec<u8>) -> Result<MapType, ZipperError> {
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 pub struct FieldData<D: Direction> {
-    pub terrain: Terrain::<D>,
-    pub details: LVec::<Detail, {details::MAX_STACK_SIZE}>,
-    pub unit: Option::<UnitType<D>>,
+    pub terrain: Terrain<D>,
+    pub details: LVec<Detail, {details::MAX_STACK_SIZE}>,
+    pub unit: Option<UnitType<D>>,
 }
 impl<D: Direction> FieldData<D> {
     pub fn fog_replacement(&self) -> Self {

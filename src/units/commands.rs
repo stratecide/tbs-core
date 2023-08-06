@@ -19,7 +19,7 @@ pub enum UnitAction<D: Direction> {
     Wait,
     Enter,
     Capture,
-    Attack(AttackInfo::<D>),
+    Attack(AttackInfo<D>),
     Pull(D),
     BuyMercenary(MercenaryOption),
     MercenaryPowerSimple,
@@ -41,7 +41,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Castle => write!(f, "Castle"),
             Self::PawnUpgrade(p) => write!(f, "{}", p),
             Self::Repair => write!(f, "Repair"),
-            Self::BuildDrone(o) => write!(f, "Build {}", o.to_normal(Some(DroneId::new(0))).name()),
+            Self::BuildDrone(o) => write!(f, "Build {}", o.to_normal(Some(0.into())).name()),
         }
     }
 }
@@ -53,12 +53,12 @@ pub enum AttackInfo<D: Direction> {
     Direction(D)
 }
 
-pub type UnloadIndex = U8<7>;
+pub type UnloadIndex = U<7>;
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 pub struct CommonMovement<D: Direction> {
-    pub unload_index: Option::<UnloadIndex>,
-    pub path: Path::<D>,
+    pub unload_index: Option<UnloadIndex>,
+    pub path: Path<D>,
 }
 impl<D: Direction> CommonMovement<D> {
     pub fn new(unload_index: Option<u8>, path: Path<D>) -> Self {
@@ -179,8 +179,8 @@ impl<D: Direction> CommonMovement<D> {
 
 fn after_path<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>, unit: &UnitType<D>) {
     let team = handler.get_game().current_player().team;
-    if handler.get_game().is_foggy() && ClientPerspective::Team(*team) == unit.get_team(handler.get_game()) {
-        let perspective = ClientPerspective::Team(*team);
+    if handler.get_game().is_foggy() && ClientPerspective::Team(*team as u8) == unit.get_team(handler.get_game()) {
+        let perspective = ClientPerspective::Team(*team as u8);
         let mut vision_changes = HashMap::new();
         for p in path.points(handler.get_map()).unwrap().into_iter().skip(1) {
             for (p, vision) in unit.get_vision(handler.get_game(), p) {
@@ -190,7 +190,7 @@ fn after_path<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>, unit:
                 }
             }
         }
-        let vision_changes: Vec<(Point, U8<2>)> = vision_changes.into_iter()
+        let vision_changes: Vec<(Point, U<2>)> = vision_changes.into_iter()
         .filter_map(|(p, v)| 
              fog_change_index(handler.get_game().get_vision(perspective, p), Some(v))
              .and_then(|vi| Some((p, vi))))
@@ -205,16 +205,16 @@ fn after_path<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>, unit:
 #[derive(Debug, Zippable)]
 #[zippable(bits = 8)]
 pub enum UnitCommand<D: Direction> {
-    MoveAttack(CommonMovement::<D>, AttackInfo::<D>),
-    MovePull(CommonMovement::<D>, D),
-    MoveCapture(CommonMovement::<D>),
-    MoveRepair(CommonMovement::<D>),
-    MoveWait(CommonMovement::<D>),
-    MoveBuyMerc(CommonMovement::<D>, MercenaryOption),
-    MoveAboard(CommonMovement::<D>),
-    MoveChess(Point, ChessCommand::<D>),
+    MoveAttack(CommonMovement<D>, AttackInfo<D>),
+    MovePull(CommonMovement<D>, D),
+    MoveCapture(CommonMovement<D>),
+    MoveRepair(CommonMovement<D>),
+    MoveWait(CommonMovement<D>),
+    MoveBuyMerc(CommonMovement<D>, MercenaryOption),
+    MoveAboard(CommonMovement<D>),
+    MoveChess(Point, ChessCommand<D>),
     MercenaryPowerSimple(Point),
-    MoveBuildDrone(CommonMovement::<D>, TransportableDrones),
+    MoveBuildDrone(CommonMovement<D>, TransportableDrones),
     StructureBuildDrone(Point, TransportableDrones),
 }
 impl<D: Direction> UnitCommand<D> {
@@ -234,7 +234,7 @@ impl<D: Direction> UnitCommand<D> {
                             AttackType::Straight(_, _) => return Err(CommandError::InvalidTarget),
                             _ => {}
                         }
-                        if !handler.get_game().has_vision_at(ClientPerspective::Team(*team), *target) {
+                        if !handler.get_game().has_vision_at(ClientPerspective::Team(*team as u8), *target) {
                             handler.get_map().get_unit(*target)
                             .and_then(|u| u.fog_replacement())
                             .ok_or(CommandError::NoVision)?;
@@ -286,7 +286,7 @@ impl<D: Direction> UnitCommand<D> {
                         dp = next_dp;
                         if let Some(unit) = handler.get_map().get_unit(dp.point).cloned() {
                             if let Some(end) = cm.apply(handler, false, false)? {
-                                if handler.get_game().has_vision_at(ClientPerspective::Team(*team), dp.point) {
+                                if handler.get_game().has_vision_at(ClientPerspective::Team(*team as u8), dp.point) {
                                     if i < min_dist - 1 || !unit.can_be_pulled(handler.get_map(), dp.point) {
                                         // can't pull if the target is already next to the unit
                                         return Err(CommandError::InvalidTarget);
@@ -318,12 +318,12 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 let (old_progress, new_progress) = match handler.get_map().get_terrain(intended_end) {
                     Some(Terrain::Realty(_, owner, old_progress)) => {
-                        if ClientPerspective::Team(*team) != handler.get_game().get_team(*owner) {
+                        if ClientPerspective::Team(*team as u8) != handler.get_game().get_team(*owner) {
                             (*old_progress, match old_progress {
                                 CaptureProgress::Capturing(capturing_owner, _) if *capturing_owner == handler.get_game().current_player().owner_id => {
                                     *old_progress
                                 }
-                                _ => CaptureProgress::Capturing(handler.get_game().current_player().owner_id, U8::new(0)),
+                                _ => CaptureProgress::Capturing(handler.get_game().current_player().owner_id, 0.into()),
                             })
                         } else {
                             return Err(CommandError::CannotCaptureHere);
@@ -416,7 +416,7 @@ impl<D: Direction> UnitCommand<D> {
             Self::MoveAboard(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
                 cm.validate_input(handler.get_game(), true)?;
-                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team), intended_end) {
+                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team as u8), intended_end) {
                     return Err(CommandError::NoVision);
                 }
                 let unit = cm.get_unit(handler.get_map())?;
@@ -445,7 +445,7 @@ impl<D: Direction> UnitCommand<D> {
                 if !handler.get_map().is_point_valid(pos) {
                     return Err(CommandError::InvalidPoint(pos));
                 }
-                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team), pos) {
+                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team as u8), pos) {
                     return Err(CommandError::NoVision);
                 }
                 match handler.get_map().get_unit(pos) {
@@ -503,7 +503,7 @@ impl<D: Direction> UnitCommand<D> {
                 Some(cm.path.start)
             }
             Self::StructureBuildDrone(pos, option) => {
-                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team), pos) {
+                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team as u8), pos) {
                     // you should have vision of your own structures
                     return Err(CommandError::NoVision);
                 }
@@ -651,7 +651,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
         let mut charges = HashMap::new();
         for (_, defender, damage) in &defenders {
             if let Some(player) = defender.get_owner().and_then(|owner| handler.get_game().get_owning_player(owner)) {
-                if ClientPerspective::Team(*player.team) != attacker_team {
+                if ClientPerspective::Team(*player.team as u8) != attacker_team {
                     let commander_charge = defender.get_hp().min(*damage as u8) as u32 * defender.type_value() as u32 / 100;
                     let old_charge = charges.remove(&player.owner_id).unwrap_or(0);
                     charges.insert(player.owner_id, commander_charge + old_charge);
@@ -661,7 +661,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
             }
         }
         for (owner, commander_charge) in charges {
-            let commander_charge = commander_charge.min(handler.get_game().get_owning_player(owner).and_then(|player| Some(*player.commander.charge_potential())).unwrap_or(0));
+            let commander_charge = commander_charge.min(handler.get_game().get_owning_player(owner).and_then(|player| Some(*player.commander.charge_potential() as u32)).unwrap_or(0));
             if commander_charge > 0 {
                 handler.add_event(Event::CommanderCharge(owner, (commander_charge as i32).try_into().unwrap()));
             }

@@ -12,7 +12,7 @@ type AreaPoint<D> = (Transformation<D>, Point);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Zippable)]
 pub struct Transformation<D>
 where D: Direction {
-    pub distortion: Distortion::<D>,
+    pub distortion: Distortion<D>,
     pub translate_by: D::T,
 }
 
