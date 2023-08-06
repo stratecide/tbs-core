@@ -34,7 +34,7 @@ impl<D: Direction> ChessCommand<D> {
         };
         let mut validated_path = None;
         match (&self, &unit.typ) {
-            (Self::Pawn(path, _), ChessUnits::Pawn(_, _, _)) => {
+            (Self::Pawn(path, _), ChessUnits::Pawn(_, _)) => {
                 unit.all_possible_paths(handler.get_game(), start, true, |_, steps| {
                     if path[..] == steps[..] {
                         validated_path = Some(steps.clone());
@@ -129,14 +129,14 @@ impl<D: Direction> ChessCommand<D> {
         }
         super::on_path_details(handler, &path, &UnitType::Chess::<D>(unit.clone()));
         match unit.typ {
-            ChessUnits::Pawn(d, moved_this_game, en_passant) => {
+            ChessUnits::Pawn(d, en_passant) => {
                 match path.steps[0] {
                     PathStep::Diagonal(_) => {
                         // en passant
                         for n in handler.get_map().get_neighbors(end, NeighborMode::FollowPipes) {
                             if let Some(UnitType::Chess(unit)) = handler.get_map().get_unit(n.point) {
                                 match unit.typ {
-                                    ChessUnits::Pawn(d, _, true) => {
+                                    ChessUnits::Pawn(d, true) => {
                                         if n.direction == d && handler.get_game().get_team(Some(unit.owner)) != perspective {
                                             handler.add_event(Event::UnitDeath(n.point, UnitType::Chess(unit.clone())));
                                         }
@@ -168,9 +168,6 @@ impl<D: Direction> ChessCommand<D> {
                     let new_dir = ChessUnit::pawn_dir_after_path(handler.get_map(), &path, d.clone());
                     if d != new_dir {
                         handler.add_event(Event::UnitDirection(end, new_dir, d));
-                    }
-                    if !moved_this_game {
-                        handler.add_event(Event::UnitMovedThisGame(end));
                     }
                 }
             }
@@ -217,7 +214,7 @@ impl<D: Direction> ChessCommand<D> {
         Ok(())
     }
     pub fn exhaust_all_on_board(handler: &mut EventHandler<D>, pos: Point) {
-        if handler.get_map().get_terrain(pos) != Some(&Terrain::ChessTile) {
+        if handler.get_map().get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
             return;
         }
         let mut to_exhaust = HashSet::new();
@@ -227,7 +224,7 @@ impl<D: Direction> ChessCommand<D> {
                     to_exhaust.insert(p);
                 }
             }
-            handler.get_map().get_terrain(p) == Some(&Terrain::ChessTile)
+            handler.get_map().get_terrain(p).and_then(|t| Some(t.is_chess())).unwrap_or(false)
         });
         for p in handler.get_map().all_points().into_iter().filter(|p| to_exhaust.contains(p)) {
             handler.add_event(Event::UnitExhaust(p));
@@ -312,9 +309,9 @@ impl<D: Direction> ChessUnit<D> {
             ClientPerspective::Team(team) => team.into(),
         };
         match self.typ {
-            ChessUnits::Pawn(dir, moved_this_game, _) => {
+            ChessUnits::Pawn(dir, _) => {
                 let mut directions = vec![];
-                if game.get_map().get_terrain(start) == Some(&Terrain::ChessTile) {
+                if game.get_map().get_terrain(start).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
                     directions.push(dir);
                 } else {
                     directions = D::list();
@@ -328,7 +325,7 @@ impl<D: Direction> ChessUnit<D> {
                             match callback(dp.point, &steps) {
                                 PathSearchFeedback::Continue => {
                                     if let Some(dp) = game.get_map().get_neighbor(dp.point, dp.direction) {
-                                        if !moved_this_game && Self::can_move_through(game, dp.point, team, ignore_unseen) {
+                                        if game.get_map().get_terrain(start) == Some(&Terrain::ChessPawnTile) && Self::can_move_through(game, dp.point, team, ignore_unseen) {
                                             // move forward 2
                                             steps.push(PathStep::Dir(dp.direction));
                                             match callback(dp.point, &steps) {
@@ -352,7 +349,7 @@ impl<D: Direction> ChessUnit<D> {
                         for n in game.get_map().get_neighbors(dp.point, NeighborMode::FollowPipes) {
                             if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(n.point) {
                                 match unit.typ {
-                                    ChessUnits::Pawn(d, _, true) => {
+                                    ChessUnits::Pawn(d, true) => {
                                         en_passant = en_passant || n.direction == d && game.get_team(Some(unit.owner)) != ClientPerspective::Team(*team as u8);
                                     }
                                     _ => {}
@@ -440,7 +437,7 @@ impl<D: Direction> ChessUnit<D> {
             return HashSet::new();
         }
         match self.typ {
-            ChessUnits::Pawn(d, _, _) => {
+            ChessUnits::Pawn(d, _) => {
                 pawn_attackable_positions(game, position, d).into_iter().map(|dp| dp.point).collect()
             }
             _ => self.movable_positions(game, &Path::new(position)),
@@ -465,7 +462,7 @@ impl<D: Direction> ChessUnit<D> {
     }
     pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         match self.typ {
-            ChessUnits::Pawn(d, _, _) => {
+            ChessUnits::Pawn(d, _) => {
                 for dp in pawn_attackable_positions(game, path_so_far.start, d) {
                     if dp.point == goal {
                         return Some(Path {
@@ -489,7 +486,7 @@ impl<D: Direction> ChessUnit<D> {
                     }
                     result.push(UnitAction::Wait);
                 }
-                ChessUnits::Pawn(d, _, _) => {
+                ChessUnits::Pawn(d, _) => {
                     if Self::pawn_upgrades_after_path(game.get_map(), path, d.clone()) {
                         result.push(UnitAction::PawnUpgrade(PawnUpgrade::Queen));
                         result.push(UnitAction::PawnUpgrade(PawnUpgrade::Rook));
@@ -548,7 +545,7 @@ impl<D: Direction> ChessUnit<D> {
     fn pawn_upgrades_after_path(map: &Map<D>, path: &Path<D>, old_dir: D) -> bool {
         let end = path.end(map).unwrap();
         let new_dir = Self::pawn_dir_after_path(map, path, old_dir);
-        map.get_terrain(end) == Some(&Terrain::ChessTile)
+        map.get_terrain(end).and_then(|t| Some(t.is_chess())).unwrap_or(false)
         && map.get_neighbor(end, new_dir).is_none()
         && get_diagonal_neighbor(map, end, new_dir).is_none()
         && get_diagonal_neighbor(map, end, new_dir.rotate_clockwise()).is_none()
@@ -559,7 +556,7 @@ impl<D: Direction> ChessUnit<D> {
 
     pub fn vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         match self.typ {
-            ChessUnits::Pawn(_, _, _) => 2,
+            ChessUnits::Pawn(_, _) => 2,
             ChessUnits::Rook(_) => 8,
             ChessUnits::Bishop => 8,
             ChessUnits::Knight => 3,
@@ -607,9 +604,9 @@ impl<D: Direction> ChessUnit<D> {
                     });
                 }
             }
-            ChessUnits::Pawn(dir, moved_this_game, _) => {
+            ChessUnits::Pawn(dir, _) => {
                 let mut directions = vec![];
-                if game.get_map().get_terrain(pos) == Some(&Terrain::ChessTile) {
+                if game.get_map().get_terrain(pos).and_then(|f| Some(f.is_chess())).unwrap_or(false) {
                     directions.push(dir);
                 } else {
                     directions = D::list();
@@ -617,7 +614,7 @@ impl<D: Direction> ChessUnit<D> {
                 for d in directions.clone() {
                     if let Some(dp) = game.get_map().get_neighbor(pos, d) {
                         result.insert(dp.point, Vision::TrueSight);
-                        if !moved_this_game {
+                        if game.get_map().get_terrain(pos) == Some(&Terrain::ChessPawnTile) {
                             if let Some(dp) = game.get_map().get_neighbor(dp.point, dp.direction) {
                                 result.insert(dp.point, Vision::Normal);
                             }
@@ -729,7 +726,7 @@ impl fmt::Display for PawnUpgrade {
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 4)]
 pub enum ChessUnits<D: Direction> {
-    Pawn(D, bool, bool),
+    Pawn(D, bool),
     Rook(bool),
     Bishop,
     Knight,
@@ -739,7 +736,7 @@ pub enum ChessUnits<D: Direction> {
 impl<D: Direction> ChessUnits<D> {
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Pawn(_, _, _) => "Pawn",
+            Self::Pawn(_, _) => "Pawn",
             Self::Rook(_) => "Rook",
             Self::Bishop => "Bishop",
             Self::Knight => "Knight",
@@ -749,7 +746,7 @@ impl<D: Direction> ChessUnits<D> {
     }
     pub fn get_movement(&self) -> MovementPoints {
         match self {
-            Self::Pawn(_, _, _) => MovementPoints::from(0.),
+            Self::Pawn(_, _) => MovementPoints::from(0.),
             Self::Rook(_) =>MovementPoints::from(8.),
             Self::Bishop =>MovementPoints::from(8.),
             Self::Knight => MovementPoints::from(0.),
@@ -759,7 +756,7 @@ impl<D: Direction> ChessUnits<D> {
     }
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
-            Self::Pawn(_, _, _) => (ArmorType::Infantry, 1.5),
+            Self::Pawn(_, _) => (ArmorType::Infantry, 1.5),
             Self::Rook(_) => (ArmorType::Light, 1.5),
             Self::Bishop => (ArmorType::Light, 1.5),
             Self::Knight => (ArmorType::Heli, 1.5),
@@ -769,7 +766,7 @@ impl<D: Direction> ChessUnits<D> {
     }
     pub fn value(&self) -> u16 {
         match self {
-            Self::Pawn(_, _, _) => 100,
+            Self::Pawn(_, _) => 100,
             Self::Rook(_) => 500,
             Self::Bishop => 300,
             Self::Knight => 300,
@@ -779,7 +776,6 @@ impl<D: Direction> ChessUnits<D> {
     }
     pub fn flip_moved_this_game(&mut self) {
         match self {
-            Self::Pawn(_, m, _) => *m = !*m,
             Self::Rook(m) => *m = !*m,
             Self::King(m) => *m = !*m,
             _ => {}

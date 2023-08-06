@@ -351,6 +351,21 @@ impl<D: Direction> Ord for MovementSearch<D> {
     }
 }
 
+fn find_normal_steps<D: Direction>(map: &Map<D>, point: Point, _movement_type: MovementType) -> HashSet<(OrientedPoint<D>, PathStep<D>)> {
+    let mut result = HashSet::new();
+    for d in D::list() {
+        if let Some(neighbor) = map.get_neighbor(point, d) {
+            if map.get_terrain(point) == Some(&Terrain::Fountain) {
+                if let Some(neighbor) = map.get_neighbor(neighbor.point, neighbor.direction) {
+                    result.insert((neighbor, PathStep::Jump(d)));
+                }
+            }
+            result.insert((neighbor, PathStep::Dir(d)));
+        }
+    }
+    result
+}
+
 fn search_path<D>(
     map: &Map<D>,
     start: Point,
@@ -496,19 +511,8 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
             };
             Some((movement_type, remaining_points))
         },
-        |point, _movement_type| {
-            let mut result = HashSet::new();
-            for d in D::list() {
-                if let Some(neighbor) = game.get_map().get_neighbor(point, d) {
-                    if game.get_map().get_terrain(point) == Some(&Terrain::Fountain) {
-                        if let Some(neighbor) = game.get_map().get_neighbor(neighbor.point, neighbor.direction) {
-                            result.insert((neighbor, PathStep::Jump(d)));
-                        }
-                    }
-                    result.insert((neighbor, PathStep::Dir(d)));
-                }
-            }
-            result
+        |point, movement_type| {
+            find_normal_steps(game.get_map(), point, movement_type)
         },
         |path, destination| {
             if path.steps.len() <= path_so_far.steps.len() && path.steps[..] != path_so_far.steps[..path.steps.len()] {

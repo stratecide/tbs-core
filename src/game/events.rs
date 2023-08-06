@@ -585,7 +585,7 @@ impl<D: Direction> Event<D> {
             Self::EnPassantOpportunity(p) => {
                 if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
                     match &mut unit.typ {
-                        ChessUnits::Pawn(_, _, en_passant) => {
+                        ChessUnits::Pawn(_, en_passant) => {
                             *en_passant = !*en_passant;
                         }
                         _ => {}
@@ -595,7 +595,7 @@ impl<D: Direction> Event<D> {
             Self::UnitDirection(p, new_dir, _) => {
                 if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
                     match &mut unit.typ {
-                        ChessUnits::Pawn(d, _, _) => {
+                        ChessUnits::Pawn(d, _) => {
                             *d = *new_dir;
                         }
                         _ => {}
@@ -796,7 +796,7 @@ impl<D: Direction> Event<D> {
             Self::EnPassantOpportunity(p) => {
                 if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
                     match &mut unit.typ {
-                        ChessUnits::Pawn(_, _, en_passant) => {
+                        ChessUnits::Pawn(_, en_passant) => {
                             *en_passant = !*en_passant;
                         }
                         _ => {}
@@ -806,7 +806,7 @@ impl<D: Direction> Event<D> {
             Self::UnitDirection(p, _, old_dir) => {
                 if let Some(UnitType::Chess(unit)) = game.get_map_mut().get_unit_mut(*p) {
                     match &mut unit.typ {
-                        ChessUnits::Pawn(d, _, _) => {
+                        ChessUnits::Pawn(d, _) => {
                             *d = *old_dir;
                         }
                         _ => {}
