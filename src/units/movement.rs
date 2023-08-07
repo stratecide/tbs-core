@@ -12,7 +12,6 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::{Game, Vision};
 use crate::map::map::*;
-use crate::map::wrapping_map::OrientedPoint;
 use crate::terrain::Terrain;
 
 use super::normal_units::{NormalUnits, NormalUnit};
@@ -138,7 +137,7 @@ impl<D: Direction> Ord for WidthSearch<D> {
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Zippable, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable, Hash)]
 #[zippable(bits = 3)]
 pub enum PathStep<D: Direction> {
     Dir(D),
@@ -149,36 +148,39 @@ pub enum PathStep<D: Direction> {
 }
 impl<D: Direction> PathStep<D> {
     pub fn progress(&self, map: &Map<D>, pos: Point) -> Result<Point, CommandError> {
+        Ok(self.progress_reversible(map, pos)?.0)
+    }
+    pub fn progress_reversible(&self, map: &Map<D>, pos: Point) -> Result<(Point, Self), CommandError> {
         match self {
             Self::Dir(d) => {
                 if let Some(o) = map.get_neighbor(pos, *d) {
-                    Ok(o.point)
+                    Ok((o.point, Self::Dir(o.direction.opposite_direction())))
                 } else {
                     Err(CommandError::InvalidPath)
                 }
             }
             Self::Jump(d) => {
                 if let Some(o) = map.get_neighbor(pos, *d).and_then(|o| map.get_neighbor(o.point, o.direction)) {
-                    Ok(o.point)
+                    Ok((o.point, Self::Jump(o.direction.opposite_direction())))
                 } else {
                     Err(CommandError::InvalidPath)
                 }
             }
             Self::Diagonal(d) => {
                 if let Some(o) = chess::get_diagonal_neighbor(map, pos, *d) {
-                    Ok(o.point)
+                    Ok((o.point, Self::Diagonal(o.direction.opposite_direction())))
                 } else {
                     Err(CommandError::InvalidPath)
                 }
             }
             Self::Knight(d, turn_left) => {
                 if let Some(o) = chess::get_knight_neighbor(map, pos, *d, *turn_left) {
-                    Ok(o.point)
+                    Ok((o.point, Self::Knight(o.direction.opposite_direction(), *turn_left != o.mirrored)))
                 } else {
                     Err(CommandError::InvalidPath)
                 }
             }
-            Self::Point(p) => Ok(*p),
+            Self::Point(p) => Ok((*p, Self::Point(pos))),
         }
     }
     pub fn dir(&self) -> Option<D> {
@@ -188,6 +190,12 @@ impl<D: Direction> PathStep<D> {
             Self::Diagonal(_) => None,
             Self::Knight(_, _) => None,
             Self::Point(_) => None,
+        }
+    }
+    pub fn blocks(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Dir(d1) | Self::Jump(d1), Self::Dir(d2) | Self::Jump(d2)) => d1 == d2,
+            _ => self == other,
         }
     }
 }
@@ -282,7 +290,7 @@ impl<D: Direction> PathStepExt<D> for HoverStep<D> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct MovementSearchMeta<D: Direction> {
     movement_type: MovementType,
-    illegal_next_dir: Option<D>, // units aren't allowed to turn around 180°
+    blocked_step: Option<PathStep<D>>, // units aren't allowed to turn around 180°
     previous_turns: Vec<Path<D>>,
     remaining_movement: MovementPoints,
     path: Path<D>,
@@ -292,36 +300,23 @@ impl<D: Direction> MovementSearchMeta<D> {
         if self.previous_turns.len() == other.previous_turns.len() {
             self.remaining_movement.cmp(&other.remaining_movement)
         } else {
-            self.previous_turns.len().cmp(&other.previous_turns.len())
+            other.previous_turns.len().cmp(&self.previous_turns.len())
         }
     }
-    fn compare(&self, other: &Self) -> Option<Ordering> {
+    fn useful_with(&self, other: &Self) -> bool {
         if self.movement_type != other.movement_type {
-            return None;
+            return true;
         }
-        let mut is_better = false;
-        let mut is_worse = false;
-        match (self.illegal_next_dir, other.illegal_next_dir) {
-            (None, None) => (),
-            (None, Some(_)) => is_better = true,
-            (Some(_), None) => is_worse = true,
+        match (self.blocked_step, other.blocked_step) {
+            (None, Some(_)) => return true,
             (Some(a), Some(b)) => {
                 if a != b {
-                    return None;
+                    return true;
                 }
             }
-        }
-        match self.heap_order(other) {
-            Ordering::Less => is_better = true,
-            Ordering::Greater => is_worse = true,
             _ => (),
         }
-        match (is_better, is_worse) {
-            (false, false) => Some(Ordering::Equal),
-            (true, false) => Some(Ordering::Less),
-            (false, true) => Some(Ordering::Greater),
-            (true, true) => None,
-        }
+        self > other
     }
 }
 impl<D: Direction> PartialOrd for MovementSearchMeta<D> {
@@ -351,36 +346,54 @@ impl<D: Direction> Ord for MovementSearch<D> {
     }
 }
 
-fn find_normal_steps<D: Direction>(map: &Map<D>, point: Point, _movement_type: MovementType) -> HashSet<(OrientedPoint<D>, PathStep<D>)> {
+fn find_normal_steps<D: Direction>(map: &Map<D>, point: Point, _movement_type: MovementType) -> HashSet<PathStep<D>> {
     let mut result = HashSet::new();
     for d in D::list() {
-        if let Some(neighbor) = map.get_neighbor(point, d) {
-            if map.get_terrain(point) == Some(&Terrain::Fountain) {
-                if let Some(neighbor) = map.get_neighbor(neighbor.point, neighbor.direction) {
-                    result.insert((neighbor, PathStep::Jump(d)));
-                }
-            }
-            result.insert((neighbor, PathStep::Dir(d)));
+        result.insert(PathStep::Dir(d));
+        if map.get_terrain(point) == Some(&Terrain::Fountain) {
+            result.insert(PathStep::Jump(d));
         }
     }
     result
 }
 
+fn update_movement_default<D: Direction>(_prev_terrain: &Terrain<D>, _next_terrain: &Terrain<D>, movement_type: MovementType, remaining_points: MovementPoints, cost: MovementPoints) -> Option<(MovementType, MovementPoints)> {
+    let remaining_points = if cost <= remaining_points {
+        Some(remaining_points - cost)
+    } else {
+        None
+    }?;
+    Some((movement_type, remaining_points))
+}
+
+type BaseMovement<'a, D> = dyn Fn(&Terrain<D>, Option<MovementType>) -> (MovementType, MovementPoints) + 'a;
+type UpdateMovement<'a, D> = dyn Fn(&Terrain<D>, &Terrain<D>, MovementType, MovementPoints, MovementPoints) -> Option<(MovementType, MovementPoints)> + 'a;
+type FindSteps<'a, D> = dyn Fn(&Path<D>, Point, MovementType, Option<PathStep<D>>) -> HashSet<PathStep<D>> + 'a;
+type SearchPathCallback<'a, D> = dyn FnMut(&[Path<D>], &Path<D>, Point) -> PathSearchFeedback + 'a;
+
 fn search_path<D>(
     map: &Map<D>,
     start: Point,
     additional_turns: usize,
-    base_movement: impl Fn(&Terrain<D>, Option<MovementType>) -> (MovementType, MovementPoints),
-    update_movement: impl Fn(&Terrain<D>, &Terrain<D>, MovementType, MovementPoints, MovementPoints) -> Option<(MovementType, MovementPoints)>,
-    find_steps: impl Fn(Point, MovementType) -> HashSet<(OrientedPoint<D>, PathStep<D>)>,
-    mut callback: impl FnMut(&Path<D>, Point) -> PathSearchFeedback
+    base_movement: Box<BaseMovement<D>>,
+    update_movement: Box<UpdateMovement<D>>,
+    find_steps: Box<FindSteps<D>>,
+    mut callback: Box<SearchPathCallback<D>>
 ) -> Option<Path<D>>
 where
     D: Direction,
 {
     // if the unit can't move from it's position, no need to go further
     let (movement_type, points) = if let Some(terrain) = map.get_terrain(start) {
-        base_movement(terrain, None)
+        let (movement_type, points) = base_movement(terrain, None);
+        if terrain.movement_cost(movement_type).is_none() {
+            let path = Path::new(start);
+            return match callback(&[], &path, start) {
+                PathSearchFeedback::Found => Some(path),
+                _ => None,
+            };
+        }
+        (movement_type, points)
     } else {
         return None;
     };
@@ -395,20 +408,20 @@ where
             movement_type,
             remaining_movement: points,
             previous_turns: Vec::new(),
-            illegal_next_dir: None,
+            blocked_step: None,
             path: Path::new(start),
         }
     });
     while let Some(MovementSearch { pos, meta }) = next_checks.pop() {
         // check if our current meta is accepted by the callback
-        match callback(&meta.path, pos) {
+        match callback(&meta.previous_turns, &meta.path, pos) {
             PathSearchFeedback::Found => return Some(meta.path),
             PathSearchFeedback::Rejected => continue,
             PathSearchFeedback::Continue => (),
         }
         // the meta was acceptable, attempt to add it to best_metas
         if let Some(metas) = best_metas.get(&pos) {
-            if metas.iter().any(|m| m.compare(&meta) == Some(Ordering::Less)) {
+            if metas.iter().any(|m| !meta.useful_with(m)) {
                 // we already found a strictly better meta
                 continue;
             }
@@ -416,7 +429,7 @@ where
         let mut set = HashSet::new();
         if let Some(mut metas) = best_metas.remove(&pos) {
             for m in metas.drain() {
-                if meta.compare(&m) != Some(Ordering::Less) {
+                if m.useful_with(&meta) {
                     // new meta isn't strictly better
                     set.insert(m);
                 }
@@ -426,69 +439,144 @@ where
         best_metas.insert(pos, set);
         // the meta was good enough, let's find its next neighbors
         let prev_terrain = map.get_terrain(pos).unwrap();
-        for (dp, step) in find_steps(pos, meta.movement_type) {
-            let terrain = if let Some(terrain) = map.get_terrain(dp.point) {
+        let mut steps_used = HashSet::new();
+        for step in find_steps(&meta.path, pos, meta.movement_type, meta.blocked_step) {
+            let (next_point, blocked_step) = match step.progress_reversible(map, pos) {
+                Ok(ok) => ok,
+                _ => {
+                    steps_used.insert(step);
+                    continue;
+                }
+            };
+            let terrain = if let Some(terrain) = map.get_terrain(next_point) {
                 terrain
             } else {
+                steps_used.insert(step);
                 continue;
             };
-            let mut next_meta = if let Some(cost) = terrain.movement_cost(meta.movement_type) {
-                if step.dir().is_some() && step.dir() == meta.illegal_next_dir {
+            if let Some(cost) = terrain.movement_cost(meta.movement_type) {
+                if meta.blocked_step.and_then(|s| Some(s.blocks(&step))).unwrap_or(false) {
                     // don't turn around 180°
-                    None
+                    continue;
                 } else if let Some((movement_type, remaining_movement)) = update_movement(prev_terrain, terrain, meta.movement_type, meta.remaining_movement, cost) {
-                    let mut illegal_next_dir = None;
-                    if step.dir().is_some() {
-                        illegal_next_dir = Some(dp.direction.opposite_direction());
-                    }
                     let mut path = meta.path.clone();
-                    path.steps.push(step.clone());
-                    Some(MovementSearchMeta {
-                        previous_turns: meta.previous_turns.clone(),
-                        movement_type,
-                        remaining_movement,
-                        path,
-                        illegal_next_dir,
-                    })
-                } else {
-                    None
+                    path.steps.push(step);
+                    steps_used.insert(step);
+                    next_checks.push(MovementSearch {
+                        pos: next_point,
+                        meta: MovementSearchMeta {
+                            previous_turns: meta.previous_turns.clone(),
+                            movement_type,
+                            remaining_movement,
+                            path,
+                            blocked_step: Some(blocked_step),
+                        }
+                    });
                 }
-            } else {
-                // doesn't allow automatic changing of movement_type between turns
-                None
-            };
-            if next_meta.is_none() && meta.previous_turns.len() < additional_turns {
-                // no meta was found, but maybe next turn we'll have enough moveement
-                // points. the illegal_next_dir also gets reset
-                let (movement_type, points) = base_movement(prev_terrain, Some(meta.movement_type));
+            }
+        }
+        // add steps that weren't possible due to missing movement_points or blocked_step
+        if meta.previous_turns.len() < additional_turns {
+            let (movement_type, points) = base_movement(prev_terrain, Some(meta.movement_type));
+            let path = Path::new(pos);
+            for step in find_steps(&path, pos, movement_type, None) {
+                if steps_used.contains(&step) {
+                    continue;
+                }
+                let (next_point, blocked_step) = match step.progress_reversible(map, pos) {
+                    Ok(ok) => ok,
+                    _ => {
+                        steps_used.insert(step);
+                        continue;
+                    }
+                };
+                let terrain = if let Some(terrain) = map.get_terrain(next_point) {
+                    terrain
+                } else {
+                    steps_used.insert(step);
+                    continue;
+                };
                 if let Some((movement_type, remaining_movement)) = terrain.movement_cost(movement_type)
                 .and_then(|cost| update_movement(prev_terrain, terrain, movement_type, points, cost)) {
                     let mut previous_turns = meta.previous_turns.clone();
                     previous_turns.push(meta.path.clone());
-                    let mut illegal_next_dir = None;
-                    if step.dir().is_some() {
-                        illegal_next_dir = Some(dp.direction.opposite_direction());
-                    }
-                    let mut path = Path::new(pos);
+                    let mut path = path.clone();
                     path.steps.push(step);
-                    next_meta = Some(MovementSearchMeta {
-                        previous_turns,
-                        movement_type,
-                        remaining_movement,
-                        path,
-                        illegal_next_dir,
+                    next_checks.push(MovementSearch {
+                        pos: next_point,
+                        meta: MovementSearchMeta {
+                            previous_turns,
+                            movement_type,
+                            remaining_movement,
+                            path,
+                            blocked_step: Some(blocked_step),
+                        }
                     });
                 }
-            }
-            if let Some(meta) = next_meta {
-                next_checks.push(MovementSearch {
-                    pos: dp.point,
-                    meta,
-                });
             }
         }
     }
     None
+}
+
+pub fn movement_area<D: Direction>(map: &Map<D>, unit: &UnitType<D>, start: Point, rounds: usize) -> HashMap<Point, usize> {
+    let mut result = HashMap::new();
+    if rounds > 0 {
+        let mut update_movement: Box<dyn Fn(&Terrain<D>, &Terrain<D>, MovementType, MovementPoints, MovementPoints) -> Option<(MovementType, MovementPoints)>> = Box::new(update_movement_default);
+        let (base_movement, find_steps): (Box<BaseMovement<D>>, Box<FindSteps<D>>) = match unit {
+            UnitType::Structure(_) => return result,
+            UnitType::Normal(unit) => {
+                if unit.changes_movement_type() {
+                    update_movement = Box::new(move |prev_terrain, next_terrain: &Terrain<D>, movement_type, remaining_points, cost| {
+                        let mut result = update_movement_default(prev_terrain, next_terrain, movement_type, remaining_points, cost)?;
+                        if let Some(m) = next_terrain.update_movement_type(result.0, prev_terrain) {
+                            result.0 = m;
+                            Some(result)
+                        } else {
+                            None
+                        }
+                    });
+                }
+                (
+                    Box::new(|terrain: &Terrain<D>, movement_type| {
+                        let mut result = unit.get_movement(terrain);
+                        if let Some(mt) = movement_type {
+                            result.0 = mt;
+                        }
+                        result
+                    }),
+                    Box::new(|_, point, movement_type, _| {
+                        find_normal_steps(map, point, movement_type)
+                    }),
+                )
+            }
+            UnitType::Chess(unit) => {
+                (
+                    Box::new(|_, _| {
+                        (MovementType::Chess, MovementPoints::from(8.))
+                    }),
+                    Box::new(|path, point, _, back_step| {
+                        unit.find_steps(map, path, point, back_step)
+                    }),
+                )
+            }
+        };
+        search_path(
+            map,
+            start,
+            rounds - 1,
+            base_movement,
+            update_movement,
+            find_steps,
+            Box::new(|previous_turns, _, point| {
+                if !result.contains_key(&point) {
+                    result.insert(point, previous_turns.len());
+                }
+                PathSearchFeedback::Continue
+            })
+        );
+    }
+    result
 }
 
 pub fn movement_search<D, F>(game: &Game<D>, unit: &NormalUnit, path_so_far: &Path<D>, vision: Option<&HashMap<Point, Vision>>, mut callback: F)
@@ -497,8 +585,8 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
         game.get_map(),
         path_so_far.start,
         0,
-        |terrain, _| unit.get_movement(terrain),
-        |prev_terrain, next_terrain, movement_type, remaining_points, cost| {
+        Box::new(|terrain, _| unit.get_movement(terrain)),
+        Box::new(|prev_terrain, next_terrain, movement_type, remaining_points, cost| {
             let remaining_points = if cost <= remaining_points {
                 remaining_points - cost
             } else {
@@ -510,11 +598,11 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
                 return None;
             };
             Some((movement_type, remaining_points))
-        },
-        |point, movement_type| {
+        }),
+        Box::new(|_, point, movement_type, _| {
             find_normal_steps(game.get_map(), point, movement_type)
-        },
-        |path, destination| {
+        }),
+        Box::new(|_, path, destination| {
             if path.steps.len() <= path_so_far.steps.len() && path.steps[..] != path_so_far.steps[..path.steps.len()] {
                 // first follow path_so_far until its end, then the search can start
                 return PathSearchFeedback::Rejected;
@@ -538,7 +626,7 @@ where D: Direction, F: FnMut(&Path<D>, Point, bool) -> PathSearchFeedback {
                 return PathSearchFeedback::Continue;
             }
             callback(path, destination, can_stop_here)
-        },
+        }),
     );
 }
 

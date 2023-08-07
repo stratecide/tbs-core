@@ -302,6 +302,7 @@ impl<D: Direction> ChessUnit<D> {
         }
         false
     }
+
     fn all_possible_paths<F>(&self, game: &Game<D>, start: Point, ignore_unseen: bool, mut callback: F)
     where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
         let team = match game.get_team(Some(self.owner)) {
@@ -342,7 +343,6 @@ impl<D: Direction> ChessUnit<D> {
                     }
                 }
                 //let directions: HashSet<Box<D>> = directions.into_iter().flat_map(|d| vec![d.clone(), Box::new(d.rotate_by(&D::list()[1].mirror_vertically()))]).collect();
-                //for d in directions {
                 for dp in pawn_attackable_positions(game, start, dir) {
                     //if let Some(dp) = get_diagonal_neighbor(game.get_map(), start, &d) {
                         let mut en_passant = false;
@@ -422,6 +422,89 @@ impl<D: Direction> ChessUnit<D> {
             }
         }
     }
+
+    pub fn find_steps(&self, map: &Map<D>, path_so_far: &Path<D>, pos: Point, back_step: Option<PathStep<D>>) -> HashSet<PathStep<D>> {
+        let mut result = HashSet::new();
+        if path_so_far.steps.len() == 0 {
+            match self.typ {
+                ChessUnits::Pawn(dir, _) => {
+                    let mut directions = vec![];
+                    if map.get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
+                        directions.push(dir);
+                    } else {
+                        directions = D::list();
+                    }
+                    for d in directions {
+                        result.insert(PathStep::Dir(d));
+                    }
+                }
+                ChessUnits::Rook(_) => {
+                    for d in D::list() {
+                        result.insert(PathStep::Dir(d));
+                    }
+                }
+                ChessUnits::Bishop => {
+                    for d in D::list() {
+                        result.insert(PathStep::Diagonal(d));
+                    }
+                }
+                ChessUnits::Queen => {
+                    for d in D::list() {
+                        result.insert(PathStep::Dir(d));
+                        result.insert(PathStep::Diagonal(d));
+                    }
+                }
+                ChessUnits::King(_) => {
+                    for d in D::list() {
+                        result.insert(PathStep::Dir(d));
+                        result.insert(PathStep::Diagonal(d));
+                    }
+                }
+                ChessUnits::Knight => {
+                    for d in D::list() {
+                        for turn_left in vec![true, false] {
+                            result.insert(PathStep::Knight(d, turn_left));
+                        }
+                    }
+                }
+            }
+        } else {
+            match self.typ {
+                ChessUnits::Pawn(_, _) => {
+                    if path_so_far.steps.len() == 1 && map.get_terrain(path_so_far.start) == Some(&Terrain::ChessPawnTile) {
+                        if let Some(PathStep::Dir(dir)) = back_step {
+                            result.insert(PathStep::Dir(dir.opposite_direction()));
+                        }
+                    }
+                }
+                ChessUnits::Rook(_) => {
+                    if let Some(PathStep::Dir(dir)) = back_step {
+                        result.insert(PathStep::Dir(dir.opposite_direction()));
+                    }
+                }
+                ChessUnits::Bishop => {
+                    if let Some(PathStep::Diagonal(dir)) = back_step {
+                        result.insert(PathStep::Diagonal(dir.opposite_direction()));
+                    }
+                }
+                ChessUnits::Queen => {
+                    match back_step {
+                        Some(PathStep::Dir(dir)) => {
+                            result.insert(PathStep::Dir(dir.opposite_direction()));
+                        }
+                        Some(PathStep::Diagonal(dir)) => {
+                            result.insert(PathStep::Diagonal(dir.opposite_direction()));
+                        }
+                        _ => (),
+                    }
+                }
+                // king and knight can only move 1 field
+                _ => ()
+            }
+        }
+        result
+    }
+
     pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
         let mut result = HashSet::new();
         self.all_possible_paths(game, path_so_far.start, false, |p, steps| {
@@ -509,6 +592,7 @@ impl<D: Direction> ChessUnit<D> {
             _ => true,
         }
     }
+
     fn find_king_for_castling(game: &Game<D>, start: Point, dir: D, path_len: usize, owner: Owner) -> Option<OrientedPoint<D>> {
         let mut rook_end = OrientedPoint::new(start, false, dir);
         for _ in 0..path_len {
@@ -531,6 +615,7 @@ impl<D: Direction> ChessUnit<D> {
         }
         None
     }
+
     fn pawn_dir_after_path(map: &Map<D>, path: &Path<D>, old_dir: D) -> D {
         if let Some(d) = path.steps.last().unwrap().dir() {
             let mut p = path.start;

@@ -146,8 +146,10 @@ impl<D: Direction> Terrain<D> {
             (Self::Pipe(_), _) => None,
 
             (Self::ChessTile, sea_units!()) => None,
+            (Self::ChessTile, MovementType::Chess) => Some(MovementPoints::from(0.)),
             (Self::ChessTile, _) => Some(MovementPoints::from(1.)),
             (Self::ChessPawnTile, sea_units!()) => None,
+            (Self::ChessPawnTile, MovementType::Chess) => Some(MovementPoints::from(0.)),
             (Self::ChessPawnTile, _) => Some(MovementPoints::from(1.)),
         }
     }

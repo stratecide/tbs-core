@@ -4,7 +4,7 @@ use crate::game::events::*;
 use crate::map::point_map::MAX_AREA;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::player::*;
-use crate::map::direction::Direction;
+use crate::map::direction::{Direction, Direction4};
 use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::map::map::{NeighborMode, Map};
@@ -257,6 +257,12 @@ impl NormalUnit {
         match self.typ {
             NormalUnits::Submarine => true,
             _ => false,
+        }
+    }
+    pub fn changes_movement_type(&self) -> bool {
+        match self.get_movement(&Terrain::<Direction4>::Beach).0 {
+            MovementType::Hover(_) => true,
+            _ => false
         }
     }
     pub fn shortest_path_to<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
