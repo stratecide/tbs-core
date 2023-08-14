@@ -98,7 +98,28 @@ impl<D: Direction> CommonMovement<D> {
             return Err(CommandError::InvalidPath);
         }
         let unit = self.get_unit(game.get_map())?;
-        unit.check_path(game, &self.path, board_at_the_end)
+        let team = unit.get_team(game);
+        let fog = game.get_fog().get(&team);
+        if Self::check_path(game, &unit, &self.path, fog, board_at_the_end) {
+            Ok(())
+        } else {
+            Err(CommandError::InvalidPath)
+        }
+    }
+
+    fn check_path(game: &Game<D>, unit: &NormalUnit, path_taken: &Path<D>, vision: Option<&HashMap<Point, Vision>>, board_at_the_end: bool) -> bool {
+        search_path(game, &unit.as_unit(), &path_taken, vision, |path, p, can_stop_here| {
+            if path == path_taken && board_at_the_end {
+                if let Some(transporter) = game.get_map().get_unit(p) {
+                    if p != path.start && transporter.boardable_by(unit) {
+                        return PathSearchFeedback::Found;
+                    }
+                }
+            } else if !board_at_the_end && can_stop_here {
+                return PathSearchFeedback::Found;
+            }
+            PathSearchFeedback::Rejected
+        }).is_some()
     }
     
     // returns the point the unit ends on unless it is stopped by a fog trap
@@ -107,16 +128,7 @@ impl<D: Direction> CommonMovement<D> {
             let mut path_taken = self.path.clone();
             let mut path_taken_works = !board_at_the_end && self.unload_index.is_none() && path_taken.steps.len() == 0;
             while !path_taken_works {
-                movement_search(handler.get_game(), &unit, &path_taken, None, |path, p, can_stop_here| {
-                    if path == &self.path && board_at_the_end {
-                        if let Some(transporter) = handler.get_map().get_unit(p) {
-                            path_taken_works = p != path.start && transporter.boardable_by(&unit);
-                        }
-                    } else if !board_at_the_end && can_stop_here {
-                        path_taken_works = true;
-                    }
-                    PathSearchFeedback::Found
-                });
+                path_taken_works = Self::check_path(handler.get_game(), &unit, &path_taken, None, board_at_the_end);
                 if path_taken.steps.len() == 0 {
                     // doesn't matter if path_taken_works is true or not at this point
                     break
@@ -212,7 +224,7 @@ pub enum UnitCommand<D: Direction> {
     MoveWait(CommonMovement<D>),
     MoveBuyMerc(CommonMovement<D>, MercenaryOption),
     MoveAboard(CommonMovement<D>),
-    MoveChess(Point, ChessCommand<D>),
+    MoveChess(ChessCommand<D>),
     MercenaryPowerSimple(Point),
     MoveBuildDrone(CommonMovement<D>, TransportableDrones),
     StructureBuildDrone(Point, TransportableDrones),
@@ -430,16 +442,8 @@ impl<D: Direction> UnitCommand<D> {
                 }
                 Some(cm.path.start)
             }
-            Self::MoveChess(start, chess_command) => {
-                check_chess_unit_can_act(handler.get_game(), start)?;
-                match handler.get_map().get_unit(start) {
-                    Some(UnitType::Chess(unit)) => {
-                        let unit = unit.clone();
-                        chess_command.convert(start, &unit, handler)?;
-                    },
-                    _ => return Err(CommandError::UnitTypeWrong),
-                }
-                Some(start)
+            Self::MoveChess(chess_command) => {
+                Some(chess_command.convert(handler)?)
             }
             Self::MercenaryPowerSimple(pos) => {
                 if !handler.get_map().is_point_valid(pos) {

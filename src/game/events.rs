@@ -1362,14 +1362,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                     UnitType::Normal(NormalUnit {typ: NormalUnits::LightDrone(id), ..}) => {
                         if let Some((destination, capacity)) = drone_parents.get_mut(id) {
                             // move drone back aboard its parent
-                            let mut path = Path::new(p);
+                            /*let mut path = Path::new(p);
                             path.steps.push(PathStep::Point(*destination));
-                            let id = *id;
-                            self.add_event(Event::UnitPath(Some(None), path, Some(true), unit.clone()));
+                            self.add_event(Event::UnitPath(Some(None), path, Some(true), unit.clone()));*/
                             // one less space in parent
                             if *capacity > 0 {
                                 *capacity -= 1;
                             } else {
+                                let id = *id;
                                 drone_parents.remove(&id);
                             }
                         } else {

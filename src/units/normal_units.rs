@@ -253,30 +253,21 @@ impl NormalUnit {
         };
         (movement_type, movement + self.data.mercenary.own_movement_bonus())
     }
+
     pub fn has_stealth(&self) -> bool {
         match self.typ {
             NormalUnits::Submarine => true,
             _ => false,
         }
     }
+
     pub fn changes_movement_type(&self) -> bool {
         match self.get_movement(&Terrain::<Direction4>::Beach).0 {
             MovementType::Hover(_) => true,
             _ => false
         }
     }
-    pub fn shortest_path_to<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
-        let mut result = None;
-        movement_search(game, self, path_so_far, None, |path, p, _can_stop_here| {
-            if goal == p {
-                result = Some(path.clone());
-                PathSearchFeedback::Found
-            } else {
-                PathSearchFeedback::Continue
-            }
-        });
-        result
-    }
+
     pub fn options_after_path<D: Direction>(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
         let mut result = vec![];
         let destination = if let Ok(p) = path.end(game.get_map()) {
@@ -358,6 +349,7 @@ impl NormalUnit {
         }
         result
     }
+
     pub fn can_attack_after_moving(&self) -> bool {
         match self.typ {
             NormalUnits::Artillery => false,
@@ -366,6 +358,7 @@ impl NormalUnit {
             _ => true,
         }
     }
+
     pub fn shortest_path_to_attack<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         if path_so_far.steps.len() == 0 && self.attackable_positions(game, path_so_far.start, false).contains(&goal) {
             return Some(path_so_far.clone());
@@ -373,16 +366,15 @@ impl NormalUnit {
             // no need to look for paths if the unit can't attack after moving
             return None;
         }
-        let mut result = None;
-        movement_search(game, self, path_so_far, None, |path, p, can_stop_here| {
-            if can_stop_here && self.attackable_positions(game, p, path.steps.len() > 0).contains(&goal) {
-                result = Some(path.clone());
+        search_path(game, &self.as_unit(), path_so_far, None, |path, p, can_stop_here| {
+            if !can_stop_here {
+                PathSearchFeedback::ContinueWithoutStopping
+            } else if self.attackable_positions(game, p, path.steps.len() > 0).contains(&goal) {
                 PathSearchFeedback::Found
             } else {
                 PathSearchFeedback::Continue
             }
-        });
-        result
+        })
     }
 
     pub fn can_move_to<D: Direction>(&self, p: Point, game: &Game<D>) -> bool {
@@ -395,49 +387,15 @@ impl NormalUnit {
         true
     }
 
-    pub fn movable_positions<D: Direction>(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
-        let mut result = HashSet::new();
-        movement_search(game, self, path_so_far, None, |_path, p, _can_stop_here| {
-            result.insert(p);
-            PathSearchFeedback::Continue
-        });
-        result
-    }
-
-    pub fn check_path<D: Direction>(&self, game: &Game<D>, path_to_check: &Path<D>, board_at_the_end: bool) -> Result<(), CommandError> {
-        if path_to_check.steps.len() == 0 && !board_at_the_end {
-            return Ok(())
-        }
-        let team = self.get_team(game);
-        let fog = game.get_fog().get(&team);
-        let mut path_is_valid = path_to_check.steps.len() == 0 && !board_at_the_end;
-        movement_search(game, self, path_to_check, fog, |path, p, can_stop_here| {
-            if path == path_to_check {
-                if board_at_the_end {
-                    if let Some(unit) = game.get_map().get_unit(p) {
-                        path_is_valid = p != path_to_check.start && unit.boardable_by(self);
-                    }
-                } else {
-                    path_is_valid = can_stop_here;
-                }
-            }
-            // if path_to_check will be found at all, it would be the first one this callback gets called with
-            PathSearchFeedback::Found
-        });
-        // TODO: make this method's return value a bool
-        if path_is_valid {
-            Ok(())
-        } else {
-            Err(CommandError::InvalidPath)
-        }
-    }
     pub fn get_attack_type(&self) -> AttackType {
         self.typ.get_attack_type()
     }
+
     // ignores fog
     pub fn can_attack_unit<D: Direction>(&self, game: &Game<D>, target: &UnitType<D>, target_pos: Point) -> bool {
         target.get_team(game) != self.get_team(game) && self.threatens(game, target, target_pos)
     }
+
     pub fn threatens<D: Direction>(&self, game: &Game<D>, target: &UnitType<D>, target_pos: Point) -> bool {
         let terrain = game.get_map().get_terrain(target_pos).unwrap();
         let in_water = terrain.is_water();
@@ -879,30 +837,6 @@ impl NormalUnits {
             _ => false,
         }
     }
-
-    /**
-     * None if the unit can't capture
-     * Some(false) if the unit can capture but isn't currently trying to
-     * Some(true) if the unit is currently trying to capture
-     */
-    /*pub fn capture_status(&self) -> Option<bool> {
-        match self {
-            Self::Sniper(capturing) |
-            Self::Bazooka(capturing) |
-            Self::SharkRider(capturing) |
-            Self::Hovercraft(_, capturing) => Some(*capturing),
-            _ => None
-        }
-    }
-    pub fn capture_status_mut(&mut self) -> Option<&mut bool> {
-        match self {
-            Self::Sniper(capturing) |
-            Self::Bazooka(capturing) |
-            Self::SharkRider(capturing) |
-            Self::Hovercraft(_, capturing) => Some(capturing),
-            _ => None
-        }
-    }*/
 
     pub fn transport_capacity(&self) -> u8 {
         // TODO: stupid

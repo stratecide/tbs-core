@@ -5,7 +5,6 @@ use crate::game::game::Game;
 use crate::map::direction::Direction;
 use crate::map::map::NeighborMode;
 use crate::map::point::Point;
-use crate::map::point_map;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::player::*;
 use crate::terrain::Terrain;
@@ -18,126 +17,71 @@ use zipper::zipper_derive::*;
 
 #[derive(Debug, Zippable)]
 #[zippable(bits = 6)]
-pub enum ChessCommand<D: Direction> {
-    Pawn(LVec<PathStep<D>, 2>, PawnUpgrade),
-    Rook(D, U<{point_map::MAX_AREA as i32}>, bool),
-    Bishop(D, U<{point_map::MAX_AREA as i32}>),
-    Knight(PathStep<D>),
-    King(PathStep<D>),
+pub struct ChessCommand<D: Direction> {
+    pub path: Path<D>,
+    pub pawn_upgrade: PawnUpgrade,
+    pub castle: bool,
 }
 impl<D: Direction> ChessCommand<D> {
-    pub fn convert(self, start: Point, unit: &ChessUnit<D>, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
-        //println!("ChessCommand {:?}", self);
-        let team = match handler.get_game().get_team(Some(unit.owner)) {
-            ClientPerspective::Neutral => panic!("Game with chess piece that doesn't belong to a team"),
-            ClientPerspective::Team(team) => team,
-        };
-        let mut validated_path = None;
-        match (&self, &unit.typ) {
-            (Self::Pawn(path, _), ChessUnits::Pawn(_, _)) => {
-                unit.all_possible_paths(handler.get_game(), start, true, |_, steps| {
-                    if path[..] == steps[..] {
-                        validated_path = Some(steps.clone());
-                        PathSearchFeedback::Found
-                    } else {
-                        // could reject some, but not worth the effort
-                        PathSearchFeedback::Continue
-                    }
-                });
+    fn check_path(game: &Game<D>, unit: &ChessUnit<D>, path_taken: &Path<D>, vision: Option<&HashMap<Point, Vision>>) -> bool {
+        search_path(game, &unit.as_unit(), &path_taken, vision, |path, _p, can_stop_here| {
+            if can_stop_here && path == path_taken {
+                return PathSearchFeedback::Found;
+            } else {
+                PathSearchFeedback::Rejected
             }
-            (Self::Rook(dir, distance, _), ChessUnits::Rook(_) | ChessUnits::Queen) => {
-                unit.all_possible_paths(handler.get_game(), start, true, |_, steps| {
-                    match steps[0] {
-                        PathStep::Dir(d) if d == *dir => {
-                            if steps.len() == **distance as usize {
-                                validated_path = Some(steps.clone());
-                                PathSearchFeedback::Found
-                            } else {
-                                PathSearchFeedback::Continue
-                            }
-                        }
-                        _ => PathSearchFeedback::Rejected,
-                    }
-                });
-            }
-            (Self::Bishop(dir, distance), ChessUnits::Bishop | ChessUnits::Queen) => {
-                unit.all_possible_paths(handler.get_game(), start, true, |_, steps| {
-                    match steps[0] {
-                        PathStep::Diagonal(d) if d == *dir => {
-                            if steps.len() == **distance as usize {
-                                validated_path = Some(steps.clone());
-                                PathSearchFeedback::Found
-                            } else {
-                                PathSearchFeedback::Continue
-                            }
-                        }
-                        _ => PathSearchFeedback::Rejected,
-                    }
-                });
-            }
-            (Self::Knight(step), ChessUnits::Knight) | (Self::King(step), ChessUnits::King(_)) => {
-                unit.all_possible_paths(handler.get_game(), start, true, |_, steps| {
-                    if vec![step.clone()] == *steps {
-                        validated_path = Some(steps.clone());
-                        PathSearchFeedback::Found
-                    } else {
-                        PathSearchFeedback::Rejected
-                    }
-                });
-            }
-            _ => return Err(CommandError::UnitTypeWrong)
-        };
-        if validated_path.is_none() {
+        }).is_some()
+    }
+
+    pub fn convert(self, handler: &mut EventHandler<D>) -> Result<Point, CommandError> {
+        if !handler.get_map().is_point_valid(self.path.start) {
+            return Err(CommandError::InvalidPoint(self.path.start));
+        }
+        let unit = check_chess_unit_can_act(handler.get_game(), self.path.start)?.clone();
+        let team = handler.get_game().get_team(Some(unit.owner));
+        let fog = handler.get_game().get_fog().get(&team);
+        if !Self::check_path(handler.get_game(), &unit, &self.path, fog) {
             return Err(CommandError::InvalidPath);
         }
-        let validated_path = validated_path.unwrap();
-        let mut path = vec![];
-        unit.all_possible_paths(handler.get_game(), start, false, |_, steps| {
-            if steps.len() > validated_path.len() || steps[..] != validated_path[..steps.len()] {
-                PathSearchFeedback::Rejected
-            } else {
-                path = steps.clone();
-                if path == validated_path {
-                    PathSearchFeedback::Found
-                } else {
-                    PathSearchFeedback::Continue
-                }
+        let mut path_taken = self.path.clone();
+        let mut path_taken_works = false;
+        while !path_taken_works {
+            path_taken_works = Self::check_path(handler.get_game(), &unit, &path_taken, None);
+            if path_taken.steps.len() == 0 {
+                // doesn't matter if path_taken_works is true or not at this point
+                break
+            } else if !path_taken_works {
+                path_taken.steps.pop();
             }
-        });
-        let path = Path {
-            start,
-            steps: path.try_into().unwrap(),
-        };
-
-        let end = path.end(handler.get_map())?;
+        }
+        let end = path_taken.end(handler.get_map())?;
         let mut recalculate_fog = false;
         if let Some(other) = handler.get_map().get_unit(end) {
             recalculate_fog = true;
             handler.add_event(Event::UnitDeath(end, other.clone()));
         }
-        handler.add_event(Event::UnitPath(Some(None), path.clone(), Some(false), UnitType::Chess::<D>(unit.clone())));
-        let perspective = ClientPerspective::Team(team);
+        handler.add_event(Event::UnitPath(Some(None), path_taken.clone(), Some(false), UnitType::Chess::<D>(unit.clone())));
         if handler.get_game().is_foggy() {
             let vision_changes: Vec<(Point, U<2>)> = unit.get_vision(handler.get_game(), end).into_iter()
             .filter_map(|(p, vision)| {
-                fog_change_index(handler.get_game().get_vision(perspective, p), Some(vision))
+                fog_change_index(handler.get_game().get_vision(team, p), Some(vision))
                 .and_then(|vi| Some((p, vi)))
             }).collect();
             if vision_changes.len() > 0 {
-                handler.add_event(Event::PureFogChange(Some(team.into()), vision_changes.try_into().unwrap()));
+                handler.add_event(Event::PureFogChange(Some(handler.get_game().current_player().team), vision_changes.try_into().unwrap()));
             }
         }
-        super::on_path_details(handler, &path, &UnitType::Chess::<D>(unit.clone()));
+        super::on_path_details(handler, &path_taken, &UnitType::Chess::<D>(unit.clone()));
         match unit.typ {
             ChessUnits::Pawn(d, en_passant) => {
-                match path.steps[0] {
+                match path_taken.steps[0] {
                     PathStep::Diagonal(_) => {
                         // en passant
                         for n in handler.get_map().get_neighbors(end, NeighborMode::FollowPipes) {
                             if let Some(UnitType::Chess(unit)) = handler.get_map().get_unit(n.point) {
                                 match unit.typ {
                                     ChessUnits::Pawn(d, true) => {
-                                        if n.direction == d && handler.get_game().get_team(Some(unit.owner)) != perspective {
+                                        if n.direction == d && handler.get_game().get_team(Some(unit.owner)) != team {
                                             handler.add_event(Event::UnitDeath(n.point, UnitType::Chess(unit.clone())));
                                         }
                                     }
@@ -148,24 +92,19 @@ impl<D: Direction> ChessCommand<D> {
                     }
                     _ => {}
                 }
-                if ChessUnit::pawn_upgrades_after_path(handler.get_map(), &path, d) {
+                if ChessUnit::pawn_upgrades_after_path(handler.get_map(), &path_taken, d) {
                     // upgrade if "end of map" reached, i.e. no terrain ahead that the pawn can enter
-                    match self {
-                        ChessCommand::Pawn(_, upgrade) => {
-                            handler.add_event(Event::UnitReplacement(end, UnitType::Chess(unit.clone()), UnitType::Chess(ChessUnit {
-                                typ: upgrade.to_chess_typ(),
-                                hp: unit.hp,
-                                owner: unit.owner,
-                                exhausted: false, // will be exhausted after
-                            })))
-                        }
-                        _ => return Err(CommandError::UnitTypeWrong)
-                    }
+                    handler.add_event(Event::UnitReplacement(end, UnitType::Chess(unit.clone()), UnitType::Chess(ChessUnit {
+                        typ: self.pawn_upgrade.to_chess_typ(),
+                        hp: unit.hp,
+                        owner: unit.owner,
+                        exhausted: false, // will be exhausted after
+                    })))
                 } else {
-                    if (path.steps.len() > 1) != en_passant {
+                    if (path_taken.steps.len() > 1) != en_passant {
                         handler.add_event(Event::EnPassantOpportunity(end));
                     }
-                    let new_dir = ChessUnit::pawn_dir_after_path(handler.get_map(), &path, d.clone());
+                    let new_dir = ChessUnit::pawn_dir_after_path(handler.get_map(), &path_taken, d.clone());
                     if d != new_dir {
                         handler.add_event(Event::UnitDirection(end, new_dir, d));
                     }
@@ -174,29 +113,24 @@ impl<D: Direction> ChessCommand<D> {
             ChessUnits::Rook(moved_this_game) => {
                 if !moved_this_game {
                     handler.add_event(Event::UnitMovedThisGame(end));
-                    match self {
-                        Self::Rook(dir, path_len, true) => {
-                            if *path_len as usize == path.steps.len() {
-                                if let Some(dp) = ChessUnit::find_king_for_castling(handler.get_game(), start, dir, *path_len as usize, unit.owner) {
-                                    let mut king_path = Path::new(dp.point);
-                                    king_path.steps.push(PathStep::Jump(dp.direction.opposite_direction()));
-                                    let king = handler.get_map().get_unit(dp.point).unwrap().clone();
-                                    handler.add_event(Event::UnitPath(Some(None), king_path.clone(), Some(false), king.clone()));
-                                    if handler.get_game().is_foggy() {
-                                        let vision_changes: Vec<(Point, U<2>)> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter()
-                                            .filter_map(|(p, vision)| {
-                                                fog_change_index(handler.get_game().get_vision(perspective, p), Some(vision))
-                                                    .and_then(|vi| Some((p, vi)))
-                                            }).collect();
-                                        if vision_changes.len() > 0 {
-                                            handler.add_event(Event::PureFogChange(Some(team.into()), vision_changes.try_into().unwrap()));
-                                        }
-                                    }
-                                    super::on_path_details(handler, &path, &king);
+                    if self.castle && path_taken.steps.len() > 0 && self.path.steps.len() == path_taken.steps.len() {
+                        if let Some(dp) = ChessUnit::find_king_for_castling(handler.get_game(), path_taken.start, path_taken.steps[0].dir().unwrap(), path_taken.steps.len(), unit.owner) {
+                            let mut king_path = Path::new(dp.point);
+                            king_path.steps.push(PathStep::Jump(dp.direction.opposite_direction()));
+                            let king = handler.get_map().get_unit(dp.point).unwrap().clone();
+                            handler.add_event(Event::UnitPath(Some(None), king_path.clone(), Some(false), king.clone()));
+                            if handler.get_game().is_foggy() {
+                                let vision_changes: Vec<(Point, U<2>)> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter()
+                                    .filter_map(|(p, vision)| {
+                                        fog_change_index(handler.get_game().get_vision(team, p), Some(vision))
+                                            .and_then(|vi| Some((p, vi)))
+                                    }).collect();
+                                if vision_changes.len() > 0 {
+                                    handler.add_event(Event::PureFogChange(Some(handler.get_game().current_player().team), vision_changes.try_into().unwrap()));
                                 }
                             }
+                            super::on_path_details(handler, &path_taken, &king);
                         }
-                        _ => {}
                     }
                 }
             }
@@ -211,7 +145,7 @@ impl<D: Direction> ChessCommand<D> {
         if recalculate_fog {
             handler.recalculate_fog(true);
         }
-        Ok(())
+        Ok(path_taken.start)
     }
     pub fn exhaust_all_on_board(handler: &mut EventHandler<D>, pos: Point) {
         if !handler.get_map().get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
@@ -248,317 +182,23 @@ impl<D: Direction> ChessUnit<D> {
             exhausted: false,
         }
     }
-    fn can_move_through(game: &Game<D>, p: Point, team: Team, ignore_unseen: bool) -> bool {
-        game.get_map().get_terrain(p).and_then(|t| t.movement_cost(MovementType::Chess)).is_some() &&
-        (game.get_map().get_unit(p).is_none() || ignore_unseen && !game.has_vision_at(ClientPerspective::Team(*team as u8), p))
-    }
-    fn can_stop_on(game: &Game<D>, p: Point, team: Team) -> bool {
-        if game.get_map().get_terrain(p).and_then(|t| t.movement_cost(MovementType::Chess)).is_none() {
-            return false;
-        }
-        if let Some(unit) = game.get_map().get_unit(p) {
-            unit.killable_by_chess(team, game)
-        } else {
-            true
-        }
-    }
-    fn possible_rook_paths<F>(game: &Game<D>, start: Point, team: ClientPerspective, max_cost: MovementPoints, ignore_unseen: bool, mut callback: F) -> bool
-    where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
-        for d in D::list() {
-            let mut found = false;
-            straight_search(game, start, d, Some(max_cost), team, ignore_unseen, |p, steps| {
-                match callback(p, steps) {
-                    PathSearchFeedback::Continue => false,
-                    PathSearchFeedback::Found => {
-                        found = true;
-                        true
-                    },
-                    PathSearchFeedback::Rejected => true,
-                }
-            });
-            if found {
-                return true;
-            }
-        }
-        false
-    }
-    fn possible_bishop_paths<F>(game: &Game<D>, start: Point, team: ClientPerspective, max_cost: MovementPoints, ignore_unseen: bool, mut callback: F) -> bool
-    where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
-        for d in D::list() {
-            let mut found = false;
-            diagonal_search(game, start, d, Some(max_cost), team, ignore_unseen, |p, steps| {
-                match callback(p, steps) {
-                    PathSearchFeedback::Continue => false,
-                    PathSearchFeedback::Found => {
-                        found = true;
-                        true
-                    },
-                    PathSearchFeedback::Rejected => true,
-                }
-            });
-            if found {
-                return true;
-            }
-        }
-        false
+
+    fn as_unit(&self) -> UnitType<D> {
+        UnitType::Chess(self.clone())
     }
 
-    fn all_possible_paths<F>(&self, game: &Game<D>, start: Point, ignore_unseen: bool, mut callback: F)
-    where F: FnMut(Point, &Vec<PathStep<D>>) -> PathSearchFeedback {
-        let team = match game.get_team(Some(self.owner)) {
-            ClientPerspective::Neutral => panic!("Game with chess piece that doesn't belong to a team"),
-            ClientPerspective::Team(team) => team.into(),
-        };
-        match self.typ {
-            ChessUnits::Pawn(dir, _) => {
-                let mut directions = vec![];
-                if game.get_map().get_terrain(start).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
-                    directions.push(dir);
-                } else {
-                    directions = D::list();
-                }
-                for d in directions.clone() {
-                    if let Some(dp) = game.get_map().get_neighbor(start, d) {
-                        if Self::can_move_through(game, dp.point, team, ignore_unseen) {
-                            // move forward 1
-                            let mut steps = vec![PathStep::Dir(d)];
-
-                            match callback(dp.point, &steps) {
-                                PathSearchFeedback::Continue => {
-                                    if let Some(dp) = game.get_map().get_neighbor(dp.point, dp.direction) {
-                                        if game.get_map().get_terrain(start) == Some(&Terrain::ChessPawnTile) && Self::can_move_through(game, dp.point, team, ignore_unseen) {
-                                            // move forward 2
-                                            steps.push(PathStep::Dir(dp.direction));
-                                            match callback(dp.point, &steps) {
-                                                PathSearchFeedback::Found => return,
-                                                _ => {}
-                                            }
-                                        }
-                                    }
-                                },
-                                PathSearchFeedback::Found => return,
-                                PathSearchFeedback::Rejected => continue,
-                            }
-                        }
-                    }
-                }
-                //let directions: HashSet<Box<D>> = directions.into_iter().flat_map(|d| vec![d.clone(), Box::new(d.rotate_by(&D::list()[1].mirror_vertically()))]).collect();
-                for dp in pawn_attackable_positions(game, start, dir) {
-                    //if let Some(dp) = get_diagonal_neighbor(game.get_map(), start, &d) {
-                        let mut en_passant = false;
-                        for n in game.get_map().get_neighbors(dp.point, NeighborMode::FollowPipes) {
-                            if let Some(UnitType::Chess(unit)) = game.get_map().get_unit(n.point) {
-                                match unit.typ {
-                                    ChessUnits::Pawn(d, true) => {
-                                        en_passant = en_passant || n.direction == d && game.get_team(Some(unit.owner)) != ClientPerspective::Team(*team as u8);
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        if Self::can_stop_on(game, dp.point, team) &&
-                        (en_passant || game.get_map().get_unit(dp.point).is_some() && game.has_vision_at(ClientPerspective::Team(*team as u8), dp.point)) {
-                            // kill unit diagonally
-                            let steps = vec![PathStep::Diagonal(dp.direction)];
-                            match callback(dp.point, &steps) {
-                                PathSearchFeedback::Found => return,
-                                _ => {}
-                            }
-                        }
-                    //}
-                }
-            }
-            ChessUnits::Rook(_) => {
-                Self::possible_rook_paths(game, start, ClientPerspective::Team(*team as u8), self.typ.get_movement(), ignore_unseen, callback);
-            }
-            ChessUnits::Bishop => {
-                Self::possible_bishop_paths(game, start, ClientPerspective::Team(*team as u8), self.typ.get_movement(), ignore_unseen, callback);
-            }
-            ChessUnits::Knight => {
-                for d in D::list() {
-                    for turn_left in vec![true, false] {
-                        if let Some(dp) = get_knight_neighbor(game.get_map(), start, d, turn_left) {
-                            if Self::can_stop_on(game, dp.point, team) {
-                                let steps = vec![PathStep::Knight(d, turn_left)];
-                                match callback(dp.point, &steps) {
-                                    PathSearchFeedback::Found => return,
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            ChessUnits::Queen => {
-                if !Self::possible_rook_paths(game, start, ClientPerspective::Team(*team as u8), self.typ.get_movement(), ignore_unseen, &mut callback) {
-                    Self::possible_bishop_paths(game, start, ClientPerspective::Team(*team as u8), self.typ.get_movement(), ignore_unseen, callback);
-                }
-            }
-            ChessUnits::King(_) => {
-                for d in D::list() {
-                    if let Some(dp) = game.get_map().get_neighbor(start, d) {
-                        if Self::can_stop_on(game, dp.point, team) {
-                            let steps = vec![PathStep::Dir(d)];
-                            match callback(dp.point, &steps) {
-                                PathSearchFeedback::Found => return,
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-                for d in D::list() {
-                    if let Some(dp) = get_diagonal_neighbor(game.get_map(), start, d) {
-                        if Self::can_stop_on(game, dp.point, team) {
-                                    
-                            let steps = vec![PathStep::Diagonal(d)];
-
-                            match callback(dp.point, &steps) {
-                                PathSearchFeedback::Found => return,
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn find_steps(&self, map: &Map<D>, path_so_far: &Path<D>, pos: Point, back_step: Option<PathStep<D>>) -> HashSet<PathStep<D>> {
-        let mut result = HashSet::new();
-        if path_so_far.steps.len() == 0 {
-            match self.typ {
-                ChessUnits::Pawn(dir, _) => {
-                    let mut directions = vec![];
-                    if map.get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
-                        directions.push(dir);
-                    } else {
-                        directions = D::list();
-                    }
-                    for d in directions {
-                        result.insert(PathStep::Dir(d));
-                    }
-                }
-                ChessUnits::Rook(_) => {
-                    for d in D::list() {
-                        result.insert(PathStep::Dir(d));
-                    }
-                }
-                ChessUnits::Bishop => {
-                    for d in D::list() {
-                        result.insert(PathStep::Diagonal(d));
-                    }
-                }
-                ChessUnits::Queen => {
-                    for d in D::list() {
-                        result.insert(PathStep::Dir(d));
-                        result.insert(PathStep::Diagonal(d));
-                    }
-                }
-                ChessUnits::King(_) => {
-                    for d in D::list() {
-                        result.insert(PathStep::Dir(d));
-                        result.insert(PathStep::Diagonal(d));
-                    }
-                }
-                ChessUnits::Knight => {
-                    for d in D::list() {
-                        for turn_left in vec![true, false] {
-                            result.insert(PathStep::Knight(d, turn_left));
-                        }
-                    }
-                }
-            }
-        } else {
-            match self.typ {
-                ChessUnits::Pawn(_, _) => {
-                    if path_so_far.steps.len() == 1 && map.get_terrain(path_so_far.start) == Some(&Terrain::ChessPawnTile) {
-                        if let Some(PathStep::Dir(dir)) = back_step {
-                            result.insert(PathStep::Dir(dir.opposite_direction()));
-                        }
-                    }
-                }
-                ChessUnits::Rook(_) => {
-                    if let Some(PathStep::Dir(dir)) = back_step {
-                        result.insert(PathStep::Dir(dir.opposite_direction()));
-                    }
-                }
-                ChessUnits::Bishop => {
-                    if let Some(PathStep::Diagonal(dir)) = back_step {
-                        result.insert(PathStep::Diagonal(dir.opposite_direction()));
-                    }
-                }
-                ChessUnits::Queen => {
-                    match back_step {
-                        Some(PathStep::Dir(dir)) => {
-                            result.insert(PathStep::Dir(dir.opposite_direction()));
-                        }
-                        Some(PathStep::Diagonal(dir)) => {
-                            result.insert(PathStep::Diagonal(dir.opposite_direction()));
-                        }
-                        _ => (),
-                    }
-                }
-                // king and knight can only move 1 field
-                _ => ()
-            }
-        }
-        result
-    }
-
-    pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
-        let mut result = HashSet::new();
-        self.all_possible_paths(game, path_so_far.start, false, |p, steps| {
-            if steps.len() > path_so_far.steps.len() && steps[..path_so_far.steps.len()] == path_so_far.steps[..] {
-                result.insert(p);
-            }
-            PathSearchFeedback::Continue
-        });
-        result
-    }
     pub fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         if moved {
             return HashSet::new();
         }
         match self.typ {
             ChessUnits::Pawn(d, _) => {
-                pawn_attackable_positions(game, position, d).into_iter().map(|dp| dp.point).collect()
+                pawn_attackable_positions(game.get_map(), position, d).into_iter().map(|dp| dp.0.point).collect()
             }
-            _ => self.movable_positions(game, &Path::new(position)),
+            _ => UnitType::Chess(self.clone()).movable_positions(game, &Path::new(position)),
         }
     }
-    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
-        let mut result = None;
-        self.all_possible_paths(game, path_so_far.start, false, |p, steps| {
-            if p == goal && steps.len() >= path_so_far.steps.len() && steps[..path_so_far.steps.len()] == path_so_far.steps[..] {
-                result = Some(Path {
-                    start: path_so_far.start,
-                    steps: steps.clone().try_into().unwrap(),
-                });
-                PathSearchFeedback::Found
-            } else if steps.len() > path_so_far.steps.len() || steps[..] == path_so_far.steps[..steps.len()] {
-                PathSearchFeedback::Continue
-            } else {
-                PathSearchFeedback::Rejected
-            }
-        });
-        result
-    }
-    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
-        match self.typ {
-            ChessUnits::Pawn(d, _) => {
-                for dp in pawn_attackable_positions(game, path_so_far.start, d) {
-                    if dp.point == goal {
-                        return Some(Path {
-                            start: path_so_far.start,
-                            steps: vec![PathStep::Diagonal(dp.direction)].try_into().unwrap(),
-                        });
-                    }
-                }
-                None
-            }
-            _ => self.shortest_path_to(game, path_so_far, goal)
-        }
-    }
+
     pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
         let mut result = vec![];
         if path.steps.len() > 0 {
@@ -586,6 +226,7 @@ impl<D: Direction> ChessUnit<D> {
         }
         result
     }
+
     pub fn threatens(&self, _game: &Game<D>, target: &UnitType<D>) -> bool {
         match target {
             UnitType::Structure(_) => false,
@@ -661,9 +302,6 @@ impl<D: Direction> ChessUnit<D> {
     pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, Vision> {
         let mut result = HashMap::new();
         result.insert(pos, Vision::TrueSight);
-        /*for p in game.get_map().get_neighbors(pos, NeighborMode::FollowPipes) {
-            result.insert(p.point);
-        }*/
         match self.typ {
             ChessUnits::Rook(_) => {
                 for d in D::list() {
@@ -751,7 +389,7 @@ impl<D: Direction> ChessUnit<D> {
     }
 }
 
-pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: Point) -> Result<(), CommandError> {
+pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: Point) -> Result<&ChessUnit<D>, CommandError> {
     if !game.has_vision_at(ClientPerspective::Team(*game.current_player().team as u8), at) {
         return Err(CommandError::NoVision);
     }
@@ -765,14 +403,85 @@ pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: Point) -> Resu
     if unit.exhausted {
         return Err(CommandError::UnitCannotMove);
     }
-    Ok(())
+    Ok(unit)
 }
 
-fn pawn_attackable_positions<D: Direction>(game: &Game<D>, pos: Point, d:D) -> HashSet<OrientedPoint<D>> {
+fn pawn_attackable_positions<D: Direction>(map: &Map<D>, pos: Point, d: D) -> HashSet<(OrientedPoint<D>, PathStep<D>)> {
     let mut result = HashSet::new();
-    for d in vec![d.clone(), d.rotate_clockwise()] {
-        if let Some(dp) = get_diagonal_neighbor(game.get_map(), pos, d) {
-            result.insert(OrientedPoint::new(dp.point, dp.mirrored, d.clone()));
+    if let Some(dp) = get_diagonal_neighbor(map, pos, d) {
+        result.insert((OrientedPoint::new(dp.point, dp.mirrored, d), PathStep::Diagonal(d)));
+    }
+    if let Some(dp) = get_diagonal_neighbor(map, pos, d.rotate_clockwise()) {
+        // TODO: rotate clockwise if mirrored?
+        result.insert((OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_counter_clockwise()), PathStep::Diagonal(d.rotate_clockwise())));
+    }
+    result
+}
+
+pub fn find_king_steps<D: Direction>() -> Vec<PathStep<D>> {
+    let mut result = Vec::new();
+    for d in D::list() {
+        result.push(PathStep::Dir(d));
+        result.push(PathStep::Diagonal(d));
+    }
+    result
+}
+
+pub fn find_queen_steps<D: Direction>(previous_step_reversed: Option<PathStep<D>>) -> Vec<PathStep<D>> {
+    let mut result = Vec::new();
+    match previous_step_reversed {
+        None => {
+            for d in D::list() {
+                result.push(PathStep::Dir(d));
+                result.push(PathStep::Diagonal(d));
+            }
+        }
+        Some(PathStep::Dir(d)) => {
+            result.push(PathStep::Dir(d.opposite_direction()));
+        }
+        Some(PathStep::Diagonal(d)) => {
+            result.push(PathStep::Diagonal(d.opposite_direction()));
+        }
+        _ => panic!("Queen's last step can't be {:?}", previous_step_reversed),
+    }
+    result
+}
+
+pub fn find_knight_steps<D: Direction>() -> Vec<PathStep<D>> {
+    let mut result = Vec::new();
+    for d in D::list() {
+        for turn_left in vec![true, false] {
+            result.push(PathStep::Knight(d, turn_left));
+        }
+    }
+    result
+}
+
+pub fn find_rook_steps<D: Direction>(dir: Option<D>) -> Vec<PathStep<D>> {
+    let mut result = Vec::new();
+    match dir {
+        None => {
+            for d in D::list() {
+                result.push(PathStep::Dir(d));
+            }
+        }
+        Some(d) => {
+            result.push(PathStep::Dir(d));
+        }
+    }
+    result
+}
+
+pub fn find_bishop_steps<D: Direction>(dir: Option<D>) -> Vec<PathStep<D>> {
+    let mut result = Vec::new();
+    match dir {
+        None => {
+            for d in D::list() {
+                result.push(PathStep::Diagonal(d));
+            }
+        }
+        Some(d) => {
+            result.push(PathStep::Diagonal(d));
         }
     }
     result

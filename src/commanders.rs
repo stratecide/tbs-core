@@ -7,6 +7,7 @@ use crate::map::direction::*;
 use crate::map::point::Point;
 use crate::player::Owner;
 use crate::units::*;
+use crate::units::movement::{MovementPoints, MovementType};
 use crate::units::normal_units::NormalUnit;
 
 use interfaces::game_interface::ClientPerspective;
@@ -35,6 +36,14 @@ impl Commander {
             Self::Zombie(_, power_active) => *power_active,
             Self::None => false,
         }
+    }
+
+    pub fn movement_bonus<D: Direction>(&self, _unit: &UnitType<D>) -> MovementPoints {
+        MovementPoints::from(0.)
+    }
+    
+    pub fn transform_movement_cost(&self, _unit: &NormalUnit, _movement_type: MovementType, cost: MovementPoints) -> MovementPoints {
+        cost
     }
     
     pub fn attack_bonus<D: Direction>(&self, _game: &Game<D>, _attacker: &NormalUnit, _is_counter: bool) -> f32 {

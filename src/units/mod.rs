@@ -167,26 +167,32 @@ impl<D: Direction> UnitType<D> {
     }
 
     pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
-        match self {
-            Self::Normal(unit) => unit.movable_positions(game, path_so_far),
-            Self::Chess(unit) => unit.movable_positions(game, path_so_far),
-            Self::Structure(_) => HashSet::new(),
-        }
+        movement_area_game(game, self, path_so_far, 1)
+        .keys()
+        .cloned()
+        .collect()
     }
+
     pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
-        match self {
-            Self::Normal(unit) => unit.shortest_path_to(game, path_so_far, goal),
-            Self::Chess(unit) => unit.shortest_path_to(game, path_so_far, goal),
-            Self::Structure(_) => None,
-        }
+        search_path(game, self, path_so_far, None, |_path, p, can_stop_here| {
+            if goal == p {
+                PathSearchFeedback::Found
+            } else if can_stop_here {
+                PathSearchFeedback::Continue
+            } else {
+                PathSearchFeedback::ContinueWithoutStopping
+            }
+        })
     }
+
     pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         match self {
             Self::Normal(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
-            Self::Chess(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
+            Self::Chess(_) => self.shortest_path_to(game, path_so_far, goal),
             Self::Structure(_) => None,
         }
     }
+
     pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
         match self {
             Self::Normal(unit) => unit.options_after_path(game, path),
@@ -196,6 +202,7 @@ impl<D: Direction> UnitType<D> {
             },
         }
     }
+
     pub fn get_armor(&self) -> (ArmorType, f32) {
         match self {
             Self::Normal(unit) => unit.get_armor(),
@@ -203,15 +210,25 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(unit) => unit.typ.get_armor(),
         }
     }
+
     pub fn killable_by_chess(&self, team: Team, game: &Game<D>) -> bool {
         match self {
             _ => self.get_team(game) != ClientPerspective::Team(*team as u8),
         }
     }
+
     pub fn can_be_moved_through(&self, by: &NormalUnit, game: &Game<D>) -> bool {
         match self {
             Self::Normal(_) => by.has_stealth() && !game.is_foggy() || self.get_team(game) == by.get_team(game),
             Self::Chess(_) => false,
+            Self::Structure(_) => false,
+        }
+    }
+
+    pub fn can_be_taken_by_chess(&self, game: &Game<D>, attacking_owner: Owner) -> bool {
+        match self {
+            Self::Normal(_) => self.get_team(game) != game.get_team(Some(attacking_owner)),
+            Self::Chess(_) => self.get_team(game) != game.get_team(Some(attacking_owner)),
             Self::Structure(_) => false,
         }
     }
@@ -223,7 +240,6 @@ impl<D: Direction> UnitType<D> {
         let terrain = game.get_map().get_terrain(pos).unwrap();
         let terrain_defense = 1. + terrain.defense_bonus(self);
         let in_water = terrain.is_water();
-
         let mut defense_bonus = 1.;
         if let Some(owner) = self.get_owner().and_then(|owner| game.get_owning_player(owner)) {
             defense_bonus += owner.commander.defense_bonus(game, self, is_counter);
@@ -234,7 +250,6 @@ impl<D: Direction> UnitType<D> {
             }
         }
         let defense_bonus = defense_bonus; // to make sure it's not updated in the for-loop on accident
-
         let mut highest_damage: f32 = 0.;
         let mut used_weapon = None;
         for (weapon, mut attack) in attacker.get_weapons() {
@@ -261,9 +276,11 @@ impl<D: Direction> UnitType<D> {
         }
         used_weapon.and_then(|weapon| Some((weapon, highest_damage.ceil() as u16)))
     }
+
     fn true_vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         1
     }
+
     fn vision_range(&self, game: &Game<D>, pos: Point) -> usize {
         match self {
             Self::Normal(unit) => unit.vision_range(game, pos),
@@ -271,6 +288,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => 0,
         }
     }
+
     pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, Vision> {
         match self {
             Self::Chess(unit) => unit.get_vision(game, pos),
@@ -291,6 +309,7 @@ impl<D: Direction> UnitType<D> {
             }
         }
     }
+
     pub fn attackable_positions(&self, game: &Game<D>, position: Point, moved: bool) -> HashSet<Point> {
         match self {
             Self::Normal(u) => u.attackable_positions(game, position, moved),
@@ -298,6 +317,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(u) => u.attackable_positions(game, position, moved),
         }
     }
+
     pub fn can_pull(&self) -> bool {
         match self {
             Self::Normal(unit) => unit.can_pull(),
@@ -305,15 +325,18 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_) => false,
         }
     }
+
     pub fn can_be_pulled(&self, _map: &Map<D>, _pos: Point) -> bool {
         true
     }
+
     pub fn can_attack_unit(&self, game: &Game<D>, target: &UnitType<D>, target_pos: Point) -> bool {
         match self {
             Self::Normal(unit) => unit.can_attack_unit(game, target, target_pos),
             _ => false
         }
     }
+
     pub fn threatens(&self, game: &Game<D>, target: &UnitType<D>, target_pos: Point) -> bool {
         self.get_team(game) != target.get_team(game) && match self {
             Self::Normal(unit) => unit.threatens(game, target, target_pos),
@@ -321,6 +344,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_unit) => false,
         }
     }
+
     pub fn make_attack_info(&self, game: &Game<D>, pos: Point, target: Point) -> Option<AttackInfo<D>> {
         match self {
             Self::Normal(unit) => unit.make_attack_info(game, pos, target),
@@ -360,6 +384,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(structure) => structure.typ.value(),
         }
     }
+
     pub fn value(&self, game: &Game<D>, _co: &Commander) -> usize {
         (match self {
             Self::Normal(unit) => unit.value(game),
@@ -367,6 +392,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(structure) => structure.typ.value(),
         }) as usize * self.get_hp() as usize / 100
     }
+
     pub fn update_used_mercs(&self, mercs: &mut HashSet<MercenaryOption>) {
         for boarded in self.get_boarded() {
             boarded.update_used_mercs(mercs);
@@ -378,6 +404,7 @@ impl<D: Direction> UnitType<D> {
             _ => {}
         }
     }
+
     pub fn insert_drone_ids(&self, existing_ids: &mut HashSet<u16>) {
         match self {
             Self::Normal(unit) => unit.typ.insert_drone_ids(existing_ids),
