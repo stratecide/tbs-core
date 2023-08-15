@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::details::{MAX_STACK_SIZE, Detail};
-use crate::game::events::{EventHandler, Event};
+use crate::game::event_handler::EventHandler;
 use crate::game::game::*;
 use crate::map::direction::*;
 use crate::map::point::Point;
@@ -18,8 +18,8 @@ pub const DEFAULT_ATTACK_BONUS_POWER: f32 = 0.1;
 pub const DEFAULT_DEFENSE_BONUS_POWER: f32 = 0.1;
 
 pub const CHARGE_UNIT: i32 = 100;
-pub const MAX_CHARGE: i32 = CHARGE_UNIT * 12;
-pub type Charge = U<{MAX_CHARGE}>;
+pub const MAX_CHARGE: u32 = CHARGE_UNIT as u32 * 12;
+pub type Charge = U<{MAX_CHARGE as i32}>;
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 8)]
@@ -72,7 +72,7 @@ impl Commander {
         }
     }
 
-    pub fn after_attacking<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Point, attacker: &NormalUnit, defenders: Vec<(Point, UnitType<D>, u16)>, _is_counter: bool) {
+    pub fn after_attacking<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Point, _attacker: &NormalUnit, defenders: Vec<(Point, UnitType<D>, u16)>, _is_counter: bool) {
         match self {
             Self::Vampire(_, _) => {
                 if handler.get_game().is_foggy() {
@@ -80,9 +80,9 @@ impl Commander {
                     for (_, _, d) in defenders {
                         damage += d as f32;
                     }
-                    let lifesteal = ((damage * 0.15 + 0.5).floor() as i8).min(100 - attacker.get_hp() as i8);
+                    let lifesteal = (damage * 0.15 + 0.5).floor() as u8;
                     if lifesteal > 0 {
-                        handler.add_event(Event::UnitHpChange(attacker_pos.clone(), lifesteal.into(), lifesteal.into()));
+                        handler.unit_heal(attacker_pos, lifesteal);
                     }
                 }
             }
@@ -94,8 +94,7 @@ impl Commander {
         let player = handler.get_game().get_owning_player(owner).unwrap();
         match self {
             Self::Zombie(_, _) => {
-                let mut details = handler.get_map().get_details(defender_pos);
-                let old_details = details.clone();
+                let details = handler.get_map().get_details(defender_pos);
                 if details.len() < MAX_STACK_SIZE as usize && defender.get_team(handler.get_game()) != ClientPerspective::Team(*player.team as u8) {
                     let mut unit= match defender {
                         UnitType::Normal(unit) => unit.clone(),
@@ -104,8 +103,7 @@ impl Commander {
                     while unit.get_boarded().len() > 0 {
                         unit.unboard(0);
                     }
-                    details.push(Detail::Skull(owner, unit.typ));
-                    handler.add_event(Event::ReplaceDetail(defender_pos.clone(), old_details.try_into().unwrap(), Detail::correct_stack(details).try_into().unwrap()));
+                    handler.detail_add(defender_pos, Detail::Skull(owner, unit.typ));
                 }
             }
             _ => {}
@@ -114,10 +112,10 @@ impl Commander {
 
     pub fn max_charge(&self) -> Charge {
         match self {
-            Self::None => 0.into(),
+            Self::None => 0,
             Self::Vampire(_, _) => CommanderPower::VampireBloodStorm.charge_cost(),
             Self::Zombie(_, _) => CommanderPower::ZombieResurrection.charge_cost(),
-        }
+        }.into()
     }
     
     pub fn charge(&self) -> Charge {
@@ -161,7 +159,7 @@ impl Commander {
     
     pub fn start_turn<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner) {
         if handler.get_game().current_player().owner_id == owner && self.power_active() {
-            handler.add_event(Event::CommanderFlipActiveSimple(owner))
+            handler.commander_power_end(owner);
         }
     }
     
@@ -190,11 +188,11 @@ impl Display for CommanderPower {
     }
 }
 impl CommanderPower {
-    pub fn charge_cost(&self) -> Charge {
+    pub fn charge_cost(&self) -> u32 {
         (match self {
             Self::VampireBloodStorm => 5,
             Self::ZombieResurrection => 6,
-        } * CHARGE_UNIT).into()
+        } * CHARGE_UNIT as u32)
     }
     
     pub fn is_simple(&self) -> bool {
@@ -204,8 +202,8 @@ impl CommanderPower {
     }
 
     pub fn execute<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner) {
-        handler.add_event(Event::CommanderFlipActiveSimple(owner));
-        handler.add_event(Event::CommanderCharge(handler.get_game().current_player().owner_id, (-*self.charge_cost()).into()));
+        handler.commander_charge_sub(owner, self.charge_cost());
+        handler.commander_power_start(owner);
         let player = handler.get_game().get_owning_player(owner).unwrap();
         match self {
             Self::VampireBloodStorm => {
@@ -217,13 +215,11 @@ impl CommanderPower {
                             UnitType::Structure(_) => continue,
                             _ => {}
                         }
-                        if unit.get_owner() == Some(owner) && unit.get_hp() < 100 {
-                            let healing = 10.min(100 - unit.get_hp());
-                            handler.add_event(Event::UnitHpChange(p, healing.into(), healing.into()));
+                        if unit.get_owner() == Some(owner) {
+                            handler.unit_heal(p, 10);
                         } else if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) && unit.get_hp() > 1 {
                             // maybe don't affect units without owner if that ever exists?
-                            let damage = -(10.min(unit.get_hp() - 1) as i8);
-                            handler.add_event(Event::UnitHpChange(p, damage.into(), damage.into()));
+                            handler.unit_damage(p, 10);
                         }
                     }
                 }
@@ -237,11 +233,11 @@ impl CommanderPower {
                         match detail {
                             Detail::Skull(o, unit_type) => {
                                 if o == owner {
-                                    handler.add_event(Event::RemoveDetail(p.clone(), index.into(), Detail::Skull(o, unit_type.clone())));
+                                    handler.detail_remove(p, index.into());
                                     let mut unit = NormalUnit::new_instance(unit_type, owner);
                                     unit.data.zombie = true;
                                     unit.data.hp = 50.into();
-                                    handler.add_event(Event::UnitCreation(p, UnitType::Normal(unit)));
+                                    handler.unit_creation(p, UnitType::Normal(unit));
                                 }
                                 break;
                             }

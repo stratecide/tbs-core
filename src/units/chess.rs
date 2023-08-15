@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fmt;
 
+use crate::game::event_handler::EventHandler;
 use crate::game::game::Game;
 use crate::map::direction::Direction;
 use crate::map::map::NeighborMode;
@@ -11,7 +12,6 @@ use crate::terrain::Terrain;
 
 use super::*;
 
-use zipper::*;
 use zipper::zipper_derive::*;
 
 
@@ -56,22 +56,11 @@ impl<D: Direction> ChessCommand<D> {
         }
         let end = path_taken.end(handler.get_map())?;
         let mut recalculate_fog = false;
-        if let Some(other) = handler.get_map().get_unit(end) {
+        if let Some(_) = handler.get_map().get_unit(end) {
             recalculate_fog = true;
-            handler.add_event(Event::UnitDeath(end, other.clone()));
+            handler.unit_death(end);
         }
-        handler.add_event(Event::UnitPath(Some(None), path_taken.clone(), Some(false), UnitType::Chess::<D>(unit.clone())));
-        if handler.get_game().is_foggy() {
-            let vision_changes: Vec<(Point, U<2>)> = unit.get_vision(handler.get_game(), end).into_iter()
-            .filter_map(|(p, vision)| {
-                fog_change_index(handler.get_game().get_vision(team, p), Some(vision))
-                .and_then(|vi| Some((p, vi)))
-            }).collect();
-            if vision_changes.len() > 0 {
-                handler.add_event(Event::PureFogChange(Some(handler.get_game().current_player().team), vision_changes.try_into().unwrap()));
-            }
-        }
-        super::on_path_details(handler, &path_taken, &UnitType::Chess::<D>(unit.clone()));
+        handler.unit_path(None, &path_taken, false, true);
         match unit.typ {
             ChessUnits::Pawn(d, en_passant) => {
                 match path_taken.steps[0] {
@@ -82,7 +71,7 @@ impl<D: Direction> ChessCommand<D> {
                                 match unit.typ {
                                     ChessUnits::Pawn(d, true) => {
                                         if n.direction == d && handler.get_game().get_team(Some(unit.owner)) != team {
-                                            handler.add_event(Event::UnitDeath(n.point, UnitType::Chess(unit.clone())));
+                                            handler.unit_death(n.point);
                                         }
                                     }
                                     _ => {}
@@ -92,62 +81,50 @@ impl<D: Direction> ChessCommand<D> {
                     }
                     _ => {}
                 }
+                // TODO: could transform the unit during the last PathStep's animation
                 if ChessUnit::pawn_upgrades_after_path(handler.get_map(), &path_taken, d) {
                     // upgrade if "end of map" reached, i.e. no terrain ahead that the pawn can enter
-                    handler.add_event(Event::UnitReplacement(end, UnitType::Chess(unit.clone()), UnitType::Chess(ChessUnit {
+                    handler.unit_replace(end, UnitType::Chess(ChessUnit {
                         typ: self.pawn_upgrade.to_chess_typ(),
                         hp: unit.hp,
                         owner: unit.owner,
                         exhausted: false, // will be exhausted after
-                    })))
+                    }))
                 } else {
                     if (path_taken.steps.len() > 1) != en_passant {
-                        handler.add_event(Event::EnPassantOpportunity(end));
+                        handler.unit_en_passant_opportunity(end);
                     }
                     let new_dir = ChessUnit::pawn_dir_after_path(handler.get_map(), &path_taken, d.clone());
-                    if d != new_dir {
-                        handler.add_event(Event::UnitDirection(end, new_dir, d));
-                    }
+                    handler.unit_direction(end, new_dir);
                 }
             }
             ChessUnits::Rook(moved_this_game) => {
                 if !moved_this_game {
-                    handler.add_event(Event::UnitMovedThisGame(end));
+                    handler.unit_moved_this_game(end);
                     if self.castle && path_taken.steps.len() > 0 && self.path.steps.len() == path_taken.steps.len() {
                         if let Some(dp) = ChessUnit::find_king_for_castling(handler.get_game(), path_taken.start, path_taken.steps[0].dir().unwrap(), path_taken.steps.len(), unit.owner) {
                             let mut king_path = Path::new(dp.point);
                             king_path.steps.push(PathStep::Jump(dp.direction.opposite_direction()));
-                            let king = handler.get_map().get_unit(dp.point).unwrap().clone();
-                            handler.add_event(Event::UnitPath(Some(None), king_path.clone(), Some(false), king.clone()));
-                            if handler.get_game().is_foggy() {
-                                let vision_changes: Vec<(Point, U<2>)> = king.get_vision(handler.get_game(), king_path.end(handler.get_map()).unwrap()).into_iter()
-                                    .filter_map(|(p, vision)| {
-                                        fog_change_index(handler.get_game().get_vision(team, p), Some(vision))
-                                            .and_then(|vi| Some((p, vi)))
-                                    }).collect();
-                                if vision_changes.len() > 0 {
-                                    handler.add_event(Event::PureFogChange(Some(handler.get_game().current_player().team), vision_changes.try_into().unwrap()));
-                                }
-                            }
-                            super::on_path_details(handler, &path_taken, &king);
+                            handler.unit_path(None, &king_path, false, false);
                         }
                     }
                 }
             }
             ChessUnits::King(moved_this_game) => {
                 if !moved_this_game {
-                    handler.add_event(Event::UnitMovedThisGame(end));
+                    handler.unit_moved_this_game(end);
                 }
             }
             _ => {}
         }
-        handler.add_event(Event::UnitExhaust(end));
+        handler.unit_exhaust(end);
         if recalculate_fog {
             handler.recalculate_fog(true);
         }
         Ok(path_taken.start)
     }
-    pub fn exhaust_all_on_board(handler: &mut EventHandler<D>, pos: Point) {
+
+    pub fn exhaust_all_on_chess_board(handler: &mut EventHandler<D>, pos: Point) {
         if !handler.get_map().get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
             return;
         }
@@ -161,7 +138,7 @@ impl<D: Direction> ChessCommand<D> {
             handler.get_map().get_terrain(p).and_then(|t| Some(t.is_chess())).unwrap_or(false)
         });
         for p in handler.get_map().all_points().into_iter().filter(|p| to_exhaust.contains(p)) {
-            handler.add_event(Event::UnitExhaust(p));
+            handler.unit_exhaust(p);
         }
     }
 }
@@ -274,7 +251,7 @@ impl<D: Direction> ChessUnit<D> {
         map.get_terrain(end).and_then(|t| Some(t.is_chess())).unwrap_or(false)
         && map.get_neighbor(end, new_dir).is_none()
         && get_diagonal_neighbor(map, end, new_dir).is_none()
-        && get_diagonal_neighbor(map, end, new_dir.rotate_clockwise()).is_none()
+        && get_diagonal_neighbor(map, end, new_dir.rotate(true)).is_none()
     }
     fn true_vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         1
@@ -411,9 +388,9 @@ fn pawn_attackable_positions<D: Direction>(map: &Map<D>, pos: Point, d: D) -> Ha
     if let Some(dp) = get_diagonal_neighbor(map, pos, d) {
         result.insert((OrientedPoint::new(dp.point, dp.mirrored, d), PathStep::Diagonal(d)));
     }
-    if let Some(dp) = get_diagonal_neighbor(map, pos, d.rotate_clockwise()) {
+    if let Some(dp) = get_diagonal_neighbor(map, pos, d.rotate(true)) {
         // TODO: rotate clockwise if mirrored?
-        result.insert((OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_counter_clockwise()), PathStep::Diagonal(d.rotate_clockwise())));
+        result.insert((OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate(dp.mirrored)), PathStep::Diagonal(d.rotate(true))));
     }
     result
 }
@@ -577,29 +554,46 @@ impl<D: Direction> ChessUnits<D> {
     }
 }
 
+// rotated slightly counter-clockwise compared to dir
 pub fn get_diagonal_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D) -> Option<OrientedPoint<D>> {
-    if let Some(dp) = map.wrapping_logic().get_neighbor(p, dir).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point, dp.direction.rotate_counter_clockwise())) {
-        Some(OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_clockwise()))
-    } else if let Some(dp) = map.wrapping_logic().get_neighbor(p, dir.rotate_counter_clockwise()).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point, dp.direction.rotate_clockwise())) {
-        Some(dp)
-    } else {
-        None
+    if let Some(dp1) = map.wrapping_logic().get_neighbor(p, dir) {
+        if let Some(dp2) = map.wrapping_logic().get_neighbor(dp1.point, dp1.direction.rotate(dp1.mirrored)) {
+            return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction.rotate(dp1.mirrored == dp2.mirrored)));
+        }
     }
+    if let Some(dp1) = map.wrapping_logic().get_neighbor(p, dir.rotate(false)) {
+        if let Some(dp2) = map.wrapping_logic().get_neighbor(dp1.point, dp1.direction.rotate(!dp1.mirrored)) {
+            return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction));
+        }
+    }
+    None
 }
 
 pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D, turn_left: bool) -> Option<OrientedPoint<D>> {
-    let rotation = if turn_left {
-        D::angle_0()
+    if turn_left {
+        if let Some(dp1) = map.wrapping_logic().get_neighbor(p, dir) {
+            if let Some(dp2) = get_diagonal_neighbor(map, dp1.point, dp1.direction) {
+                return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction));
+            }
+        }
+        if let Some(dp1) = get_diagonal_neighbor(map, p, dir) {
+            if let Some(dp2) = map.wrapping_logic().get_neighbor(dp1.point, dp1.direction) {
+                return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction));
+            }
+        }
     } else {
-        D::angle_0().rotate_clockwise()
+        if let Some(dp1) = map.wrapping_logic().get_neighbor(p, dir) {
+            if let Some(dp2) = get_diagonal_neighbor(map, dp1.point, dp1.direction.rotate(!dp1.mirrored)) {
+                return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction.rotate(dp1.mirrored != dp2.mirrored)));
+            }
+        }
+        if let Some(dp1) = get_diagonal_neighbor(map, p, dir.rotate(true)) {
+            if let Some(dp2) = map.wrapping_logic().get_neighbor(dp1.point, dp1.direction.rotate(dp1.mirrored)) {
+                return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction));
+            }
+        }
     };
-    if let Some(dp) = map.wrapping_logic().get_neighbor(p, dir).and_then(|dp| get_diagonal_neighbor(map, dp.point, dp.direction.rotate_by(rotation))) {
-        Some(OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_by(rotation.mirror_vertically())))
-    } else if let Some(dp) = get_diagonal_neighbor(map, p, dir.rotate_by(rotation)).and_then(|dp| map.wrapping_logic().get_neighbor(dp.point, dp.direction.rotate_by(rotation.mirror_vertically()))) {
-        Some(dp)
-    } else {
-        None
-    }
+    None
 }
 
 // callback returns true if the search can be aborted

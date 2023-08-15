@@ -18,8 +18,6 @@ use crate::units::*;
 use crate::details::*;
 use crate::units::mercenary::MaybeMercenary;
 use crate::units::mercenary::Mercenaries;
-use crate::units::movement::MovementType;
-use crate::units::movement::PathStep;
 use crate::units::normal_units::DroneId;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -253,28 +251,33 @@ where D: Direction
         drone_id.into()
     }
 
-    pub fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<(Point, D, Option<D>)>> {
-        let mut layers: Vec<HashSet<(Point, D, Option<D>)>> = vec![];
-        let mut layer = HashSet::new();
-        for dp in self.get_neighbors(center, NeighborMode::FollowPipes) {
-            layer.insert((dp.point.clone(), dp.direction.clone(), None));
+    pub fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<Point>> {
+        if range == 0 {
+            return Vec::new();
         }
-        layers.push(layer);
-        while layers.len() < range {
-            let mut layer = HashSet::new();
-            for (p, dir, dir_change) in layers.last().unwrap() {
-                if let Some(dp) = self.get_neighbor(*p, *dir) {
+        let mut result = Vec::new();
+        let mut layer: HashSet<(Point, D, Option<D>)> = HashSet::new();
+        for dp in self.get_neighbors(center, NeighborMode::FollowPipes) {
+            layer.insert((dp.point, dp.direction, None));
+        }
+        for _ in 1..range {
+            let previous_layer = layer;
+            layer = HashSet::new();
+            let mut result_layer = HashSet::new();
+            for (p, dir, dir_change) in previous_layer {
+                result_layer.insert(p);
+                if let Some(dp) = self.get_neighbor(p, dir) {
                     let dir_change = match (dp.mirrored, dir_change) {
                         (_, None) => None,
                         (true, Some(angle)) => Some(angle.mirror_vertically()),
-                        (false, Some(angle)) => Some(angle.clone()),
+                        (false, Some(angle)) => Some(angle),
                     };
-                    layer.insert((dp.point.clone(), dp.direction.clone(), dir_change));
+                    layer.insert((dp.point, dp.direction, dir_change));
                 }
                 let mut dir_changes = vec![];
                 if let Some(dir_change) = dir_change {
                     // if we already have 2 directions, only those 2 directions can find new points
-                    dir_changes.push(dir_change.clone());
+                    dir_changes.push(dir_change);
                 } else {
                     // since only one direction has been used so far, try both directions that are directly neighboring
                     let d = *D::list().last().unwrap();
@@ -282,19 +285,24 @@ where D: Direction
                     dir_changes.push(d);
                 }
                 for dir_change in dir_changes {
-                    if let Some(dp) = self.get_neighbor(*p, dir.rotate_by(dir_change)) {
-                        let mut dir_change = dir_change.clone();
+                    if let Some(dp) = self.get_neighbor(p, dir.rotate_by(dir_change)) {
+                        let mut dir_change = dir_change;
                         if dp.mirrored {
                             dir_change = dir_change.mirror_vertically();
                         }
                         let dir = dp.direction.rotate_by(dir_change.mirror_vertically());
-                        layer.insert((dp.point.clone(), dir, Some(dir_change)));
+                        layer.insert((dp.point, dir, Some(dir_change)));
                     }
                 }
             }
-            layers.push(layer);
+            result.push(result_layer);
         }
-        layers
+        let mut result_layer = HashSet::new();
+        for (p, _, _) in layer {
+            result_layer.insert(p);
+        }
+        result.push(result_layer);
+        result
     }
 
     pub fn mercenary_influence_at(&self, point: Point, owner: Option<Owner>) -> Vec<(Point, &Mercenaries)> {
@@ -303,7 +311,7 @@ where D: Direction
             if let Some(UnitType::Normal(unit)) = self.get_unit(p) {
                 if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
                     if (owner.is_none() || owner == Some(unit.owner)) && mercenary.in_range(self, p, point) {
-                        result.push((p.clone(), mercenary));
+                        result.push((p, mercenary));
                     }
                 }
             }
@@ -348,7 +356,7 @@ where D: Direction
                         }
                     }
                     if !is_valid {
-                        corrected.push((p.clone(), self.terrain.remove(&p).unwrap()));
+                        corrected.push((p, self.terrain.remove(&p).unwrap()));
                         if let Some(dir) = valid_dir {
                             self.set_terrain(p, Terrain::Pipe(dir.pipe_entry()));
                         } else {
@@ -442,13 +450,13 @@ where D: Direction
         let mut units = HashMap::new();
         let mut details = HashMap::new();
         for p in wrapping_logic.pointmap().get_valid_points() {
-            terrain.insert(p.clone(), Terrain::import(unzipper)?);
+            terrain.insert(p, Terrain::import(unzipper)?);
             let det = LVec::<Detail, MAX_STACK_SIZE>::import(unzipper)?;
             if det.len() > 0 {
-                details.insert(p.clone(), det);
+                details.insert(p, det);
             }
             if let Some(unit) = Option::<UnitType<D>>::import(unzipper)? {
-                units.insert(p.clone(), unit);
+                units.insert(p, unit);
             }
         }
         Ok(Self {

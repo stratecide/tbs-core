@@ -78,42 +78,54 @@ impl Mercenaries {
             Self::EarlGrey(_, _) => "Earl Grey",
         }
     }
+
     // should NEVER be higher than MAX_CHARGE
     pub fn max_charge(&self) -> u8 {
-        if self.power_active() {
-            return 0;
-        }
         match self {
             Self::EarlGrey(charge, _) => charge.max_value() as u8,
         }
     }
+
     pub fn charge(&self) -> u8 {
         match self {
             Self::EarlGrey(charge, _) => **charge as u8,
         }
     }
+
+    pub fn charge_potential(&self) -> u8 {
+        if self.power_active() {
+            0
+        } else {
+            self.max_charge() - self.charge()
+        }
+    }
+
     pub fn add_charge(&mut self, add: i8) {
         let value = (self.charge() as i8 + add).min(self.max_charge() as i8).max(0) as u8;
         match self {
             Mercenaries::EarlGrey(charge, _) => *charge = value.into(),
         }
     }
+
     pub fn power_active(&self) -> bool {
         match self {
             Mercenaries::EarlGrey(_, power_active) => *power_active,
         }
     }
+
     pub fn power_active_mut<'a>(&'a mut self) -> Option<&'a mut bool> {
         match self {
             Mercenaries::EarlGrey(_, power_active) => Some(power_active),
         }
     }
+
     pub fn can_use_simple_power<D: Direction>(&self, _game: &Game<D>, _pos: Point) -> bool {
         match self {
             Mercenaries::EarlGrey(_, false) => self.charge() >= self.max_charge(),
             _ => false,
         }
     }
+
     pub fn add_options_after_path<D: Direction>(&self, _unit: &NormalUnit, _game: &Game<D>, path: &Path<D>, options: &mut Vec<UnitAction<D>>) {
         match self {
             Mercenaries::EarlGrey(charge, false) => {
@@ -171,7 +183,7 @@ impl Mercenaries {
         let mut result = HashSet::new();
         result.insert(position.clone());
         for layer in map.range_in_layers(position, self.aura_range() as usize) {
-            for (p, _, _) in layer {
+            for p in layer {
                 result.insert(p);
             }
         }

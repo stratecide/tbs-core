@@ -89,7 +89,7 @@ impl<D: Direction> UnitType<D> {
         match self {
             Self::Normal(unit) => unit.data.exhausted,
             Self::Chess(unit) => unit.exhausted,
-            Self::Structure(_) => false,
+            Self::Structure(struc) => struc.exhausted,
         }
     }
     pub fn set_exhausted(&mut self, exhausted: bool) {
@@ -277,6 +277,13 @@ impl<D: Direction> UnitType<D> {
         used_weapon.and_then(|weapon| Some((weapon, highest_damage.ceil() as u16)))
     }
 
+    pub fn has_vision_from_path_intermediates(&self) -> bool {
+        match self {
+            Self::Normal(_) => true,
+            _ => false
+        }
+    }
+
     fn true_vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
         1
     }
@@ -297,7 +304,7 @@ impl<D: Direction> UnitType<D> {
                 result.insert(pos, Vision::TrueSight);
                 let layers = game.get_map().range_in_layers(pos, self.vision_range(game, pos));
                 for (i, layer) in layers.into_iter().enumerate() {
-                    for (p, _, _) in layer {
+                    for p in layer {
                         if i < self.true_vision_range(game, pos) {
                             result.insert(p, Vision::TrueSight);
                         } else if !result.contains_key(&p) {

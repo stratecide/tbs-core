@@ -33,18 +33,14 @@ pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zip
         let list = Self::list();
         list.iter().position(|d| self == d).expect("Unable to find Direction in list of all Directions")
     }
-    fn rotate_counter_clockwise(&self) -> Self {
+    fn rotate(&self, clockwise: bool) -> Self {
         let list = Self::list();
         let index = self.list_index();
-        list[(index + 1) % list.len()]
-    }
-    fn rotate_clockwise(&self) -> Self {
-        let list = Self::list();
-        if self == &list[0] {
-            return *list.last().unwrap();
+        if clockwise {
+            list[(index + list.len() - 1) % list.len()]
+        } else {
+            list[(index + 1) % list.len()]
         }
-        let index = self.list_index();
-        list[index - 1]
     }
     fn rotate_by(&self, other: Self) -> Self {
         let list = Self::list();

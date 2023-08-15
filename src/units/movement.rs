@@ -756,7 +756,7 @@ where
                         if temporary.may_take {
                             let dir = temporary.dir.unwrap_or(permanent.0);
                             steps.push(PathStep::Diagonal(dir));
-                            steps.push(PathStep::Diagonal(dir.rotate_clockwise()));
+                            steps.push(PathStep::Diagonal(dir.rotate(true)));
                         }
                         steps
                     },
@@ -769,7 +769,7 @@ where
                                 if let PathStep::Diagonal(d) = step {
                                     steps_left = 0;
                                     if d != temporary.dir.unwrap_or(permanent.0) {
-                                        direction = direction.rotate_counter_clockwise();
+                                        direction = direction.rotate(dp.mirrored);
                                     }
                                 }
                                 return Some((dp.point, PawnPermanent(direction), PawnTemporary { steps_left, dir: Some(direction), may_take: false }));

@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::{Game, Vision}, events::{EventHandler, Event}}, units::{structures::{Structures, Structure}}};
+use crate::{player::*, map::{direction::Direction, point::Point}, game::game::{Game, Vision}, units::structures::{Structures, Structure}};
+use crate::game::event_handler::EventHandler;
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
 use crate::units::UnitType;
@@ -253,13 +254,6 @@ impl<D: Direction> Terrain<D> {
         }
     }
 
-    /*pub fn requires_true_sight(&self) -> bool {
-        match self {
-            Self::Forest => true,
-            Self::Icebergs => true,
-            _ => false
-        }
-    }*/
     pub fn hides_unit(&self, unit: &UnitType<D>) -> bool {
         if match self {
             Self::Forest => false,
@@ -284,7 +278,7 @@ impl<D: Direction> Terrain<D> {
         match self {
             Terrain::Flame => {
                 for layer in game.get_map().range_in_layers(pos, 2) {
-                    for (p, _, _) in layer {
+                    for p in layer {
                         result.insert(p, Vision::Normal);
                     }
                 }
@@ -308,12 +302,6 @@ impl<D: Direction> Terrain<D> {
             _ => self.clone(),
         }
     }
-    /*fn end_turn(&self) {
-        match self {
-            Terrain::Realty(realty, owner) => realty.end_turn(owner),
-            _ => {}, // do nothin by default
-        }
-    }*/
 }
 
 
@@ -403,7 +391,7 @@ impl Realty {
             Self::ConstructionSite(built_this_turn) |
             Self::Port(built_this_turn) => {
                 if **built_this_turn < MAX_BUILT_THIS_TURN as i32 {
-                    handler.add_event(Event::UpdateBuiltThisTurn(pos, *built_this_turn, (**built_this_turn + 1).into()));
+                    handler.terrain_built_this_turn(pos, *built_this_turn + 1);
                 }
             }
             _ => {}

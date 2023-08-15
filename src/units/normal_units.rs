@@ -440,7 +440,7 @@ impl NormalUnit {
                 // each point in a layer is probably in it 2 times
                 let mut layers = game.get_map().range_in_layers(position, max_range as usize);
                 for _ in min_range-1..max_range {
-                    for (p, _, _) in layers.pop().unwrap() {
+                    for p in layers.pop().unwrap() {
                         result.insert(p);
                     }
                 }

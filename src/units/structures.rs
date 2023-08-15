@@ -1,10 +1,10 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 
-use crate::game::events::Effect;
-use crate::game::events::Event;
-use crate::game::events::EventHandler;
+use crate::game::event_handler::EventHandler;
 use crate::game::game::Game;
 use crate::map::direction::Direction;
+use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::player::Owner;
@@ -21,13 +21,13 @@ use zipper::*;
 use zipper::zipper_derive::*;
 
 pub const MEGA_CANNON_RANGE: usize = 5;
-pub const MEGA_CANNON_DAMAGE: i8 = 60;
+pub const MEGA_CANNON_DAMAGE: u16 = 60;
 
 pub const LASER_CANNON_RANGE: u32 = 50;
-pub const LASER_CANNON_DAMAGE: i8 = 40;
+pub const LASER_CANNON_DAMAGE: u16 = 40;
 
 pub const SHOCK_TOWER_RANGE: usize = 4;
-pub const SHOCK_TOWER_DAMAGE: i8 = 70;
+pub const SHOCK_TOWER_DAMAGE: u16 = 40;
 
 
 
@@ -65,41 +65,154 @@ impl<D: Direction> Structure<D> {
     }
     
     pub fn attackable_positions(&self, game: &Game<D>, position: Point, _moved: bool) -> HashSet<Point> {
-        self.typ.attack_area(game, position).0
-            .into_iter()
-            .map(|p| p.0)
-            .collect()
+        let mut result = HashSet::new();
+        match self.typ {
+            Structures::Pyramid(_) |
+            Structures::DroneTower(_) => (),
+            Structures::MegaCannon(_, direction) => {
+                attack_area_cannon(game.get_map(), position, direction, |p, _| {
+                    result.insert(p);
+                });
+            }
+            Structures::LaserCannon(_, direction) => {
+                for p in attack_area_laser(game.get_map(), position, direction) {
+                    result.insert(p);
+                }
+            }
+            Structures::ShockTower(_) => {
+                attack_area_shock_tower(game.get_map(), position, |p, _| {
+                    result.insert(p);
+                });
+            }
+        }
+        result
     }
 
     pub fn start_turn(&self, handler: &mut EventHandler<D>, position: Point) {
         if Some(handler.get_game().current_player().owner_id) == self.typ.get_owner() {
-            if !self.exhausted {
-                let team = handler.get_game().current_player().team;
-                let (attack_area, effect) = self.typ.attack_area(handler.get_game(), position);
-                if let Some(effect) = effect {
-                    handler.add_event(Event::Effect(effect));
-                }
-                for (pos, damage) in attack_area {
-                    // turn into match if more unit types should be hit
-                    if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(pos) {
-                        if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) {
-                            let hp = unit.get_hp() as i8;
-                            handler.add_event(Event::UnitHpChange(pos, (-damage.min(hp)).into(), (-damage as i16).into()));
-                            if hp <= damage {
-                                handler.add_event(Event::UnitDeath(pos, handler.get_map().get_unit(pos).cloned().unwrap()));
-                            }
-                        }
-                    }
-                }
-            }
             match self.typ {
                 Structures::Pyramid(_) |
                 Structures::DroneTower(_) => {
                     if self.exhausted {
-                        handler.add_event(Event::UnitExhaust(position));
+                        handler.unit_unexhaust(position);
                     }
                 }
-                _ => handler.add_event(Event::UnitExhaust(position)),
+                _ => {
+                    if !self.exhausted {
+                        /*let team = handler.get_game().current_player().team;
+                        let (attack_area, effect) = self.typ.attack_area(handler.get_game(), position);
+                        if let Some(effect) = effect {
+                            handler.add_event(Event::Effect(effect));
+                        }
+                        for (pos, damage) in attack_area {
+                            // turn into match if more unit types should be hit
+                            if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(pos) {
+                                if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) {
+                                    let hp = unit.get_hp();
+                                    handler.unit_damage(pos, damage as u16);
+                                    if hp <= damage as u8 {
+                                        handler.unit_death(pos);
+                                    }
+                                }
+                            }
+                        }*/
+                        self.fire(handler, position);
+                        handler.unit_exhaust(position);
+                    } else {
+                        handler.unit_unexhaust(position);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn fire(&self, handler: &mut EventHandler<D>, position: Point) {
+        let team = handler.get_game().current_player().team;
+        match self.typ {
+            Structures::Pyramid(_) |
+            Structures::DroneTower(_) => (), // shouldn't happen
+            Structures::MegaCannon(_, direction) => {
+                // TODO: effect
+                let mut layers = HashMap::new();
+                attack_area_cannon(handler.get_map(), position, direction, |p, distance| {
+                    if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(p) {
+                        if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) {
+                            if !layers.contains_key(&distance) {
+                                layers.insert(distance, HashMap::new());
+                            }
+                            let layer = layers.get_mut(&distance).unwrap();
+                            layer.insert(p, layer.get(&p).cloned().unwrap_or(0) + MEGA_CANNON_DAMAGE - 5 * distance as u16);
+                        }
+                    }
+                });
+                let mut deaths = Vec::new();
+                for distance in 0..MEGA_CANNON_RANGE * 2 {
+                    if let Some(layer) = layers.remove(&distance) {
+                        let mut new_deaths = HashSet::new();
+                        for (p, damage) in &layer {
+                            let hp = handler.get_map().get_unit(*p).unwrap().get_hp();
+                            if hp > 0 && (hp as u16) <= *damage {
+                                new_deaths.insert(*p);
+                            }
+                        }
+                        handler.unit_mass_damage(layer);
+                        deaths.push(new_deaths);
+                    }
+                }
+                for death in deaths {
+                    handler.unit_mass_death(death);
+                }
+            }
+            Structures::LaserCannon(_, direction) => {
+                let attack_area = attack_area_laser(handler.get_map(), position, direction);
+                // TODO: effect
+                //handler.effect_laser(position, direction, attack_area.len());
+                let mut deaths = Vec::new();
+                for pos in attack_area {
+                    if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(pos) {
+                        if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) {
+                            let hp = unit.get_hp();
+                            handler.unit_damage(pos, LASER_CANNON_DAMAGE);
+                            if hp > 0 && hp <= LASER_CANNON_DAMAGE as u8 {
+                                deaths.push(pos);
+                            }
+                        }
+                    }
+                }
+                // TODO: make them die in sequence or all at once?
+                handler.unit_mass_death(deaths.into_iter().collect());
+            }
+            Structures::ShockTower(_) => {
+                // TODO: effect
+                let mut layers = HashMap::new();
+                attack_area_shock_tower(handler.get_map(), position, |p, distance| {
+                    if let Some(UnitType::Normal(unit)) = handler.get_map().get_unit(p) {
+                        if unit.get_team(handler.get_game()) != ClientPerspective::Team(*team as u8) {
+                            if !layers.contains_key(&distance) {
+                                layers.insert(distance, HashMap::new());
+                            }
+                            let layer = layers.get_mut(&distance).unwrap();
+                            layer.insert(p, layer.get(&p).cloned().unwrap_or(0) + SHOCK_TOWER_DAMAGE - 10 * distance as u16);
+                        }
+                    }
+                });
+                let mut deaths = Vec::new();
+                for distance in 0..SHOCK_TOWER_RANGE {
+                    if let Some(layer) = layers.remove(&distance) {
+                        let mut new_deaths = HashSet::new();
+                        for (p, damage) in &layer {
+                            let hp = handler.get_map().get_unit(*p).unwrap().get_hp();
+                            if hp > 0 && (hp as u16) <= *damage {
+                                new_deaths.insert(*p);
+                            }
+                        }
+                        handler.unit_mass_damage(layer);
+                        deaths.push(new_deaths);
+                    }
+                }
+                for death in deaths {
+                    handler.unit_mass_death(death);
+                }
             }
         }
     }
@@ -226,109 +339,6 @@ impl<D: Direction> Structures<D> {
         }
     }
 
-    pub fn attack_area(&self, game: &Game<D>, position: Point) -> (Vec<(Point, i8)>, Option<Effect<D>>) {
-        let mut result = Vec::new();
-        let mut effect = None;
-        match self {
-            Self::Pyramid(_) => (),
-            Self::MegaCannon(_, d) => {
-                let mut layers = Vec::new();
-                layers.push(HashSet::new());
-                if let Some(dp) = game.get_map().get_neighbor(position, *d) {
-                    layers[0].insert(dp);
-                }
-                let (range, damage_dropoff) = if D::is_hex() {
-                    layers.push(HashSet::new());
-                    layers.push(HashSet::new());
-                    if let Some(dp) = get_diagonal_neighbor(game.get_map(), position, *d) {
-                        layers[1].insert(dp);
-                    }
-                    if let Some(dp) = get_diagonal_neighbor(game.get_map(), position, d.rotate_clockwise()) {
-                        layers[1].insert(OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_counter_clockwise()));
-                    }
-                    (MEGA_CANNON_RANGE * 2, 5)
-                } else {
-                    (MEGA_CANNON_RANGE, 10)
-                };
-                let mut i = 0;
-                while layers.len() < range {
-                    layers.push(HashSet::new());
-                    for dp in layers[i].clone() {
-                        if let Some(dp) = game.get_map().get_neighbor(dp.point, dp.direction) {
-                            if D::is_hex() {
-                                layers[i + 2].insert(dp);
-                            } else {
-                                layers[i + 1].insert(dp);
-                            }
-                        }
-                        if D::is_hex() {
-                            if let Some(dp) = get_diagonal_neighbor(game.get_map(), dp.point, dp.direction) {
-                                layers[i + 3].insert(dp);
-                            }
-                            if let Some(dp) = get_diagonal_neighbor(game.get_map(), dp.point, dp.direction.rotate_clockwise()) {
-                                layers[i + 3].insert(OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_counter_clockwise()));
-                            }
-                        } else {
-                            if let Some(dp) = get_diagonal_neighbor(game.get_map(), dp.point, dp.direction) {
-                                layers[i + 1].insert(dp);
-                            }
-                            if let Some(dp) = get_diagonal_neighbor(game.get_map(), dp.point, dp.direction.rotate_clockwise()) {
-                                layers[i + 1].insert(OrientedPoint::new(dp.point, dp.mirrored, dp.direction.rotate_counter_clockwise()));
-                            }
-                        }
-                    }
-                    i += 1;
-                }
-                for (i, layer) in layers.into_iter().enumerate() {
-                    for dp in layer {
-                        // the same point may appear multiple times
-                        result.push((dp.point, MEGA_CANNON_DAMAGE - i as i8 * damage_dropoff));
-                    }
-                }
-                // TODO: effect
-            }
-            Self::LaserCannon(_, d) => {
-                let mut current = OrientedPoint::new(position, false, *d);
-                let mut laser_effect = vec![];
-                for _ in 0..LASER_CANNON_RANGE {
-                    if let Some(dp) = game.get_map().get_neighbor(current.point, current.direction) {
-                        result.push((dp.point, LASER_CANNON_DAMAGE));
-                        laser_effect.push((dp.point, dp.direction));
-                        current = dp;
-                    } else {
-                        break;
-                    }
-                }
-                if result.len() > 0 {
-                    println!("added laser effect");
-                    effect = Some(Effect::Laser(laser_effect.try_into().unwrap()));
-                }
-            }
-            Self::DroneTower(_) => (),
-            Self::ShockTower(_) => {
-                let mut visited = HashSet::new();
-                for (i, layer) in game.get_map().range_in_layers(position, SHOCK_TOWER_RANGE)
-                .into_iter()
-                .enumerate() {
-                    if i == 0 {
-                        continue;
-                    }
-                    for (p, _, _) in layer {
-                        // don't hit the same point multiple times
-                        if visited.insert(p) {
-                            result.push((p, SHOCK_TOWER_DAMAGE - 10 * i as i8));
-                        }
-                    }
-                }
-                if visited.len() > 0 {
-                    let visited: Vec<Point> = visited.into_iter().collect();
-                    effect = Some(Effect::Lightning(visited.try_into().unwrap()));
-                }
-            }
-        }
-        (result, effect)
-    }
-
     pub fn transport_capacity(&self) -> u8 {
         // TODO: stupid
         match self {
@@ -344,6 +354,98 @@ impl<D: Direction> Structures<D> {
                 TransportableDrones::from_normal(unit).is_some()
             }
             _ => false
+        }
+    }
+}
+
+fn attack_area_cannon<D: Direction, F: FnMut(Point, usize)>(map: &Map<D>, position: Point, direction: D, mut callback: F) {
+    if let Some(dp) = map.get_neighbor(position, direction) {
+        if D::is_hex() {
+            let mut old_front = HashMap::new();
+            let mut front = HashMap::new();
+            front.insert((dp.point, dp.direction), true);
+            for i in 0..(MEGA_CANNON_RANGE * 2 - 1) {
+                let older_front = old_front;
+                old_front = front;
+                front = HashMap::new();
+                for ((position, direction), _) in older_front {
+                    callback(position, i);
+                    if let Some(dp) = map.get_neighbor(position, direction) {
+                        front.insert((dp.point, dp.direction), true);
+                    }
+                }
+                // in order to not spread too much, only spread if
+                //      - previously moved straight forward
+                //      - current position was spread to from both sides
+                for ((position, direction), may_spread) in &old_front {
+                    if *may_spread {
+                        if let Some(dp) = map.get_neighbor(*position, direction.rotate(true)) {
+                            let key = (dp.point, dp.direction.rotate(dp.mirrored));
+                            front.insert(key, front.contains_key(&key));
+                        }
+                        if let Some(dp) = map.get_neighbor(*position, direction.rotate(false)) {
+                            let key = (dp.point, dp.direction.rotate(!dp.mirrored));
+                            front.insert(key, front.contains_key(&key));
+                        }
+                    }
+                }
+            }
+            for (position, _) in old_front.keys() {
+                callback(*position, MEGA_CANNON_RANGE * 2 - 1);
+            }
+            for (position, _) in front.keys() {
+                callback(*position, MEGA_CANNON_RANGE * 2);
+            }
+        } else {
+            let mut front = HashSet::new();
+            front.insert((dp.point, dp.direction));
+            for i in 0..MEGA_CANNON_RANGE {
+                let old_front = front;
+                front = HashSet::new();
+                for (position, direction) in old_front {
+                    callback(position, i * 2);
+                    if let Some(dp) = map.get_neighbor(position, direction) {
+                        front.insert((dp.point, dp.direction));
+                    }
+                    if let Some(dp) = get_diagonal_neighbor(map, position, direction) {
+                        front.insert((dp.point, dp.direction));
+                    }
+                    if let Some(dp) = get_diagonal_neighbor(map, position, direction.rotate(true)) {
+                        front.insert((dp.point, dp.direction.rotate(dp.mirrored)));
+                    }
+                }
+            }
+            for (position, _) in front {
+                callback(position, MEGA_CANNON_RANGE * 2);
+            }
+        }
+    }
+}
+
+// the same point may be contained multiple times
+fn attack_area_laser<D: Direction>(map: &Map<D>, position: Point, direction: D) -> Vec<Point> {
+    let mut result = Vec::new();
+    let mut current = OrientedPoint::new(position, false, direction);
+    for _ in 0..LASER_CANNON_RANGE {
+        if let Some(dp) = map.get_neighbor(current.point, current.direction) {
+            if let Some(UnitType::Structure(_)) = map.get_unit(dp.point) {
+                break;
+            }
+            result.push(dp.point);
+            current = dp;
+        } else {
+            break;
+        }
+    }
+    result
+}
+
+fn attack_area_shock_tower<D: Direction, F: FnMut(Point, usize)>(map: &Map<D>, position: Point, mut callback: F) {
+    for (i, layer) in map.range_in_layers(position, SHOCK_TOWER_RANGE).into_iter().enumerate() {
+        if i > 0 {
+            for p in layer {
+                callback(p, i - 1);
+            }
         }
     }
 }

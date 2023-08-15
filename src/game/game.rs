@@ -17,6 +17,8 @@ use crate::units::UnitType;
 use crate::units::mercenary::MercenaryOption;
 use crate::units::movement::Path;
 
+use super::event_handler;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Game<D: Direction> {
     map: Map<D>,
@@ -65,19 +67,9 @@ impl<D: Direction> Game<D> {
         this
     }
     fn start_server<R: 'static + Fn() -> f32>(&mut self, random: R) -> Events<Self> {
-        let mut handler = events::EventHandler::new(self, Box::new(random));
+        let mut handler = event_handler::EventHandler::new(self, Box::new(random));
         FogMode::forecast(&mut handler);
-        if handler.get_game().is_foggy() {
-            // TODO: this is duplicated code from EndTurn in events
-            let mut events: Vec<events::Event<D>> = vec![];
-            for player in handler.get_game().players.iter() {
-                events.push(events::Event::PureHideFunds(player.owner_id));
-            }
-            for event in events {
-                handler.add_event(event);
-            }
-        }
-        handler.start_turn();
+        handler.start_turn(false);
         handler.accept()
     }
     pub fn get_fog_mode(&self) -> &FogMode {
@@ -114,12 +106,15 @@ impl<D: Direction> Game<D> {
     pub fn get_map(&self) -> &Map<D> {
         &self.map
     }
+
     pub fn get_map_mut(&mut self) -> &mut Map<D> {
         &mut self.map
     }
+
     pub fn current_player(&self) -> &Player {
         &self.players[self.current_turn as usize % self.players.len()]
     }
+
     pub fn get_teams(&self) -> HashSet<Team> {
         let mut result = HashSet::new();
         for p in self.players.iter() {
@@ -127,6 +122,7 @@ impl<D: Direction> Game<D> {
         }
         result
     }
+
     pub fn get_living_teams(&self) -> HashSet<Team> {
         let mut result = HashSet::new();
         for p in self.players.iter() {
@@ -136,9 +132,15 @@ impl<D: Direction> Game<D> {
         }
         result
     }
+
+    pub fn is_team_alive(&self, team: &Team) -> bool {
+        self.get_living_teams().contains(team)
+    }
+
     pub fn has_ended(&self) -> bool {
         self.ended
     }
+
     pub fn get_owning_player(&self, owner: Owner) -> Option<&Player> {
         self.players.iter().find(|player| player.owner_id == owner)
     }
@@ -380,7 +382,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
     }
 
     fn handle_command<R: 'static + Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<Events<Self>, events::CommandError> {
-        let mut handler = events::EventHandler::new(self, Box::new(random));
+        let mut handler = event_handler::EventHandler::new(self, Box::new(random));
         match command.convert(&mut handler) {
             Ok(()) => Ok(handler.accept()),
             Err(err) => {
@@ -537,7 +539,7 @@ impl Display for FogMode {
 }
 
 impl FogMode {
-    pub fn forecast<D: Direction>(handler: &mut events::EventHandler<D>) {
+    pub fn forecast<D: Direction>(handler: &mut event_handler::EventHandler<D>) {
         loop {
             match &handler.get_game().fog_mode {
                 FogMode::Random(to_bright_chance, to_dark_chance, turns_between_changes, forecast) => {
@@ -551,9 +553,9 @@ impl FogMode {
                         to_dark_chance.check(handler.rng())
                     };
                     if change {
-                        handler.add_event(events::Event::RandomFogForecast(!current_last, 1.max(**turns_between_changes).into()));
+                        handler.fog_forecast(!current_last, 1.max(**turns_between_changes as usize));
                     } else {
-                        handler.add_event(events::Event::RandomFogForecast(current_last, 1.into()));
+                        handler.fog_forecast(current_last, 1);
                     }
                 }
                 _ => break,
