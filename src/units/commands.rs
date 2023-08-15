@@ -3,7 +3,7 @@ use std::fmt;
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::game::events::*;
+use crate::game::commands::*;
 use crate::game::event_handler::*;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::map::direction::Direction;

@@ -3,6 +3,7 @@ use std::fmt;
 
 use crate::game::event_handler::EventHandler;
 use crate::game::game::Game;
+use crate::game::commands::*;
 use crate::map::direction::Direction;
 use crate::map::map::NeighborMode;
 use crate::map::point::Point;

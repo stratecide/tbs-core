@@ -17,7 +17,7 @@ use crate::units::UnitType;
 use crate::units::mercenary::MercenaryOption;
 use crate::units::movement::Path;
 
-use super::event_handler;
+use super::{event_handler, commands};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Game<D: Direction> {
@@ -316,8 +316,8 @@ fn import_game_base<D: Direction>(unzipper: &mut Unzipper, is_server: bool) -> R
 
 impl<D: Direction> game_interface::GameInterface for Game<D> {
     type Event = events::Event<D>;
-    type Command = events::Command<D>;
-    type CommandError = events::CommandError;
+    type Command = commands::Command<D>;
+    type CommandError = commands::CommandError;
     type ImportError = ZipperError;
 
     fn import_server(data: game_interface::ExportedGame) -> Result<Box<Self>, ZipperError> {
@@ -381,7 +381,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
         Ok(Box::new(game))
     }
 
-    fn handle_command<R: 'static + Fn() -> f32>(&mut self, command: events::Command<D>, random: R) -> Result<Events<Self>, events::CommandError> {
+    fn handle_command<R: 'static + Fn() -> f32>(&mut self, command: commands::Command<D>, random: R) -> Result<Events<Self>, commands::CommandError> {
         let mut handler = event_handler::EventHandler::new(self, Box::new(random));
         match command.convert(&mut handler) {
             Ok(()) => Ok(handler.accept()),

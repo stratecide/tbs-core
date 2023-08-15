@@ -1,6 +1,6 @@
 
 use crate::details::Detail;
-use crate::game::events::*;
+use crate::game::commands::*;
 use crate::map::point_map::MAX_AREA;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::player::*;

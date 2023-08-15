@@ -8,7 +8,7 @@ use zipper::*;
 use zipper_derive::*;
 
 use crate::commanders::Commander;
-use crate::game::events::CommandError;
+use crate::game::commands::CommandError;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::{Game, Vision};
