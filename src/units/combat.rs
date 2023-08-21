@@ -29,6 +29,7 @@ impl WeaponType {
             return None;
         }
         match (self, armor) {
+            (_, ArmorType::Unknown) => Some(0.1),
             (Self::MachineGun, ArmorType::Infantry) => Some(1.00),
             (Self::MachineGun, ArmorType::Light) => Some(0.15),
             (Self::MachineGun, ArmorType::Heavy) => Some(0.05),
@@ -122,4 +123,5 @@ pub enum ArmorType {
 	Plane,
     Submarine,
 	Structure,
+    Unknown, // units half-hidden in light fog
 }

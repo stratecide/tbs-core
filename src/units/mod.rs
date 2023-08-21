@@ -13,13 +13,14 @@ use zipper::*;
 use zipper::zipper_derive::*;
 
 use crate::commanders::Commander;
-use crate::game::events::*;
-use crate::game::game::Vision;
+use crate::game::fog::FogIntensity;
+use crate::game::fog::FogSetting;
 use crate::player::*;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::map::map::Map;
+use crate::terrain::Terrain;
 
 use self::chess::*;
 use self::structures::*;
@@ -31,12 +32,20 @@ use self::commands::*;
 
 pub type Hp = U<100>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum UnitVisibility {
+    Stealth,
+    Normal,
+    AlwaysVisible,
+}
+
 #[derive(Debug, PartialEq, Clone, Zippable)]
 #[zippable(bits = 3)]
 pub enum UnitType<D: Direction> {
     Normal(NormalUnit),
     Chess(ChessUnit<D>),
     Structure(Structure<D>),
+    Unknown, // half-hidden unit due to light fog
 }
 impl<D: Direction> UnitType<D> {
     pub fn normal(typ: NormalUnits, owner: Owner) -> Self {
@@ -58,6 +67,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.typ.name(),
             Self::Chess(unit) => unit.typ.name(),
             Self::Structure(unit) => unit.typ.name(),
+            Self::Unknown => "???",
         }
     }
     pub fn get_owner(&self) -> Option<Owner> {
@@ -65,6 +75,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => Some(unit.owner),
             Self::Chess(unit) => Some(unit.owner),
             Self::Structure(unit) => unit.get_owner(),
+            Self::Unknown => None,
         }
     }
     pub fn get_team(&self, game: &Game<D>) -> ClientPerspective {
@@ -75,6 +86,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.data.hp,
             Self::Chess(unit) => unit.hp,
             Self::Structure(unit) => unit.hp,
+            Self::Unknown => return 100,
         } as u8
     }
     pub fn set_hp(&mut self, hp: u8) {
@@ -83,6 +95,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.data.hp = hp,
             Self::Chess(unit) => unit.hp = hp,
             Self::Structure(unit) => unit.hp = hp,
+            Self::Unknown => (),
         }
     }
     pub fn is_exhausted(&self) -> bool {
@@ -90,6 +103,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.data.exhausted,
             Self::Chess(unit) => unit.exhausted,
             Self::Structure(struc) => struc.exhausted,
+            Self::Unknown => false,
         }
     }
     pub fn set_exhausted(&mut self, exhausted: bool) {
@@ -97,6 +111,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.data.exhausted = exhausted,
             Self::Chess(unit) => unit.exhausted = exhausted,
             Self::Structure(struc) => struc.exhausted = exhausted,
+            Self::Unknown => (),
         }
     }
 
@@ -119,22 +134,25 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.can_act(player),
             Self::Chess(unit) => return !unit.exhausted && unit.owner == player,
             Self::Structure(structure) => return structure.can_act(player),
+            Self::Unknown => false,
         }
     }
 
     pub fn get_boarded(&self) -> Vec<NormalUnit> {
         match self {
             Self::Normal(unit) => unit.get_boarded(),
-            Self::Chess(_) => vec![],
+            Self::Chess(_) => Vec::new(),
             Self::Structure(struc) => struc.get_boarded(),
+            Self::Unknown => Vec::new(),
         }
     }
 
     pub fn get_boarded_mut(&mut self) -> Vec<&mut UnitData> {
         match self {
             Self::Normal(unit) => unit.get_boarded_mut(),
-            Self::Chess(_) => vec![],
+            Self::Chess(_) => Vec::new(),
             Self::Structure(struc) => struc.get_boarded_mut(),
+            Self::Unknown => Vec::new(),
         }
     }
 
@@ -190,6 +208,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.shortest_path_to_attack(game, path_so_far, goal),
             Self::Chess(_) => self.shortest_path_to(game, path_so_far, goal),
             Self::Structure(_) => None,
+            Self::Unknown => None,
         }
     }
 
@@ -200,6 +219,7 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(structure) => {
                 structure.available_options(game)
             },
+            Self::Unknown => Vec::new(),
         }
     }
 
@@ -208,6 +228,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.get_armor(),
             Self::Chess(unit) => unit.typ.get_armor(),
             Self::Structure(unit) => unit.typ.get_armor(),
+            Self::Unknown => (ArmorType::Unknown, 1.0),
         }
     }
 
@@ -219,6 +240,7 @@ impl<D: Direction> UnitType<D> {
 
     pub fn can_be_moved_through(&self, by: &NormalUnit, game: &Game<D>) -> bool {
         match self {
+            Self::Unknown |
             Self::Normal(_) => by.has_stealth() && !game.is_foggy() || self.get_team(game) == by.get_team(game),
             Self::Chess(_) => false,
             Self::Structure(_) => false,
@@ -230,6 +252,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(_) => self.get_team(game) != game.get_team(Some(attacking_owner)),
             Self::Chess(_) => self.get_team(game) != game.get_team(Some(attacking_owner)),
             Self::Structure(_) => false,
+            Self::Unknown => true,
         }
     }
 
@@ -293,23 +316,35 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.vision_range(game, pos),
             Self::Chess(_) => 0,
             Self::Structure(_) => 0,
+            Self::Unknown => 0,
         }
     }
 
-    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, Vision> {
+    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, FogIntensity> {
         match self {
             Self::Chess(unit) => unit.get_vision(game, pos),
+            Self::Unknown => HashMap::new(),
             _ => {
                 let mut result = HashMap::new();
-                result.insert(pos, Vision::TrueSight);
-                let layers = game.get_map().range_in_layers(pos, self.vision_range(game, pos));
+                result.insert(pos, FogIntensity::TrueSight);
+                let vision_range = self.vision_range(game, pos);
+                let normal_range = match game.get_fog_setting() {
+                    FogSetting::ExtraDark(_) => 0,
+                    FogSetting::Fade1(_) => 1.max(vision_range) - 1,
+                    FogSetting::Fade2(_) => 2.max(vision_range) - 2,
+                    _ => vision_range
+                };
+                let layers = game.get_map().range_in_layers(pos, vision_range);
                 for (i, layer) in layers.into_iter().enumerate() {
                     for p in layer {
-                        if i < self.true_vision_range(game, pos) {
-                            result.insert(p, Vision::TrueSight);
-                        } else if !result.contains_key(&p) {
-                            result.insert(p, Vision::Normal);
-                        }
+                        let vision = if i < self.true_vision_range(game, pos) {
+                            FogIntensity::TrueSight
+                        } else if i < normal_range {
+                            FogIntensity::NormalVision
+                        } else {
+                            FogIntensity::Light
+                        };
+                        result.insert(p, vision.min(result.get(&p).cloned().unwrap_or(FogIntensity::Dark)));
                     }
                 }
                 result
@@ -322,6 +357,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(u) => u.attackable_positions(game, position, moved),
             Self::Chess(u) => u.attackable_positions(game, position, moved),
             Self::Structure(u) => u.attackable_positions(game, position, moved),
+            Self::Unknown => HashSet::new(),
         }
     }
 
@@ -330,6 +366,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.can_pull(),
             Self::Chess(_) => false,
             Self::Structure(_) => false,
+            Self::Unknown => false,
         }
     }
 
@@ -348,7 +385,8 @@ impl<D: Direction> UnitType<D> {
         self.get_team(game) != target.get_team(game) && match self {
             Self::Normal(unit) => unit.threatens(game, target, target_pos),
             Self::Chess(unit) => unit.threatens(game, target),
-            Self::Structure(_unit) => false,
+            Self::Structure(_unit) => false, // TODO: should return yes if in range
+            Self::Unknown => false,
         }
     }
 
@@ -359,28 +397,72 @@ impl<D: Direction> UnitType<D> {
         }
     }
 
-    pub fn fog_replacement(&self) -> Option<Self> {
+    pub fn fog_replacement(&self, terrain: &Terrain<D>, intensity: FogIntensity) -> Option<Self> {
         match self {
-            Self::Structure(struc) => struc.fog_replacement().and_then(|s| Some(Self::Structure(s))),
-            _ => None,
+            Self::Structure(struc) => struc.fog_replacement(intensity).and_then(|s| Some(Self::Structure(s))),
+            Self::Normal(_unit) => {
+                match intensity {
+                    FogIntensity::TrueSight => Some(self.clone()),
+                    FogIntensity::NormalVision => {
+                        if match self.visibility() {
+                            UnitVisibility::Stealth => false,
+                            UnitVisibility::Normal => !terrain.hides_unit(self),
+                            UnitVisibility::AlwaysVisible => true,
+                        } {
+                            Some(self.clone())
+                        } else {
+                            None
+                        }
+                    }
+                    FogIntensity::Light => {
+                        match self.visibility() {
+                            UnitVisibility::Stealth => None,
+                            UnitVisibility::Normal => {
+                                if terrain.hides_unit(self) {
+                                    None
+                                } else {
+                                    Some(UnitType::Unknown)
+                                }
+                            }
+                            UnitVisibility::AlwaysVisible => Some(self.clone()),
+                        }
+                    }
+                    FogIntensity::Dark => {
+                        // normal units don't have AlwaysVisible so far, but doesn't hurt
+                        if self.visibility() == UnitVisibility::AlwaysVisible {
+                            Some(self.clone())
+                        } else {
+                            None
+                        }
+                    }
+                }
+            }
+            Self::Chess(_unit) => {
+                match intensity {
+                    FogIntensity::NormalVision |
+                    FogIntensity::TrueSight => Some(self.clone()),
+                    FogIntensity::Light => Some(UnitType::Unknown),
+                    FogIntensity::Dark => None,
+                }
+            }
+            Self::Unknown => match intensity {
+                FogIntensity::Dark => None,
+                _ => Some(self.clone()),
+            }
         }
     }
-    pub fn has_stealth(&self) -> bool {
-        match self {
-            Self::Normal(unit) => unit.has_stealth(),
-            _ => false,
-        }
-    }
-    pub fn stealth_replacement(&self) -> Option<Self> {
+    pub fn visibility(&self) -> UnitVisibility {
         match self {
             Self::Normal(unit) => {
                 if unit.has_stealth() {
-                    None
+                    UnitVisibility::Stealth
                 } else {
-                    Some(self.clone())
+                    UnitVisibility::Normal
                 }
-            },
-            _ => Some(self.clone()),
+            }
+            Self::Chess(_) => UnitVisibility::Normal,
+            Self::Structure(_) => UnitVisibility::AlwaysVisible,
+            Self::Unknown => UnitVisibility::Normal,
         }
     }
 
@@ -389,6 +471,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.typ.value(),
             Self::Chess(unit) => unit.typ.value(),
             Self::Structure(structure) => structure.typ.value(),
+            Self::Unknown => 0,
         }
     }
 
@@ -397,6 +480,7 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(unit) => unit.value(game),
             Self::Chess(unit) => unit.typ.value(),
             Self::Structure(structure) => structure.typ.value(),
+            Self::Unknown => return 0,
         }) as usize * self.get_hp() as usize / 100
     }
 

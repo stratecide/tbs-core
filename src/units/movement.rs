@@ -11,7 +11,8 @@ use crate::commanders::Commander;
 use crate::game::commands::CommandError;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
-use crate::game::game::{Game, Vision};
+use crate::game::game::Game;
+use crate::game::fog::FogIntensity;
 use crate::map::map::*;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::terrain::Terrain;
@@ -645,6 +646,7 @@ where
 {
     if rounds > 0 {
         match unit {
+            UnitType::Unknown |
             UnitType::Structure(_) => return,
             UnitType::Normal(unit) if unit.changes_movement_type() => {
                 let (starting_movement_type, movement_points) = unit.get_movement(map.get_terrain(start).expect(&format!("Map doesn't have terrain at {:?}", start)));
@@ -984,7 +986,7 @@ pub fn movement_area_game<D: Direction>(game: &Game<D>, unit: &UnitType<D>, path
     result
 }
 
-pub fn search_path<D: Direction, F>(game: &Game<D>, unit: &UnitType<D>, path_so_far: &Path<D>, vision: Option<&HashMap<Point, Vision>>, callback: F) -> Option<Path<D>>
+pub fn search_path<D: Direction, F>(game: &Game<D>, unit: &UnitType<D>, path_so_far: &Path<D>, fog: Option<&HashMap<Point, FogIntensity>>, callback: F) -> Option<Path<D>>
 where F: Fn(&Path<D>, Point, bool) -> PathSearchFeedback {
     let mut result = None;
     movement_search_game(game, unit, path_so_far.start, 1, |_, path, destination| {
@@ -997,14 +999,10 @@ where F: Fn(&Path<D>, Point, bool) -> PathSearchFeedback {
         }
         let mut can_stop_here = true;
         let mut can_continue = true;
-        if let Some(blocking_unit) = game.get_map().get_unit(destination) {
-            let hidden_by_fog = vision.and_then(|vision| Some(match vision.get(&destination) {
-                None => true,
-                Some(Vision::Normal) => blocking_unit.has_stealth() || game.get_map().get_terrain(destination).unwrap().hides_unit(&blocking_unit),
-                Some(Vision::TrueSight) => false,
-            })).unwrap_or(false);
-            let is_self = path_so_far.start == destination && blocking_unit == unit;
-            if !hidden_by_fog && !is_self {
+        if let Some(blocking_unit) = game.get_map().get_unit(destination)
+        .and_then(|u| u.fog_replacement(game.get_map().get_terrain(destination).unwrap(), fog.and_then(|fog| fog.get(&destination)).cloned().unwrap_or(FogIntensity::TrueSight))) {
+            let is_self = path_so_far.start == destination && blocking_unit == *unit;
+            if !is_self {
                 match unit {
                     UnitType::Normal(unit) => {
                         if !blocking_unit.can_be_moved_through(unit, game) {

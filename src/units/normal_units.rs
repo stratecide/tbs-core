@@ -1,6 +1,7 @@
 
 use crate::details::Detail;
 use crate::game::commands::*;
+use crate::game::fog::FogSetting;
 use crate::map::point_map::MAX_AREA;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::player::*;
@@ -131,8 +132,17 @@ impl NormalUnit {
         (armor, defense)
     }
 
-    pub fn vision_range<D: Direction>(&self, game: &Game<D>, pos: Point) -> usize {
-        self.typ.vision_range(game, pos)
+    pub fn vision_range<D: Direction>(&self, game: &Game<D>, _pos: Point) -> usize {
+        let mut range = self.typ.vision_range();
+        match game.get_fog_setting() {
+            FogSetting::None => (),
+            FogSetting::Light(bonus) |
+            FogSetting::Sharp(bonus) |
+            FogSetting::Fade1(bonus) |
+            FogSetting::Fade2(bonus) |
+            FogSetting::ExtraDark(bonus) => range += bonus as usize,
+        }
+        range
     }
 
     pub fn get_weapons(&self) -> Vec<(WeaponType, f32)> {
@@ -965,7 +975,7 @@ impl NormalUnits {
         (typ, multiplier)
     }
 
-    pub fn vision_range<D: Direction>(&self, _game: &Game<D>, _pos: Point) -> usize {
+    pub fn vision_range(&self) -> usize {
         match self {
             Self::Sniper => 3,
             Self::Artillery => 1,
@@ -1040,13 +1050,12 @@ impl NormalUnits {
 }
 
 pub fn check_normal_unit_can_act<D: Direction>(game: &Game<D>, at: Point, unload_index: Option<UnloadIndex>) -> Result<(), CommandError> {
-    if !game.has_vision_at(ClientPerspective::Team(*game.current_player().team as u8), at) {
-        return Err(CommandError::NoVision);
-    }
-    let unit = game.get_map().get_unit(at).ok_or(CommandError::MissingUnit)?;
+    let terrain = game.get_map().get_terrain(at).ok_or(CommandError::InvalidPoint(at))?;
+    let fog_intensity = game.get_fog_at(ClientPerspective::Team(*game.current_player().team as u8), at);
+    let unit = game.get_map().get_unit(at).and_then(|u| u.fog_replacement(terrain, fog_intensity)).ok_or(CommandError::MissingUnit)?;
     let boarded = unit.get_boarded();
-    let unit: &NormalUnit = if let Some(index) = unload_index {
-        boarded.get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?
+    let unit: NormalUnit = if let Some(index) = unload_index {
+        boarded.get(*index as usize).ok_or(CommandError::MissingBoardedUnit)?.clone()
     } else {
         match unit {
             UnitType::Normal(unit) => unit,

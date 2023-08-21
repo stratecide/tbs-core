@@ -1,7 +1,7 @@
 use crate::commanders::*;
 use crate::player::*;
 
-use super::game::FogMode;
+use super::fog::FogMode;
 use interfaces::map_interface::GameSettingsInterface;
 use zipper::*;
 use zipper::{zipper_derive::*, LVec};

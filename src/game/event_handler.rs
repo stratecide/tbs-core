@@ -1,27 +1,24 @@
 use std::collections::{HashMap, HashSet};
 
-use interfaces::game_interface::{CommandInterface, EventInterface, Events, Perspective as IPerspective, ClientPerspective, GameInterface};
-use zipper::*;
-use zipper::zipper_derive::*;
+use interfaces::game_interface::{Events, Perspective as IPerspective, ClientPerspective};
 
-use crate::commanders::{MAX_CHARGE, CommanderPower};
-use crate::map::map::{Map, FieldData};
+use crate::map::map::Map;
 use crate::map::point::Point;
-use crate::map::point_map::{self, MAX_AREA};
 use crate::units::combat::WeaponType;
-use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, TransportedUnit, UnitData, DroneId, UnitActionStatus};
-use crate::units::structures::{LASER_CANNON_RANGE, Structure, Structures};
-use crate::{player::*, details};
+use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, UnitData, DroneId, UnitActionStatus};
+use crate::units::structures::{Structure, Structures};
+use crate::player::*;
 use crate::terrain::{Terrain, BuiltThisTurn, Realty, CaptureProgress};
 use crate::details::Detail;
 use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::*;
-use crate::units::mercenary::{Mercenaries, MaybeMercenary};
+use crate::game::fog::*;
+use crate::units::mercenary::MaybeMercenary;
 use crate::units::chess::*;
-use crate::units::commands::{UnitCommand, UnloadIndex};
-use crate::units::movement::{Path, PathStep, PathStepExt, MovementType};
-use super::events::{Event, fog_change_index, Effect};
+use crate::units::commands::UnloadIndex;
+use crate::units::movement::{Path, MovementType};
+use super::events::{Event, Effect};
 
 pub struct EventHandler<'a, D: Direction> {
     game: &'a mut Game<D>,
@@ -54,18 +51,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn next_turn(&mut self) {
         self.add_event(Event::NextTurn);
-        // update fog manually if it's random
-        match self.get_game().get_fog_mode() {
-            FogMode::Random(_, _, _, forecast) => {
-                self.add_event(Event::RandomFogNextTurn(forecast[0]));
-                FogMode::forecast(self);
-            }
-            _ => (),
-        }
     }
 
-    pub fn start_turn(&mut self, was_foggy: bool) {
+    pub fn start_turn(&mut self, fog_before: Option<HashMap<Point, FogIntensity>>) {
         // hide / reveal player funds if fog started / ended
+        let was_foggy = fog_before.is_some();
         if was_foggy != self.get_game().is_foggy() {
             let players: Vec<Owner> = self.game.players.iter().map(|player| player.owner_id).collect();
             if was_foggy {
@@ -131,7 +121,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
         // has to be recalculated before structures, because the effects of some structures on
         // other players should maybe not be visible
-        self.recalculate_fog(false);
+        //self.recalculate_fog(false);
 
         let income = (*self.game.current_player().income as isize * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32;
         if income != 0 {
@@ -147,43 +137,26 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
 
         // structures may have destroyed some units
-        self.recalculate_fog(false);
+        self.recalculate_fog();
+        let team = self.game.current_player().team;
+        let fog = self.game.recalculate_fog(Some(team)).into_iter()
+        .map(|(p, intensity)| (p, intensity.min(fog_before.as_ref().and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight))))
+        .collect();
+        self.change_fog(Some(team), fog);
     }
 
-    pub fn recalculate_fog(&mut self, keep_current_team: bool) {
+    pub fn recalculate_fog(&mut self) {
         let mut perspectives: HashSet<Perspective> = self.game.get_teams().into_iter().map(|team| Some(team)).collect();
-        if keep_current_team {
-            perspectives.remove(&Some(self.game.current_player().team));
-        }
+        perspectives.remove(&Some(self.game.current_player().team));
         perspectives.insert(None);
         for team in perspectives {
-            let perspective = to_client_perspective(&team);
-            let fog = self.game.recalculate_fog(team);
-            let mut changes = Vec::new();
-            for p in self.get_map().all_points() {
-                if let Some(index) = fog_change_index(self.game.get_vision(perspective, p), fog.get(&p).cloned()) {
-                    changes.push((p, index));
-                }
-            }
-            if changes.len() > 0 {
-                self.change_fog(team, changes.try_into().unwrap());
-            }
+            self.recalculate_fog_for(team);
         }
     }
 
-    // TODO: de-duplicate
-    pub fn recalculate_fog_for(&mut self, team: Team) {
-        let perspective = to_client_perspective(&Some(team));
-        let fog = self.game.recalculate_fog(Some(team));
-        let mut changes = Vec::new();
-        for p in self.get_map().all_points() {
-            if let Some(index) = fog_change_index(self.game.get_vision(perspective, p), fog.get(&p).cloned()) {
-                changes.push((p, index));
-            }
-        }
-        if changes.len() > 0 {
-            self.change_fog(Some(team), changes.try_into().unwrap());
-        }
+    pub fn recalculate_fog_for(&mut self, team: Option<Team>) {
+        let fog = self.game.recalculate_fog(team);
+        self.change_fog(team, fog);
     }
 
     pub fn rng(&self) -> f32 {
@@ -202,12 +175,15 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.events.get_mut(&IPerspective::Server).unwrap().push(event);
     }
 
-    pub fn change_fog(&mut self, team: Perspective, changes: LVec<(Point, U<2>), {point_map::MAX_AREA}>) {
-        self.add_event(Event::PureFogChange(team, changes));
-    }
-
-    pub fn fog_forecast(&mut self, value: bool, duration: usize) {
-        self.add_event(Event::RandomFogForecast(value, duration.into()));
+    pub fn change_fog(&mut self, team: Perspective, changes: HashMap<Point, FogIntensity>) {
+        let perspective = to_client_perspective(&team);
+        let changes: Vec<(Point, FogIntensity, FogIntensity)> = changes.into_iter()
+        .map(|(p, intensity)| (p, self.game.get_fog_at(perspective, p), intensity))
+        .filter(|(_, before, after)| before != after)
+        .collect();
+        if changes.len() > 0 {
+            self.add_event(Event::PureFogChange(team, changes.try_into().unwrap()));
+        }
     }
 
     pub fn commander_charge_add(&mut self, owner: Owner, change: u32) {
@@ -357,17 +333,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn unit_creation(&mut self, position: Point, unit: UnitType<D>) {
         if let ClientPerspective::Team(team) = unit.get_team(self.get_game()) {
             if self.get_game().is_foggy() && self.get_game().is_team_alive(&team.into()) {
-                let unit_vision = unit.get_vision(self.get_game(), position);
-                let perspective = to_client_perspective(&Some(team.into()));
-                let vision_changes: Vec<(Point, U<2>)> = unit_vision.iter()
-                .filter_map(|(p, v)| {
-                    fog_change_index(self.get_game().get_vision(perspective, *p), Some(*v))
-                        .and_then(|i| Some((*p, i)))
-                })
+                let changes = unit.get_vision(self.get_game(), position).into_iter()
+                .filter(|(p, intensity)| *intensity < self.get_game().get_fog_at(ClientPerspective::Team(team), *p))
                 .collect();
-                if vision_changes.len() > 0 {
-                    self.change_fog(Some(team.into()), vision_changes.try_into().unwrap());
-                }
+                self.change_fog(Some(team.into()), changes);
             }
         }
         self.add_event(Event::UnitCreation(position, unit));
@@ -410,22 +379,15 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 };
                 for p in points {
                     for (p, vision) in unit.get_vision(self.get_game(), p) {
-                        if vision == Vision::TrueSight && !self.get_game().has_true_sight_at(perspective, p)
-                        || !self.get_game().has_vision_at(perspective, p) && !vision_changes.contains_key(&p) {
+                        let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
+                        if vision < self.get_game().get_fog_at(perspective, p) {
                             vision_changes.insert(p, vision);
                         }
                     }
                 }
-                let vision_changes: Vec<(Point, U<2>)> = vision_changes.into_iter()
-                .filter_map(|(p, v)| 
-                     fog_change_index(self.get_game().get_vision(perspective, p), Some(v))
-                     .and_then(|vi| Some((p, vi))))
-                .collect();
-                if vision_changes.len() > 0 {
-                    self.change_fog(Some(player_team), vision_changes.try_into().unwrap());
-                }
+                self.change_fog(Some(player_team), vision_changes);
             } else if let ClientPerspective::Team(team) = unit_team {
-                self.recalculate_fog_for(team.into());
+                self.recalculate_fog_for(Some(team.into()));
             }
         }
         // remove details the destroyed by the unit moving over them

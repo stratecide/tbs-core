@@ -24,7 +24,7 @@ pub struct ChessCommand<D: Direction> {
     pub castle: bool,
 }
 impl<D: Direction> ChessCommand<D> {
-    fn check_path(game: &Game<D>, unit: &ChessUnit<D>, path_taken: &Path<D>, vision: Option<&HashMap<Point, Vision>>) -> bool {
+    fn check_path(game: &Game<D>, unit: &ChessUnit<D>, path_taken: &Path<D>, vision: Option<&HashMap<Point, FogIntensity>>) -> bool {
         search_path(game, &unit.as_unit(), &path_taken, vision, |path, _p, can_stop_here| {
             if can_stop_here && path == path_taken {
                 return PathSearchFeedback::Found;
@@ -120,7 +120,7 @@ impl<D: Direction> ChessCommand<D> {
         }
         handler.unit_exhaust(end);
         if recalculate_fog {
-            handler.recalculate_fog(true);
+            handler.recalculate_fog();
         }
         Ok(path_taken.start)
     }
@@ -222,7 +222,7 @@ impl<D: Direction> ChessUnit<D> {
                 let king = game.get_map().get_unit(dp.point).unwrap();
                 let team = match game.get_team(Some(owner)) {
                     ClientPerspective::Neutral => panic!("Game with chess piece that doesn't belong to a team"),
-                    ClientPerspective::Team(team) => team.into(),
+                    ClientPerspective::Team(team) => ClientPerspective::Team(team),
                 };
                 if unit.typ == ChessUnits::King(false) && unit.owner == owner
                     && game.find_visible_threats(dp.point, &king, team).is_empty()
@@ -269,17 +269,17 @@ impl<D: Direction> ChessUnit<D> {
         }
     }
 
-    fn add_path_to_vision(&self, game: &Game<D>, start: Point, path: &[PathStep<D>], end: Point, vision: &mut HashMap<Point, Vision>) {
+    fn add_path_to_vision(&self, game: &Game<D>, start: Point, path: &[PathStep<D>], end: Point, vision: &mut HashMap<Point, FogIntensity>) {
         if path.len() <= self.true_vision_range(game, start) {
-            vision.insert(end, Vision::TrueSight);
+            vision.insert(end, FogIntensity::TrueSight);
         } else {
-            vision.insert(end, Vision::Normal);
+            vision.insert(end, FogIntensity::NormalVision);
         }
     }
 
-    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, Vision> {
+    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, FogIntensity> {
         let mut result = HashMap::new();
-        result.insert(pos, Vision::TrueSight);
+        result.insert(pos, FogIntensity::TrueSight);
         match self.typ {
             ChessUnits::Rook(_) => {
                 for d in D::list() {
@@ -314,10 +314,10 @@ impl<D: Direction> ChessUnit<D> {
                 }
                 for d in directions.clone() {
                     if let Some(dp) = game.get_map().get_neighbor(pos, d) {
-                        result.insert(dp.point, Vision::TrueSight);
+                        result.insert(dp.point, FogIntensity::TrueSight);
                         if game.get_map().get_terrain(pos) == Some(&Terrain::ChessPawnTile) {
                             if let Some(dp) = game.get_map().get_neighbor(dp.point, dp.direction) {
-                                result.insert(dp.point, Vision::Normal);
+                                result.insert(dp.point, FogIntensity::NormalVision);
                             }
                         }
                     }
@@ -327,7 +327,7 @@ impl<D: Direction> ChessUnit<D> {
                 for d in D::list() {
                     for turn_left in vec![true, false] {
                         if let Some(dp) = get_knight_neighbor(game.get_map(), pos, d, turn_left) {
-                            result.insert(dp.point, Vision::TrueSight);
+                            result.insert(dp.point, FogIntensity::TrueSight);
                         }
                     }
                 }
@@ -354,11 +354,11 @@ impl<D: Direction> ChessUnit<D> {
             }
             ChessUnits::King(_) => {
                 for p in game.get_map().get_neighbors(pos, NeighborMode::FollowPipes) {
-                    result.insert(p.point, Vision::TrueSight);
+                    result.insert(p.point, FogIntensity::TrueSight);
                 }
                 for d in D::list() {
                     if let Some(dp) = get_diagonal_neighbor(game.get_map(), pos, d) {
-                        result.insert(dp.point, Vision::TrueSight);
+                        result.insert(dp.point, FogIntensity::TrueSight);
                     }
                 }
             }
@@ -367,11 +367,10 @@ impl<D: Direction> ChessUnit<D> {
     }
 }
 
-pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: Point) -> Result<&ChessUnit<D>, CommandError> {
-    if !game.has_vision_at(ClientPerspective::Team(*game.current_player().team as u8), at) {
-        return Err(CommandError::NoVision);
-    }
-    let unit = match game.get_map().get_unit(at).ok_or(CommandError::MissingUnit)? {
+pub fn check_chess_unit_can_act<D: Direction>(game: &Game<D>, at: Point) -> Result<ChessUnit<D>, CommandError> {
+    let terrain = game.get_map().get_terrain(at).ok_or(CommandError::InvalidPoint(at))?;
+    let fog_intensity = game.get_fog_at(ClientPerspective::Team(*game.current_player().team as u8), at);
+    let unit = match game.get_map().get_unit(at).and_then(|u| u.fog_replacement(terrain, fog_intensity)).ok_or(CommandError::MissingUnit)? {
         UnitType::Chess(unit) => unit,
         _ => return Err(CommandError::UnitTypeWrong),
     };
@@ -620,7 +619,7 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                 }
                 if let ClientPerspective::Team(team) = team {
                     if let Some(unit) = game.get_map().get_unit(next_dp.point) {
-                        if !ignore_unseen || game.has_vision_at(ClientPerspective::Team(team), next_dp.point) {
+                        if !ignore_unseen || game.can_see_unit_at(ClientPerspective::Team(team), next_dp.point, unit, true) {
                             if unit.killable_by_chess(team.into(), game) {
                                 callback(next_dp.point, &steps);
                             }
@@ -667,7 +666,7 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                 }
                 if let ClientPerspective::Team(team) = team {
                     if let Some(unit) = game.get_map().get_unit(next_dp.point) {
-                        if !ignore_unseen || game.has_vision_at(ClientPerspective::Team(team), next_dp.point) {
+                        if !ignore_unseen || game.can_see_unit_at(ClientPerspective::Team(team), next_dp.point, unit, true) {
                             if unit.killable_by_chess(team.into(), game) {
                                 callback(next_dp.point, &steps);
                             }

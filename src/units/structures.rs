@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use crate::game::event_handler::EventHandler;
+use crate::game::fog::FogIntensity;
 use crate::game::game::Game;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
@@ -47,16 +48,23 @@ impl<D: Direction> Structure<D> {
         }
     }
 
-    pub fn fog_replacement(&self) -> Option<Self> {
-        match &self.typ {
-            Structures::DroneTower(Some((owner, _, drone_id))) => {
-                Some(Self {
-                    typ: Structures::DroneTower(Some((*owner, LVec::new(), *drone_id))),
-                    hp: self.hp,
-                    exhausted: self.exhausted,
-                })
+    pub fn fog_replacement(&self, intensity: FogIntensity) -> Option<Self> {
+        match intensity {
+            FogIntensity::NormalVision |
+            FogIntensity::TrueSight => Some(self.clone()),
+            FogIntensity::Dark |
+            FogIntensity::Light => {
+                match &self.typ {
+                    Structures::DroneTower(Some((owner, _, drone_id))) => {
+                        Some(Self {
+                            typ: Structures::DroneTower(Some((*owner, LVec::new(), *drone_id))),
+                            hp: self.hp,
+                            exhausted: self.exhausted,
+                        })
+                    }
+                    _ => Some(self.clone()),
+                }
             }
-            _ => Some(self.clone()),
         }
     }
 

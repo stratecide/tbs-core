@@ -1,4 +1,4 @@
-use interfaces::game_interface::CommandInterface;
+use interfaces::game_interface::{CommandInterface, GameInterface};
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -13,6 +13,7 @@ use crate::units::*;
 use crate::map::direction::Direction;
 use crate::units::commands::UnitCommand;
 use super::event_handler::EventHandler;
+use super::fog::FogIntensity;
 
 #[derive(Debug, Zippable)]
 #[zippable(bits = 8)]
@@ -83,7 +84,12 @@ impl<D: Direction> Command<D> {
                     }
                 }
 
-                let was_foggy = handler.get_game().is_foggy();
+                let fog_before = if handler.get_game().is_foggy() {
+                    let next_player = handler.get_game().players.get((handler.get_game().current_turn() + 1) % handler.get_game().players.len()).unwrap();
+                    Some(handler.get_game().recalculate_fog(Some(next_player.team)))
+                } else {
+                    None
+                };
 
                 handler.next_turn();
 
@@ -130,14 +136,15 @@ impl<D: Direction> Command<D> {
                 
                 handler.get_game().current_player().commander.clone().start_turn(handler, handler.get_game().current_player().owner_id);
 
-                handler.start_turn(was_foggy);
+                handler.start_turn(fog_before);
 
                 Ok(())
             }
             Self::UnitCommand(command) => command.convert(handler),
             Self::BuyUnit(pos, index) => {
                 let team = Some(handler.get_game().current_player().team);
-                if !handler.get_game().has_vision_at(to_client_perspective(&team), pos) {
+                if handler.get_game().get_fog_at(to_client_perspective(&team), pos) != FogIntensity::TrueSight {
+                    // factories and bubbles provide true-sight
                     Err(CommandError::NoVision)
                 } else if let Some(_) = handler.get_map().get_unit(pos) {
                     Err(CommandError::Blocked(pos))

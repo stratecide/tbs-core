@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::{player::*, map::{direction::Direction, point::Point}, game::game::{Game, Vision}, units::structures::{Structures, Structure}};
+use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::Game, fog::FogIntensity}, units::structures::{Structures, Structure}};
 use crate::game::event_handler::EventHandler;
 use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
@@ -229,6 +229,7 @@ impl<D: Direction> Terrain<D> {
                 MovementType::Chess
             }
             UnitType::Structure(_) => return 0.0,
+            UnitType::Unknown => return 0.0,
         };
         match (self, movement_type) {
             (Self::Grass, land_units!()) => 0.1,
@@ -270,24 +271,25 @@ impl<D: Direction> Terrain<D> {
                 movement_type != MovementType::Plane
                 && movement_type != MovementType::Heli
             }
+            UnitType::Unknown => false,
         }
     }
 
-    pub fn get_vision(&self, game: &Game<D>, pos: Point, team: Perspective) -> HashMap<Point, Vision> {
+    pub fn get_vision(&self, game: &Game<D>, pos: Point, team: Perspective) -> HashMap<Point, FogIntensity> {
         let mut result = HashMap::new();
         match self {
             Terrain::Flame => {
                 for layer in game.get_map().range_in_layers(pos, 2) {
                     for p in layer {
-                        result.insert(p, Vision::Normal);
+                        result.insert(p, FogIntensity::NormalVision);
                     }
                 }
-                result.insert(pos, Vision::TrueSight);
+                result.insert(pos, FogIntensity::TrueSight);
             }
             Terrain::Realty(_, owner, _) => {
                 if let Some(player) = owner.and_then(|owner| game.get_owning_player(owner)) {
                     if Some(player.team) == team {
-                        result.insert(pos, Vision::TrueSight);
+                        result.insert(pos, FogIntensity::TrueSight);
                     }
                 }
             }
@@ -296,10 +298,17 @@ impl<D: Direction> Terrain<D> {
         result
     }
 
-    pub fn fog_replacement(&self) -> Terrain<D> {
-        match self {
-            Terrain::Realty(realty, _, _) => Terrain::Realty(realty.clone(), None, CaptureProgress::None),
-            _ => self.clone(),
+    pub fn fog_replacement(&self, intensity: FogIntensity) -> Terrain<D> {
+        match intensity {
+            FogIntensity::NormalVision |
+            FogIntensity::TrueSight => self.clone(),
+            FogIntensity::Light |
+            FogIntensity::Dark => {
+                match self {
+                    Terrain::Realty(realty, _, _) => Terrain::Realty(realty.clone(), None, CaptureProgress::None),
+                    _ => self.clone(),
+                }
+            }
         }
     }
 }

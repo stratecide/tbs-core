@@ -1,7 +1,12 @@
+use std::collections::HashMap;
+
+use crate::game::fog::FogIntensity;
+use crate::game::game::Game;
+use crate::map::direction::Direction;
+use crate::map::point::Point;
 use crate::player::*;
 use crate::units::normal_units::NormalUnits;
 
-use zipper::*;
 use zipper::zipper_derive::*;
 
 pub const MAX_STACK_SIZE: u32 = 4;
@@ -18,18 +23,34 @@ pub enum Detail {
     Skull(Owner, NormalUnits),
 }
 impl Detail {
-    pub fn fog_replacement(&self) -> Option<Self> {
+    pub fn get_vision<D: Direction>(&self, game: &Game<D>, pos: Point, team: Perspective) -> HashMap<Point, FogIntensity> {
+        let mut result = HashMap::new();
         match self {
-            Self::Coins1 | Self::Coins2 | Self::Coins4 => {
+            Self::AirportBubble(owner) |
+            Self::FactoryBubble(owner) |
+            Self::PortBubble(owner) => {
+                if let Some(player) = game.get_owning_player(*owner) {
+                    if Some(player.team) == team {
+                        result.insert(pos, FogIntensity::TrueSight);
+                    }
+                }
+            }
+            _ => ()
+        }
+        result
+    }
+
+    pub fn fog_replacement(&self, intensity: FogIntensity) -> Option<Self> {
+        match intensity {
+            FogIntensity::NormalVision |
+            FogIntensity::TrueSight => {
                 Some(self.clone())
             }
-            Self::AirportBubble(_) |
-            Self::PortBubble(_) |
-            Self::FactoryBubble(_) => {
-                Some(self.clone())
-            }
-            Self::Skull(_, _) => {
-                Some(self.clone())
+            FogIntensity::Light |
+            FogIntensity::Dark => {
+                match self {
+                    _ => Some(self.clone())
+                }
             }
         }
     }
@@ -64,9 +85,3 @@ impl Detail {
     }
 }
 
-pub fn details_fog_replacement<const S: u32>(dets: &LVec<Detail, S>) -> LVec<Detail, S> {
-    let dets: Vec<Detail> = dets.into_iter().flat_map(|det| {
-        det.fog_replacement()
-    }).collect();
-    LVec::try_from(dets).unwrap()
-}

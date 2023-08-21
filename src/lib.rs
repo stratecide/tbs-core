@@ -15,6 +15,7 @@ mod tests {
     use interfaces::game_interface::*;
     use interfaces::map_interface::*;
     use crate::game::game::*;
+    use crate::game::fog::*;
     use crate::map::direction::*;
     use crate::map::map::Map;
     use crate::map::wrapping_map::WrappingMapBuilder;
@@ -51,7 +52,7 @@ mod tests {
         map.set_unit(Point::new(6, 2), Some(UnitType::normal(NormalUnits::Hovercraft(true), 1.into())));
 
         let mut settings = map.settings().unwrap();
-        settings.fog_mode = FogMode::Always;
+        settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
         let (server, events) = crate::game::game::Game::new_server(map.clone(), &settings, || 0.0);
         let exported_server = server.export();
         
@@ -70,6 +71,8 @@ mod tests {
                 _ => None,
             };
             let client_imported = *Game::<Direction4>::import_client(exported_server.public.clone(), hidden).unwrap();
+            assert_eq!(client.get_map(), client_imported.get_map());
+            assert_eq!(client.get_fog(), client_imported.get_fog());
             assert_eq!(client, client_imported);
         }
     }

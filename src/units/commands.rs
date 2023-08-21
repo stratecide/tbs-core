@@ -107,7 +107,7 @@ impl<D: Direction> CommonMovement<D> {
         }
     }
 
-    fn check_path(game: &Game<D>, unit: &NormalUnit, path_taken: &Path<D>, vision: Option<&HashMap<Point, Vision>>, board_at_the_end: bool) -> bool {
+    fn check_path(game: &Game<D>, unit: &NormalUnit, path_taken: &Path<D>, vision: Option<&HashMap<Point, FogIntensity>>, board_at_the_end: bool) -> bool {
         search_path(game, &unit.as_unit(), &path_taken, vision, |path, p, can_stop_here| {
             if path == path_taken && board_at_the_end {
                 if let Some(transporter) = game.get_map().get_unit(p) {
@@ -190,23 +190,17 @@ impl<D: Direction> UnitCommand<D> {
                 let unit = cm.get_unit(handler.get_map())?;
                 match &target {
                     AttackInfo::Point(target) => {
-                        if !handler.get_map().is_point_valid(*target) {
-                            return Err(CommandError::InvalidPoint(target.clone()));
-                        }
+                        let terrain = handler.get_map().get_terrain(*target).ok_or(CommandError::InvalidPoint(*target))?;
                         match unit.get_attack_type() {
                             AttackType::Straight(_, _) => return Err(CommandError::InvalidTarget),
                             _ => {}
                         }
-                        if !handler.get_game().has_vision_at(ClientPerspective::Team(*team as u8), *target) {
-                            handler.get_map().get_unit(*target)
-                            .and_then(|u| u.fog_replacement())
-                            .ok_or(CommandError::NoVision)?;
-                        }
+                        let fog_intensity = handler.get_game().get_fog_at(ClientPerspective::Team(*team as u8), *target);
+                        let target_unit = handler.get_map().get_unit(*target).and_then(|u| u.fog_replacement(terrain, fog_intensity)).ok_or(CommandError::MissingUnit)?;
                         if !unit.attackable_positions(handler.get_game(), intended_end, cm.path.steps.len() > 0).contains(target) {
                             return Err(CommandError::InvalidTarget);
                         }
-                        let target_unit = handler.get_map().get_unit(*target).ok_or(CommandError::MissingUnit)?;
-                        if !unit.can_attack_unit(handler.get_game(), target_unit, *target) {
+                        if !unit.can_attack_unit(handler.get_game(), &target_unit, *target) {
                             return Err(CommandError::InvalidTarget);
                         }
                     }
@@ -221,7 +215,7 @@ impl<D: Direction> UnitCommand<D> {
                     }
                 }
                 if let Some(end) = cm.apply(handler, false, true)? {
-                    handle_attack(handler, &cm.path, &target)?;
+                    handle_attack(handler, &unit.as_unit(), &cm.path, &target)?;
                     if handler.get_game().get_map().get_unit(end).is_some() {
                         // ensured that the unit didn't die from counter attack
                         handler.unit_exhaust(end);
@@ -236,38 +230,26 @@ impl<D: Direction> UnitCommand<D> {
                 if !unit.can_pull() {
                     return Err(CommandError::UnitCannotPull);
                 }
-                let (min_dist, max_dist) = match unit.get_attack_type() {
-                    AttackType::Straight(min_dist, max_dist) => (min_dist, max_dist),
-                    _ => {
-                        return Err(CommandError::UnitCannotPull);
-                    }
-                };
-                let mut pull_path = vec![];
-                let mut dp = OrientedPoint::new(intended_end.clone(), false, dir);
-                for i in 0..max_dist {
-                    if let Some(next_dp) = handler.get_map().get_neighbor(dp.point, dp.direction) {
-                        dp = next_dp;
-                        if let Some(unit) = handler.get_map().get_unit(dp.point).cloned() {
-                            if let Some(end) = cm.apply(handler, false, false)? {
-                                if handler.get_game().has_vision_at(ClientPerspective::Team(*team as u8), dp.point) {
-                                    if i < min_dist - 1 || !unit.can_be_pulled(handler.get_map(), dp.point) {
-                                        // can't pull if the target is already next to the unit
-                                        return Err(CommandError::InvalidTarget);
-                                    } else {
-                                        // found a valid target
-                                        let pull_path = Path {start: dp.point, steps: pull_path.try_into().unwrap()};
-                                        handler.unit_path(None, &pull_path, false, true);
-                                    }
-                                } else {
-                                    // the pull is blocked by a unit that isn't visible to the player
-                                    // maybe it should still be pulled?
-                                }
-                                handler.unit_exhaust(end);
+                if let Some(end) = cm.apply(handler, false, true)? {
+                    let mut pull_path = vec![];
+                    let mut dp = OrientedPoint::new(intended_end.clone(), false, dir);
+                    for _ in 0..2 {
+                        if let Some(next_dp) = handler.get_map().get_neighbor(dp.point, dp.direction) {
+                            dp = next_dp;
+                            if handler.get_map().get_unit(dp.point).is_some() {
+                                break;
                             }
-                            break;
+                            pull_path.insert(0, PathStep::Dir(dp.direction.opposite_direction()));
                         }
-                        pull_path.insert(0, PathStep::Dir(dp.direction.opposite_direction()));
                     }
+                    if let Some(target) = handler.get_map().get_unit(dp.point).cloned() {
+                        let terrain = handler.get_map().get_terrain(dp.point).unwrap();
+                        let fog_intensity = handler.get_game().get_fog_at(ClientPerspective::Team(*team as u8), dp.point);
+                        if pull_path.len() == 2 && handler.get_game().can_see_unit_at(ClientPerspective::Team(*team as u8), dp.point, &target, true) && target.can_be_pulled(handler.get_map(), dp.point) {
+                            handler.unit_path(None, &Path {start: dp.point, steps: pull_path.try_into().unwrap()}, false, true);
+                        }
+                    }
+                    handler.unit_exhaust(end);
                 }
                 Some(cm.path.start)
             }
@@ -378,11 +360,10 @@ impl<D: Direction> UnitCommand<D> {
             Self::MoveAboard(cm) => {
                 let intended_end = cm.intended_end(handler.get_map())?;
                 cm.validate_input(handler.get_game(), true)?;
-                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team as u8), intended_end) {
-                    return Err(CommandError::NoVision);
-                }
+                let terrain = handler.get_map().get_terrain(intended_end).unwrap();
+                let fog_intensity = handler.get_game().get_fog_at(ClientPerspective::Team(*team as u8), intended_end);
+                let transporter = handler.get_map().get_unit(intended_end).and_then(|u| u.fog_replacement(terrain, fog_intensity)).ok_or(CommandError::MissingUnit)?;
                 let unit = cm.get_unit(handler.get_map())?;
-                let transporter = handler.get_map().get_unit(intended_end).ok_or(CommandError::MissingUnit)?;
                 if !transporter.boardable_by(&unit) {
                     return Err(CommandError::UnitCannotBeBoarded);
                 }
@@ -399,10 +380,9 @@ impl<D: Direction> UnitCommand<D> {
                 if !handler.get_map().is_point_valid(pos) {
                     return Err(CommandError::InvalidPoint(pos));
                 }
-                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team as u8), pos) {
-                    return Err(CommandError::NoVision);
-                }
-                match handler.get_map().get_unit(pos) {
+                let terrain = handler.get_map().get_terrain(pos).unwrap();
+                let fog_intensity = handler.get_game().get_fog_at(ClientPerspective::Team(*team as u8), pos);
+                match handler.get_map().get_unit(pos).and_then(|u| u.fog_replacement(terrain, fog_intensity)) {
                     Some(UnitType::Normal(unit)) => {
                         if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
                             if mercenary.can_use_simple_power(handler.get_game(), pos) {
@@ -416,6 +396,7 @@ impl<D: Direction> UnitCommand<D> {
                             return Err(CommandError::PowerNotUsable);
                         }
                     },
+                    None => return Err(CommandError::MissingUnit),
                     _ => return Err(CommandError::UnitTypeWrong),
                 }
                 None
@@ -457,13 +438,8 @@ impl<D: Direction> UnitCommand<D> {
                 Some(cm.path.start)
             }
             Self::StructureBuildDrone(pos, option) => {
-                if !handler.get_game().has_vision_at(ClientPerspective::Team(*handler.get_game().current_player().team as u8), pos) {
-                    // you should have vision of your own structures
-                    return Err(CommandError::NoVision);
-                }
                 let unit = match handler.get_map().get_unit(pos) {
                     Some(UnitType::Structure(struc)) => struc.clone(),
-                    None => return Err(CommandError::MissingUnit),
                     _ => return Err(CommandError::UnitTypeWrong),
                 };
                 let drone_id = match &unit.typ {
@@ -516,6 +492,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
         Some(UnitType::Normal(unit)) => Ok(unit),
         Some(UnitType::Chess(_)) => Err(CommandError::UnitTypeWrong),
         Some(UnitType::Structure(_)) => Err(CommandError::UnitTypeWrong),
+        Some(UnitType::Unknown) => Err(CommandError::NoVision),
         None => Err(CommandError::MissingUnit),
     }?;
     let mut potential_counters = vec![];
@@ -586,12 +563,12 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
         }
     }
     if recalculate_fog {
-        handler.recalculate_fog(true);
+        handler.recalculate_fog();
     }
     Ok(potential_counters)
 }
 
-pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>, target: &AttackInfo<D>) -> Result<(), CommandError> {
+pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker: &UnitType<D>, path: &Path<D>, target: &AttackInfo<D>) -> Result<(), CommandError> {
     let attacker_pos = path.end(handler.get_map()).unwrap();
     let potential_counters = calculate_attack(handler, attacker_pos, target, Some(path))?;
     // counter attack
@@ -600,9 +577,10 @@ pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>
             Some(UnitType::Normal(unit)) => unit,
             Some(UnitType::Chess(_)) => continue,
             Some(UnitType::Structure(_)) => continue,
+            Some(UnitType::Unknown) => continue,
             None => continue,
         };
-        if !handler.get_game().has_vision_at(unit.get_team(handler.get_game()), attacker_pos) {
+        if !handler.get_game().can_see_unit_at(unit.get_team(handler.get_game()), attacker_pos, attacker, true) {
             continue;
         }
         if !unit.attackable_positions(handler.get_game(), *p, false).contains(&attacker_pos) {
@@ -614,6 +592,5 @@ pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, path: &Path<D>
             calculate_attack(handler, *p, &attack_info, None).ok();
         }
     }
-
     Ok(())
 }

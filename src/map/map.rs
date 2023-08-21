@@ -7,6 +7,7 @@ use zipper::zipper_derive::*;
 use crate::details;
 use crate::game::settings;
 use crate::game::game::*;
+use crate::game::fog::*;
 use crate::game::events;
 use crate::game::settings::PlayerSettings;
 use crate::map::wrapping_map::*;
@@ -422,25 +423,15 @@ where D: Direction
             unit: self.units.get(&p).cloned(),
         }
     }
-    pub fn export_field(&self, zipper: &mut Zipper, p: Point, vision: Option<&Vision>) {
-        let mut fd = self.get_field_data(p);
-        fd = match vision {
-            Some(Vision::TrueSight) => fd,
-            Some(Vision::Normal) => fd.stealth_replacement(),
-            None => fd.fog_replacement(),
-        };
+    pub fn export_field(&self, zipper: &mut Zipper, p: Point, fog_intensity: FogIntensity) {
+        let mut fd = self.get_field_data(p).fog_replacement(fog_intensity);
         fd.export(zipper);
     }
 
-    pub fn zip(&self, zipper: &mut Zipper, vision: Option<&HashMap<Point, Vision>>) {
+    pub fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
         self.wrapping_logic.export(zipper);
         for p in self.all_points() {
-            let vision = if let Some(vision) = vision {
-                vision.get(&p)
-            } else {
-                Some(&Vision::TrueSight)
-            };
-            self.export_field(zipper, p, vision);
+            self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
         }
     }
 
@@ -489,27 +480,14 @@ pub struct FieldData<D: Direction> {
     pub unit: Option<UnitType<D>>,
 }
 impl<D: Direction> FieldData<D> {
-    pub fn fog_replacement(&self) -> Self {
+    pub fn fog_replacement(self, intensity: FogIntensity) -> Self {
+        let details: Vec<Detail> = self.details.into_iter()
+        .filter_map(|d| d.fog_replacement(intensity))
+        .collect();
         Self {
-            terrain: self.terrain.fog_replacement(),
-            details: details_fog_replacement(&self.details),
-            unit: self.unit.clone().and_then(|unit| unit.fog_replacement())
-        }
-    }
-    pub fn stealth_replacement(&self) -> Self {
-        let unit = if let Some(unit) = self.unit.as_ref() {
-            if unit.fog_replacement().is_none() && self.terrain.hides_unit(unit) {
-                None
-            } else {
-                unit.stealth_replacement()
-            }
-        } else {
-            None
-        };
-        Self {
-            terrain: self.terrain.clone(),
-            details: self.details.clone(),
-            unit
+            unit: self.unit.and_then(|unit| unit.fog_replacement(&self.terrain, intensity)),
+            details: details.try_into().expect("Detail list shouldn't become longer after filtering"),
+            terrain: self.terrain.fog_replacement(intensity),
         }
     }
 }
@@ -537,7 +515,7 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
             .map(|owner| PlayerSettings::new(owner))
             .collect();
         Ok(settings::GameSettings {
-            fog_mode: FogMode::DarkRegular(0.into(), (players.len() as u8 * 2).into(), (players.len() as u8 * 2 + 1).into()),
+            fog_mode: FogMode::Constant(FogSetting::Light(0)),
             players: players.try_into().unwrap(),
         })
     }
