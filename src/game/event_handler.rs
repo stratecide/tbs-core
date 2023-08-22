@@ -17,8 +17,8 @@ use crate::game::fog::*;
 use crate::units::mercenary::MaybeMercenary;
 use crate::units::chess::*;
 use crate::units::commands::UnloadIndex;
-use crate::units::movement::{Path, MovementType};
-use super::events::{Event, Effect};
+use crate::units::movement::Path;
+use super::events::{Event, Effect, UnitStep};
 
 pub struct EventHandler<'a, D: Direction> {
     game: &'a mut Game<D>,
@@ -339,32 +339,46 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 self.change_fog(Some(team.into()), changes);
             }
         }
-        self.add_event(Event::UnitCreation(position, unit));
+        self.add_event(Event::UnitAdd(position, unit));
     }
 
     pub fn unit_path(&mut self, unload_index: Option<UnloadIndex>, path: &Path<D>, board_at_the_end: bool, involuntarily: bool) {
+        if path.steps.len() == 0 {
+            return;
+        }
         let unit = self.get_map().get_unit(path.start).expect(&format!("Missing unit at {:?}", path.start)).clone();
         let unit_team = unit.get_team(self.get_game());
         let path_end = path.end(self.get_map()).unwrap();
-        let mut was_hover_path = false;
-        if !involuntarily {
-            match &unit {
-                UnitType::Normal(u) => {
-                    let movement_type = u.get_movement(self.get_map().get_terrain(path.start).unwrap()).0;
-                    match movement_type {
-                        MovementType::Hover(hover_mode) => {
-                            let steps = path.hover_steps(self.get_map(), hover_mode);
-                            self.add_event(Event::HoverPath(Some(unload_index), path.start, steps, Some(board_at_the_end), unit.clone()));
-                            was_hover_path = true;
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
+        if let Some(unload_index) = unload_index {
+            if let UnitType::Normal(unit) = unit.clone() {
+                self.add_event(Event::UnitRemoveBoarded(path.start, unload_index, unit));
             }
+        } else {
+            self.add_event(Event::UnitRemove(path.start, unit.clone()));
         }
-        if !was_hover_path {
-            self.add_event(Event::UnitPath(Some(unload_index), path.clone(), Some(board_at_the_end), unit.clone()));
+        let mut current = path.start;
+        let mut transformed_unit = unit.clone();
+        let mut steps = Vec::new();
+        for step in &path.steps {
+            let next = step.progress(self.get_map(), current).unwrap();
+            if !involuntarily {
+                if let Some(unit) = transformed_unit.transformed_by_movement(self.get_map(), current, next) {
+                    transformed_unit = unit;
+                    steps.push(UnitStep::Transform(current, *step, Some(transformed_unit.clone())));
+                    current = next;
+                    continue;
+                }
+            }
+            steps.push(UnitStep::Simple(current, *step));
+            current = next;
+        }
+        self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
+        if board_at_the_end {
+            if let UnitType::Normal(unit) = transformed_unit.clone() {
+                self.add_event(Event::UnitAddBoarded(path_end, unit));
+            }
+        } else {
+            self.add_event(Event::UnitAdd(path_end, transformed_unit));
         }
         // update vision
         let player_team = self.get_game().current_player().team;
@@ -552,8 +566,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn unit_death(&mut self, position: Point) {
+        self.add_event(Event::Effect(Effect::Explode(position)));
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        self.add_event(Event::UnitDeath(position, unit.clone()));
+        self.add_event(Event::UnitRemove(position, unit.clone()));
     }
 
     pub fn unit_mass_death(&mut self, positions: HashSet<Point>) {
@@ -565,7 +580,8 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn unit_replace(&mut self, position: Point, new_unit: UnitType<D>) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        self.add_event(Event::UnitReplacement(position, unit.clone(), new_unit));
+        self.add_event(Event::UnitRemove(position, unit.clone()));
+        self.add_event(Event::UnitAdd(position, new_unit));
     }
 
     pub fn accept(mut self) -> Events<Game<D>> {

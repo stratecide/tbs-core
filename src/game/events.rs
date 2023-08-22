@@ -18,7 +18,7 @@ use crate::game::fog::*;
 use crate::units::mercenary::MaybeMercenary;
 use crate::units::chess::*;
 use crate::units::commands::UnloadIndex;
-use crate::units::movement::{Path, PathStep, PathStepExt};
+use crate::units::movement::PathStep;
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 8)]
@@ -26,6 +26,7 @@ pub enum Event<D:Direction> {
     NextTurn,
     MoneyChange(Owner, Funds),
     Effect(Effect<D>),
+    UnitPath(Option<UnitType<D>>, LVec<UnitStep<D>, {point_map::MAX_AREA}>),
     // fog events
     PureFogChange(Perspective, LVec<(Point, FogIntensity, FogIntensity), {point_map::MAX_AREA}>),
     FogChange(Perspective, LVec<(Point, FogIntensity, FogIntensity, FieldData<D>), {point_map::MAX_AREA}>),
@@ -34,16 +35,17 @@ pub enum Event<D:Direction> {
     PureRevealFunds(Owner),
     RevealFunds(Owner, Funds),
     // unit events
-    UnitPath(Option<Option<UnloadIndex>>, Path<D>, Option<bool>, UnitType<D>),
-    HoverPath(Option<Option<UnloadIndex>>, Point, LVec<(bool, PathStep<D>), {point_map::MAX_AREA}>, Option<bool>, UnitType<D>),
-    UnitActionStatus(Point, UnitActionStatus, UnitActionStatus),
+    UnitAdd(Point, UnitType<D>),
+    UnitRemove(Point, UnitType<D>),
+    UnitAddBoarded(Point, NormalUnit),
+    UnitRemoveBoarded(Point, UnloadIndex, NormalUnit),
     UnitExhaust(Point),
     UnitExhaustBoarded(Point, UnloadIndex),
     UnitHpChange(Point, I<-100, 99>, I<-999, 999>),
     UnitHpChangeBoarded(Point, UnloadIndex, I<-100, 99>),
-    UnitCreation(Point, UnitType<D>),
-    UnitDeath(Point, UnitType<D>),
-    UnitReplacement(Point, UnitType<D>, UnitType<D>),
+    //UnitPath(Option<Option<UnloadIndex>>, Path<D>, Option<bool>, UnitType<D>),
+    //HoverPath(Option<Option<UnloadIndex>>, Point, LVec<(bool, PathStep<D>), {point_map::MAX_AREA}>, Option<bool>, UnitType<D>),
+    UnitActionStatus(Point, UnitActionStatus, UnitActionStatus),
     UnitMovedThisGame(Point),
     EnPassantOpportunity(Point),
     UnitDirection(Point, D, D),
@@ -96,7 +98,7 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::NextTurn => game.current_turn += 1,
-            Self::UnitPath(unload_index, path, end_visible, unit) => {
+            /*Self::UnitPath(unload_index, path, end_visible, unit) => {
                 apply_unit_path(game, *unload_index, path, *end_visible, unit);
             }
             Self::HoverPath(unload_index, start, steps, end_visible, unit) => {
@@ -117,7 +119,7 @@ impl<D: Direction> Event<D> {
                     path.steps.push(step.clone());
                 }
                 apply_unit_path(game, *unload_index, &path, *end_visible, &unit);
-            }
+            }*/
             Self::UnitActionStatus(pos, _, action_status) => {
                 match game.get_map_mut().get_unit_mut(*pos) {
                     Some(UnitType::Normal(unit)) => {
@@ -154,14 +156,21 @@ impl<D: Direction> Event<D> {
                     boarded.hp = (*boarded.hp + **hp_change).into();
                 }
             }
-            Self::UnitCreation(pos, unit) => {
+            Self::UnitAdd(pos, unit) => {
                 game.get_map_mut().set_unit(*pos, Some(unit.clone()));
             }
-            Self::UnitDeath(pos, _) => {
+            Self::UnitRemove(pos, _) => {
                 game.get_map_mut().set_unit(*pos, None).expect(&format!("expected a unit at {:?} to die!", pos));
             }
-            Self::UnitReplacement(pos, _, unit) => {
-                game.get_map_mut().set_unit(*pos, Some(unit.clone()));
+            Self::UnitAddBoarded(pos, unit) => {
+                if let Some(transporter) = game.get_map_mut().get_unit_mut(*pos) {
+                    transporter.board(unit.get_boarded().len() as u8, unit.clone());
+                }
+            }
+            Self::UnitRemoveBoarded(pos, index, _) => {
+                if let Some(transporter) = game.get_map_mut().get_unit_mut(*pos) {
+                    transporter.unboard(**index as u8);
+                }
             }
             Self::TerrainChange(pos, _, terrain) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
@@ -198,6 +207,7 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_details(*p, list.iter().cloned().collect());
             }
             Self::Effect(_) => {}
+            Self::UnitPath(_, _) => {}
             Self::CommanderCharge(owner, delta) => {
                 game.get_owning_player_mut(*owner).unwrap().commander.add_charge(**delta);
             }
@@ -285,7 +295,7 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::NextTurn => game.current_turn -= 1,
-            Self::UnitPath(unload_index, path, end_visible, unit) => {
+            /*Self::UnitPath(unload_index, path, end_visible, unit) => {
                 undo_unit_path(game, *unload_index, path, *end_visible, unit);
             }
             Self::HoverPath(unload_index, start, steps, end_visible, unit) => {
@@ -294,7 +304,7 @@ impl<D: Direction> Event<D> {
                     path.steps.push(step.clone());
                 }
                 undo_unit_path(game, *unload_index, &path, *end_visible, unit);
-            }
+            }*/
             Self::UnitActionStatus(pos, action_status, _) => {
                 match game.get_map_mut().get_unit_mut(*pos) {
                     Some(UnitType::Normal(unit)) => {
@@ -331,14 +341,21 @@ impl<D: Direction> Event<D> {
                     boarded.hp = (*boarded.hp - **hp_change).into();
                 }
             }
-            Self::UnitCreation(pos, _) => {
+            Self::UnitAdd(pos, _) => {
                 game.get_map_mut().set_unit(*pos, None).expect(&format!("expected a unit at {:?} to die!", pos));
             }
-            Self::UnitDeath(pos, unit) => {
+            Self::UnitRemove(pos, unit) => {
                 game.get_map_mut().set_unit(*pos, Some(unit.clone()));
             }
-            Self::UnitReplacement(pos, unit, _) => {
-                game.get_map_mut().set_unit(*pos, Some(unit.clone()));
+            Self::UnitAddBoarded(pos, _) => {
+                if let Some(transporter) = game.get_map_mut().get_unit_mut(*pos) {
+                    transporter.unboard(transporter.get_boarded().len() as u8 - 1);
+                }
+            }
+            Self::UnitRemoveBoarded(pos, index, unit) => {
+                if let Some(transporter) = game.get_map_mut().get_unit_mut(*pos) {
+                    transporter.board(**index as u8, unit.clone());
+                }
             }
             Self::TerrainChange(pos, terrain, _) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
@@ -375,6 +392,7 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_details(*p, list.iter().cloned().collect());
             }
             Self::Effect(_) => {}
+            Self::UnitPath(_, _) => {}
             Self::CommanderCharge(owner, delta) => {
                 game.get_owning_player_mut(*owner).unwrap().commander.add_charge(-**delta);
             }
@@ -444,7 +462,7 @@ impl<D: Direction> Event<D> {
                 panic!("FogChange should only ever be created as replacement for PureFogChange. It shouldn't be replaced itself!");
             }
             Self::NextTurn => Some(Self::NextTurn),
-            Self::UnitPath(unload_index, path, into, unit) => {
+            /*Self::UnitPath(unload_index, path, into, unit) => {
                 if let Some((unload_index, start, steps, into, unit)) = fog_replacement_unit_path(game, team, *unload_index, path.start, &path.steps, *into, unit.clone()) {
                     let mut path = Path::new(start);
                     path.steps = steps;
@@ -459,7 +477,7 @@ impl<D: Direction> Event<D> {
                 } else {
                     None
                 }
-            }
+            }*/
             Self::UnitActionStatus(pos, _, _) => {
                 if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap(), false) {
                     Some(self.clone())
@@ -474,13 +492,6 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::UnitExhaustBoarded(pos, _) => {
-                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap(), false) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
             Self::UnitHpChange(pos, _, _) => {
                 if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap(), false) {
                     Some(self.clone())
@@ -488,41 +499,28 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::UnitHpChangeBoarded(pos, _, _) => {
-                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap(), false) {
-                    Some(self.clone())
+            Self::UnitAdd(pos, unit) => {
+                if let Some(unit) = unit.fog_replacement(game.get_map().get_terrain(*pos).unwrap(), game.get_fog_at(team, *pos)) {
+                    Some(Self::UnitAdd(*pos, unit))
                 } else {
                     None
                 }
             }
-            Self::UnitCreation(pos, unit) => {
-                if game.can_see_unit_at(team, *pos, unit, true) {
-                    Some(self.clone())
+            Self::UnitRemove(pos, unit) => {
+                if let Some(unit) = unit.fog_replacement(game.get_map().get_terrain(*pos).unwrap(), game.get_fog_at(team, *pos)) {
+                    Some(Self::UnitRemove(*pos, unit))
                 } else {
                     None
                 }
             }
-            Self::UnitDeath(pos, unit) => {
-                if game.can_see_unit_at(team, *pos, unit, true) {
+            Self::UnitHpChangeBoarded(pos, _, _) |
+            Self::UnitExhaustBoarded(pos, _) |
+            Self::UnitAddBoarded(pos, _) |
+            Self::UnitRemoveBoarded(pos, _, _) => {
+                if game.get_fog_at(team, *pos) <= FogIntensity::NormalVision && game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap(), false) {
                     Some(self.clone())
                 } else {
                     None
-                }
-            }
-            Self::UnitReplacement(pos, before, after) => {
-                let fog_intensity = game.get_fog_at(team, *pos);
-                let terrain = game.get_map().get_terrain(*pos).unwrap();
-                match (before.fog_replacement(terrain, fog_intensity), after.fog_replacement(terrain, fog_intensity)) {
-                    (None, None) => None,
-                    (None, Some(unit)) => Some(Self::UnitCreation(*pos, unit)),
-                    (Some(unit), None) => Some(Self::UnitDeath(*pos, unit)),
-                    (Some(before), Some(after)) => {
-                        if before == after {
-                            None
-                        } else {
-                            Some(Self::UnitReplacement(*pos, before, after))
-                        }
-                    }
                 }
             }
             Self::TerrainChange(pos, before, after) => {
@@ -619,6 +617,25 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
+            Self::UnitPath(unit, steps) => {
+                let mut unit = unit.clone().expect("UnitPath needs to have a unit before fog_replacement");
+                if unit.get_team(game) == team {
+                    return Some(self.clone());
+                }
+                let mut result = Vec::new();
+                for step in steps {
+                    if let Some(step) = step.replace_unit_path(game, team, &mut unit) {
+                        result.push(step);
+                    }
+                }
+                if result.len() == 0 {
+                    None
+                } else {
+                    let start = result[0].get_start();
+                    let unit = unit.fog_replacement(game.get_map().get_terrain(start).unwrap(), game.get_fog_at(team, start));
+                    Some(Self::UnitPath(unit, result.try_into().unwrap()))
+                }
+            }
             Self::CommanderCharge(_, _) => {
                 Some(self.clone())
             }
@@ -664,7 +681,7 @@ impl<D: Direction> Event<D> {
     }
 }
 
-fn apply_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option<UnloadIndex>>, path: &Path<D>, end_visible: Option<bool>, unit: &UnitType<D>) {
+/*fn apply_unit_path<D: Direction>(game: &mut Game<D>, unload_index: Option<Option<UnloadIndex>>, path: &Path<D>, end_visible: Option<bool>, unit: &UnitType<D>) {
     if let Some(unload_index) = unload_index {
         if let Some(index) = unload_index {
             if let Some(unit) = game.get_map_mut().get_unit_mut(path.start) {
@@ -772,17 +789,63 @@ fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
         previous_visible = visible;
     }
     result.and_then(|(start, steps)| Some((unit, start, steps)))
+}*/
+
+#[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(bits = 1)]
+pub enum UnitStep<D: Direction> {
+    Simple(Point, PathStep<D>),
+    Transform(Point, PathStep<D>, Option<UnitType<D>>),
+}
+
+impl<D: Direction> UnitStep<D> {
+    pub fn get_start(&self) -> Point {
+        match self {
+            Self::Simple(p, _) => *p,
+            Self::Transform(p, _, _) => *p,
+        }
+    }
+
+    pub fn get_step(&self) -> PathStep<D> {
+        match self {
+            Self::Simple(_, step) => *step,
+            Self::Transform(_, step, _) => *step,
+        }
+    }
+
+    fn replace_unit_path(&self, game: &Game<D>, team: ClientPerspective, unit: &mut UnitType<D>) -> Option<Self> {
+        let (p, step, unit2) = match self {
+            Self::Simple(p, step) => (*p, *step, Some(unit.clone())),
+            Self::Transform(p, step, unit2) => (*p, *step, unit2.clone()),
+        };
+        let p2 = step.progress(game.get_map(), p).unwrap();
+        let unit1 = unit.fog_replacement(game.get_map().get_terrain(p).unwrap(), game.get_fog_at(team, p));
+        let unit2 = unit2.and_then(|unit| unit.fog_replacement(game.get_map().get_terrain(p2).unwrap(), game.get_fog_at(team, p2)));
+        if let Some(unit2) = unit2.clone() {
+            *unit = unit2;
+        }
+        if unit1 == None && unit2 == None {
+            None
+        } else if unit1 == unit2 {
+            Some(Self::Simple(p, step))
+        } else {
+            Some(Self::Transform(p, step, unit2))
+        }
+    }
+
 }
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 8)]
 pub enum Effect<D: Direction> {
+    Laser(LVec<(Point, D), {LASER_CANNON_RANGE}>),
+    Lightning(LVec<Point, {MAX_AREA}>),
+    // unit effects - only visible if the affected unit is visible
     Flame(Point),
     GunFire(Point),
     ShellFire(Point),
     Repair(Point),
-    Laser(LVec<(Point, D), {LASER_CANNON_RANGE}>),
-    Lightning(LVec<Point, {MAX_AREA}>),
+    Explode(Point),
 }
 impl<D: Direction> Effect<D> {
     pub fn fog_replacement(&self, game: &Game<D>, team: ClientPerspective) -> Option<Self> {
@@ -790,6 +853,7 @@ impl<D: Direction> Effect<D> {
             Self::Flame(p) |
             Self::GunFire(p) |
             Self::Repair(p) |
+            Self::Explode(p) |
             Self::ShellFire(p) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity <= FogIntensity::NormalVision {

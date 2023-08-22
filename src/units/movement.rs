@@ -150,12 +150,13 @@ pub enum PathStep<D: Direction> {
     Jump(D), // jumps 2 fields, caused by Fountains
     Diagonal(D), // moves diagonally, for chess units
     Knight(D, bool),
-    Point(Point),
+    //Point(Point),
 }
 impl<D: Direction> PathStep<D> {
     pub fn progress(&self, map: &Map<D>, pos: Point) -> Result<Point, CommandError> {
         Ok(self.progress_reversible(map, pos)?.0.point)
     }
+
     pub fn progress_reversible(&self, map: &Map<D>, pos: Point) -> Result<(OrientedPoint<D>, Self), CommandError> {
         match self {
             Self::Dir(d) => {
@@ -186,16 +187,17 @@ impl<D: Direction> PathStep<D> {
                     Err(CommandError::InvalidPath)
                 }
             }
-            Self::Point(p) => Ok((OrientedPoint::new(*p, false, D::list()[0]), Self::Point(pos))),
+            //Self::Point(p) => Ok((OrientedPoint::new(*p, false, D::list()[0]), Self::Point(pos))),
         }
     }
+
     pub fn dir(&self) -> Option<D> {
         match self {
             Self::Dir(d) => Some(*d),
             Self::Jump(d) => Some(*d),
             Self::Diagonal(_) => None,
             Self::Knight(_, _) => None,
-            Self::Point(_) => None,
+            //Self::Point(_) => None,
         }
     }
 }
@@ -231,6 +233,7 @@ impl<D: Direction> Path<D> {
         Ok(points)
     }
 
+    // TODO: refactor to use UnitType::Transformed_by_movement
     pub fn hover_steps(&self, map: &Map<D>, hover_mode: HoverMode) -> LVec<HoverStep<D>, {crate::map::point_map::MAX_AREA}> {
         let mut steps = LVec::new();
         let mut current = self.start;
@@ -250,7 +253,7 @@ impl<D: Direction> Path<D> {
 
 pub trait PathStepExt<D: Direction>: Debug + Clone {
     fn step(&self) -> &PathStep<D>;
-    fn skip_to(&self, p: Point) -> Self;
+    //fn skip_to(&self, p: Point) -> Self;
     fn update_unit(&self, unit: &mut UnitType<D>) {
         match unit {
             UnitType::Normal(unit) => self.update_normal_unit(unit),
@@ -263,9 +266,9 @@ impl<D: Direction> PathStepExt<D> for PathStep<D> {
     fn step(&self) -> &PathStep<D> {
         self
     }
-    fn skip_to(&self, p: Point) -> Self {
+    /*fn skip_to(&self, p: Point) -> Self {
         PathStep::Point(p)
-    }
+    }*/
     fn update_normal_unit(&self, _: &mut NormalUnit) {
         // do nothing
     }
@@ -276,9 +279,9 @@ impl<D: Direction> PathStepExt<D> for HoverStep<D> {
     fn step(&self) -> &PathStep<D> {
         &self.1
     }
-    fn skip_to(&self, p: Point) -> Self {
+    /*fn skip_to(&self, p: Point) -> Self {
         (self.0, self.1.skip_to(p))
-    }
+    }*/
     fn update_normal_unit(&self, unit: &mut NormalUnit) {
         match &mut unit.typ {
             NormalUnits::Hovercraft(on_sea) => *on_sea = self.0,

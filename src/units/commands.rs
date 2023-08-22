@@ -243,8 +243,6 @@ impl<D: Direction> UnitCommand<D> {
                         }
                     }
                     if let Some(target) = handler.get_map().get_unit(dp.point).cloned() {
-                        let terrain = handler.get_map().get_terrain(dp.point).unwrap();
-                        let fog_intensity = handler.get_game().get_fog_at(ClientPerspective::Team(*team as u8), dp.point);
                         if pull_path.len() == 2 && handler.get_game().can_see_unit_at(ClientPerspective::Team(*team as u8), dp.point, &target, true) && target.can_be_pulled(handler.get_map(), dp.point) {
                             handler.unit_path(None, &Path {start: dp.point, steps: pull_path.try_into().unwrap()}, false, true);
                         }

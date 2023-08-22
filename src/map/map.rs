@@ -424,7 +424,7 @@ where D: Direction
         }
     }
     pub fn export_field(&self, zipper: &mut Zipper, p: Point, fog_intensity: FogIntensity) {
-        let mut fd = self.get_field_data(p).fog_replacement(fog_intensity);
+        let fd = self.get_field_data(p).fog_replacement(fog_intensity);
         fd.export(zipper);
     }
 

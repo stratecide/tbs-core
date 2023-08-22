@@ -32,7 +32,7 @@ pub const SHOCK_TOWER_DAMAGE: u16 = 40;
 
 
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 pub struct Structure<D: Direction> {
     pub typ: Structures<D>,
     pub hp: Hp,
@@ -298,7 +298,7 @@ impl<D: Direction> Structure<D> {
 
 }
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 4)]
 pub enum Structures<D: Direction> {
     Pyramid(Option<Owner>),

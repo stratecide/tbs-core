@@ -144,7 +144,7 @@ impl<D: Direction> ChessCommand<D> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 pub struct ChessUnit<D: Direction> {
     pub typ: ChessUnits<D>,
     pub owner: Owner,
@@ -494,7 +494,7 @@ impl fmt::Display for PawnUpgrade {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 4)]
 pub enum ChessUnits<D: Direction> {
     Pawn(D, bool),

@@ -28,6 +28,19 @@ pub enum FogSetting {
     ExtraDark(u8)
 }
 
+impl Display for FogSetting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FogSetting::None => write!(f, "No Fog"),
+            FogSetting::Light(bonus) => write!(f, "Twilight (+{bonus})"),
+            FogSetting::Sharp(bonus) => write!(f, "Sharp (+{bonus})"),
+            FogSetting::Fade1(bonus) => write!(f, "Fade 1 (+{bonus})"),
+            FogSetting::Fade2(bonus) => write!(f, "Fade 2 (+{bonus})"),
+            FogSetting::ExtraDark(bonus) => write!(f, "Extra Dark (+{bonus})"),
+        }
+    }
+}
+
 impl Zippable for FogSetting {
     fn export(&self, zipper: &mut Zipper) {
         let (index, bonus_vision): (u8, Option<u8>) = match self {
@@ -105,13 +118,14 @@ pub enum FogMode {
 
 impl Display for FogMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Constant(FogSetting::None) => write!(f, "No Fog"),
-            Self::Constant(FogSetting::Light(bonus)) => write!(f, "Light Fog (+{bonus})"),
-            Self::GradientWithNone(_, _, _) => write!(f, "Day/Night Cycle"),
-            // TODO
-            _ => write!(f, "a"),
-        }
+        let gradient = match self {
+            Self::Constant(setting) => return write!(f, "{setting}"),
+            Self::GradientWithNone(_, _, _) => FogSetting::GRADIENT_WITH_NONE,
+            Self::GradientDark(_, _, _) => FogSetting::GRADIENT_DARK,
+            Self::GradientLight(_, _, _) => FogSetting::GRADIENT_LIGHT,
+            Self::GradientLarge(_, _, _) => FogSetting::GRADIENT_LARGE,
+        };
+        write!(f, "{} <-> {}", gradient[0], gradient[gradient.len() - 1])
     }
 }
 

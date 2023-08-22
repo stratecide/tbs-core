@@ -39,7 +39,7 @@ pub enum UnitVisibility {
     AlwaysVisible,
 }
 
-#[derive(Debug, PartialEq, Clone, Zippable)]
+#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 3)]
 pub enum UnitType<D: Direction> {
     Normal(NormalUnit),
@@ -51,6 +51,7 @@ impl<D: Direction> UnitType<D> {
     pub fn normal(typ: NormalUnits, owner: Owner) -> Self {
         Self::Normal(NormalUnit::new_instance(typ, owner))
     }
+
     pub fn chess(typ: ChessUnits<D>, owner: Owner) -> Self {
         Self::Chess(ChessUnit::new_instance(typ, owner))
     }
@@ -70,6 +71,7 @@ impl<D: Direction> UnitType<D> {
             Self::Unknown => "???",
         }
     }
+
     pub fn get_owner(&self) -> Option<Owner> {
         match self {
             Self::Normal(unit) => Some(unit.owner),
@@ -78,9 +80,11 @@ impl<D: Direction> UnitType<D> {
             Self::Unknown => None,
         }
     }
+
     pub fn get_team(&self, game: &Game<D>) -> ClientPerspective {
         game.get_team(self.get_owner())
     }
+
     pub fn get_hp(&self) -> u8 {
         *match self {
             Self::Normal(unit) => unit.data.hp,
@@ -89,6 +93,7 @@ impl<D: Direction> UnitType<D> {
             Self::Unknown => return 100,
         } as u8
     }
+
     pub fn set_hp(&mut self, hp: u8) {
         let hp = hp.min(100).into();
         match self {
@@ -98,6 +103,7 @@ impl<D: Direction> UnitType<D> {
             Self::Unknown => (),
         }
     }
+
     pub fn is_exhausted(&self) -> bool {
         match self {
             Self::Normal(unit) => unit.data.exhausted,
@@ -106,6 +112,7 @@ impl<D: Direction> UnitType<D> {
             Self::Unknown => false,
         }
     }
+
     pub fn set_exhausted(&mut self, exhausted: bool) {
         match self {
             Self::Normal(unit) => unit.data.exhausted = exhausted,
@@ -181,6 +188,26 @@ impl<D: Direction> UnitType<D> {
             Self::Normal(u) => u.board(index, unit),
             Self::Structure(u) => u.board(index, unit),
             _ => {}
+        }
+    }
+
+    pub fn transformed_by_movement(&self, map: &Map<D>, from: Point, to: Point) -> Option<Self> {
+        match self {
+            UnitType::Normal(u @ NormalUnit { typ: NormalUnits::Hovercraft(on_sea), .. }) => {
+                let prev_terrain = map.get_terrain(from).unwrap();
+                let movement_type = u.get_movement(prev_terrain).0;
+                let terrain = map.get_terrain(to).unwrap();
+                let movement_type2 = terrain.update_movement_type(movement_type, prev_terrain).unwrap();
+                let on_sea2 = movement_type2 != MovementType::Hover(HoverMode::Land);
+                if *on_sea != on_sea2 {
+                    let mut new = u.clone();
+                    new.typ = NormalUnits::Hovercraft(on_sea2);
+                    Some(new.as_unit())
+                } else {
+                    None
+                }
+            }
+            _ => None
         }
     }
 
