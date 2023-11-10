@@ -648,13 +648,24 @@ where
    TransformMovementCost: Fn(MovementPoints, &NormalUnit, MovementType) -> MovementPoints,
 {
     if rounds > 0 {
+        let transporter = map.get_unit(start)
+        .filter(|u| unit.cast_normal().and_then(|unit| Some(u.boardable_by(&unit))).unwrap_or(false));
         match unit {
             UnitType::Unknown |
             UnitType::Structure(_) => return,
             UnitType::Normal(unit) if unit.changes_movement_type() => {
-                let (starting_movement_type, movement_points) = unit.get_movement(map.get_terrain(start).expect(&format!("Map doesn't have terrain at {:?}", start)));
+                let (starting_movement_type, starting_movement_points) = unit.get_movement(map.get_terrain(start).expect(&format!("Map doesn't have terrain at {:?}", start)), transporter);
+                let movement_points = unit.get_movement(map.get_terrain(start).expect(&format!("Map doesn't have terrain at {:?}", start)), None).1;
                 let base_movement = |_terrain: &Terrain<D>, permanent: Option<&MovementType>, round: usize| {
-                    (permanent.cloned().unwrap_or(starting_movement_type), NormalBallast { points: transform_movement_points(movement_points, round), forbidden_dir: None })
+                    let mp = if round == 0 {
+                        starting_movement_points
+                    } else {
+                        movement_points
+                    };
+                    (permanent.cloned().unwrap_or(starting_movement_type), NormalBallast {
+                        points: transform_movement_points(mp, round),
+                        forbidden_dir: None
+                    })
                 };
                 movement_search_core(
                     map,
@@ -686,9 +697,18 @@ where
                 );
             }
             UnitType::Normal(unit) => {
-                let (movement_type, movement_points) = unit.get_movement(map.get_terrain(start).expect(&format!("Map doesn't have terrain at {:?}", start)));
+                let (movement_type, starting_movement_points) = unit.get_movement(map.get_terrain(start).expect(&format!("Map doesn't have terrain at {:?}", start)), transporter);
+                let movement_points = unit.get_movement(map.get_terrain(start).expect(&format!("Map doesn't have terrain at {:?}", start)), None).1;
                 let base_movement = |_terrain: &Terrain<D>, _permanent: Option<&()>, round: usize| {
-                    ((), NormalBallast { points: transform_movement_points(movement_points, round), forbidden_dir: None })
+                    let mp = if round == 0 {
+                        starting_movement_points
+                    } else {
+                        movement_points
+                    };
+                    ((), NormalBallast {
+                        points: transform_movement_points(mp, round),
+                        forbidden_dir: None
+                    })
                 };
                 movement_search_core(
                     map,

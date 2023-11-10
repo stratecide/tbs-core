@@ -27,6 +27,7 @@ pub enum UnitAction<D: Direction> {
     PawnUpgrade(chess::PawnUpgrade),
     Repair,
     BuildDrone(TransportableDrones),
+    BuyUnit(D, U<255>),
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -42,6 +43,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::PawnUpgrade(p) => write!(f, "{}", p),
             Self::Repair => write!(f, "Repair"),
             Self::BuildDrone(o) => write!(f, "Build {}", o.to_normal(Some(0.into())).name()),
+            Self::BuyUnit(d, o) => write!(f, "Build option {}", **o as usize + 1),
         }
     }
 }
@@ -107,7 +109,7 @@ impl<D: Direction> CommonMovement<D> {
         }
     }
 
-    fn check_path(game: &Game<D>, unit: &NormalUnit, path_taken: &Path<D>, vision: Option<&HashMap<Point, FogIntensity>>, board_at_the_end: bool) -> bool {
+    pub fn check_path(game: &Game<D>, unit: &NormalUnit, path_taken: &Path<D>, vision: Option<&HashMap<Point, FogIntensity>>, board_at_the_end: bool) -> bool {
         search_path(game, &unit.as_unit(), &path_taken, vision, |path, p, can_stop_here| {
             if path == path_taken && board_at_the_end {
                 if let Some(transporter) = game.get_map().get_unit(p) {
@@ -179,6 +181,7 @@ pub enum UnitCommand<D: Direction> {
     MercenaryPowerSimple(Point),
     MoveBuildDrone(CommonMovement<D>, TransportableDrones),
     StructureBuildDrone(Point, TransportableDrones),
+    BuyUnit(Point, D, U<255>),
 }
 impl<D: Direction> UnitCommand<D> {
     pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
@@ -289,7 +292,7 @@ impl<D: Direction> UnitCommand<D> {
                 if unit.get_hp() == 100 {
                     return Err(CommandError::CannotRepairHere);
                 }
-                match unit.get_movement(handler.get_map().get_terrain(cm.path.start).unwrap()).0 {
+                match unit.get_movement(handler.get_map().get_terrain(cm.path.start).unwrap(), None).0 {
                     MovementType::Hover(hover_mode) => {
                         for step in &cm.path.hover_steps(handler.get_map(), hover_mode) {
                             step.update_normal_unit(&mut unit);
@@ -402,28 +405,30 @@ impl<D: Direction> UnitCommand<D> {
             Self::MoveBuildDrone(cm, option) => {
                 cm.validate_input(handler.get_game(), false)?;
                 let unit = cm.get_unit(handler.get_map())?;
-                let drone_id = match &unit.typ {
+                let (drone_id, mut existing_drones, capacity) = match &unit.typ {
                     NormalUnits::DroneBoat(drones, drone_id) => {
-                        // new drones can't be built if at max-capacity
-                        let mut existing_drones = drones.len();
-                        for p in handler.get_map().all_points() {
-                            match handler.get_map().get_unit(p) {
-                                Some(UnitType::Normal(NormalUnit {typ: NormalUnits::LightDrone(id), ..})) | 
-                                Some(UnitType::Normal(NormalUnit {typ: NormalUnits::HeavyDrone(id), ..})) => {
-                                    if drone_id == id {
-                                        existing_drones += 1;
-                                    }
-                                }
-                                _ => (),
-                            }
-                        }
-                        if existing_drones >= drones.capacity() {
-                            return Err(CommandError::UnitCannotBeBoarded)
-                        }
-                        *drone_id
+                        (*drone_id, drones.len(), drones.capacity())
+                    }
+                    NormalUnits::DroneShip(drones, drone_id) => {
+                        (*drone_id, drones.len(), drones.capacity())
                     }
                     _ => return Err(CommandError::UnitTypeWrong),
                 };
+                for p in handler.get_map().all_points() {
+                    match handler.get_map().get_unit(p) {
+                        Some(UnitType::Normal(NormalUnit {typ: NormalUnits::LightDrone(id), ..})) | 
+                        Some(UnitType::Normal(NormalUnit {typ: NormalUnits::HeavyDrone(id), ..})) => {
+                            if drone_id == *id {
+                                existing_drones += 1;
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                // new drones can't be built if at max-capacity
+                if existing_drones >= capacity {
+                    return Err(CommandError::UnitCannotBeBoarded)
+                }
                 if let Some(end) = cm.apply(handler, false, true)? {
                     let unit = option.to_normal(Some(drone_id));
                     let cost = unit.value() as u32;
@@ -441,7 +446,7 @@ impl<D: Direction> UnitCommand<D> {
                     _ => return Err(CommandError::UnitTypeWrong),
                 };
                 let drone_id = match &unit.typ {
-                    Structures::DroneTower(Some((owner, drones, drone_id))) => {
+                    Structures::DroneTower(owner, drones, drone_id) => {
                         if *owner != handler.get_game().current_player().owner_id {
                             return Err(CommandError::NotYourUnit);
                         }
@@ -471,6 +476,43 @@ impl<D: Direction> UnitCommand<D> {
                     handler.money_buy(handler.get_game().current_player().owner_id, cost);
                     handler.unit_build_drone(pos, option);
                 }
+                handler.unit_exhaust(pos);
+                Some(pos)
+            }
+            Self::BuyUnit(pos, dir, index) => {
+                if handler.get_game().get_fog_at(ClientPerspective::Team(*team as u8), pos) != FogIntensity::NormalVision {
+                    return Err(CommandError::NoVision);
+                }
+                let unit = handler.get_map().get_unit(pos).ok_or(CommandError::MissingUnit)?;
+                let owner = handler.get_game().current_player().owner_id;
+                if unit.get_owner() != Some(owner) {
+                    return Err(CommandError::NotYourUnit);
+                }
+                if unit.is_exhausted() {
+                    return Err(CommandError::UnitCannotMove);
+                }
+                let options = match unit {
+                    UnitType::Normal(NormalUnit { typ: NormalUnits::SwimmingFactory, .. }) => build_options_swimming_factory(handler.get_game(), owner, 0),
+                    _ => return Err(CommandError::UnitTypeWrong),
+                };
+                let index = *index as usize;
+                if index >= options.len() {
+                    return Err(CommandError::InvalidIndex);
+                }
+                let (new_unit, cost) = options[index].clone();
+                if cost as i32 > *handler.get_game().current_player().funds {
+                    return Err(CommandError::NotEnoughMoney);
+                }
+                let mut path = Path::new(pos);
+                path.steps.push(PathStep::Dir(dir));
+                if !CommonMovement::check_path(handler.get_game(), &new_unit.cast_normal().unwrap(), &path, None, false) {
+                    return Err(CommandError::InvalidPath);
+                }
+                handler.money_buy(owner, cost as u32);
+                let new_unit = handler.animate_unit_path(&new_unit, &path, false);
+                let path_end = path.end(handler.get_map()).unwrap();
+                handler.unit_creation(path_end, new_unit);
+                handler.unit_exhaust(path_end);
                 handler.unit_exhaust(pos);
                 Some(pos)
             }
@@ -519,7 +561,7 @@ pub fn calculate_attack<D: Direction>(handler: &mut EventHandler<D>, attacker_po
                 handler.unit_damage(target.clone(), damage);
                 if damage >= hp as u16 {
                     dead_units.insert(target);
-                    handler.unit_death(target);
+                    handler.unit_death(target, true);
                     if handler.get_game().get_team(Some(attacker.get_owner())) != handler.get_game().get_team(defender.get_owner()) {
                         if let Some(commander) = handler.get_game().get_owning_player(attacker.get_owner()).and_then(|player| Some(player.commander.clone())) {
                             commander.after_killing_unit(handler, attacker.get_owner(), target, &defender);

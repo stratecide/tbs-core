@@ -177,14 +177,14 @@ impl<D: Direction> Command<D> {
                             _ => {}
                         }
                     }
-                    if let Some((index, owner, options)) = bubble_data {
+                    if let Some((bubble_index, owner, options)) = bubble_data {
                         if owner != owner_id {
                             return Err(CommandError::NotYourBubble);
                         }
-                        if let Some((unit, cost)) = options.get(index) {
+                        if let Some((unit, cost)) = options.get(*index as usize) {
                             if *cost as i32 <= *handler.get_game().current_player().funds {
                                 buy_unit(handler, *cost as u32, unit.clone(), pos);
-                                handler.detail_remove(pos, index);
+                                handler.detail_remove(pos, bubble_index);
                                 Ok(())
                             } else {
                                 Err(CommandError::NotEnoughMoney)
@@ -244,7 +244,7 @@ fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: u32, mut unit: Un
         UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(_, drone_id), ..}) => {
             *drone_id = handler.get_map().new_drone_id(handler.rng());
         }
-        UnitType::Structure(Structure {typ: Structures::DroneTower(Some((_, _, drone_id))), ..}) => {
+        UnitType::Structure(Structure {typ: Structures::DroneTower(_, _, drone_id), ..}) => {
             *drone_id = handler.get_map().new_drone_id(handler.rng());
         }
         _ => (),

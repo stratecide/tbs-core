@@ -59,7 +59,7 @@ impl<D: Direction> ChessCommand<D> {
         let mut recalculate_fog = false;
         if let Some(_) = handler.get_map().get_unit(end) {
             recalculate_fog = true;
-            handler.unit_death(end);
+            handler.unit_death(end, true);
         }
         handler.unit_path(None, &path_taken, false, true);
         match unit.typ {
@@ -72,7 +72,7 @@ impl<D: Direction> ChessCommand<D> {
                                 match unit.typ {
                                     ChessUnits::Pawn(d, true) => {
                                         if n.direction == d && handler.get_game().get_team(Some(unit.owner)) != team {
-                                            handler.unit_death(n.point);
+                                            handler.unit_death(n.point, true);
                                         }
                                     }
                                     _ => {}

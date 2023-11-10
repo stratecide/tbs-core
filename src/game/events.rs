@@ -160,7 +160,7 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_unit(*pos, Some(unit.clone()));
             }
             Self::UnitRemove(pos, _) => {
-                game.get_map_mut().set_unit(*pos, None).expect(&format!("expected a unit at {:?} to die!", pos));
+                game.get_map_mut().set_unit(*pos, None).expect(&format!("expected a unit at {:?} to remove!", pos));
             }
             Self::UnitAddBoarded(pos, unit) => {
                 if let Some(transporter) = game.get_map_mut().get_unit_mut(*pos) {
@@ -263,7 +263,7 @@ impl<D: Direction> Event<D> {
                         };
                         drones.push(unit);
                     }
-                    Some(UnitType::Structure(Structure {typ: Structures::DroneTower(Some((_, drones, _))), ..})) => {
+                    Some(UnitType::Structure(Structure {typ: Structures::DroneTower(_, drones, _), ..})) => {
                         let unit = TransportedUnit {
                             typ: drone.clone(),
                             data: UnitData {
@@ -846,6 +846,7 @@ pub enum Effect<D: Direction> {
     ShellFire(Point),
     Repair(Point),
     Explode(Point),
+    KrakenRage(Point),
 }
 impl<D: Direction> Effect<D> {
     pub fn fog_replacement(&self, game: &Game<D>, team: ClientPerspective) -> Option<Self> {
@@ -863,6 +864,7 @@ impl<D: Direction> Effect<D> {
                 }
             }
             Self::Lightning(_) |
+            Self::KrakenRage(_) |
             Self::Laser(_) => Some(self.clone()),
         }
     }
@@ -870,7 +872,7 @@ impl<D: Direction> Effect<D> {
 
 fn apply_vision_changes<D: Direction>(game: &mut Game<D>, team: ClientPerspective, pos: Point, intensity_before: FogIntensity, intensity: FogIntensity, change: &FieldData<D>) {
     game.set_fog(team, pos, intensity);
-    let change = if intensity < intensity_before {
+    let change = if intensity_before > intensity {
         change.clone()
     } else {
         change.clone().fog_replacement(intensity)

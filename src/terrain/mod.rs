@@ -9,6 +9,8 @@ use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
 use crate::units::UnitType;
 
+pub const KRAKEN_ATTACK_RANGE: usize = 3;
+
 
 macro_rules! land_units {
     () => {
@@ -59,6 +61,10 @@ pub enum Terrain<D: Direction> {
     Street,
     Tavern,
     ChessPawnTile,
+    //TrashIsland,
+    //Crater,
+    TentacleDepths,
+    Kraken(U<8>),
 }
 impl<D: Direction> Terrain<D> {
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<MovementPoints> {
@@ -152,6 +158,23 @@ impl<D: Direction> Terrain<D> {
             (Self::ChessPawnTile, sea_units!()) => None,
             (Self::ChessPawnTile, MovementType::Chess) => Some(MovementPoints::from(0.)),
             (Self::ChessPawnTile, _) => Some(MovementPoints::from(1.)),
+
+            /*(Self::TrashIsland, land_units!()) => None,
+            (Self::TrashIsland, MovementType::Boat) => Some(MovementPoints::from(1.5)),
+            (Self::TrashIsland, _) => Some(MovementPoints::from(1.)),
+
+            (Self::Crater, sea_units!()) => None,
+            (Self::Crater, MovementType::Hover(_)) => Some(MovementPoints::from(2.)),
+            (Self::Crater, MovementType::Foot) => Some(MovementPoints::from(1.)),
+            (Self::Crater, land_units!()) => Some(MovementPoints::from(1.5)),
+            (Self::Crater, air_units!()) => Some(MovementPoints::from(1.)),*/
+
+            (Self::TentacleDepths, land_units!()) => None,
+            (Self::TentacleDepths, _) => Some(MovementPoints::from(1.)),
+
+            (Self::Kraken(_), air_units!()) => Some(MovementPoints::from(1.)),
+            (Self::Kraken(_), sea_units!()) => Some(MovementPoints::from(2.)),
+            (Self::Kraken(_), _) => None,
         }
     }
     pub fn is_land(&self) -> bool {
@@ -193,6 +216,7 @@ impl<D: Direction> Terrain<D> {
                         Self::Bridge => HoverMode::Sea,
                         Self::ChessPawnTile => HoverMode::Land,
                         Self::ChessTile => HoverMode::Land,
+                        //Self::Crater => HoverMode::Land,
                         Self::Flame => HoverMode::Land,
                         Self::Forest => HoverMode::Land,
                         Self::Fountain => HoverMode::Sea,
@@ -209,6 +233,9 @@ impl<D: Direction> Terrain<D> {
                         Self::ShallowSea => HoverMode::Sea,
                         Self::Street => HoverMode::Land,
                         Self::Tavern => HoverMode::Beach,
+                        Self::TentacleDepths => HoverMode::Sea,
+                        //Self::TrashIsland => HoverMode::Sea,
+                        Self::Kraken(_) => HoverMode::Sea,
                     })
                 } else {
                     MovementType::Hover(mode)
@@ -223,7 +250,7 @@ impl<D: Direction> Terrain<D> {
     pub fn defense_bonus(&self, unit: &UnitType<D>) -> f32 {
         let movement_type = match unit {
             UnitType::Normal(unit) => {
-                unit.get_movement(self).0
+                unit.get_movement(self, None).0
             }
             UnitType::Chess(_) => {
                 MovementType::Chess
@@ -242,6 +269,24 @@ impl<D: Direction> Terrain<D> {
             (Self::Reef, sea_units!()) => 0.1,
             (Self::Ruins, land_units!()) => 0.3,
             (Self::Tavern, land_units!()) => 0.2,
+            //(Self::TrashIsland, sea_units!()) => 0.1,
+            (_, _) => 0.,
+        }
+    }
+
+    pub fn adjacent_defense_bonus(&self, unit: &UnitType<D>) -> f32 {
+        let movement_type = match unit {
+            UnitType::Normal(unit) => {
+                unit.get_movement(self, None).0
+            }
+            UnitType::Chess(_) => {
+                MovementType::Chess
+            }
+            UnitType::Structure(_) => return 0.0,
+            UnitType::Unknown => return 0.0,
+        };
+        match (self, movement_type) {
+            //(Self::Statue, sea_units!()) => 0.2,
             (_, _) => 0.,
         }
     }
@@ -256,10 +301,10 @@ impl<D: Direction> Terrain<D> {
     }
 
     pub fn hides_unit(&self, unit: &UnitType<D>) -> bool {
-        if match self {
-            Self::Forest => false,
-            Self::Icebergs => false,
-            _ => true
+        if !match self {
+            Self::Forest => true,
+            Self::Icebergs => true,
+            _ => false
         } {
             return false;
         }
@@ -267,7 +312,7 @@ impl<D: Direction> Terrain<D> {
             UnitType::Structure(_) => false,
             UnitType::Chess(_) => true,
             UnitType::Normal(unit) => {
-                let movement_type = unit.get_movement(self).0;
+                let movement_type = unit.get_movement(self, None).0;
                 movement_type != MovementType::Plane
                 && movement_type != MovementType::Heli
             }
@@ -306,6 +351,7 @@ impl<D: Direction> Terrain<D> {
             FogIntensity::Dark => {
                 match self {
                     Terrain::Realty(realty, _, _) => Terrain::Realty(realty.clone(), None, CaptureProgress::None),
+                    Terrain::Kraken(_) => Terrain::Kraken(0.into()),
                     _ => self.clone(),
                 }
             }
@@ -450,7 +496,7 @@ pub fn build_options_airport<D: Direction>(_game: &Game<D>, owner: Owner, built_
 pub fn build_options_construction_site<D: Direction>(_game: &Game<D>, owner: Owner, built_this_turn: u8) -> Vec<(UnitType<D>, u16)> {
     let mut list = vec![
         Structures::ShockTower(Some(owner)),
-        Structures::DroneTower(Some((owner, LVec::new(), 0.into())))
+        Structures::DroneTower(owner, LVec::new(), 0.into())
     ];
     for d in D::list() {
         list.push(Structures::MegaCannon(Some(owner), d));

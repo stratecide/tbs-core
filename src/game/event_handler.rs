@@ -83,7 +83,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                     None
                 }
             }
-            UnitType::Structure(Structure {typ: Structures::DroneTower(Some((_, boarded, id))), ..}) => {
+            UnitType::Structure(Structure {typ: Structures::DroneTower(_, boarded, id), ..}) => {
                 if boarded.remaining_capacity() > 0 {
                     Some((*id, (p, boarded.remaining_capacity())))
                 } else {
@@ -111,11 +111,18 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                             }
                         } else {
                             // no parent available, self-destruct
-                            self.unit_death(p);
+                            self.unit_death(p, false);
                         }
                     }
                     _ => (),
                 }
+            }
+        }
+
+        // release the kraken
+        for p in self.get_map().all_points() {
+            if self.get_map().get_terrain(p) == Some(&Terrain::TentacleDepths) && self.get_map().get_unit(p) == None {
+                self.unit_creation(p, UnitType::Structure(Structure::new_instance(Structures::Tentacle)));
             }
         }
 
@@ -356,23 +363,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         } else {
             self.add_event(Event::UnitRemove(path.start, unit.clone()));
         }
-        let mut current = path.start;
-        let mut transformed_unit = unit.clone();
-        let mut steps = Vec::new();
-        for step in &path.steps {
-            let next = step.progress(self.get_map(), current).unwrap();
-            if !involuntarily {
-                if let Some(unit) = transformed_unit.transformed_by_movement(self.get_map(), current, next) {
-                    transformed_unit = unit;
-                    steps.push(UnitStep::Transform(current, *step, Some(transformed_unit.clone())));
-                    current = next;
-                    continue;
-                }
-            }
-            steps.push(UnitStep::Simple(current, *step));
-            current = next;
-        }
-        self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
+        let transformed_unit = self.animate_unit_path(&unit, path, involuntarily);
         if board_at_the_end {
             if let UnitType::Normal(unit) = transformed_unit.clone() {
                 self.add_event(Event::UnitAddBoarded(path_end, unit));
@@ -447,6 +438,27 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 self.add_event(Event::ReplaceDetail(p, old_details.try_into().unwrap(), details.try_into().unwrap()));
             }
         }
+    }
+
+    pub fn animate_unit_path(&mut self, unit: &UnitType<D>, path: &Path<D>, involuntarily: bool) -> UnitType<D> {
+        let mut current = path.start;
+        let mut transformed_unit = unit.clone();
+        let mut steps = Vec::new();
+        for step in &path.steps {
+            let next = step.progress(self.get_map(), current).unwrap();
+            if !involuntarily {
+                if let Some(unit) = transformed_unit.transformed_by_movement(self.get_map(), current, next) {
+                    transformed_unit = unit;
+                    steps.push(UnitStep::Transform(current, *step, Some(transformed_unit.clone())));
+                    current = next;
+                    continue;
+                }
+            }
+            steps.push(UnitStep::Simple(current, *step));
+            current = next;
+        }
+        self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
+        transformed_unit
     }
 
     pub fn unit_moved_this_game(&mut self, position: Point) {
@@ -565,16 +577,19 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn unit_death(&mut self, position: Point) {
+    pub fn unit_death(&mut self, position: Point, trigger_death_effects: bool) {
         self.add_event(Event::Effect(Effect::Explode(position)));
-        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         self.add_event(Event::UnitRemove(position, unit.clone()));
+        if trigger_death_effects {
+            unit.on_death(self, position);
+        }
     }
 
-    pub fn unit_mass_death(&mut self, positions: HashSet<Point>) {
+    pub fn unit_mass_death(&mut self, positions: HashSet<Point>, trigger_death_effects: bool) {
         // TODO: mass-effect
         for position in positions {
-            self.unit_death(position);
+            self.unit_death(position, trigger_death_effects);
         }
     }
 
@@ -583,6 +598,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.add_event(Event::UnitRemove(position, unit.clone()));
         self.add_event(Event::UnitAdd(position, new_unit));
     }
+
+    pub fn effect_kraken_rage(&mut self, position: Point) {
+        self.add_event(Event::Effect(Effect::KrakenRage(position)))
+    }
+
+
+
 
     pub fn accept(mut self) -> Events<Game<D>> {
         if self.events.get(&IPerspective::Server) == self.events.get(&IPerspective::Neutral) {

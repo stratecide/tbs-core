@@ -13,6 +13,7 @@ use zipper::*;
 use zipper::zipper_derive::*;
 
 use crate::commanders::Commander;
+use crate::game::event_handler::EventHandler;
 use crate::game::fog::FogIntensity;
 use crate::game::fog::FogSetting;
 use crate::player::*;
@@ -195,7 +196,7 @@ impl<D: Direction> UnitType<D> {
         match self {
             UnitType::Normal(u @ NormalUnit { typ: NormalUnits::Hovercraft(on_sea), .. }) => {
                 let prev_terrain = map.get_terrain(from).unwrap();
-                let movement_type = u.get_movement(prev_terrain).0;
+                let movement_type = u.get_movement(prev_terrain, None).0;
                 let terrain = map.get_terrain(to).unwrap();
                 let movement_type2 = terrain.update_movement_type(movement_type, prev_terrain).unwrap();
                 let on_sea2 = movement_type2 != MovementType::Hover(HoverMode::Land);
@@ -288,7 +289,10 @@ impl<D: Direction> UnitType<D> {
         let is_counter = path.is_none();
         let (armor_type, defense) = self.get_armor();
         let terrain = game.get_map().get_terrain(pos).unwrap();
-        let terrain_defense = 1. + terrain.defense_bonus(self);
+        let mut terrain_defense = 1. + terrain.defense_bonus(self);
+        for t in game.get_map().get_neighbors(pos, crate::map::map::NeighborMode::Direct).into_iter().map(|p| game.get_map().get_terrain(p.point).unwrap()) {
+            terrain_defense += t.adjacent_defense_bonus(self);
+        }
         let in_water = terrain.is_water();
         let mut defense_bonus = 1.;
         if let Some(owner) = self.get_owner().and_then(|owner| game.get_owning_player(owner)) {
@@ -426,7 +430,7 @@ impl<D: Direction> UnitType<D> {
 
     pub fn fog_replacement(&self, terrain: &Terrain<D>, intensity: FogIntensity) -> Option<Self> {
         match self {
-            Self::Structure(struc) => struc.fog_replacement(intensity).and_then(|s| Some(Self::Structure(s))),
+            Self::Structure(struc) => struc.fog_replacement(intensity),
             Self::Normal(_unit) => {
                 match intensity {
                     FogIntensity::TrueSight => Some(self.clone()),
@@ -529,7 +533,23 @@ impl<D: Direction> UnitType<D> {
             Self::Structure(_structure) => (), // TODO: drone tower
             _ => (),
         }
+        for u in self.get_boarded() {
+            u.typ.insert_drone_ids(existing_ids);
+        }
+    }
+
+    pub fn on_death(&self, handler: &mut EventHandler<D>, position: Point) {
+        match self {
+            Self::Structure(u) => u.on_death(handler, position),
+            _ => ()
+        }
+    }
+
+    pub fn unload_movement_bonus(&self, _transported: &NormalUnit) -> MovementPoints {
+        match self {
+            Self::Normal(NormalUnit { typ: NormalUnits::DroneShip(_, _), .. }) => MovementPoints::from(2.),
+            Self::Structure(Structure { typ: Structures::DroneTower(_, _, _), .. }) => MovementPoints::from(2.),
+            _ => MovementPoints::from(0.),
+        }
     }
 }
-
-
