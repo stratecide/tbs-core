@@ -83,6 +83,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                     None
                 }
             }
+            UnitType::Normal(NormalUnit {typ: NormalUnits::DroneShip(boarded, id), ..}) => {
+                if boarded.remaining_capacity() > 0 {
+                    Some((*id, (p, boarded.remaining_capacity())))
+                } else {
+                    None
+                }
+            }
             UnitType::Structure(Structure {typ: Structures::DroneTower(_, boarded, id), ..}) => {
                 if boarded.remaining_capacity() > 0 {
                     Some((*id, (p, boarded.remaining_capacity())))
@@ -153,8 +160,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn recalculate_fog(&mut self) {
-        let mut perspectives: HashSet<Perspective> = self.game.get_teams().into_iter().map(|team| Some(team)).collect();
-        perspectives.remove(&Some(self.game.current_player().team));
+        let mut perspectives: HashSet<Perspective> = self.game.get_teams().into_iter()
+        .filter(|team| *team != self.game.current_player().team)
+        .map(|team| Some(team))
+        .collect();
         perspectives.insert(None);
         for team in perspectives {
             self.recalculate_fog_for(team);
@@ -353,17 +362,20 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         if path.steps.len() == 0 {
             return;
         }
-        let unit = self.get_map().get_unit(path.start).expect(&format!("Missing unit at {:?}", path.start)).clone();
+        let mut unit = self.get_map().get_unit(path.start).expect(&format!("Missing unit at {:?}", path.start)).clone();
         let unit_team = unit.get_team(self.get_game());
-        let path_end = path.end(self.get_map()).unwrap();
         if let Some(unload_index) = unload_index {
-            if let UnitType::Normal(unit) = unit.clone() {
-                self.add_event(Event::UnitRemoveBoarded(path.start, unload_index, unit));
+            if let Some(u) = unit.get_boarded().get(*unload_index as usize) {
+                self.add_event(Event::UnitRemoveBoarded(path.start, unload_index, u.clone()));
+                unit = u.as_unit();
+            } else {
+                panic!("Attempted to unboard unit that doesn't exist!");
             }
         } else {
             self.add_event(Event::UnitRemove(path.start, unit.clone()));
         }
         let transformed_unit = self.animate_unit_path(&unit, path, involuntarily);
+        let path_end = path.end(self.get_map()).unwrap();
         if board_at_the_end {
             if let UnitType::Normal(unit) = transformed_unit.clone() {
                 self.add_event(Event::UnitAddBoarded(path_end, unit));

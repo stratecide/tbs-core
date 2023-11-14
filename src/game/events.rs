@@ -263,6 +263,18 @@ impl<D: Direction> Event<D> {
                         };
                         drones.push(unit);
                     }
+                    Some(UnitType::Normal(NormalUnit {typ: NormalUnits::DroneShip(drones, _), ..})) => {
+                        let unit = TransportedUnit {
+                            typ: drone.clone(),
+                            data: UnitData {
+                                exhausted: true,
+                                hp: 100.into(),
+                                mercenary: MaybeMercenary::None,
+                                zombie: false,
+                            },
+                        };
+                        drones.push(unit);
+                    }
                     Some(UnitType::Structure(Structure {typ: Structures::DroneTower(_, drones, _), ..})) => {
                         let unit = TransportedUnit {
                             typ: drone.clone(),
@@ -437,6 +449,12 @@ impl<D: Direction> Event<D> {
             Self::BuildDrone(p, _) => {
                 match game.get_map_mut().get_unit_mut(*p) {
                     Some(UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(drones, _), ..})) => {
+                        drones.pop();
+                    }
+                    Some(UnitType::Normal(NormalUnit {typ: NormalUnits::DroneShip(drones, _), ..})) => {
+                        drones.pop();
+                    }
+                    Some(UnitType::Structure(Structure {typ: Structures::DroneTower(_, drones, _), ..})) => {
                         drones.pop();
                     }
                     _ => (),
