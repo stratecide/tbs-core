@@ -72,13 +72,13 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn recalculate_fog(&self, perspective: Perspective) -> HashMap<Point, FogIntensity> {
-        if !self.is_foggy() {
-            return HashMap::new();
-        }
         let mut fog = HashMap::new();
         let strongest_intensity = self.fog_mode.fog_setting(self.current_turn as usize, self.players.len()).intensity();
         for p in self.get_map().all_points() {
             fog.insert(p, strongest_intensity);
+        }
+        if !self.is_foggy() {
+            return fog;
         }
         for p in self.get_map().all_points() {
             for (p, v) in self.get_map().get_terrain(p).unwrap().get_vision(self, p, perspective) {
@@ -97,9 +97,7 @@ impl<D: Direction> Game<D> {
                 }
             }
         }
-        fog.into_iter()
-        .filter(|(_, intensity)| *intensity != FogIntensity::TrueSight)
-        .collect()
+        fog
     }
     
     pub fn get_map(&self) -> &Map<D> {
