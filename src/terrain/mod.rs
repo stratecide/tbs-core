@@ -384,7 +384,7 @@ impl Realty {
     pub fn income_factor(&self) -> i16 {
         match self {
             Self::City => 1,
-            Self::OilPlatform => 2,
+            Self::OilPlatform => 1,
             _ => 0,
         }
     }
