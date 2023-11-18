@@ -9,6 +9,7 @@ edition = "2021"
 rendering = []
 
 [dependencies]
+rustc-hash = "1.1"
 interfaces = { path = "../interfaces" }
 zipper = { path = "../../zipper", features = ["debug"] }
 zipper_derive = { path = "../../zipper/zipper_derive" }

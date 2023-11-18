@@ -13,7 +13,7 @@ pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zip
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
     fn pipe_entry(&self) -> Self::P;
-    fn list() -> Vec<Self>;
+    fn list() -> Vec<Self>; // TODO: turn into &'static[Self]
     fn mirror_horizontally(&self) -> Self;
     //fn rotate_point_map(&self, map: &PointMap) -> PointMap;
     fn get_neighbor(&self, point: Point, odd_if_hex: bool) -> Option<Point> {

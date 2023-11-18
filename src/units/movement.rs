@@ -973,13 +973,13 @@ pub fn movement_area_game<D: Direction>(game: &Game<D>, unit: &UnitType<D>, path
                         if let Some(PathStep::Dir(_)) = path.steps.last() {
                             return PathSearchFeedback::Rejected;
                         }
-                        if !blocking_unit.can_be_taken_by_chess(game, *owner) {
+                        if !blocking_unit.killable_by_chess(game.get_team(Some(*owner)), game) {
                             return PathSearchFeedback::Rejected;
                         }
                         can_continue = false;
                     }
                     UnitType::Chess(unit) => {
-                        if !blocking_unit.can_be_taken_by_chess(game, unit.owner) {
+                        if !blocking_unit.killable_by_chess(game.get_team(Some(unit.owner)), game) {
                             return PathSearchFeedback::Rejected;
                         }
                         can_continue = false;
@@ -1037,13 +1037,13 @@ where F: Fn(&Path<D>, Point, bool) -> PathSearchFeedback {
                         if let Some(PathStep::Dir(_)) = path.steps.last() {
                             return PathSearchFeedback::Rejected;
                         }
-                        if !blocking_unit.can_be_taken_by_chess(game, *owner) {
+                        if !blocking_unit.killable_by_chess(game.get_team(Some(*owner)), game) {
                             return PathSearchFeedback::Rejected;
                         }
                         can_continue = false;
                     }
                     UnitType::Chess(unit) => {
-                        if !blocking_unit.can_be_taken_by_chess(game, unit.owner) {
+                        if !blocking_unit.killable_by_chess(game.get_team(Some(unit.owner)), game) {
                             return PathSearchFeedback::Rejected;
                         }
                         can_continue = false;

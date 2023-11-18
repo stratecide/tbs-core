@@ -617,14 +617,12 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                         break;
                     }
                 }
-                if let ClientPerspective::Team(team) = team {
-                    if let Some(unit) = game.get_map().get_unit(next_dp.point) {
-                        if !ignore_unseen || game.can_see_unit_at(ClientPerspective::Team(team), next_dp.point, unit, true) {
-                            if unit.killable_by_chess(team.into(), game) {
-                                callback(next_dp.point, &steps);
-                            }
-                            break;
+                if let Some(unit) = game.get_map().get_unit(next_dp.point) {
+                    if team != ClientPerspective::Neutral && !ignore_unseen || game.can_see_unit_at(team, next_dp.point, unit, true) {
+                        if unit.killable_by_chess(team, game) {
+                            callback(next_dp.point, &steps);
                         }
+                        break;
                     }
                 }
                 cost += c;
@@ -664,16 +662,14 @@ where D: Direction, F: FnMut(Point, &Vec<PathStep<D>>) -> bool {
                         break;
                     }
                 }
-                if let ClientPerspective::Team(team) = team {
                     if let Some(unit) = game.get_map().get_unit(next_dp.point) {
-                        if !ignore_unseen || game.can_see_unit_at(ClientPerspective::Team(team), next_dp.point, unit, true) {
-                            if unit.killable_by_chess(team.into(), game) {
+                        if team != ClientPerspective::Neutral && !ignore_unseen || game.can_see_unit_at(team, next_dp.point, unit, true) {
+                            if unit.killable_by_chess(team, game) {
                                 callback(next_dp.point, &steps);
                             }
                             break;
                         }
                     }
-                }
                 cost += c;
                 dp = next_dp;
                 if callback(dp.point, &steps) {

@@ -5,6 +5,8 @@ pub mod normal_units;
 pub mod commands;
 pub mod movement;
 pub mod combat;
+pub mod attributes;
+pub mod hero;
 
 use std::collections::{HashSet, HashMap};
 
@@ -260,9 +262,12 @@ impl<D: Direction> UnitType<D> {
         }
     }
 
-    pub fn killable_by_chess(&self, team: Team, game: &Game<D>) -> bool {
+    pub fn killable_by_chess(&self, team: ClientPerspective, game: &Game<D>) -> bool {
         match self {
-            _ => self.get_team(game) != ClientPerspective::Team(*team as u8),
+            Self::Normal(_) => self.get_team(game) != team,
+            Self::Chess(_) => self.get_team(game) != team,
+            Self::Structure(_) => false,
+            Self::Unknown => true,
         }
     }
 
@@ -275,14 +280,14 @@ impl<D: Direction> UnitType<D> {
         }
     }
 
-    pub fn can_be_taken_by_chess(&self, game: &Game<D>, attacking_owner: Owner) -> bool {
+    /*pub fn can_be_taken_by_chess(&self, game: &Game<D>, attacking_owner: Owner) -> bool {
         match self {
             Self::Normal(_) => self.get_team(game) != game.get_team(Some(attacking_owner)),
             Self::Chess(_) => self.get_team(game) != game.get_team(Some(attacking_owner)),
             Self::Structure(_) => false,
             Self::Unknown => true,
         }
-    }
+    }*/
 
     // set path to None if this is a counter-attack
     pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &NormalUnit, path: Option<&Path<D>>) -> Option<(WeaponType, u16)> {
