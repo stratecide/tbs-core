@@ -263,7 +263,7 @@ impl<D: Direction> Event<D> {
                         };
                         drones.push(unit);
                     }
-                    Some(UnitType::Normal(NormalUnit {typ: NormalUnits::DroneShip(drones, _), ..})) => {
+                    Some(UnitType::Normal(NormalUnit {typ: NormalUnits::Carrier(drones, _), ..})) => {
                         let unit = TransportedUnit {
                             typ: drone.clone(),
                             data: UnitData {
@@ -451,7 +451,7 @@ impl<D: Direction> Event<D> {
                     Some(UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(drones, _), ..})) => {
                         drones.pop();
                     }
-                    Some(UnitType::Normal(NormalUnit {typ: NormalUnits::DroneShip(drones, _), ..})) => {
+                    Some(UnitType::Normal(NormalUnit {typ: NormalUnits::Carrier(drones, _), ..})) => {
                         drones.pop();
                     }
                     Some(UnitType::Structure(Structure {typ: Structures::DroneTower(_, drones, _), ..})) => {

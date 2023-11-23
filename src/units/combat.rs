@@ -41,7 +41,7 @@ impl WeaponType {
             (Self::Rifle, ArmorType::Infantry) => Some(1.20),
             (Self::Rifle, ArmorType::Light) => Some(0.25),
             (Self::Rifle, ArmorType::Heavy) => Some(0.15),
-            (Self::Rifle, ArmorType::Heli) => Some(0.30),
+            (Self::Rifle, ArmorType::Heli) => Some(0.40),
             (Self::Rifle, ArmorType::Plane) => Some(0.15),
             (Self::Rifle, ArmorType::Submarine) => if !in_water { Some(0.15) } else { None },
             (Self::Rifle, ArmorType::Structure) => Some(0.10),

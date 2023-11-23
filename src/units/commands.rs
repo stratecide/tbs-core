@@ -117,7 +117,7 @@ impl<D: Direction> CommonMovement<D> {
                         return PathSearchFeedback::Found;
                     }
                 }
-            } else if !board_at_the_end && can_stop_here {
+            } else if path == path_taken && !board_at_the_end && can_stop_here {
                 return PathSearchFeedback::Found;
             }
             PathSearchFeedback::Rejected
@@ -125,7 +125,7 @@ impl<D: Direction> CommonMovement<D> {
     }
     
     // returns the point the unit ends on unless it is stopped by a fog trap
-    fn apply(&self, handler: &mut EventHandler<D>, board_at_the_end: bool, actively: bool) -> Result<Option<Point>, CommandError> {
+    fn apply(&self, handler: &mut EventHandler<D>, mut board_at_the_end: bool, actively: bool) -> Result<Option<Point>, CommandError> {
         if let Ok(unit) = self.get_unit(handler.get_map()) {
             let mut path_taken = self.path.clone();
             let mut path_taken_works = !board_at_the_end && self.unload_index.is_none() && path_taken.steps.len() == 0;
@@ -136,6 +136,7 @@ impl<D: Direction> CommonMovement<D> {
                     break
                 } else if !path_taken_works {
                     path_taken.steps.pop();
+                    board_at_the_end = false;
                 }
             }
             if path_taken_works {
@@ -146,7 +147,7 @@ impl<D: Direction> CommonMovement<D> {
                     }
                     // special case of a unit being unable to move that's loaded in a transport
                     if path_taken.steps.len() == 0 && self.unload_index.is_some() {
-                        handler.unit_exhaust_boarded(self.path.start, self.unload_index.unwrap());
+                        handler.unit_exhaust_boarded(path_taken.start, self.unload_index.unwrap());
                     } else {
                         handler.unit_exhaust(path_taken.end(handler.get_map())?);
                     }
@@ -409,7 +410,7 @@ impl<D: Direction> UnitCommand<D> {
                     NormalUnits::DroneBoat(drones, drone_id) => {
                         (*drone_id, drones.len(), drones.capacity())
                     }
-                    NormalUnits::DroneShip(drones, drone_id) => {
+                    NormalUnits::Carrier(drones, drone_id) => {
                         (*drone_id, drones.len(), drones.capacity())
                     }
                     _ => return Err(CommandError::UnitTypeWrong),

@@ -547,7 +547,7 @@ impl<D: Direction> UnitType<D> {
 
     pub fn unload_movement_bonus(&self, _transported: &NormalUnit) -> MovementPoints {
         match self {
-            Self::Normal(NormalUnit { typ: NormalUnits::DroneShip(_, _), .. }) => MovementPoints::from(2.),
+            Self::Normal(NormalUnit { typ: NormalUnits::Carrier(_, _), .. }) => MovementPoints::from(2.),
             Self::Structure(Structure { typ: Structures::DroneTower(_, _, _), .. }) => MovementPoints::from(2.),
             _ => MovementPoints::from(0.),
         }

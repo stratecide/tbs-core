@@ -176,7 +176,7 @@ impl NormalUnit {
             NormalUnits::TransportHeli(units) => units.iter().map(|t| t.to_normal(self.owner, None)).collect(),
             NormalUnits::TransportBoat(units) => units.iter().map(|t| t.to_normal(self.owner, None)).collect(),
             NormalUnits::DroneBoat(units, id) => units.iter().map(|t| t.to_normal(self.owner, Some(*id))).collect(),
-            NormalUnits::DroneShip(units, id) => units.iter().map(|t| t.to_normal(self.owner, Some(*id))).collect(),
+            NormalUnits::Carrier(units, id) => units.iter().map(|t| t.to_normal(self.owner, Some(*id))).collect(),
             _ => vec![],
         }
     }
@@ -186,7 +186,7 @@ impl NormalUnit {
             NormalUnits::TransportHeli(units) => units.iter_mut().map(|u| &mut u.data).collect(),
             NormalUnits::TransportBoat(units) => units.iter_mut().map(|u| &mut u.data).collect(),
             NormalUnits::DroneBoat(units, _) => units.iter_mut().map(|u| &mut u.data).collect(),
-            NormalUnits::DroneShip(units, _) => units.iter_mut().map(|u| &mut u.data).collect(),
+            NormalUnits::Carrier(units, _) => units.iter_mut().map(|u| &mut u.data).collect(),
             _ => vec![],
         }
     }
@@ -203,7 +203,7 @@ impl NormalUnit {
             NormalUnits::DroneBoat(units, _) => {
                 units.remove(index).ok();
             }
-            NormalUnits::DroneShip(units, _) => {
+            NormalUnits::Carrier(units, _) => {
                 units.remove(index).ok();
             }
             _ => (),
@@ -225,7 +225,7 @@ impl NormalUnit {
                 TransportedUnit::from_normal(&unit)
                 .and_then(|u| units.insert(index, u).ok());
             }
-            NormalUnits::DroneShip(units, _) => {
+            NormalUnits::Carrier(units, _) => {
                 TransportedUnit::from_normal(&unit)
                 .and_then(|u| units.insert(index, u).ok());
             }
@@ -253,13 +253,13 @@ impl NormalUnit {
                 (movement_type,MovementPoints::from(4.5))
             },
             
-            NormalUnits::LaserShark => (MovementType::Boat, MovementPoints::from(5.)),
+            NormalUnits::LaserShark => (MovementType::Boat, MovementPoints::from(4.)),
             NormalUnits::TransportBoat(_) => (MovementType::Boat, MovementPoints::from(5.)),
             NormalUnits::WaveBreaker => (MovementType::Ship, MovementPoints::from(6.)),
             NormalUnits::Submarine => (MovementType::Ship, MovementPoints::from(6.)),
             NormalUnits::Cruiser => (MovementType::Ship, MovementPoints::from(5.)),
             NormalUnits::DroneBoat(_, _) => (MovementType::Boat, MovementPoints::from(4.)),
-            NormalUnits::DroneShip(_, _) => (MovementType::Ship, MovementPoints::from(4.)),
+            NormalUnits::Carrier(_, _) => (MovementType::Ship, MovementPoints::from(4.)),
             NormalUnits::SwimmingFactory => (MovementType::Ship, MovementPoints::from(3.)),
 
             NormalUnits::TransportHeli(_) => (MovementType::Heli, MovementPoints::from(5.)),
@@ -322,8 +322,20 @@ impl NormalUnit {
         }
         if path.start == destination || game.get_map().get_unit(destination).is_none() {
             match &this.typ {
-                NormalUnits::DroneBoat(drones, _) => {
-                    if drones.remaining_capacity() > 0 {
+                NormalUnits::DroneBoat(drones, drone_id) => {
+                    let mut outside = 0;
+                    for p in game.get_map().all_points() {
+                        match game.get_map().get_unit(p) {
+                            Some(UnitType::Normal(u @ NormalUnit {typ: NormalUnits::HeavyDrone(id), ..})) |
+                            Some(UnitType::Normal(u @ NormalUnit {typ: NormalUnits::LightDrone(id), ..})) => {
+                                if id == drone_id && u.owner == self.owner {
+                                    outside += 1;
+                                }
+                            }
+                            _ => ()
+                        }
+                    }
+                    if drones.remaining_capacity() > outside {
                         for unit in NormalUnits::list() {
                             if let Some(drone) = TransportableDrones::from_normal(&unit) {
                                 if unit.value() as i32 <= funds_after_path {
@@ -333,8 +345,20 @@ impl NormalUnit {
                         }
                     }
                 }
-                NormalUnits::DroneShip(drones, _) => {
-                    if drones.remaining_capacity() > 0 {
+                NormalUnits::Carrier(drones, drone_id) => {
+                    let mut outside = 0;
+                    for p in game.get_map().all_points() {
+                        match game.get_map().get_unit(p) {
+                            Some(UnitType::Normal(u @ NormalUnit {typ: NormalUnits::HeavyDrone(id), ..})) |
+                            Some(UnitType::Normal(u @ NormalUnit {typ: NormalUnits::LightDrone(id), ..})) => {
+                                if id == drone_id && u.owner == self.owner {
+                                    outside += 1;
+                                }
+                            }
+                            _ => ()
+                        }
+                    }
+                    if drones.remaining_capacity() > outside {
                         for unit in NormalUnits::list() {
                             if let Some(drone) = TransportableDrones::from_normal(&unit) {
                                 if unit.value() as i32 <= funds_after_path {
@@ -594,7 +618,7 @@ pub enum TransportableHeli {
     Submarine,
     Cruiser,
     DroneBoat(DroneId), // can't contain drones, can't have drones flying around
-    DroneShip(DroneId),
+    Carrier(DroneId),
 }
 impl TransportableUnits for TransportableHeli {
     fn from_normal(unit: &NormalUnits) -> Option<Self> {
@@ -627,11 +651,11 @@ impl TransportableUnits for TransportableHeli {
                 }
                 Self::DroneBoat(*id)
             },
-            NormalUnits::DroneShip(units, id) => {
+            NormalUnits::Carrier(units, id) => {
                 if units.len() != 0 {
                     return None;
                 }
-                Self::DroneShip(*id)
+                Self::Carrier(*id)
             }
             _ => return None,
         })
@@ -656,7 +680,7 @@ impl TransportableUnits for TransportableHeli {
             Self::Submarine => NormalUnits::Submarine,
             Self::Cruiser => NormalUnits::Cruiser,
             Self::DroneBoat(id) => NormalUnits::DroneBoat(LVec::new(), *id),
-            Self::DroneShip(id) => NormalUnits::DroneShip(LVec::new(), *id),
+            Self::Carrier(id) => NormalUnits::Carrier(LVec::new(), *id),
         }
     }
 }
@@ -738,7 +762,7 @@ pub type DroneId = U::<{MAX_AREA as i32 * 2}>;
 
 pub fn buildable_drones<D: Direction>(_game: &Game<D>, _owner: Owner) -> Vec<TransportableDrones> {
     vec![
-        TransportableDrones::Light,
+        //TransportableDrones::Light,
         TransportableDrones::Heavy,
     ]
 }
@@ -763,11 +787,11 @@ pub enum NormalUnits {
     // sea units
     LaserShark,
     TransportBoat(LVec<TransportedUnit<TransportableBoat>, 1>),
-    DroneBoat(LVec<TransportedUnit<TransportableDrones>, 2>, DroneId),
+    DroneBoat(LVec<TransportedUnit<TransportableDrones>, 1>, DroneId),
     WaveBreaker,
     Submarine,
     Cruiser,
-    DroneShip(LVec<TransportedUnit<TransportableDrones>, 3>, DroneId),
+    Carrier(LVec<TransportedUnit<TransportableDrones>, 2>, DroneId),
     SwimmingFactory,
 
     // air units
@@ -802,7 +826,7 @@ impl NormalUnits {
             Self::Submarine => "Submarine",
             Self::Cruiser => "Cruiser",
             Self::DroneBoat(_, _) => "Drone Boat",
-            Self::DroneShip(_, _) => "Drone Ship",
+            Self::Carrier(_, _) => "Carrier",
             Self::SwimmingFactory => "Swimming Factory",
 
             Self::TransportHeli(_) => "Transport Helicopter",
@@ -837,8 +861,13 @@ impl NormalUnits {
             Self::WaveBreaker,
             Self::Submarine,
             Self::Cruiser,
-            Self::DroneBoat(LVec::new(), 0.into()),
-            Self::DroneShip(LVec::new(), 0.into()),
+            Self::DroneBoat(vec![
+                TransportedUnit {
+                    typ: TransportableDrones::Heavy,
+                    data: UnitData { mercenary: MaybeMercenary::None, hp: 100.into(), exhausted: true, zombie: false }
+                },
+            ].try_into().unwrap(), 0.into()),
+            Self::Carrier(LVec::new(), 0.into()),
             Self::SwimmingFactory,
 
             Self::TransportHeli(LVec::new()),
@@ -876,7 +905,7 @@ impl NormalUnits {
             Self::WaveBreaker |
             Self::Submarine |
             Self::Cruiser |
-            Self::DroneShip(_, _) |
+            Self::Carrier(_, _) |
             Self::DroneBoat(_, _) => true,
             _ => false,
         }
@@ -898,8 +927,8 @@ impl NormalUnits {
         match self {
             NormalUnits::TransportHeli(_) => 1,
             NormalUnits::TransportBoat(_) => 1,
-            NormalUnits::DroneBoat(_, _) => 2,
-            NormalUnits::DroneShip(_, _) => 3,
+            NormalUnits::DroneBoat(_, _) => 1,
+            NormalUnits::Carrier(_, _) => 2,
             _ => 0,
         }
     }
@@ -913,7 +942,7 @@ impl NormalUnits {
             NormalUnits::TransportBoat(_) => {
                 TransportableBoat::from_normal(unit).is_some()
             }
-            NormalUnits::DroneShip(_, _) |
+            NormalUnits::Carrier(_, _) |
             NormalUnits::DroneBoat(_, _) => {
                 TransportableDrones::from_normal(unit).is_some()
             }
@@ -930,7 +959,7 @@ impl NormalUnits {
             Self::SmallTank => AttackType::Adjacent,
             Self::BigTank => AttackType::Adjacent,
             Self::AntiAir => AttackType::Adjacent,
-            Self::RocketLauncher => AttackType::Ranged(3, 5),
+            Self::RocketLauncher => AttackType::Ranged(3, 4),
             Self::Magnet => AttackType::Straight(2, 2),
 
             Self::Hovercraft(_) => AttackType::Adjacent,
@@ -942,7 +971,7 @@ impl NormalUnits {
             Self::Submarine => AttackType::Adjacent,
             Self::Cruiser => AttackType::Adjacent,
             Self::DroneBoat(_, _) => AttackType::None,
-            Self::DroneShip(_, _) => AttackType::None,
+            Self::Carrier(_, _) => AttackType::None,
             Self::SwimmingFactory => AttackType::Adjacent,
 
             Self::TransportHeli(_) => AttackType::None,
@@ -970,13 +999,13 @@ impl NormalUnits {
 
             Self::Hovercraft(_) => vec![(WeaponType::MachineGun, 1.)],
 
-            Self::LaserShark => vec![(WeaponType::MachineGun, 1.5), (WeaponType::AntiAir, 0.9)],
+            Self::LaserShark => vec![(WeaponType::Rifle, 1.5)],
             Self::TransportBoat(_) => vec![],
             Self::WaveBreaker => vec![(WeaponType::Torpedo, 1.), (WeaponType::Shells, 0.5)],
             Self::Submarine => vec![(WeaponType::Torpedo, 1.)],
             Self::Cruiser => vec![(WeaponType::Torpedo, 1.9), (WeaponType::Shells, 0.95)],
             Self::DroneBoat(_, _) => vec![],
-            Self::DroneShip(_, _) => vec![],
+            Self::Carrier(_, _) => vec![],
             Self::SwimmingFactory => vec![(WeaponType::AntiAir, 0.5), (WeaponType::Shells, 0.5)],
 
             Self::TransportHeli(_) => vec![],
@@ -986,7 +1015,7 @@ impl NormalUnits {
             Self::Fighter => vec![(WeaponType::AntiAir, 1.)],
 
             Self::LightDrone(_) => vec![(WeaponType::MachineGun, 1.)],
-            Self::HeavyDrone(_) => vec![(WeaponType::Shells, 1.)],
+            Self::HeavyDrone(_) => vec![(WeaponType::MachineGun, 1.), (WeaponType::Shells, 1.)],
         }
     }
 
@@ -1010,7 +1039,7 @@ impl NormalUnits {
             Self::Submarine => (ArmorType::Submarine, 2.0),
             Self::Cruiser => (ArmorType::Heavy, 2.5),
             Self::DroneBoat(_, _) => (ArmorType::Light, 1.5),
-            Self::DroneShip(_, _) => (ArmorType::Light, 1.5),
+            Self::Carrier(_, _) => (ArmorType::Light, 1.5),
             Self::SwimmingFactory => (ArmorType::Heavy, 2.5),
             
             Self::TransportHeli(_) => (ArmorType::Heli, 1.2),
@@ -1019,8 +1048,8 @@ impl NormalUnits {
             Self::Bomber => (ArmorType::Plane, 1.5),
             Self::Fighter => (ArmorType::Plane, 1.5),
             
-            Self::LightDrone(_) => (ArmorType::Heli, 0.8),
-            Self::HeavyDrone(_) => (ArmorType::Heli, 0.8),
+            Self::LightDrone(_) => (ArmorType::Heli, 0.6),
+            Self::HeavyDrone(_) => (ArmorType::Heli, 0.6),
         };
         (typ, multiplier)
     }
@@ -1028,10 +1057,34 @@ impl NormalUnits {
     pub fn vision_range(&self) -> usize {
         match self {
             Self::Sniper => 3,
+            Self::Bazooka => 1,
+            Self::DragonHead => 4,
             Self::Artillery => 1,
-            Self::RocketLauncher => 1,
+            Self::SmallTank => 3,
             Self::BigTank => 1,
-            _ => 2,
+            Self::AntiAir => 2,
+            Self::RocketLauncher => 1,
+            Self::Magnet => 2,
+
+            Self::Hovercraft(_) => 2,
+
+            Self::LaserShark => 4,
+            Self::TransportBoat(_) => 1,
+            Self::WaveBreaker => 3,
+            Self::Submarine => 2,
+            Self::Cruiser => 1,
+            Self::DroneBoat(_, _) => 1,
+            Self::Carrier(_, _) => 1,
+            Self::SwimmingFactory => 1,
+
+            Self::TransportHeli(_) => 1,
+            Self::AttackHeli => 2,
+            Self::Blimp => 4,
+            Self::Bomber => 2,
+            Self::Fighter => 3,
+
+            Self::LightDrone(_) => 1,
+            Self::HeavyDrone(_) => 1,
         }
     }
 
@@ -1069,13 +1122,13 @@ impl NormalUnits {
 
             Self::Hovercraft(_) => 100,
             
-            Self::LaserShark => 800,
-            Self::TransportBoat(_) => 400,
-            Self::WaveBreaker => 800,
-            Self::Submarine => 1200,
-            Self::Cruiser => 1800,
-            Self::DroneBoat(_, _) => 300,
-            Self::DroneShip(_, _) => 1400,
+            Self::LaserShark => 250,
+            Self::TransportBoat(_) => 500,
+            Self::WaveBreaker => 700,
+            Self::Submarine => 900,
+            Self::Cruiser => 1500,
+            Self::DroneBoat(_, _) => 600,
+            Self::Carrier(_, _) => 1500,
             Self::SwimmingFactory => 10000,
 
             Self::TransportHeli(_) => 600,
@@ -1091,7 +1144,7 @@ impl NormalUnits {
     pub fn insert_drone_ids(&self, existing_ids: &mut HashSet<u16>) {
         match self {
             Self::DroneBoat(_, id) |
-            Self::DroneShip(_, id) |
+            Self::Carrier(_, id) |
             Self::LightDrone(id) |
             Self::HeavyDrone(id) => {
                 existing_ids.insert(**id as u16);
