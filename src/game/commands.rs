@@ -244,7 +244,7 @@ fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, cost: u32, mut unit: Un
         UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(_, drone_id), ..}) => {
             *drone_id = handler.get_map().new_drone_id(handler.rng());
         }
-        UnitType::Normal(NormalUnit {typ: NormalUnits::DroneShip(_, drone_id), ..}) => {
+        UnitType::Normal(NormalUnit {typ: NormalUnits::Carrier(_, drone_id), ..}) => {
             *drone_id = handler.get_map().new_drone_id(handler.rng());
         }
         UnitType::Structure(Structure {typ: Structures::DroneTower(_, _, drone_id), ..}) => {

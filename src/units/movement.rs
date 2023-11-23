@@ -649,7 +649,7 @@ where
 {
     if rounds > 0 {
         let transporter = map.get_unit(start)
-        .filter(|u| unit.cast_normal().and_then(|unit| Some(u.boardable_by(&unit))).unwrap_or(false));
+        .filter(|u| unit.get_owner() == u.get_owner());
         match unit {
             UnitType::Unknown |
             UnitType::Structure(_) => return,
@@ -1016,8 +1016,6 @@ where F: Fn(&Path<D>, Point, bool) -> PathSearchFeedback {
         if path.steps.len() <= path_so_far.steps.len() {
             if path.steps[..] != path_so_far.steps[..path.steps.len()] {
                 return PathSearchFeedback::Rejected;
-            } else if path.steps.len() < path_so_far.steps.len() {
-                return PathSearchFeedback::Continue;
             }
         }
         let mut can_stop_here = true;
@@ -1055,6 +1053,9 @@ where F: Fn(&Path<D>, Point, bool) -> PathSearchFeedback {
             if let Some(PathStep::Diagonal(_)) = path.steps.last() {
                 return PathSearchFeedback::Rejected;
             }
+        }
+        if path.steps.len() < path_so_far.steps.len() {
+            return PathSearchFeedback::Continue;
         }
         let feedback = callback(path, destination, can_stop_here);
         if feedback == PathSearchFeedback::Found {

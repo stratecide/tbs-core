@@ -83,7 +83,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                     None
                 }
             }
-            UnitType::Normal(NormalUnit {typ: NormalUnits::DroneShip(boarded, id), ..}) => {
+            UnitType::Normal(NormalUnit {typ: NormalUnits::Carrier(boarded, id), ..}) => {
                 if boarded.remaining_capacity() > 0 {
                     Some((*id, (p, boarded.remaining_capacity())))
                 } else {
@@ -105,15 +105,17 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                     continue;
                 }
                 match unit {
-                    UnitType::Normal(NormalUnit {typ: NormalUnits::HeavyDrone(id), ..}) |
-                    UnitType::Normal(NormalUnit {typ: NormalUnits::LightDrone(id), ..}) => {
-                        if let Some((_destination, capacity)) = drone_parents.get_mut(id) {
+                    UnitType::Normal(u @ NormalUnit {typ: NormalUnits::HeavyDrone(id), ..}) |
+                    UnitType::Normal(u @ NormalUnit {typ: NormalUnits::LightDrone(id), ..}) => {
+                        if let Some((destination, capacity)) = drone_parents.get_mut(id) {
                             // move drone back aboard its parent
+                            let id = *id;
+                            let u = u.clone();
+                            self.add_event(Event::UnitRemove(p, unit.clone()));
+                            self.add_event(Event::UnitAddBoarded(*destination, u));
                             // one less space in parent
-                            if *capacity > 0 {
-                                *capacity -= 1;
-                            } else {
-                                let id = *id;
+                            *capacity -= 1;
+                            if *capacity == 0 {
                                 drone_parents.remove(&id);
                             }
                         } else {
@@ -533,7 +535,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn unit_exhaust_boarded(&mut self, position: Point, index: UnloadIndex) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        if unit.get_boarded().len() < *index as usize || !unit.get_boarded()[*index as usize].data.exhausted {
+        if unit.get_boarded().len() > *index as usize && !unit.get_boarded()[*index as usize].data.exhausted {
             self.add_event(Event::UnitExhaustBoarded(position, index));
         } else {
             panic!("Can't exhaust unit at {position:?}, boarded as {index}");
@@ -542,7 +544,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn unit_unexhaust_boarded(&mut self, position: Point, index: UnloadIndex) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        if unit.get_boarded().len() < *index as usize || unit.get_boarded()[*index as usize].data.exhausted {
+        if unit.get_boarded().len() > *index as usize && unit.get_boarded()[*index as usize].data.exhausted {
             self.add_event(Event::UnitExhaustBoarded(position, index));
         } else {
             panic!("Can't unexhaust unit at {position:?}, boarded as {index}");
@@ -579,13 +581,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn unit_heal_boarded(&mut self, position: Point, index: usize, heal: u8) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        if unit.get_boarded().len() < index {
+        if unit.get_boarded().len() > index {
             let hp = unit.get_boarded()[index].get_hp();
             if hp < 100 {
                 self.add_event(Event::UnitHpChangeBoarded(position, index.into(), heal.min(100 - hp).into()));
             }
         } else {
-            panic!("Can't unexhaust unit at {position:?}, boarded as {index}");
+            panic!("Can't heal unit at {position:?}, boarded as {index}");
         }
     }
 
