@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use serde::Deserialize;
 
 use zipper::*;
 use zipper::zipper_derive::*;
@@ -191,4 +192,17 @@ fn gradient_progress(gradient: &[FogSetting], bright_duration: FogDuration, dark
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub enum VisionMode {
+    Normal,
+    Movement,
+}
 
+impl VisionMode {
+    pub fn see_while_moving(&self) -> bool {
+        match self {
+            Self::Normal => true,
+            Self::Movement => false,
+        }
+    }
+}

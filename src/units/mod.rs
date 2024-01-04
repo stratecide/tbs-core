@@ -1,37 +1,20 @@
-pub mod chess;
+/*pub mod chess;
 pub mod structures;
 pub mod mercenary;
-pub mod normal_units;
+pub mod normal_units;*/
 pub mod commands;
 pub mod movement;
 pub mod combat;
 pub mod attributes;
 pub mod hero;
+pub mod unit_types;
+pub mod unit;
 
-use std::collections::{HashSet, HashMap};
-
-use interfaces::game_interface::ClientPerspective;
 use zipper::*;
-use zipper::zipper_derive::*;
-
-use crate::commanders::Commander;
-use crate::game::event_handler::EventHandler;
-use crate::game::fog::FogIntensity;
-use crate::game::fog::FogSetting;
-use crate::player::*;
-use crate::map::direction::Direction;
-use crate::map::point::Point;
-use crate::game::game::Game;
-use crate::map::map::Map;
-use crate::terrain::Terrain;
-
-use self::chess::*;
+/*use self::chess::*;
 use self::structures::*;
 use self::mercenary::*;
-use self::normal_units::*;
-use self::movement::*;
-use self::combat::*;
-use self::commands::*;
+use self::normal_units::*;*/
 
 pub type Hp = U<100>;
 
@@ -42,7 +25,7 @@ pub enum UnitVisibility {
     AlwaysVisible,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
+/*#[derive(Debug, PartialEq, Eq, Clone, Zippable, Hash)]
 #[zippable(bits = 3)]
 pub enum UnitType<D: Direction> {
     Normal(NormalUnit),
@@ -280,15 +263,6 @@ impl<D: Direction> UnitType<D> {
         }
     }
 
-    /*pub fn can_be_taken_by_chess(&self, game: &Game<D>, attacking_owner: Owner) -> bool {
-        match self {
-            Self::Normal(_) => self.get_team(game) != game.get_team(Some(attacking_owner)),
-            Self::Chess(_) => self.get_team(game) != game.get_team(Some(attacking_owner)),
-            Self::Structure(_) => false,
-            Self::Unknown => true,
-        }
-    }*/
-
     // set path to None if this is a counter-attack
     pub fn calculate_attack_damage(&self, game: &Game<D>, pos: Point, attacker_pos: Point, attacker: &NormalUnit, path: Option<&Path<D>>) -> Option<(WeaponType, u16)> {
         let is_counter = path.is_none();
@@ -442,7 +416,7 @@ impl<D: Direction> UnitType<D> {
                     FogIntensity::NormalVision => {
                         if match self.visibility() {
                             UnitVisibility::Stealth => false,
-                            UnitVisibility::Normal => !terrain.hides_unit(self),
+                            UnitVisibility::Normal => !terrain.hides_unit_old(self),
                             UnitVisibility::AlwaysVisible => true,
                         } {
                             Some(self.clone())
@@ -454,7 +428,7 @@ impl<D: Direction> UnitType<D> {
                         match self.visibility() {
                             UnitVisibility::Stealth => None,
                             UnitVisibility::Normal => {
-                                if terrain.hides_unit(self) {
+                                if terrain.hides_unit_old(self) {
                                     None
                                 } else {
                                     Some(UnitType::Unknown)
@@ -557,4 +531,4 @@ impl<D: Direction> UnitType<D> {
             _ => MovementPoints::from(0.),
         }
     }
-}
+}*/

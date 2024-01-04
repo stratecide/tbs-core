@@ -12,13 +12,13 @@ pub struct Point {
     pub y: u8,
 }
 impl Zippable for Point {
-    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+    fn unzip(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
         Ok(Self {
             x: unzipper.read_u8(8)?,
             y: unzipper.read_u8(8)?,
         })
     }
-    fn export(&self, zipper: &mut Zipper) {
+    fn zip(&self, zipper: &mut Zipper) {
         zipper.write_u8(self.x, 8);
         zipper.write_u8(self.y, 8);
     }

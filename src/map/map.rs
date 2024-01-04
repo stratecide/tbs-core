@@ -2,9 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use interfaces::game_interface::Events;
 use zipper::*;
-use zipper::zipper_derive::*;
 
-use crate::details;
+use crate::config::Environment;
 use crate::game::settings;
 use crate::game::game::*;
 use crate::game::fog::*;
@@ -13,33 +12,32 @@ use crate::game::settings::PlayerSettings;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
-use crate::player::*;
-use crate::terrain::*;
-use crate::units::*;
 use crate::details::*;
-use crate::units::mercenary::MaybeMercenary;
-use crate::units::mercenary::Mercenaries;
-use crate::units::normal_units::DroneId;
+use crate::terrain::terrain::Terrain;
+use crate::units::hero::Hero;
+use crate::units::unit::Unit;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Map<D>
 where D: Direction
 {
+    environment: Environment,
     wrapping_logic: WrappingMap<D>,
-    terrain: HashMap<Point, Terrain<D>>,
-    units: HashMap<Point, UnitType<D>>,
-    details: HashMap<Point, LVec<Detail, MAX_STACK_SIZE>>,
+    terrain: HashMap<Point, Terrain>,
+    units: HashMap<Point, Unit<D>>,
+    details: HashMap<Point, Vec<Detail<D>>>,
 }
 
 impl<D> Map<D>
 where D: Direction
 {
-    pub fn new(wrapping_logic: WrappingMap<D>) -> Self {
+    pub fn new(wrapping_logic: WrappingMap<D>, environment: &Environment) -> Self {
         let mut terrain = HashMap::new();
         for p in wrapping_logic.pointmap().get_valid_points() {
-            terrain.insert(p, Terrain::Grass);
+            terrain.insert(p, environment.default_terrain());
         }
         Map {
+            environment: environment.clone(),
             wrapping_logic,
             terrain,
             units: HashMap::new(),
@@ -76,16 +74,17 @@ where D: Direction
      * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
      */
     fn next_pipe_tile(&self, dp: &OrientedPoint<D>) -> Option<OrientedPoint<D>> {
-        match self.terrain.get(&dp.point) {
-            Some(Terrain::Pipe(pipe_state)) => {
-                if pipe_state.connects_towards(dp.direction.opposite_direction()) || pipe_state.enterable_from(dp.direction) {
-                    self.wrapping_logic.get_neighbor(dp.point, pipe_state.next_dir(dp.direction))
-                } else {
-                    None
+        for det in self.details.get(&dp.point)? {
+            match det {
+                Detail::Pipe(connection) => {
+                    if let Some(d) = connection.transform_direction(dp.direction) {
+                        return self.wrapping_logic.get_neighbor(dp.point, d)
+                    }
                 }
+                _ => (),
             }
-            _ => None,
         }
+        None
     }
 
     pub fn get_direction(&self, from: Point, to: Point) -> Option<D> {
@@ -101,24 +100,27 @@ where D: Direction
 
     pub fn get_neighbor(&self, p: Point, d: D) -> Option<OrientedPoint<D>> {
         if let Some(n) = self.wrapping_logic.get_neighbor(p, d) {
-            match self.terrain.get(&n.point) {
-                Some(Terrain::Pipe(pipe_state)) => {
-                    if pipe_state.enterable_from(n.direction) || pipe_state.connects_towards(n.direction.opposite_direction()) {
-                        let mut dp = n.clone();
-                        while let Some(next) = self.next_pipe_tile(&dp) {
-                            dp = next;
-                            if dp.point == n.point {
-                                // infinite loop, abort
-                                return None;
+            for det in self.get_details(n.point) {
+                match det {
+                    Detail::Pipe(pipe_state) => {
+                        if pipe_state.transform_direction(n.direction).is_some() {
+                            let mut dp = n.clone();
+                            while let Some(next) = self.next_pipe_tile(&dp) {
+                                dp = next;
+                                if dp.point == n.point {
+                                    // infinite loop, abort
+                                    return None;
+                                }
                             }
+                            return Some(dp);
+                        } else {
+                            break;
                         }
-                        Some(dp)
-                    } else {
-                        Some(n)
                     }
+                    _ => (),
                 }
-                _ => Some(n),
             }
+            Some(n)
         } else {
             None
         }
@@ -138,6 +140,26 @@ where D: Direction
                         result.push(neighbor);
                     }
                 }
+            }
+        }
+        result
+    }
+
+    // the result includes start, the OrientedPoints point towards the next point
+    // the result may be shorter than the requested length if not enough points could be found
+    pub fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+        let mut result = vec![OrientedPoint::new(start, false, d)];
+        while result.len() < length {
+            let current = result.get(result.len() - 1).unwrap();
+            let next = match mode {
+                NeighborMode::Direct => self.wrapping_logic.get_neighbor(current.point, current.direction),
+                NeighborMode::FollowPipes => self.get_neighbor(current.point, current.direction),
+            };
+            if let Some(mut dp) = next {
+                dp.mirrored = dp.mirrored != current.mirrored;
+                result.push(dp);
+            } else {
+                break;
             }
         }
         result
@@ -164,26 +186,26 @@ where D: Direction
         result
     }
 
-    pub fn get_terrain(&self, p: Point) -> Option<&Terrain<D>> {
+    pub fn get_terrain(&self, p: Point) -> Option<&Terrain> {
         self.terrain.get(&p)
     }
-    pub fn get_terrain_mut(&mut self, p: Point) -> Option<&mut Terrain<D>> {
+    pub fn get_terrain_mut(&mut self, p: Point) -> Option<&mut Terrain> {
         self.terrain.get_mut(&p)
     }
-    pub fn set_terrain(&mut self, p: Point, t: Terrain<D>) {
+    pub fn set_terrain(&mut self, p: Point, t: Terrain) {
         // TODO: return a Result<(), ?>
         if self.is_point_valid(p) {
             self.terrain.insert(p, t);
         }
     }
 
-    pub fn get_unit(&self, p: Point) -> Option<&UnitType<D>> {
+    pub fn get_unit(&self, p: Point) -> Option<&Unit<D>> {
         self.units.get(&p)
     }
-    pub fn get_unit_mut(&mut self, p: Point) -> Option<&mut UnitType<D>> {
+    pub fn get_unit_mut(&mut self, p: Point) -> Option<&mut Unit<D>> {
         self.units.get_mut(&p)
     }
-    pub fn set_unit(&mut self, p: Point, unit: Option<UnitType<D>>) -> Option<UnitType<D>> {
+    pub fn set_unit(&mut self, p: Point, unit: Option<Unit<D>>) -> Option<Unit<D>> {
         // TODO: return a Result<(), ?>, returning an error if the point is invalid
         if let Some(unit) = unit {
             if self.is_point_valid(p) {
@@ -196,12 +218,12 @@ where D: Direction
         }
     }
 
-    pub fn get_details(&self, p: Point) -> Vec<Detail> {
+    pub fn get_details(&self, p: Point) -> Vec<Detail<D>> {
         self.details.get(&p).and_then(|v| Some(v.to_vec())).unwrap_or(Vec::new())
     }
-    pub fn set_details(&mut self, p: Point, value: Vec<Detail>) {
+    pub fn set_details(&mut self, p: Point, value: Vec<Detail<D>>) {
         if self.is_point_valid(p) {
-            let value: Vec<Detail> = Detail::correct_stack(value);
+            let value = Detail::correct_stack(value, &self.environment);
             if value.len() > 0 {
                 self.details.insert(p, value.try_into().unwrap());
             } else {
@@ -209,47 +231,52 @@ where D: Direction
             }
         }
     }
-    pub fn add_detail(&mut self, p: Point, value: Detail) {
-        let mut list: Vec<Detail> = self.get_details(p).into_iter().map(|f| f.clone()).collect();
+    pub fn add_detail(&mut self, p: Point, value: Detail<D>) {
+        let mut list = self.get_details(p);
         list.push(value);
         self.set_details(p, list);
     }
-    pub fn insert_detail(&mut self, p: Point, index: usize, value: Detail) {
-        let mut list: Vec<Detail> = self.get_details(p).into_iter().map(|f| f.clone()).collect();
+    pub fn insert_detail(&mut self, p: Point, index: usize, value: Detail<D>) {
+        let mut list = self.get_details(p);
         if index <= list.len() {
             list.insert(index, value);
             self.set_details(p, list);
         }
     }
-    pub fn remove_detail(&mut self, p: Point, index: usize) -> Option<Detail> {
+    pub fn remove_detail(&mut self, p: Point, index: usize) -> Option<Detail<D>> {
         if let Some(list) = self.details.get_mut(&p) {
-            return list.remove(index).ok();
-        } else {
-            None
+            if list.len() > index {
+                return Some(list.remove(index));
+            }
         }
+        None
     }
     
     // returns a random DroneId that isn't in use yet
-    pub fn new_drone_id(&self, rng: f32) -> DroneId {
+    pub fn new_drone_id(&self, rng: f32) -> u16 {
         let mut existing_ids = HashSet::new();
         for unit in self.units.values() {
-            unit.insert_drone_ids(&mut existing_ids);
+            if let Some(id) = unit.get_drone_station_id().or(unit.get_drone_id()) {
+                existing_ids.insert(id);
+            }
         }
-        for details in self.details.values() {
+        /*for details in self.details.values() {
             for det in details {
                 match det {
                     Detail::Skull(_, unit) => {
-                        unit.insert_drone_ids(&mut existing_ids);
+                        if let Some(id) = unit.get_drone_station_id().or(unit.get_drone_id()) {
+                            existing_ids.insert(id);
+                        }
                     }
                     _ => ()
                 }
             }
-        }
-        let mut drone_id = (DroneId::MAX as f32 * rng) as u16;
+        }*/
+        let mut drone_id = (u16::MAX as f32 * rng) as u16;
         while existing_ids.contains(&drone_id) {
-            drone_id = (drone_id + 1) % DroneId::MAX as u16;
+            drone_id = (drone_id + 1) % u16::MAX as u16;
         }
-        drone_id.into()
+        drone_id
     }
 
     pub fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<Point>> {
@@ -306,14 +333,13 @@ where D: Direction
         result
     }
 
-    pub fn mercenary_influence_at(&self, point: Point, owner: Option<Owner>) -> Vec<(Point, &Mercenaries)> {
+    pub fn mercenary_influence_at(&self, point: Point, owner_id: i8) -> Vec<(Point, Hero)> {
         let mut result = vec![];
         for p in self.all_points() {
-            if let Some(UnitType::Normal(unit)) = self.get_unit(p) {
-                if let MaybeMercenary::Some{mercenary, ..} = &unit.data.mercenary {
-                    if (owner.is_none() || owner == Some(unit.owner)) && mercenary.in_range(self, p, point) {
-                        result.push((p, mercenary));
-                    }
+            if let Some(unit) = self.get_unit(p) {
+                let hero = unit.get_hero();
+                if unit.get_owner_id() == owner_id && hero.in_range(self, p, point) {
+                    result.push((p, hero));
                 }
             }
         }
@@ -333,85 +359,67 @@ where D: Direction
         }
     }*/
 
-    pub fn validate_terrain(&mut self) -> Vec<(Point, Terrain<D>)> {
-        let mut corrected = vec![];
+    pub fn fix_errors_details(&self) -> HashMap<Point, Vec<Detail<D>>> {
+        let mut corrected = HashMap::new();
         for p in self.all_points() {
-            match self.get_terrain(p).unwrap() {
-                Terrain::Pipe(state) => {
-                    let mut is_valid = true;
-                    let mut valid_dir = None;
-                    for d in state.connections() {
-                        if let Some(dp) = self.wrapping_logic.get_neighbor(p, d) {
-                            match self.get_terrain(dp.point).unwrap() {
-                                Terrain::Pipe(state) => {
-                                    if state.connects_towards(dp.direction.opposite_direction()) {
-                                        valid_dir = Some(d)
-                                    } else {
-                                        is_valid = false;
-                                    }
-                                }
-                                _ => is_valid = false
-                            }
-                        } else {
-                            is_valid = false;
-                        }
-                    }
-                    if !is_valid {
-                        corrected.push((p, self.terrain.remove(&p).unwrap()));
-                        if let Some(dir) = valid_dir {
-                            self.set_terrain(p, Terrain::Pipe(dir.pipe_entry()));
-                        } else {
-                            self.set_terrain(p, Terrain::Grass);
-                        }
-                    }
-                }
-                _ => {}
+            let stack = Detail::correct_stack(self.get_details(p), &self.environment);
+            if *self.details.get(&p).unwrap_or(&stack) != stack {
+                corrected.insert(p, stack);
+            }
+        }
+        // fix_self can depend on surrounding details
+        // so Detail::correct_stack which can remove details has to be in a separate loop before this one
+        for p in self.all_points() {
+            let stack = corrected.remove(&p).unwrap_or(self.get_details(p))
+            .into_iter()
+            .map(|mut det| {
+                det.fix_self(self, p);
+                det
+            })
+            .collect();
+            if *self.details.get(&p).unwrap_or(&stack) != stack {
+                corrected.insert(p, stack);
             }
         }
         corrected
     }
     
-    pub fn get_income_factor(&self, owner_id: Owner) -> isize {
+    pub fn get_income_factor(&self, owner_id: i8) -> i32 {
         // income from properties
         let mut income_factor = 0;
         for p in self.all_points() {
-            match self.get_terrain(p) {
-                Some(Terrain::Realty(realty, owner, _)) => {
-                    if *owner == Some(owner_id) {
-                        income_factor += realty.income_factor() as isize;
-                    }
-                }
-                _ => {}
+            let t = self.get_terrain(p).unwrap();
+            if t.get_owner_id() == owner_id {
+                income_factor += t.income_factor();
             }
         }
         income_factor
     }
     
-    pub fn get_viable_player_ids(&self) -> Vec<Owner> {
+    pub fn get_viable_player_ids(&self) -> Vec<u8> {
         let mut owners = HashSet::new();
         for p in self.all_points() {
             if let Some(unit) = self.get_unit(p) {
-                if let Some(owner) = unit.get_owner() {
-                    owners.insert(owner);
+                if unit.get_owner_id() >= 0 {
+                    owners.insert(unit.get_owner_id() as u8);
                 }
             }
-            if let Some(Terrain::Realty(realty, owner, _)) = self.get_terrain(p) {
-                if let Some(owner) = owner {
-                    if realty.can_build() {
-                        owners.insert(*owner);
-                    }
-                }
+            let t = self.get_terrain(p).unwrap();
+            if t.get_owner_id() >= 0 && t.can_build() {
+                owners.insert(t.get_owner_id() as u8);
             }
             for detail in self.get_details(p) {
                 match detail {
-                    Detail::FactoryBubble(owner) => {
-                        owners.insert(owner);
+                    Detail::Bubble(owner, _) => {
+                        if owner >= 0 {
+                            owners.insert(owner as u8);
+                        }
                     }
                     _ => {}
                 }
             }
         }
-        let mut owners: Vec<Owner> = owners.into_iter().collect();
+        let mut owners: Vec<u8> = owners.into_iter().collect();
         owners.sort();
         owners
     }
@@ -419,7 +427,7 @@ where D: Direction
     pub fn get_field_data(&self, p: Point) -> FieldData<D> {
         FieldData {
             terrain: self.terrain.get(&p).unwrap().clone(),
-            details: self.details.get(&p).cloned().unwrap_or(LVec::new()),
+            details: self.details.get(&p).cloned().unwrap_or(Vec::new()),
             unit: self.units.get(&p).cloned(),
         }
     }
@@ -435,19 +443,20 @@ where D: Direction
         }
     }
 
-    pub fn import_from_unzipper(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+    pub fn import_from_unzipper(environment: &Environment, unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
         let wrapping_logic = WrappingMap::import(unzipper)?;
         let mut terrain = HashMap::new();
         let mut units = HashMap::new();
         let mut details = HashMap::new();
         for p in wrapping_logic.pointmap().get_valid_points() {
             terrain.insert(p, Terrain::import(unzipper)?);
-            let det = LVec::<Detail, MAX_STACK_SIZE>::import(unzipper)?;
+            let det = LVec::<Detail<D>, MAX_STACK_SIZE>::import(unzipper)?;
             if det.len() > 0 {
                 details.insert(p, det);
             }
-            if let Some(unit) = Option::<UnitType<D>>::import(unzipper)? {
-                units.insert(p, unit);
+            // could be more memory-efficient by returning Option<Unit> from import and removing this read_bool
+            if unzipper.read_bool()? {
+                units.insert(p, Unit::import(environment, unzipper, None)?);
             }
         }
         Ok(Self {
@@ -464,24 +473,24 @@ pub enum MapType {
     Hex(Map<Direction6>),
 }
 
-pub fn import_map(bytes: Vec<u8>) -> Result<MapType, ZipperError> {
+pub fn import_map(environment: &Environment, bytes: Vec<u8>) -> Result<MapType, ZipperError> {
     let mut unzipper = Unzipper::new(bytes);
     if unzipper.read_bool()? {
-        Ok(MapType::Hex(Map::import_from_unzipper(&mut unzipper)?))
+        Ok(MapType::Hex(Map::import_from_unzipper(environment, &mut unzipper)?))
     } else {
-        Ok(MapType::Square(Map::import_from_unzipper(&mut unzipper)?))
+        Ok(MapType::Square(Map::import_from_unzipper(environment, &mut unzipper)?))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Zippable)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldData<D: Direction> {
-    pub terrain: Terrain<D>,
-    pub details: LVec<Detail, {details::MAX_STACK_SIZE}>,
-    pub unit: Option<UnitType<D>>,
+    pub terrain: Terrain,
+    pub details: Vec<Detail<D>>,
+    pub unit: Option<Unit<D>>,
 }
 impl<D: Direction> FieldData<D> {
     pub fn fog_replacement(self, intensity: FogIntensity) -> Self {
-        let details: Vec<Detail> = self.details.into_iter()
+        let details: Vec<_> = self.details.into_iter()
         .filter_map(|d| d.fog_replacement(intensity))
         .collect();
         Self {
@@ -493,9 +502,9 @@ impl<D: Direction> FieldData<D> {
 }
 
 impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
-    type Terrain = Terrain<D>;
-    type Detail = Detail;
-    type Unit = UnitType<D>;
+    type Terrain = Terrain;
+    type Detail = Detail<D>;
+    type Unit = Unit<D>;
     type GameSettings = settings::GameSettings;
     type Game = Game<D>;
 
@@ -515,6 +524,7 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
             .map(|owner| PlayerSettings::new(owner))
             .collect();
         Ok(settings::GameSettings {
+            name: "".to_string(),
             fog_mode: FogMode::Constant(FogSetting::Light(0)),
             players: players.try_into().unwrap(),
         })

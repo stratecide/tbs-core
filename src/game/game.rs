@@ -4,6 +4,7 @@ use zipper::*;
 use interfaces::game_interface::{self, Events, ClientPerspective};
 use interfaces::game_interface::GameInterface;
 
+use crate::config::Environment;
 use crate::map::map::*;
 use crate::map::direction::*;
 use crate::game::settings;
@@ -11,15 +12,16 @@ use crate::game::events;
 use crate::game::fog::*;
 use crate::map::point::Point;
 use crate::player::*;
-use crate::terrain::Terrain;
-use crate::units::UnitType;
-use crate::units::mercenary::MercenaryOption;
+use crate::units::hero::HeroType;
 use crate::units::movement::Path;
+use crate::units::unit::*;
+use crate::units::unit_types::UnitType;
 
 use super::{event_handler, commands};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Game<D: Direction> {
+    environment: Environment,
     map: Map<D>,
     pub current_turn: u32,
     ended: bool,
@@ -71,7 +73,7 @@ impl<D: Direction> Game<D> {
         self.get_fog_mode().fog_setting(self.current_turn(), self.players.len())
     }
 
-    pub fn recalculate_fog(&self, perspective: Perspective) -> HashMap<Point, FogIntensity> {
+    pub fn recalculate_fog(&self, perspective: ClientPerspective) -> HashMap<Point, FogIntensity> {
         let mut fog = HashMap::new();
         let strongest_intensity = self.fog_mode.fog_setting(self.current_turn as usize, self.players.len()).intensity();
         for p in self.get_map().all_points() {
@@ -85,7 +87,7 @@ impl<D: Direction> Game<D> {
                 fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
             }
             if let Some(unit) = self.get_map().get_unit(p) {
-                if perspective.is_some() && perspective == unit.get_owner().and_then(|owner| self.get_owning_player(owner)).and_then(|player| Some(player.team)) {
+                if perspective!= ClientPerspective::Neutral && perspective == unit.get_team() {
                     for (p, v) in unit.get_vision(self, p) {
                         fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
                     }
@@ -100,6 +102,10 @@ impl<D: Direction> Game<D> {
         fog
     }
     
+    pub fn environment(&self) -> &Environment {
+        &self.environment
+    }
+
     pub fn get_map(&self) -> &Map<D> {
         &self.map
     }
@@ -112,26 +118,35 @@ impl<D: Direction> Game<D> {
         &self.players[self.current_turn as usize % self.players.len()]
     }
 
-    pub fn get_teams(&self) -> HashSet<Team> {
+    pub fn get_teams(&self) -> HashSet<u8> {
         let mut result = HashSet::new();
         for p in self.players.iter() {
-            result.insert(p.team);
-        }
-        result
-    }
-
-    pub fn get_living_teams(&self) -> HashSet<Team> {
-        let mut result = HashSet::new();
-        for p in self.players.iter() {
-            if !p.dead {
-                result.insert(p.team);
+            match p.get_team() {
+                ClientPerspective::Team(team) => {
+                    result.insert(team);
+                }
+                _ => panic!("player should not be neutral"),
             }
         }
         result
     }
 
-    pub fn is_team_alive(&self, team: &Team) -> bool {
-        self.get_living_teams().contains(team)
+    pub fn get_living_teams(&self) -> HashSet<u8> {
+        let mut result = HashSet::new();
+        for p in self.players.iter()
+        .filter(|p| !p.dead) {
+            match p.get_team() {
+                ClientPerspective::Team(team) => {
+                    result.insert(team);
+                }
+                _ => panic!("player should not be neutral"),
+            }
+        }
+        result
+    }
+
+    pub fn is_team_alive(&self, team: u8) -> bool {
+        self.get_living_teams().contains(&team)
     }
 
     pub fn has_ended(&self) -> bool {
@@ -139,15 +154,15 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn get_owning_player(&self, owner: Owner) -> Option<&Player> {
-        self.players.iter().find(|player| player.owner_id == owner)
+        self.players.iter().find(|player| player.get_owner_id() == owner)
     }
 
     pub fn get_owning_player_mut(&mut self, owner: Owner) -> Option<&mut Player> {
-        self.players.iter_mut().find(|player| player.owner_id == owner)
+        self.players.iter_mut().find(|player| player.get_owner_id() == owner)
     }
 
     pub fn get_team(&self, owner: Option<Owner>) -> ClientPerspective {
-        owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(ClientPerspective::Team(*p.team as u8))).unwrap_or(ClientPerspective::Neutral)
+        owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(p.get_team())).unwrap_or(ClientPerspective::Neutral)
     }
 
     pub fn is_foggy(&self) -> bool {
@@ -166,11 +181,10 @@ impl<D: Direction> Game<D> {
         self.fog.get(&team).and_then(|fog| fog.get(&position)).cloned().unwrap_or(FogIntensity::TrueSight)
     }
 
-    pub fn can_see_unit_at(&self, team: ClientPerspective, position: Point, unit: &UnitType<D>, accept_unknowns: bool) -> bool {
+    pub fn can_see_unit_at(&self, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {
         match unit.fog_replacement(self.map.get_terrain(position).expect(&format!("No terrain at {position:?}")), self.get_fog_at(team, position)) {
             None => false,
-            Some(UnitType::Unknown) => accept_unknowns,
-            Some(_) => true,
+            Some(unit) => accept_unknowns || unit.typ() != UnitType::Unknown,
         }
     }
 
@@ -183,60 +197,34 @@ impl<D: Direction> Game<D> {
         }
     }
     
-    pub fn available_mercs(&self, player: &Player) -> Vec<MercenaryOption> {
+    pub fn available_heroes(&self, player: &Player) -> Vec<HeroType> {
         let mut used = HashSet::new();
+        used.insert(HeroType::None);
         for p in self.map.all_points() {
             if let Some(unit) = self.map.get_unit(p) {
-                if unit.get_owner() == Some(player.owner_id) {
-                    unit.update_used_mercs(&mut used);
+                if unit.get_owner_id() == player.get_owner_id() {
+                    used.insert(unit.get_hero().typ());
                 }
             }
         }
-        vec![MercenaryOption::EarlGrey]
+        HeroType::list()
         .into_iter()
         .filter(|m| !used.contains(m))
+        .cloned()
         .collect()
     }
     
-    pub fn can_buy_merc_at(&self, player: &Player, pos: Point) -> bool {
-        if self.map.get_terrain(pos) == Some(&Terrain::Tavern) {
-            for p in self.map.all_points() {
-                if let Some(unit) = self.map.get_unit(p) {
-                    if unit.get_owner() == Some(player.owner_id) {
-                        // check if unit is mercenary or transports a mercenary
-                        match unit {
-                            UnitType::Normal(unit) => {
-                                if unit.data.mercenary.get_origin() == Some(pos) {
-                                    return false;
-                                }
-                            }
-                            _ => {}
-                        }
-                        for unit in unit.get_boarded() {
-                            if unit.data.mercenary.get_origin() == Some(pos) {
-                                return false;
-                            }
-                        }
-                    }
-                }
-            }
-            true
-        } else {
-            false
-        }
-    }
-
     pub fn undo(&mut self, events: &Vec<events::Event<D>>) {
         for event in events.iter().rev() {
             event.undo(self);
         }
     }
 
-    pub fn find_visible_threats(&self, pos: Point, threatened: &UnitType<D>, team: ClientPerspective) -> HashSet<Point> {
+    pub fn find_visible_threats(&self, pos: Point, threatened: &Unit<D>, team: ClientPerspective) -> HashSet<Point> {
         let mut result = HashSet::new();
         for p in self.map.all_points() {
             if let Some(unit) = self.map.get_unit(p) {
-                if self.can_see_unit_at(team, p, unit, false) && unit.threatens(self, threatened, pos) && unit.shortest_path_to_attack(self, &Path::new(p), pos).is_some() {
+                if self.can_see_unit_at(team, p, unit, false) && unit.threatens(threatened) && unit.shortest_path_to_attack(self, &Path::new(p), pos).is_some() {
                     result.insert(p);
                 }
             }
@@ -269,8 +257,8 @@ fn create_base_fog<D: Direction>(_map: &Map<D>, players: &[Player]) -> HashMap<C
     for player in players {
         // TODO: maybe fog-maps should only be added for visible teams
         // (so all for the server but only your team's for client)
-        if !fog.contains_key(&ClientPerspective::Team(*player.team as u8)) {
-            fog.insert(ClientPerspective::Team(*player.team as u8), neutral_fog.clone());
+        if !fog.contains_key(&player.get_team()) {
+            fog.insert(player.get_team(), neutral_fog.clone());
         }
     }
     fog.insert(ClientPerspective::Neutral, neutral_fog);
@@ -312,9 +300,9 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             game.fog.insert(ClientPerspective::Neutral, import_fog(&mut unzipper, &points)?);
             
             for team in game.get_living_teams() {
-                if let Some(data) = hidden_data.teams.remove(&(*team as u8)) {
+                if let Some(data) = hidden_data.teams.remove(&(team)) {
                     let mut unzipper = Unzipper::new(data);
-                    game.fog.insert(ClientPerspective::Team(*team as u8), import_fog(&mut unzipper, &points)?);
+                    game.fog.insert(ClientPerspective::Team(team), import_fog(&mut unzipper, &points)?);
                 }
             }
 
@@ -349,7 +337,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             game.fog.insert(ClientPerspective::Team(team), fog);
             let mut players: Vec<Player> = vec![];
             for player in game.players.iter() {
-                players.push(if *player.team as u8 == team {
+                players.push(if player.get_team() == ClientPerspective::Team(team) {
                     Player::import(&mut unzipper, false)?
                 } else {
                     player.clone()
@@ -365,7 +353,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
 
     fn handle_command<R: 'static + Fn() -> f32>(&mut self, command: commands::Command<D>, random: R) -> Result<Events<Self>, commands::CommandError> {
         let mut handler = event_handler::EventHandler::new(self, Box::new(random));
-        match command.convert(&mut handler) {
+        match command.execute(&mut handler) {
             Ok(()) => Ok(handler.accept()),
             Err(err) => {
                 handler.cancel();
@@ -419,7 +407,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             let mut teams = HashMap::new();
             for team in self.get_living_teams() {
                 // team perspective, one per team
-                if let Some(fog) = self.fog.get(&ClientPerspective::Team(*team as u8)) {
+                if let Some(fog) = self.fog.get(&ClientPerspective::Team(team)) {
                     let mut zipper = Zipper::new();
                     export_fog(&mut zipper, &points, fog);
                     for p in &points {
@@ -429,11 +417,11 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
                         }
                     }
                     for player in self.players.iter() {
-                        if player.team == team {
+                        if player.get_team() == ClientPerspective::Team(team) {
                             player.export(&mut zipper, false);
                         }
                     }
-                    teams.insert(*team as u8, zipper.finish());
+                    teams.insert(team, zipper.finish());
                 }
             }
 
@@ -455,11 +443,14 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
     }
     fn players(&self) -> Vec<game_interface::PlayerData> {
         self.players.iter()
-        .map(|p| {
+        .map(|player| {
             game_interface::PlayerData {
-                color_id: p.color_id,
-                team: *p.team as u8,
-                dead: p.dead,
+                color_id: player.get_owner_id() as u8,
+                team: match player.get_team() {
+                    ClientPerspective::Team(team) => team,
+                    _ => panic!("player should not be neutral"),
+                },
+                dead: player.dead,
             }
         }).collect()
     }
@@ -469,8 +460,11 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
     fn current_player(&self) -> game_interface::PlayerData {
         let player = self.current_player();
         game_interface::PlayerData {
-            color_id: player.color_id,
-            team: *player.team as u8,
+            color_id: player.get_owner_id() as u8,
+            team: match player.get_team() {
+                ClientPerspective::Team(team) => team,
+                _ => panic!("player should not be neutral"),
+            },
             dead: player.dead,
         }
     }

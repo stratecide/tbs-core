@@ -1,0 +1,4 @@
+,Hp,Hero,Owner,ActionStatus,Amphibious,Direction,DroneStation,Drone,Transported
+HoverBike,X,X,X,X,X,,,,
+SmallTank,X,X,x,x,,,,,
+DroneTower,x,,x,H,,,h,,h

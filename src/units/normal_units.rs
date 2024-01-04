@@ -758,7 +758,7 @@ impl TransportableUnits for TransportableDrones {
     }
 }
 
-pub type DroneId = U::<{MAX_AREA as i32 * 2}>;
+type DroneId = u16;
 
 pub fn buildable_drones<D: Direction>(_game: &Game<D>, _owner: Owner) -> Vec<TransportableDrones> {
     vec![

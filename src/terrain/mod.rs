@@ -1,18 +1,64 @@
+pub mod attributes;
+pub mod terrain;
+
 use std::collections::HashMap;
+use serde::Deserialize;
 
 use zipper::*;
 use zipper::zipper_derive::*;
 
-use crate::{player::*, map::{direction::Direction, point::Point}, game::{game::Game, fog::FogIntensity}, units::structures::{Structures, Structure}};
 use crate::game::event_handler::EventHandler;
-use crate::units::normal_units::{NormalUnits, NormalUnit};
 use crate::units::movement::*;
-use crate::units::UnitType;
 
 pub const KRAKEN_ATTACK_RANGE: usize = 3;
+pub const KRAKEN_MAX_ANGER: usize = 8;
 
 
-macro_rules! land_units {
+crate::enum_with_custom! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    pub enum TerrainType {
+        Airport,
+        Beach,
+        Bridge,
+        ChessPawnTile,
+        ChessTile,
+        City,
+        ConstructionSite,
+        Factory,
+        Flame,
+        Forest,
+        Fountain,
+        Grass,
+        Hill,
+        Hq,
+        Icebergs,
+        Kraken,
+        Lillypads,
+        Mountain,
+        OilPlatform,
+        //Pipe,
+        Reef,
+        Ruins,
+        Sea,
+        ShallowSea,
+        Street,
+        Tavern,
+        //TrashIsland,
+        //Crater,
+        TentacleDepths,
+        Port,
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum ExtraMovementOptions {
+    #[default]
+    None,
+    Jump,
+    PawnStart,
+}
+
+/*macro_rules! land_units {
     () => {
         MovementType::Foot |
         MovementType::Wheel |
@@ -53,7 +99,7 @@ pub enum Terrain<D: Direction> {
     Lillypads,
     Mountain,
     Pipe(D::P),
-    Realty(Realty, Option<Owner>, CaptureProgress),
+    Realty(Realty, Option<Owner>, CaptureProgress), 
     Reef,
     Ruins,
     Sea,
@@ -300,7 +346,11 @@ impl<D: Direction> Terrain<D> {
         }
     }
 
-    pub fn hides_unit(&self, unit: &UnitType<D>) -> bool {
+    pub fn hides_unit(&self, unit: &Unit<D>) -> bool {
+        // TODO
+        false
+    }
+    pub fn hides_unit_old(&self, unit: &UnitType<D>) -> bool {
         if !match self {
             Self::Forest => true,
             Self::Icebergs => true,
@@ -357,10 +407,22 @@ impl<D: Direction> Terrain<D> {
             }
         }
     }
+}*/
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+pub enum AmphibiousTyping {
+    Land,
+    Sea,
+    Beach,
 }
 
+impl Default for AmphibiousTyping {
+    fn default() -> Self {
+        Self::Beach
+    }
+}
 
-const MAX_BUILT_THIS_TURN: u8 = 9;
+/*const MAX_BUILT_THIS_TURN: u8 = 9;
 pub type BuiltThisTurn = U<{MAX_BUILT_THIS_TURN as i32}>;
 #[derive(Debug, PartialEq, Clone, Copy, Zippable)]
 #[zippable(bits = 1)]
@@ -510,5 +572,4 @@ pub fn build_options_construction_site<D: Direction>(_game: &Game<D>, owner: Own
     }).collect();
     result.sort_by(|v1, v2| v1.1.cmp(&v2.1));
     result
-}
-
+}*/

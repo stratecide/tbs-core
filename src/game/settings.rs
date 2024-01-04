@@ -1,25 +1,27 @@
-use crate::commanders::*;
+use crate::commander::Commander;
+use crate::commander::commander_type::CommanderType;
+use crate::config::Environment;
 use crate::player::*;
 
 use super::fog::FogMode;
 use interfaces::map_interface::GameSettingsInterface;
 use zipper::*;
-use zipper::{zipper_derive::*, LVec};
 use interfaces::game_interface;
 
 
-#[derive(Debug, Clone, Zippable)]
+#[derive(Debug, Clone)]
 pub struct GameSettings {
+    pub name: String,
     pub fog_mode: FogMode,
-    pub players: LVec<PlayerSettings, 16>,
+    pub players: Vec<PlayerSettings>,
 }
 impl GameSettingsInterface for GameSettings {
     fn players(&self) -> Vec<game_interface::PlayerData> {
         self.players.iter()
         .map(|p| {
             game_interface::PlayerData {
-                color_id: *p.color_id as u8,
-                team: *p.team as u8,
+                color_id: p.owner_id,
+                team: p.team,
                 dead: false,
             }
         }).collect()
@@ -35,21 +37,21 @@ impl GameSettingsInterface for GameSettings {
     }
 }
 
-#[derive(Debug, Clone, Zippable)]
+#[derive(Debug, Clone)]
 pub struct PlayerSettings {
-    commander_options: LVec<Commander, 255>,
-    commander: Commander,
-    pub funds: Funds,
-    pub income: Income,
-    pub team: Team,
-    pub owner_id: Owner,
-    pub color_id: U<15>,
+    commander_options: Vec<CommanderType>,
+    commander: CommanderType,
+    funds: Funds,
+    income: Income,
+    team: u8,
+    owner_id: u8,
 }
+
 impl PlayerSettings {
-    pub fn new(owner_id: Owner) -> Self {
+    pub fn new(owner_id: u8) -> Self {
         // TODO: validate input after importing. commander_options shouldn't contain the same commander multiple times
-        let commander_options = Commander::list_all();
-        let commander = commander_options.get(0).cloned().unwrap_or(Commander::None);
+        let commander_options = CommanderType::list();
+        let commander = commander_options.get(0).cloned().unwrap_or(CommanderType::None);
         Self {
             commander_options: commander_options.try_into().unwrap(),
             commander,
@@ -57,30 +59,38 @@ impl PlayerSettings {
             funds: 0.into(),
             team: owner_id,
             owner_id,
-            color_id: owner_id,
         }
     }
-    pub fn get_commander_options(&self) -> &LVec<Commander, 255> {
+
+    pub fn get_owner_id(&self) -> i8 {
+        self.owner_id as i8
+    }
+
+    pub fn get_team(&self) -> u8 {
+        self.team
+    }
+
+    pub fn get_commander_options(&self) -> &[CommanderType] {
         &self.commander_options
     }
+    
     /*pub fn set_commander_options(&mut self, options: Vec<CommanderOption>) {
         // TODO
     }*/
-    pub fn get_commander(&self) -> &Commander {
-        &self.commander
+
+    pub fn get_commander(&self) -> CommanderType {
+        self.commander
     }
-    pub fn set_commander(&mut self, co: Commander) {
-        self.commander = co;
+
+    pub fn set_commander(&mut self, commander: CommanderType) {
+        self.commander = commander;
     }
-    pub fn build(&self) -> Player {
-        Player {
-            commander: self.commander.clone(),
-            funds: self.funds,
-            income: self.income,
-            team: self.team,
-            dead: false,
-            color_id: *self.color_id as u8,
-            owner_id: self.owner_id,
-        }
+
+    pub fn get_income(&self) -> i32 {
+        *self.income
+    }
+
+    pub fn build(&self, environment: &Environment) -> Player {
+        Player::new(self.owner_id, *self.funds, Commander::new(environment, self.commander))
     }
 }

@@ -1,33 +1,45 @@
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt;
 
-use zipper::*;
-use zipper::zipper_derive::*;
+use interfaces::game_interface::ClientPerspective;
 
 use crate::game::commands::*;
 use crate::game::event_handler::*;
+use crate::game::fog::FogIntensity;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::terrain::*;
-use super::chess::*;
+use super::attributes::ActionStatus;
 
-use super::*;
+use super::combat::AttackVector;
+use super::hero::*;
+use super::movement::Path;
+use super::movement::PathSearchFeedback;
+use super::movement::PathStep;
+use super::movement::search_path;
+use super::unit::Unit;
+use super::unit_types::UnitType;
 
-#[derive(Debug, Clone)]
+pub const UNIT_REPAIR: u32 = 30;
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnitAction<D: Direction> {
     Wait,
     Enter,
     Capture,
-    Attack(AttackInfo<D>),
-    Pull(D),
-    BuyMercenary(MercenaryOption),
-    MercenaryPowerSimple,
-    Castle,
-    PawnUpgrade(chess::PawnUpgrade),
     Repair,
-    BuildDrone(TransportableDrones),
-    BuyUnit(D, U<255>),
+    Attack(AttackVector<D>),
+    //Pull(D),
+    BuyMercenary(HeroType),
+    MercenaryPowerSimple,
+    //Castle,
+    PawnUpgrade(UnitType),
+    //BuildDrone(TransportableDrones),
+    BuyTransportedUnit(UnitType),
+    BuyUnit(UnitType, D),
 }
 impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -35,20 +47,261 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Wait => write!(f, "Wait"),
             Self::Enter => write!(f, "Enter"),
             Self::Capture => write!(f, "Capture"),
+            Self::Repair => write!(f, "Repair"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
-            Self::Pull(_) => write!(f, "Pull"),
+            //Self::Pull(_) => write!(f, "Pull"),
             Self::BuyMercenary(_) => write!(f, "Buy Mercenary"),
             Self::MercenaryPowerSimple => write!(f, "Activate Power"),
-            Self::Castle => write!(f, "Castle"),
-            Self::PawnUpgrade(p) => write!(f, "{}", p),
-            Self::Repair => write!(f, "Repair"),
-            Self::BuildDrone(o) => write!(f, "Build {}", o.to_normal(Some(0.into())).name()),
-            Self::BuyUnit(d, o) => write!(f, "Build option {}", **o as usize + 1),
+            //Self::Castle => write!(f, "Castle"),
+            Self::PawnUpgrade(u) => write!(f, "{u:?}"),
+            //Self::BuildDrone(o) => write!(f, "Build {}", o.to_normal(Some(0.into())).name()),
+            Self::BuyTransportedUnit(unit) => write!(f, "Build {unit:?}"),
+            Self::BuyUnit(unit, dir) => write!(f, "Build {unit:?} towards the {dir}"),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Zippable)]
+impl<D: Direction> UnitAction<D> {
+    pub fn execute(&self, handler: &mut EventHandler<D>, end: Point, path: &Path<D>) {
+        let needs_to_exhaust = match self {
+            Self::Wait => true,
+            Self::Enter => {
+                let transporter = handler.get_map().get_unit(end).unwrap();
+                let index = transporter.get_transported().len() - 1;
+                handler.unit_status_boarded(end, index, ActionStatus::Exhausted);
+                false
+            }
+            Self::Capture => {
+                let terrain = handler.get_map().get_terrain(end).unwrap();
+                if let Some(new_progress) = match terrain.get_capture_progress() {
+                    Some((capturing_owner, _)) if capturing_owner == handler.get_game().current_player().get_owner_id() => {
+                        None
+                    }
+                    _ => Some((handler.get_game().current_player().get_owner_id(), 0))
+                } {
+                    handler.terrain_capture_progress(end, Some(new_progress));
+                }
+                handler.unit_status(end, ActionStatus::Capturing);
+                false
+            }
+            Self::Repair => {
+                let unit = handler.get_map().get_unit(end).unwrap();
+                let heal:u32 = UNIT_REPAIR
+                    .min(100 - unit.get_hp() as u32)
+                    .min(*handler.get_game().current_player().funds as u32 * 100 / unit.typ().price(handler.environment(), unit.get_owner_id()) as u32);
+                if heal > 0 {
+                    let cost = unit.typ().price(handler.environment(), unit.get_owner_id()) as u32 * heal / 100;
+                    handler.money_buy(unit.get_owner_id(), cost);
+                    handler.unit_repair(end, heal as u8);
+                    handler.unit_status(end, ActionStatus::Repairing);
+                    false
+                } else {
+                    true
+                }
+            }
+            Self::Attack(attack_vector) => {
+                attack_vector.execute(handler, end, Some(path), true, true, true);
+                false
+            }
+            Self::BuyMercenary(hero_type) => {
+                let unit = handler.get_map().get_unit(end).unwrap();
+                let cost = hero_type.price(handler.environment(), &unit).unwrap();
+                handler.money_change(unit.get_owner_id(), cost);
+                handler.unit_set_hero(end, Hero::new(handler.environment(), *hero_type, Some(end)));
+                true
+            }
+            Self::MercenaryPowerSimple => {
+                let hero = handler.get_map().get_unit(end).unwrap().get_hero();
+                let change = hero.get_charge();
+                handler.hero_charge_sub(end, change.into());
+                handler.hero_power_start(end);
+                true
+            }
+            Self::PawnUpgrade(unit_type) => {
+                let old_unit = handler.get_map().get_unit(end).unwrap();
+                let new_unit = unit_type.instance(handler.environment())
+                .copy_from(old_unit)
+                .build_with_defaults();
+                handler.unit_replace(end, new_unit);
+                true
+            }
+            Self::BuyTransportedUnit(unit_type) => {
+                let owner_id = handler.get_game().current_player().get_owner_id();
+                let cost = unit_type.price(handler.environment(), owner_id);
+                let unit = unit_type.instance(handler.environment())
+                .set_owner_id(owner_id)
+                .set_status(ActionStatus::Exhausted)
+                .build_with_defaults();
+                handler.money_buy(owner_id, cost as u32);
+                handler.unit_add_transported(end, unit);
+                true
+            }
+            Self::BuyUnit(unit_type, dir) => {
+                let destination = handler.get_map().get_neighbor(end, *dir).unwrap();
+                if handler.get_map().get_unit(destination.point).is_some() {
+                    handler.effect_fog_surprise(destination.point);
+                } else {
+                    let owner_id = handler.get_game().current_player().get_owner_id();
+                    let cost = unit_type.price(handler.environment(), owner_id);
+                    let mut unit = unit_type.instance(handler.environment())
+                    .set_owner_id(owner_id)
+                    .set_status(ActionStatus::Exhausted)
+                    .set_direction(destination.direction);
+                    if let Some(drone_id) = handler.get_map().get_unit(end).unwrap().get_drone_station_id() {
+                        // TODO: only a drone-station should be able to build drones
+                        unit = unit.set_drone_id(drone_id);
+                    }
+                    let unit = unit.build_with_defaults();
+                    let path = Path {
+                        start: end,
+                        steps: vec![PathStep::Dir(*dir)],
+                    };
+                    handler.money_buy(owner_id, cost as u32);
+                    let unit = handler.animate_unit_path(&unit, &path, false);
+                    handler.unit_creation(destination.point, unit);
+                }
+                true
+            }
+        };
+        if needs_to_exhaust {
+            handler.unit_status(end, ActionStatus::Exhausted);
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnitCommand<D: Direction> {
+    pub unload_index: Option<usize>,
+    pub path: Path<D>,
+    pub action: UnitAction<D>,
+}
+
+impl<D: Direction> UnitCommand<D> {
+    pub fn execute(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
+        let start = self.path.start;
+        let terrain = handler.get_map().get_terrain(start).ok_or(CommandError::InvalidPoint(start))?;
+        let team = handler.get_game().current_player().get_team();
+        let fog_intensity = handler.get_game().get_fog_at(team, start);
+        let unit = handler.get_map().get_unit(start).and_then(|u| u.fog_replacement(terrain, fog_intensity)).ok_or(CommandError::MissingUnit)?;
+        let unit = if let Some(index) = self.unload_index {
+            let boarded = unit.get_transported();
+            boarded.get(index).ok_or(CommandError::MissingBoardedUnit)?.clone()
+        } else {
+            unit
+        };
+        if handler.get_game().current_player().get_owner_id() != unit.get_owner_id() {
+            return Err(CommandError::NotYourUnit);
+        }
+        if unit.is_exhausted() {
+            return Err(CommandError::UnitCannotMove);
+        }
+        if self.unload_index.is_some() && self.path.steps.len() == 0 {
+            return Err(CommandError::InvalidPath);
+        }
+        let fog = handler.get_game().get_fog().get(&team);
+        let board_at_the_end = self.action == UnitAction::Enter;
+        // check whether the path seemed possible for the player (ignores fog traps)
+        if !search_path(handler.get_game(), &unit, &self.path, fog, |path, p, can_stop_here| {
+            if *path == self.path && board_at_the_end {
+                if let Some(transporter) = handler.get_map().get_unit(p) {
+                    if p != path.start && transporter.can_transport(&unit) {
+                        return PathSearchFeedback::Found;
+                    }
+                }
+            } else if *path == self.path && !board_at_the_end && can_stop_here {
+                return PathSearchFeedback::Found;
+            }
+            PathSearchFeedback::Rejected
+        }).is_some() {
+            return Err(CommandError::InvalidPath);
+        }
+        if !unit.options_after_path(handler.get_game(), &self.path).contains(&self.action) {
+            return Err(CommandError::InvalidAction);
+        }
+
+        // now we know that the player entered a valid command
+        // check for fog trap
+        let mut path_taken = self.path.clone();
+        let mut path_taken_works = !board_at_the_end && self.unload_index.is_none() && path_taken.steps.len() == 0;
+        let mut fog_trap = None;
+        while !path_taken_works {
+            path_taken_works = Self::check_path(handler.get_game(), &unit, &path_taken, None, board_at_the_end);
+            if path_taken.steps.len() == 0 {
+                // doesn't matter if path_taken_works is true or not at this point
+                break
+            } else if !path_taken_works {
+                fog_trap = Some(path_taken.end(handler.get_map()).unwrap());
+                path_taken.steps.pop();
+            }
+        }
+        if !path_taken_works {
+            // don't know what to do, aaaaaah
+            return Err(CommandError::InvalidPath);
+        }
+        if path_taken != self.path {
+            // no event for the path is necessary if the unit is unable to move at all
+            if path_taken.steps.len() > 0 {
+                handler.unit_path(self.unload_index, &path_taken, false, false);
+            }
+            // fog trap
+            handler.effect_fog_surprise(fog_trap.unwrap());
+            // special case of a unit being unable to move that's loaded in a transport
+            if path_taken.steps.len() == 0 && self.unload_index.is_some() {
+                handler.unit_status_boarded(path_taken.start, self.unload_index.unwrap(), ActionStatus::Exhausted);
+            } else {
+                handler.unit_status(path_taken.end(handler.get_map())?, ActionStatus::Exhausted);
+            }
+        } else {
+            if path_taken.steps.len() > 0 {
+                handler.unit_path(self.unload_index, &path_taken, board_at_the_end, false);
+            }
+            let end = path_taken.end(handler.get_map()).unwrap();
+            self.action.execute(handler, end, &path_taken);
+        }
+        exhaust_all_on_chess_board(handler, path_taken.start);
+        Ok(())
+    }
+
+    pub fn check_path(game: &Game<D>, unit: &Unit<D>, path_taken: &Path<D>, vision: Option<&HashMap<Point, FogIntensity>>, board_at_the_end: bool) -> bool {
+        search_path(game, unit, &path_taken, vision, |path, p, can_stop_here| {
+            if path == path_taken && board_at_the_end {
+                if let Some(transporter) = game.get_map().get_unit(p) {
+                    if p != path.start && transporter.can_transport(unit) {
+                        return PathSearchFeedback::Found;
+                    }
+                }
+            } else if path == path_taken && !board_at_the_end && can_stop_here {
+                return PathSearchFeedback::Found;
+            }
+            PathSearchFeedback::Rejected
+        }).is_some()
+    }
+}
+
+pub fn exhaust_all_on_chess_board<D: Direction>(handler: &mut EventHandler<D>, pos: Point) {
+    if !handler.get_map().get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
+        return;
+    }
+    let owner_id = handler.get_game().current_player().get_owner_id();
+    let mut to_exhaust = HashSet::new();
+    handler.get_map().width_search(pos, |p| {
+        let is_chess = handler.get_map().get_terrain(p).and_then(|t| Some(t.is_chess())).unwrap_or(false);
+        if let Some(unit) = handler.get_map().get_unit(p) {
+            if !unit.is_exhausted() && unit.get_owner_id() == owner_id && unit.can_have_status(ActionStatus::Exhausted) {
+                to_exhaust.insert(p);
+            }
+        }
+        is_chess
+    });
+    // order doesn't matter
+    for p in to_exhaust {
+        handler.unit_status(p, ActionStatus::Exhausted);
+    }
+}
+
+pub type UnloadIndex = usize;
+
+/*#[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 2)]
 pub enum AttackInfo<D: Direction> {
     Point(Point),
@@ -170,7 +423,7 @@ impl<D: Direction> CommonMovement<D> {
 
 #[derive(Debug, Zippable)]
 #[zippable(bits = 8)]
-pub enum UnitCommand<D: Direction> {
+pub enum UnitCommandOld<D: Direction> {
     MoveAttack(CommonMovement<D>, AttackInfo<D>),
     MovePull(CommonMovement<D>, D),
     MoveCapture(CommonMovement<D>),
@@ -184,7 +437,8 @@ pub enum UnitCommand<D: Direction> {
     StructureBuildDrone(Point, TransportableDrones),
     BuyUnit(Point, D, U<255>),
 }
-impl<D: Direction> UnitCommand<D> {
+
+impl<D: Direction> UnitCommandOld<D> {
     pub fn convert(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         let team = handler.get_game().current_player().team;
         let chess_exhaust = match self {
@@ -634,4 +888,4 @@ pub fn handle_attack<D: Direction>(handler: &mut EventHandler<D>, attacker: &Uni
         }
     }
     Ok(())
-}
+}*/

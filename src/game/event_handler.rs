@@ -2,28 +2,31 @@ use std::collections::{HashMap, HashSet};
 
 use interfaces::game_interface::{Events, Perspective as IPerspective, ClientPerspective};
 
+use crate::config::Environment;
 use crate::map::map::Map;
 use crate::map::point::Point;
+use crate::terrain::attributes::TerrainAttributeKey;
+use crate::terrain::terrain::*;
+use crate::terrain::TerrainType;
+use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::units::combat::WeaponType;
-use crate::units::normal_units::{NormalUnits, NormalUnit, TransportableDrones, UnitData, DroneId, UnitActionStatus};
-use crate::units::structures::{Structure, Structures};
 use crate::player::*;
-use crate::terrain::{Terrain, BuiltThisTurn, Realty, CaptureProgress};
 use crate::details::Detail;
-use crate::units::*;
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::game::fog::*;
-use crate::units::mercenary::MaybeMercenary;
-use crate::units::chess::*;
-use crate::units::commands::UnloadIndex;
+use crate::units::hero::Hero;
 use crate::units::movement::Path;
+use crate::units::unit::Unit;
+use crate::units::unit_types::UnitType;
 use super::events::{Event, Effect, UnitStep};
 
 pub struct EventHandler<'a, D: Direction> {
     game: &'a mut Game<D>,
     events: HashMap<IPerspective, Vec<Event<D>>>,
     random: Box<dyn Fn() -> f32>,
+    observed_units: HashMap<usize, (Point, Option<usize>)>,
+    next_observed_unit_id: usize,
 }
 
 impl<'a, D: Direction> EventHandler<'a, D> {
@@ -32,12 +35,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         events.insert(IPerspective::Server, vec![]);
         events.insert(IPerspective::Neutral, vec![]);
         for team in game.get_teams() {
-            events.insert(IPerspective::Team(*team as u8), vec![]);
+            events.insert(IPerspective::Team(team), vec![]);
         }
         EventHandler {
             game,
             events,
             random,
+            next_observed_unit_id: 0,
+            observed_units: HashMap::new(),
         }
     }
 
@@ -49,6 +54,30 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.game.get_map()
     }
 
+    pub fn environment(&self) -> &Environment {
+        self.game.environment()
+    }
+
+    pub fn observe_unit(&mut self, position: Point, unload_index: Option<usize>) -> usize {
+        if let Some((id, _)) = self.observed_units.iter()
+        .find(|(_, (p, i))| *p == position && *i == unload_index) {
+            *id
+        } else {
+            self.observed_units.insert(self.next_observed_unit_id, (position, unload_index));
+            self.next_observed_unit_id += 1;
+            self.next_observed_unit_id - 1
+        }
+    }
+    pub fn get_observed_unit(&self, id: usize) -> Option<&(Point, Option<usize>)> {
+        self.observed_units.get(&id)
+    }
+
+    fn observation_id(&self, position: Point, unload_index: Option<usize>) -> Option<usize> {
+        self.observed_units.iter()
+        .find(|(_, (p, i))| *p == position && *i == unload_index)
+        .map(|(id, _)| *id)
+    }
+
     pub fn next_turn(&mut self) {
         self.add_event(Event::NextTurn);
     }
@@ -57,7 +86,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         // hide / reveal player funds if fog started / ended
         let was_foggy = fog_before.is_some();
         if was_foggy != self.get_game().is_foggy() {
-            let players: Vec<Owner> = self.game.players.iter().map(|player| player.owner_id).collect();
+            let players: Vec<Owner> = self.game.players.iter().map(|player| player.get_owner_id()).collect();
             if was_foggy {
                 for player in players {
                     self.add_event(Event::PureRevealFunds(player));
@@ -69,69 +98,55 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             }
         }
 
-        let owner_id = self.game.current_player().owner_id;
+        let owner_id = self.game.current_player().get_owner_id();
         // return drones to their origin if possible or destroy them
-        let mut drone_parents: HashMap<DroneId, (Point, usize)> = self.get_map().all_points()
+        let mut drone_parents: HashMap<u16, (Point, usize)> = self.get_map().all_points()
         .into_iter()
         .filter_map(|p| self.get_map().get_unit(p).and_then(|u| Some((p, u))))
-        .filter(|(_, u)| u.get_owner() == Some(owner_id))
-        .filter_map(|(p, unit)| match unit {
-            UnitType::Normal(NormalUnit {typ: NormalUnits::DroneBoat(boarded, id), ..}) => {
-                if boarded.remaining_capacity() > 0 {
-                    Some((*id, (p, boarded.remaining_capacity())))
-                } else {
-                    None
-                }
+        .filter(|(_, u)| u.get_owner_id() == owner_id)
+        .filter_map(|(p, unit)| {
+            if let Some(drone_id) = unit.get_drone_station_id() {
+                Some((drone_id, (p, unit.remaining_transport_capacity())))
+            } else {
+                None
             }
-            UnitType::Normal(NormalUnit {typ: NormalUnits::Carrier(boarded, id), ..}) => {
-                if boarded.remaining_capacity() > 0 {
-                    Some((*id, (p, boarded.remaining_capacity())))
-                } else {
-                    None
-                }
-            }
-            UnitType::Structure(Structure {typ: Structures::DroneTower(_, boarded, id), ..}) => {
-                if boarded.remaining_capacity() > 0 {
-                    Some((*id, (p, boarded.remaining_capacity())))
-                } else {
-                    None
-                }
-            }
-            _ => None,
         }).collect();
         for p in self.get_map().all_points() {
             if let Some(unit) = self.get_map().get_unit(p) {
-                if unit.get_owner() != Some(self.game.current_player().owner_id) {
+                if unit.get_owner_id() != self.game.current_player().get_owner_id() {
                     continue;
                 }
-                match unit {
-                    UnitType::Normal(u @ NormalUnit {typ: NormalUnits::HeavyDrone(id), ..}) |
-                    UnitType::Normal(u @ NormalUnit {typ: NormalUnits::LightDrone(id), ..}) => {
-                        if let Some((destination, capacity)) = drone_parents.get_mut(id) {
-                            // move drone back aboard its parent
-                            let id = *id;
-                            let u = u.clone();
-                            self.add_event(Event::UnitRemove(p, unit.clone()));
-                            self.add_event(Event::UnitAddBoarded(*destination, u));
-                            // one less space in parent
-                            *capacity -= 1;
-                            if *capacity == 0 {
-                                drone_parents.remove(&id);
-                            }
-                        } else {
-                            // no parent available, self-destruct
-                            self.unit_death(p, false);
+                if let Some(drone_id) = unit.get_drone_id() {
+                    if let Some((destination, capacity)) = drone_parents.get_mut(&drone_id) {
+                        // move drone back aboard its parent
+                        if let Some(id) = self.observation_id(p, None) {
+                            self.observed_units.insert(id, (*destination, Some(self.get_map().get_unit(*destination).unwrap().get_transported().len())));
                         }
+                        let mut u = unit.clone();
+                        self.add_event(Event::UnitRemove(p, u.clone()));
+                        u.set_en_passant(None);
+                        self.add_event(Event::UnitAddBoarded(*destination, u));
+                        // one less space in parent
+                        *capacity -= 1;
+                        if *capacity == 0 {
+                            drone_parents.remove(&drone_id);
+                        }
+                    } else {
+                        // no parent available, self-destruct
+                        self.unit_death(p, false);
                     }
-                    _ => (),
+                } else if unit.has_attribute(AttributeKey::EnPassant) {
+                    // for drones en-passant is removed before boarding its station instead
+                    self.unit_en_passant_opportunity(p, None);
                 }
             }
         }
 
         // release the kraken
         for p in self.get_map().all_points() {
-            if self.get_map().get_terrain(p) == Some(&Terrain::TentacleDepths) && self.get_map().get_unit(p) == None {
-                self.unit_creation(p, UnitType::Structure(Structure::new_instance(Structures::Tentacle)));
+            if self.get_map().get_terrain(p).unwrap().typ() == TerrainType::TentacleDepths && self.get_map().get_unit(p) == None {
+                // TODO: configure which unit is created here
+                self.unit_creation(p, UnitType::Tentacle.instance(self.environment()).build_with_defaults());
             }
         }
 
@@ -139,40 +154,39 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         // other players should maybe not be visible
         //self.recalculate_fog(false);
 
-        let income = (*self.game.current_player().income as isize * self.get_map().get_income_factor(self.game.current_player().owner_id)) as i32;
+        let income = self.game.current_player().get_income() * self.get_map().get_income_factor(self.game.current_player().get_owner_id());
         if income != 0 {
-            self.money_income(self.game.current_player().owner_id, income);
+            self.money_income(self.game.current_player().get_owner_id(), income);
         }
 
         // fire structures
         for p in self.get_map().all_points() {
-            if let Some(UnitType::Structure(structure)) = self.get_map().get_unit(p) {
-                let structure = structure.clone();
-                structure.start_turn(self, p);
+            if let Some(unit) = self.get_map().get_unit(p).cloned() {
+                unit.on_start_turn(self, p);
             }
         }
 
         // structures may have destroyed some units
         self.recalculate_fog();
-        let team = self.game.current_player().team;
-        let fog = self.game.recalculate_fog(Some(team)).into_iter()
+        let team = self.game.current_player().get_team();
+        let fog = self.game.recalculate_fog(team).into_iter()
         .map(|(p, intensity)| (p, intensity.min(fog_before.as_ref().and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight))))
         .collect();
-        self.change_fog(Some(team), fog);
+        self.change_fog(team, fog);
     }
 
     pub fn recalculate_fog(&mut self) {
-        let mut perspectives: HashSet<Perspective> = self.game.get_teams().into_iter()
-        .filter(|team| *team != self.game.current_player().team)
-        .map(|team| Some(team))
+        let mut perspectives: HashSet<ClientPerspective> = self.game.get_teams().into_iter()
+        .filter(|team| ClientPerspective::Team(*team) != self.game.current_player().get_team())
+        .map(|team| ClientPerspective::Team(team))
         .collect();
-        perspectives.insert(None);
+        perspectives.insert(ClientPerspective::Neutral);
         for team in perspectives {
             self.recalculate_fog_for(team);
         }
     }
 
-    pub fn recalculate_fog_for(&mut self, team: Option<Team>) {
+    pub fn recalculate_fog_for(&mut self, team: ClientPerspective) {
         let fog = self.game.recalculate_fog(team);
         self.change_fog(team, fog);
     }
@@ -193,20 +207,19 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.events.get_mut(&IPerspective::Server).unwrap().push(event);
     }
 
-    pub fn change_fog(&mut self, team: Perspective, changes: HashMap<Point, FogIntensity>) {
-        let perspective = to_client_perspective(&team);
+    pub fn change_fog(&mut self, team: ClientPerspective, changes: HashMap<Point, FogIntensity>) {
         let changes: Vec<(Point, FogIntensity, FogIntensity)> = changes.into_iter()
-        .map(|(p, intensity)| (p, self.game.get_fog_at(perspective, p), intensity))
+        .map(|(p, intensity)| (p, self.game.get_fog_at(team, p), intensity))
         .filter(|(_, before, after)| before != after)
         .collect();
         if changes.len() > 0 {
-            self.add_event(Event::PureFogChange(team, changes.try_into().unwrap()));
+            self.add_event(Event::PureFogChange(from_client_perspective(team), changes.try_into().unwrap()));
         }
     }
 
     pub fn commander_charge_add(&mut self, owner: Owner, change: u32) {
         if let Some(player) = self.get_game().get_owning_player(owner) {
-            let change = (change as i32).min(*player.commander.charge_potential());
+            let change = change.min(player.commander.get_max_charge() - player.commander.get_charge()) as i32;
             if change > 0 {
                 self.add_event(Event::CommanderCharge(owner, change.into()));
             }
@@ -215,34 +228,26 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn commander_charge_sub(&mut self, owner: Owner, change: u32) {
         if let Some(player) = self.get_game().get_owning_player(owner) {
-            let change = -(change as i32).min(*player.commander.charge());
+            let change = -(change as i32).min(player.commander.get_charge() as i32);
             if change < 0 {
                 self.add_event(Event::CommanderCharge(owner, change.into()));
             }
         }
     }
 
-    pub fn commander_power_start(&mut self, owner: Owner) {
+    pub fn commander_power(&mut self, owner: Owner, index: usize) {
         if let Some(player) = self.get_game().get_owning_player(owner) {
-            if !player.commander.power_active() {
-                self.add_event(Event::CommanderFlipActiveSimple(owner));
+            if player.commander.get_active_power() != index {
+                self.add_event(Event::CommanderPowerIndex(owner, player.commander.get_active_power(), index));
             }
         }
     }
 
-    pub fn commander_power_end(&mut self, owner: Owner) {
-        if let Some(player) = self.get_game().get_owning_player(owner) {
-            if player.commander.power_active() {
-                self.add_event(Event::CommanderFlipActiveSimple(owner));
-            }
-        }
-    }
-
-    pub fn detail_add(&mut self, position: Point, detail: Detail) {
+    pub fn detail_add(&mut self, position: Point, detail: Detail<D>) {
         let old_details = self.get_map().get_details(position);
         let mut details = old_details.clone();
         details.push(detail);
-        self.add_event(Event::ReplaceDetail(position, old_details.try_into().unwrap(), Detail::correct_stack(details).try_into().unwrap()));
+        self.add_event(Event::ReplaceDetail(position, old_details.try_into().unwrap(), Detail::correct_stack(details, self.environment()).try_into().unwrap()));
     }
 
     pub fn detail_remove(&mut self, position: Point, index: usize) {
@@ -252,6 +257,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         } else {
             self.add_event(Event::RemoveDetail(position, index.into(), details[index].clone()));
         }
+    }
+
+    pub fn effect_fog_surprise(&mut self, _position: Point) {
+        // TODO: add effect
     }
 
     fn effect_heal(&mut self, _position: Point) {
@@ -267,34 +276,43 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.add_event(Event::Effect(weapon.effect(position)));
     }
 
-    pub fn mercenary_charge_add(&mut self, position: Point, change: u8) {
-        self.mercenary_charge(position, change as i8)
-    }
-
-    pub fn mercenary_charge_sub(&mut self, position: Point, change: u8) {
-        self.mercenary_charge(position, -(change as i8))
-    }
-
-    fn mercenary_charge(&mut self, position: Point, change: i8) {
-        let mut unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
-        if let UnitType::Normal(NormalUnit { data: UnitData { mercenary: MaybeMercenary::Some { mercenary, .. }, .. }, .. }) = &mut unit {
-            let change = change.max(-(mercenary.charge() as i8)).min(mercenary.charge_potential() as i8);
-            if change != 0 {
-                mercenary.add_charge(change as i8);
-                self.unit_replace(position, unit);
-            }
+    pub fn unit_set_hero(&mut self, position: Point, hero: Hero) {
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
+        let old_hero = unit.get_hero();
+        if hero != old_hero {
+            self.add_event(Event::HeroSet(position, old_hero, hero));
         }
     }
 
-    pub fn mercenary_power_start(&mut self, position: Point) {
-        let mut unit  = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
-        if let UnitType::Normal(NormalUnit { data: UnitData { mercenary: MaybeMercenary::Some { mercenary, .. }, .. }, .. }) = &mut unit {
-            if let Some(power_active) = mercenary.power_active_mut() {
-                if !*power_active {
-                    *power_active = true;
-                    self.unit_replace(position, unit);
-                }
-            }
+    pub fn hero_charge_add(&mut self, position: Point, change: u8) {
+        self.hero_charge(position, change as i8)
+    }
+
+    pub fn hero_charge_sub(&mut self, position: Point, change: u8) {
+        self.hero_charge(position, -(change as i8))
+    }
+
+    fn hero_charge(&mut self, position: Point, change: i8) {
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
+        let hero = unit.get_hero();
+        let change = change.max(-(hero.get_charge() as i8)).min((hero.typ().max_charge(self.environment()) - hero.get_charge()) as i8);
+        if change != 0 {
+            self.add_event(Event::HeroCharge(position, change));
+        }
+    }
+
+    pub fn hero_power_start(&mut self, position: Point) {
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
+        let hero = unit.get_hero();
+        if !hero.is_power_active() {
+            self.add_event(Event::HeroPower(position));
+        }
+    }
+    pub fn hero_power_end(&mut self, position: Point) {
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
+        let hero = unit.get_hero();
+        if hero.is_power_active() {
+            self.add_event(Event::HeroPower(position));
         }
     }
 
@@ -305,7 +323,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn money_bonus(&mut self, owner: Owner, change: i32) {
+    pub fn money_change(&mut self, owner: Owner, change: i32) {
         if change != 0 {
             // TODO: add effect depending on change < 0
             self.add_event(Event::MoneyChange(owner, change.into()));
@@ -318,58 +336,58 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn terrain_replace(&mut self, position: Point, terrain: Terrain<D>) {
+    pub fn terrain_replace(&mut self, position: Point, terrain: Terrain) {
         let old_terrain = self.get_map().get_terrain(position).expect(&format!("Missing terrain at {:?}", position));
         self.add_event(Event::TerrainChange(position, old_terrain.clone(), terrain));
     }
 
-    pub fn terrain_capture_progress(&mut self, position: Point, progress: CaptureProgress) {
+    pub fn terrain_anger(&mut self, position: Point, anger: u8) {
+        let old_anger = self.get_map().get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).get_anger();
+        self.add_event(Event::TerrainAnger(position, old_anger, anger));
+    }
+
+    pub fn terrain_capture_progress(&mut self, position: Point, progress: Option<(i8, u8)>) {
         let terrain = self.get_map().get_terrain(position).expect(&format!("Missing terrain at {:?}", position));
-        if let Terrain::Realty(_, _, old_progress) = terrain {
-            if *old_progress != progress {
-                self.add_event(Event::CaptureProgress(position, *old_progress, progress));
-            }
+        let old = terrain.get_capture_progress();
+        if terrain.has_attribute(TerrainAttributeKey::CaptureProgress) && old != progress {
+            self.add_event(Event::CaptureProgress(position, old, progress));
         }
     }
 
-    pub fn terrain_built_this_turn(&mut self, position: Point, built_this_turn: BuiltThisTurn) {
+    pub fn terrain_built_this_turn(&mut self, position: Point, built_this_turn: u8) {
         let terrain = self.get_map().get_terrain(position).expect(&format!("Missing terrain at {:?}", position));
-        if let Terrain::Realty(realty, _, _) = terrain {
-            match realty {
-                Realty::Port(old) |
-                Realty::Factory(old) |
-                Realty::Airport(old) => {
-                    if *old != built_this_turn {
-                        self.add_event(Event::UpdateBuiltThisTurn(position, *old, built_this_turn));
-                    }
-                }
-                _ => ()
-            }
+        let old = terrain.get_built_this_turn();
+        if terrain.has_attribute(TerrainAttributeKey::BuiltThisTurn) && old != built_this_turn {
+            self.add_event(Event::UpdateBuiltThisTurn(position, old, built_this_turn));
         }
     }
 
-    pub fn unit_creation(&mut self, position: Point, unit: UnitType<D>) {
-        if let ClientPerspective::Team(team) = unit.get_team(self.get_game()) {
-            if self.get_game().is_foggy() && self.get_game().is_team_alive(&team.into()) {
+    pub fn unit_creation(&mut self, position: Point, unit: Unit<D>) {
+        if let ClientPerspective::Team(team) = unit.get_team() {
+            if self.get_game().is_foggy() && self.get_game().is_team_alive(team) {
                 let changes = unit.get_vision(self.get_game(), position).into_iter()
                 .filter(|(p, intensity)| *intensity < self.get_game().get_fog_at(ClientPerspective::Team(team), *p))
                 .collect();
-                self.change_fog(Some(team.into()), changes);
+                self.change_fog(ClientPerspective::Team(team), changes);
             }
         }
         self.add_event(Event::UnitAdd(position, unit));
     }
 
-    pub fn unit_path(&mut self, unload_index: Option<UnloadIndex>, path: &Path<D>, board_at_the_end: bool, involuntarily: bool) {
+    pub fn unit_add_transported(&mut self, position: Point, unit: Unit<D>) {
+        self.add_event(Event::UnitAddBoarded(position, unit));
+    }
+
+    pub fn unit_path(&mut self, unload_index: Option<usize>, path: &Path<D>, board_at_the_end: bool, involuntarily: bool) {
         if path.steps.len() == 0 {
             return;
         }
         let mut unit = self.get_map().get_unit(path.start).expect(&format!("Missing unit at {:?}", path.start)).clone();
-        let unit_team = unit.get_team(self.get_game());
+        let unit_team = unit.get_team();
         if let Some(unload_index) = unload_index {
-            if let Some(u) = unit.get_boarded().get(*unload_index as usize) {
+            if let Some(u) = unit.get_transported().get(unload_index) {
                 self.add_event(Event::UnitRemoveBoarded(path.start, unload_index, u.clone()));
-                unit = u.as_unit();
+                unit = u.clone();
             } else {
                 panic!("Attempted to unboard unit that doesn't exist!");
             }
@@ -379,19 +397,23 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let transformed_unit = self.animate_unit_path(&unit, path, involuntarily);
         let path_end = path.end(self.get_map()).unwrap();
         if board_at_the_end {
-            if let UnitType::Normal(unit) = transformed_unit.clone() {
-                self.add_event(Event::UnitAddBoarded(path_end, unit));
+            if let Some(id) = self.observation_id(path.start, unload_index) {
+                self.observed_units.insert(id, (path_end, Some(self.get_map().get_unit(path_end).unwrap().get_transported().len())));
             }
+            self.add_event(Event::UnitAddBoarded(path_end, transformed_unit));
         } else {
+            if let Some(id) = self.observation_id(path.start, unload_index) {
+                self.observed_units.insert(id, (path_end, None));
+            }
             self.add_event(Event::UnitAdd(path_end, transformed_unit));
         }
         // update vision
-        let player_team = self.get_game().current_player().team;
+        let player_team = self.get_game().current_player().get_team();
         if self.get_game().is_foggy() {
-            if ClientPerspective::Team(*player_team as u8) == unit_team {
-                let perspective = ClientPerspective::Team(*player_team as u8);
+            if player_team == unit_team {
+                let perspective = player_team;
                 let mut vision_changes = HashMap::new();
-                let points = if unit.has_vision_from_path_intermediates() {
+                let points = if unit.vision_mode().see_while_moving() {
                     path.points(self.get_map()).unwrap().into_iter().skip(1).collect()
                 } else {
                     vec![path_end]
@@ -404,47 +426,40 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                         }
                     }
                 }
-                self.change_fog(Some(player_team), vision_changes);
+                self.change_fog(player_team, vision_changes);
             } else if let ClientPerspective::Team(team) = unit_team {
-                self.recalculate_fog_for(Some(team.into()));
+                self.recalculate_fog_for(ClientPerspective::Team(team));
             }
         }
-        // remove details the destroyed by the unit moving over them
+        // remove details that were destroyed by the unit moving over them
         for p in path.points(self.get_map()).unwrap() {
             let old_details = self.get_map().get_details(p);
-            let details: Vec<Detail> = old_details.clone().into_iter().filter(|detail| {
+            let details: Vec<Detail<D>> = old_details.clone().into_iter().filter(|detail| {
                 match detail {
+                    Detail::Pipe(_) => true,
                     Detail::Coins1 => {
-                        if let Some(owner) = unit.get_owner() {
-                            if let Some(player) = self.get_game().get_owning_player(owner) {
-                                self.money_bonus(owner, *player.income / 2);
-                            }
+                        if let Some(player) = unit.get_player(self.get_game()) {
+                            self.money_change(unit.get_owner_id(), player.get_income() / 2);
                         }
                         false
                     }
                     Detail::Coins2 => {
-                        if let Some(owner) = unit.get_owner() {
-                            if let Some(player) = self.get_game().get_owning_player(owner) {
-                                self.money_bonus(owner, *player.income);
-                            }
+                        if let Some(player) = unit.get_player(self.get_game()) {
+                            self.money_change(unit.get_owner_id(), player.get_income());
                         }
                         false
                     }
                     Detail::Coins4 => {
-                        if let Some(owner) = unit.get_owner() {
-                            if let Some(player) = self.get_game().get_owning_player(owner) {
-                                self.money_bonus(owner, *player.income * 2);
-                            }
+                        if let Some(player) = unit.get_player(self.get_game()) {
+                            self.money_change(unit.get_owner_id(), player.get_income() * 2);
                         }
                         false
                     }
-                    Detail::AirportBubble(owner) |
-                    Detail::PortBubble(owner) |
-                    Detail::FactoryBubble(owner) => {
-                        Some(*owner) == unit.get_owner()
+                    Detail::Bubble(owner, _) => {
+                        *owner == unit.get_owner_id()
                     }
                     Detail::Skull(owner, _) => {
-                        Some(*owner) == unit.get_owner()
+                        *owner as i8 == unit.get_owner_id()
                     }
                 }
             }).collect();
@@ -454,24 +469,29 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn animate_unit_path(&mut self, unit: &UnitType<D>, path: &Path<D>, involuntarily: bool) -> UnitType<D> {
+    pub fn animate_unit_path(&mut self, unit: &Unit<D>, path: &Path<D>, involuntarily: bool) -> Unit<D> {
         let mut current = path.start;
+        let mut previous = None;
         let mut transformed_unit = unit.clone();
         let mut steps = Vec::new();
         for step in &path.steps {
             let next = step.progress(self.get_map(), current).unwrap();
-            if !involuntarily {
-                if let Some(unit) = transformed_unit.transformed_by_movement(self.get_map(), current, next) {
-                    transformed_unit = unit;
-                    steps.push(UnitStep::Transform(current, *step, Some(transformed_unit.clone())));
-                    current = next;
-                    continue;
-                }
+            if !involuntarily && transformed_unit.transformed_by_movement(self.get_map(), current, next) {
+                steps.push(UnitStep::Transform(current, *step, Some(transformed_unit.clone())));
+            } else {
+                steps.push(UnitStep::Simple(current, *step));
             }
-            steps.push(UnitStep::Simple(current, *step));
+            previous = Some(current);
             current = next;
         }
         self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
+        if transformed_unit.has_attribute(AttributeKey::EnPassant) {
+            if path.steps.len() < 2 {
+                // resets en passant opportunity on short paths
+                previous = None;
+            }
+            transformed_unit.set_en_passant(previous);
+        }
         transformed_unit
     }
 
@@ -480,42 +500,40 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.add_event(Event::UnitMovedThisGame(position));
     }
 
-    pub fn unit_en_passant_opportunity(&mut self, position: Point) {
-        //let _ = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        self.add_event(Event::EnPassantOpportunity(position));
+    pub fn unit_en_passant_opportunity(&mut self, unit_pos: Point, targetable: Option<Point>) {
+        let unit = self.get_map().get_unit(unit_pos).expect(&format!("Missing unit at {:?}", unit_pos));
+        if unit.get_en_passant() != targetable {
+            self.add_event(Event::EnPassantOpportunity(unit_pos, unit.get_en_passant(), targetable));
+        }
     }
 
     pub fn unit_direction(&mut self, position: Point, direction: D) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        match unit {
-            UnitType::Chess(ChessUnit { typ: ChessUnits::Pawn(starting_dir, _), .. }) => {
-                if *starting_dir != direction {
-                    self.add_event(Event::UnitDirection(position, *starting_dir, direction));
-                }
-            }
-            _ => panic!("unit at {position:?} doesn't have direction attribute"),
+        if unit.has_attribute(AttributeKey::Direction) {
+            let starting_dir = unit.get_direction();
+            self.add_event(Event::UnitDirection(position, starting_dir, direction));
         }
     }
 
-    pub fn unit_status(&mut self, position: Point, status: UnitActionStatus) {
-        let unit = self.get_map().get_unit(position);
-        match unit {
-            Some(UnitType::Normal(unit)) => {
-                if status != unit.action_status {
-                    self.add_event(Event::UnitActionStatus(position, unit.action_status, status));
-                }
-            }
-            None => panic!("Missing unit at {position:?}"),
-            _ => panic!("unit at {position:?} can't have action status"),
-        }
+    pub fn unit_status(&mut self, position: Point, status: ActionStatus) {
+        // TODO: check if unit can have that status
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
+        self.add_event(Event::UnitActionStatus(position, unit.get_status(), status));
     }
 
-    pub fn unit_build_drone(&mut self, position: Point, drone: TransportableDrones) {
+    pub fn unit_status_boarded(&mut self, position: Point, index: usize, status: ActionStatus) {
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
+        let unit = unit.get_transported()[index];
+        // TODO: check if unit can have that status
+        self.add_event(Event::UnitActionStatusBoarded(position, index, unit.get_status(), status));
+    }
+
+    /*pub fn unit_build_drone(&mut self, position: Point, drone: TransportableDrones) {
         //let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
         self.add_event(Event::BuildDrone(position, drone));
-    }
+    }*/
 
-    pub fn unit_exhaust(&mut self, position: Point) {
+    /*pub fn unit_exhaust(&mut self, position: Point) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
         if !unit.is_exhausted() {
             self.add_event(Event::UnitExhaust(position));
@@ -549,11 +567,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         } else {
             panic!("Can't unexhaust unit at {position:?}, boarded as {index}");
         }
-    }
+    }*/
 
     pub fn unit_damage(&mut self, position: Point, damage: u16) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        self.add_event(Event::UnitHpChange(position, (-(damage.min(unit.get_hp() as u16) as i8)).into(), (-(damage as i32)).max(-999).into()));
+        self.add_event(Event::UnitHpChange(position, -(damage.min(unit.get_hp() as u16) as i8), (-(damage as i32)).max(-999) as i16));
     }
 
     pub fn unit_mass_damage(&mut self, amounts: HashMap<Point, u16>) {
@@ -570,24 +588,44 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn unit_repair(&mut self, position: Point, heal: u8) {
         let hp = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).get_hp();
         self.effect_repair(position);
-        self.add_event(Event::UnitHpChange(position, heal.min(100 - hp).into(), heal.into()));
+        self.add_event(Event::UnitHpChange(position, heal.min(100 - hp) as i8, heal as i16));
     }
 
     pub fn unit_heal(&mut self, position: Point, heal: u8) {
         let hp = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).get_hp();
         self.effect_heal(position);
-        self.add_event(Event::UnitHpChange(position, heal.min(100 - hp).into(), heal.into()));
+        self.add_event(Event::UnitHpChange(position, heal.min(100 - hp) as i8, heal as i16));
+    }
+
+    pub fn unit_mass_heal(&mut self, amounts: HashMap<Point, u8>) {
+        for (position, damage) in amounts {
+            self.unit_heal(position, damage);
+        }
     }
 
     pub fn unit_heal_boarded(&mut self, position: Point, index: usize, heal: u8) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        if unit.get_boarded().len() > index {
-            let hp = unit.get_boarded()[index].get_hp();
+        let transported = unit.get_transported();
+        if transported.len() > index {
+            let hp = transported[index].get_hp();
             if hp < 100 {
-                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), heal.min(100 - hp).into()));
+                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), heal.min(100 - hp) as i8));
             }
         } else {
             panic!("Can't heal unit at {position:?}, boarded as {index}");
+        }
+    }
+
+    pub fn unit_damage_boarded(&mut self, position: Point, index: usize, damage: u8) {
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
+        let transported = unit.get_transported();
+        if transported.len() > index {
+            let hp = transported[index].get_hp();
+            if hp > 0 {
+                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), -(damage.min(hp) as i8)));
+            }
+        } else {
+            panic!("Can't damage unit at {position:?}, boarded as {index}");
         }
     }
 
@@ -595,8 +633,30 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.add_event(Event::Effect(Effect::Explode(position)));
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         self.add_event(Event::UnitRemove(position, unit.clone()));
+        if let Some(id) = self.observation_id(position, None) {
+            self.observed_units.remove(&id);
+        }
+        for i in 0..unit.get_transported().len() {
+            if let Some(id) = self.observation_id(position, Some(i)) {
+                self.observed_units.remove(&id);
+            }
+        }
         if trigger_death_effects {
             unit.on_death(self, position);
+        }
+    }
+
+    pub fn unit_death_boarded(&mut self, position: Point, index: usize) {
+        self.add_event(Event::Effect(Effect::Explode(position)));
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
+        let transported = unit.get_transported();
+        if transported.len() > index {
+            if let Some(id) = self.observation_id(position, Some(index)) {
+                self.observed_units.remove(&id);
+            }
+            self.add_event(Event::UnitRemoveBoarded(position, index.into(), transported[index].clone()));
+        } else {
+            panic!("Can't damage unit at {position:?}, boarded as {index}");
         }
     }
 
@@ -607,7 +667,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn unit_replace(&mut self, position: Point, new_unit: UnitType<D>) {
+    pub fn unit_replace(&mut self, position: Point, new_unit: Unit<D>) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
         self.add_event(Event::UnitRemove(position, unit.clone()));
         self.add_event(Event::UnitAdd(position, new_unit));

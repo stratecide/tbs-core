@@ -1,21 +1,24 @@
 use std::fmt::Display;
 
+use crate::config::Environment;
 use crate::details::{MAX_STACK_SIZE, Detail};
 use crate::game::event_handler::EventHandler;
 use crate::game::game::*;
 use crate::map::direction::*;
 use crate::map::point::Point;
 use crate::player::Owner;
-use crate::units::*;
-use crate::units::movement::{MovementPoints, MovementType};
-use crate::units::normal_units::NormalUnit;
+use crate::script::unit::UnitScript;
+use crate::units::attributes::AttributeKey;
+use crate::units::unit::Unit;
 
 use interfaces::game_interface::ClientPerspective;
+use num_rational::Rational32;
+use serde::Deserialize;
 use zipper::U;
 use zipper::zipper_derive::*;
 
-pub const DEFAULT_ATTACK_BONUS_POWER: f32 = 0.1;
-pub const DEFAULT_DEFENSE_BONUS_POWER: f32 = 0.1;
+pub const DEFAULT_ATTACK_BONUS_POWER: Rational32 = Rational32::new(1, 10);
+pub const DEFAULT_DEFENSE_BONUS_POWER: Rational32 = Rational32::new(1, 10);
 
 pub const CHARGE_UNIT: i32 = 100;
 pub const MAX_CHARGE: u32 = CHARGE_UNIT as u32 * 12;
@@ -38,17 +41,17 @@ impl Commander {
         }
     }
 
-    pub fn movement_bonus<D: Direction>(&self, _unit: &UnitType<D>) -> MovementPoints {
-        MovementPoints::from(0.)
+    pub fn movement_bonus<D: Direction>(&self, _unit: &Unit<D>) -> Rational32 {
+        Rational32::from_integer(0)
     }
     
-    pub fn transform_movement_cost(&self, _unit: &NormalUnit, _movement_type: MovementType, cost: MovementPoints) -> MovementPoints {
+    pub fn transform_movement_cost<D: Direction>(&self, _unit: &Unit<D>, cost: Rational32) -> Rational32 {
         cost
     }
     
-    pub fn attack_bonus<D: Direction>(&self, _game: &Game<D>, _attacker: &NormalUnit, _is_counter: bool) -> f32 {
+    pub fn attack_bonus<D: Direction>(&self, _game: &Game<D>, _attacker: &Unit<D>, _is_counter: bool) -> Rational32 {
         let mut result = match self {
-            _ => 0.,
+            _ => Rational32::from_integer(0),
         };
         if self.power_active() {
             result += DEFAULT_ATTACK_BONUS_POWER;
@@ -56,9 +59,9 @@ impl Commander {
         result
     }
 
-    pub fn defense_bonus<D: Direction>(&self, _game: &Game<D>, _defender: &UnitType<D>, _is_counter: bool) -> f32 {
+    pub fn defense_bonus<D: Direction>(&self, _game: &Game<D>, _defender: &Unit<D>, _is_counter: bool) -> Rational32 {
         let mut result = match self {
-            _ => 0.,
+            _ => Rational32::from_integer(0),
         };
         if self.power_active() {
             result += DEFAULT_ATTACK_BONUS_POWER;
@@ -66,21 +69,21 @@ impl Commander {
         result
     }
     
-    pub fn after_attacked<D: Direction>(&self, _game: &Game<D>, _attacker: &NormalUnit, _defender: &UnitType<D>, _is_counter: bool) {
+    pub fn after_attacked<D: Direction>(&self, _game: &Game<D>, _attacker: &Unit<D>, _defender: &Unit<D>, _is_counter: bool) {
         match self {
             _ => {}
         }
     }
 
-    pub fn after_attacking<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Point, _attacker: &NormalUnit, defenders: Vec<(Point, UnitType<D>, u16)>, _is_counter: bool) {
+    pub fn after_attacking<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Point, _attacker: &Unit<D>, defenders: Vec<(Unit<D>, u8)>, _is_counter: bool) {
         match self {
             Self::Vampire(_, _) => {
                 if handler.get_game().is_foggy() {
-                    let mut damage: f32 = 0.0;
-                    for (_, _, d) in defenders {
-                        damage += d as f32;
+                    let mut damage: i32 = 0;
+                    for (_, d) in defenders {
+                        damage += d as i32;
                     }
-                    let lifesteal = (damage * 0.15 + 0.5).floor() as u8;
+                    let lifesteal = Rational32::new(damage * 15, 100).round().to_integer().min(100) as u8;
                     if lifesteal > 0 {
                         handler.unit_heal(attacker_pos, lifesteal);
                     }
@@ -90,23 +93,22 @@ impl Commander {
         }
     }
 
-    pub fn after_killing_unit<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner, defender_pos: Point, defender: &UnitType<D>) {
+    pub fn after_killing_unit<D: Direction>(&self, handler: &mut EventHandler<D>, owner: Owner, defender_pos: Point, defender: &Unit<D>) {
         let player = handler.get_game().get_owning_player(owner).unwrap();
         match self {
             Self::Zombie(_, _) => {
                 let details = handler.get_map().get_details(defender_pos);
-                if details.len() < MAX_STACK_SIZE as usize && defender.get_team(handler.get_game()) != ClientPerspective::Team(*player.team as u8) {
-                    let mut unit= match defender {
-                        UnitType::Normal(unit) => unit.clone(),
-                        _ => return,
-                    };
-                    while unit.get_boarded().len() > 0 {
-                        unit.unboard(0);
-                    }
-                    handler.detail_add(defender_pos, Detail::Skull(owner, unit.typ));
+                if details.len() < MAX_STACK_SIZE as usize && defender.get_team() != ClientPerspective::Team(player.team) && defender.has_attribute(AttributeKey::Zombified) {
+                    handler.detail_add(defender_pos, Detail::Skull(player.owner_id as u8, defender.typ()));
                 }
             }
             _ => {}
+        }
+    }
+
+    pub fn unit_death_effects<D: Direction>(&self, unit: &Unit<D>) -> Vec<UnitScript> {
+        match self {
+            _ => Vec::new()
         }
     }
 
