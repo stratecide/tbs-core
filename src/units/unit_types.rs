@@ -1,7 +1,8 @@
-use std::fmt::Display;
 use serde::Deserialize;
+use zipper::*;
 
-use crate::{map::direction::Direction, config::Environment};
+use crate::map::direction::Direction;
+use crate::config::environment::Environment;
 
 use super::unit::UnitBuilder;
 
@@ -116,3 +117,20 @@ impl UnitType {
         })
     }
 }*/
+
+impl SupportedZippable<&Environment> for UnitType {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        let index = support.config.unit_types().iter().position(|t| t == self).unwrap();
+        let bits = bits_needed_for_max_value(support.config.unit_count() as u32 - 1);
+        zipper.write_u32(index as u32, bits);
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let bits = bits_needed_for_max_value(support.config.unit_count() as u32 - 1);
+        let index = unzipper.read_u32(bits)? as usize;
+        if index < support.config.unit_count() {
+            Ok(support.config.unit_types()[index])
+        } else {
+            Err(ZipperError::EnumOutOfBounds(format!("UnitType index {}", index)))
+        }
+    }
+}

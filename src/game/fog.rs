@@ -43,7 +43,7 @@ impl Display for FogSetting {
 }
 
 impl Zippable for FogSetting {
-    fn export(&self, zipper: &mut Zipper) {
+    fn zip(&self, zipper: &mut Zipper) {
         let (index, bonus_vision): (u8, Option<u8>) = match self {
             Self::None => (0, None),
             Self::Light(b) => (1, Some(*b)),
@@ -57,7 +57,7 @@ impl Zippable for FogSetting {
             zipper.write_u8(bonus_vision, 2);
         }
     }
-    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+    fn unzip(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
         Ok(match unzipper.read_u8(3)? {
             0 => Self::None,
             1 => Self::Light(unzipper.read_u8(2)?),
@@ -71,23 +71,23 @@ impl Zippable for FogSetting {
 }
 
 impl FogSetting {
-    pub const GRADIENT_WITH_NONE: &[Self] = &[
+    pub const GRADIENT_WITH_NONE: &'static [Self] = &[
         Self::None,
         Self::Sharp(2),
         Self::Sharp(1),
         Self::Sharp(0),
     ];
-    pub const GRADIENT_DARK: &[Self] = &[
+    pub const GRADIENT_DARK: &'static [Self] = &[
         Self::Fade1(2),
         Self::Fade2(1),
         Self::ExtraDark(0),
     ];
-    pub const GRADIENT_LIGHT: &[Self] = &[
+    pub const GRADIENT_LIGHT: &'static [Self] = &[
         Self::Light(0),
         Self::Fade2(3),
         Self::Fade2(1),
     ];
-    pub const GRADIENT_LARGE: &[Self] = &[
+    pub const GRADIENT_LARGE: &'static [Self] = &[
         Self::Light(0),
         Self::Fade2(3),
         Self::Fade2(2),
@@ -192,7 +192,7 @@ fn gradient_progress(gradient: &[FogSetting], bright_duration: FogDuration, dark
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 pub enum VisionMode {
     Normal,
     Movement,

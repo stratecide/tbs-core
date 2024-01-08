@@ -10,7 +10,7 @@ use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
 
-use super::Config;
+use super::config::Config;
 
 
 

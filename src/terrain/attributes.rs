@@ -1,12 +1,11 @@
 use std::fmt::{Display, Debug};
 
-use rustc_hash::FxHashMap;
 use zipper::*;
 use serde::Deserialize;
 
-use crate::config::Environment;
-use crate::map::direction::{Direction, Direction4, Direction6};
-use crate::units::attributes::{DEFAULT_OWNER, Owner};
+use crate::config::environment::Environment;
+use crate::units::attributes::DEFAULT_OWNER;
+use crate::player::Owner;
 
 use super::TerrainType;
 
@@ -51,7 +50,7 @@ impl TerrainAttributeKey {
 pub(crate) enum TerrainAttribute {
     //PipeConnection(D::P),
     Owner(i8),
-    CaptureProgress(Option<(i8, u8)>),
+    CaptureProgress(CaptureProgress),
     BuiltThisTurn(u8),
     Exhausted(bool),
     Anger(u8),
@@ -70,7 +69,7 @@ impl TerrainAttribute {
         }
     }
 
-    pub(super) fn export(&self, environment: &Environment, zipper: &mut Zipper, typ: TerrainType) {
+    pub(super) fn export(&self, zipper: &mut Zipper, environment: &Environment, typ: TerrainType) {
         match self {
             //Self::PipeConnection(connection) => connection.export(zipper),
             Self::Owner(id) => {
@@ -84,20 +83,20 @@ impl TerrainAttribute {
                 zipper.write_bool(progress.is_some());
                 if let Some((new_owner, progress)) = progress {
                     if environment.config.terrain_needs_owner(typ) {
-                        zipper.write_u8(0.max(*new_owner) as u8, bits_needed_for_max_value(environment.config.max_player_count() as u32 - 1));
+                        zipper.write_u8(0.max(new_owner.0) as u8, bits_needed_for_max_value(environment.config.max_player_count() as u32 - 1));
                     } else {
-                        zipper.write_u8((*new_owner + 1) as u8, bits_needed_for_max_value(environment.config.max_player_count() as u32));
+                        zipper.write_u8((new_owner.0 + 1) as u8, bits_needed_for_max_value(environment.config.max_player_count() as u32));
                     }
                     zipper.write_u8(*progress, bits_needed_for_max_value(environment.config.terrain_max_capture_progress(typ) as u32));
                 }
             }
             Self::BuiltThisTurn(counter) => zipper.write_u8(*counter, bits_needed_for_max_value(environment.config.terrain_max_builds_per_turn(typ) as u32)),
             Self::Exhausted(z) => zipper.write_bool(*z),
-            Self::Anger(counter) => zipper.write_u8(*counter, bits_needed_for_max_value(environment.config.terrain_max_anger(typ) as u32)),
+            Self::Anger(counter) => zipper.write_u8(*counter, bits_needed_for_max_value(environment.config.terrain_anger(typ) as u32)),
         }
     }
 
-    pub(super) fn import(environment: &Environment, unzipper: &mut Unzipper, key: TerrainAttributeKey, typ: TerrainType) -> Result<Self, ZipperError> {
+    pub(super) fn import(unzipper: &mut Unzipper, environment: &Environment, key: TerrainAttributeKey, typ: TerrainType) -> Result<Self, ZipperError> {
         use TerrainAttributeKey as A;
         Ok(match key {
             //A::PipeConnection => Self::PipeConnection(<D::P as Zippable>::import(unzipper)?),
@@ -116,14 +115,14 @@ impl TerrainAttribute {
                         unzipper.read_u8(bits_needed_for_max_value(environment.config.max_player_count() as u32))? as i8 - 1
                     }.min(environment.config.max_player_count() - 1);
                     let progress = unzipper.read_u8(bits_needed_for_max_value(environment.config.terrain_max_capture_progress(typ) as u32))?;
-                    Some((new_owner, progress))
+                    Some((new_owner.into(), progress))
                 } else {
                     None
                 })
             }
             A::BuiltThisTurn => Self::BuiltThisTurn(unzipper.read_u8(bits_needed_for_max_value(environment.config.terrain_max_builds_per_turn(typ) as u32))?),
             A::Exhausted => Self::Exhausted(unzipper.read_bool()?),
-            A::Anger => Self::Anger(unzipper.read_u8(bits_needed_for_max_value(environment.config.terrain_max_anger(typ) as u32))?),
+            A::Anger => Self::Anger(unzipper.read_u8(bits_needed_for_max_value(environment.config.terrain_anger(typ) as u32))?),
         })
     }
 }
@@ -194,10 +193,56 @@ macro_rules! attribute {
 
 attribute_tuple!(Owner, Owner);
 
-attribute!(Option<(i8, u8)>, CaptureProgress);
+pub type CaptureProgress = Option<(Owner, u8)>;
+attribute!(CaptureProgress, CaptureProgress);
 
+impl SupportedZippable<&Environment> for (Owner, u8) {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        self.0.export(zipper, support);
+        zipper.write_u8(self.1, bits_needed_for_max_value(support.config.max_capture_resistance() as u32));
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Ok((
+            Owner::import(unzipper, support)?,
+            unzipper.read_u8(bits_needed_for_max_value(support.config.max_capture_resistance() as u32))?,
+        ))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct Anger(pub(crate) u8);
 attribute_tuple!(Anger, Anger);
 
+impl SupportedZippable<&Environment> for Anger {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        zipper.write_u8(self.0, bits_needed_for_max_value(support.config.terrain_max_anger() as u32));
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(support.config.terrain_max_anger() as u32))?))
+    }
+}
+
+impl From<u8> for Anger {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct BuiltThisTurn(pub(crate) u8);
 attribute_tuple!(BuiltThisTurn, BuiltThisTurn);
+
+impl SupportedZippable<&Environment> for BuiltThisTurn {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        zipper.write_u8(self.0, bits_needed_for_max_value(support.config.terrain_max_built_this_turn() as u32));
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(support.config.terrain_max_built_this_turn() as u32))?))
+    }
+}
+
+impl From<u8> for BuiltThisTurn {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}

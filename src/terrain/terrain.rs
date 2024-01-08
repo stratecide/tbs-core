@@ -1,21 +1,18 @@
-use std::collections::{HashSet, HashMap};
-use std::fmt::{Display, Debug};
-use std::ops::{Deref, DerefMut};
+use std::collections::HashMap;
+use std::fmt::Debug;
 
 use interfaces::game_interface::ClientPerspective;
 use num_rational::Rational32;
 use rustc_hash::FxHashMap;
 use zipper::*;
-use serde::Deserialize;
 
-use crate::config::Environment;
-use crate::game::fog::{FogIntensity, VisionMode, FogSetting};
+use crate::config::environment::Environment;
+use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::game::Game;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
-use crate::player::Player;
-use crate::units::attributes::Owner;
+use crate::player::{Player, Owner};
 use crate::units::movement::MovementType;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
@@ -188,30 +185,33 @@ impl Terrain {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_capture_progress(&self) -> Option<(i8, u8)> {
+    pub fn get_capture_progress(&self) -> CaptureProgress {
         self.get()
     }
-    pub fn set_capture_progress(&self, progress: Option<(i8, u8)>) {
+    pub fn set_capture_progress(&mut self, progress: CaptureProgress) {
         self.set(progress);
     }
 
     pub fn get_anger(&self) -> u8 {
         self.get::<Anger>().0
     }
-    pub fn set_anger(&self, anger: u8) {
+    pub fn set_anger(&mut self, anger: u8) {
         self.set(Anger(anger));
     }
 
     pub fn get_built_this_turn(&self) -> u8 {
         self.get::<BuiltThisTurn>().0
     }
-    pub fn set_built_this_turn(&self, built_this_turn: u8) {
+    pub fn set_built_this_turn(&mut self, built_this_turn: u8) {
         self.set(BuiltThisTurn(built_this_turn));
     }
 
     // methods that go beyond getter / setter functionality
 
     pub fn get_vision<D: Direction>(&self, game: &Game<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
+        if self.get_team() != team {
+            return HashMap::new();
+        }
         let vision_range = if let Some(v) = self.vision_range(game) {
             v
         } else {
@@ -275,6 +275,30 @@ impl Terrain {
     }
 }
 
+impl SupportedZippable<&Environment> for Terrain {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        self.typ.export(zipper, support);
+        for key in support.config.terrain_specific_attributes(self.typ) {
+            let value = key.default(self.typ, &self.environment);
+            let value = self.attributes.get(key).unwrap_or(&value);
+            value.export(zipper, support, self.typ);
+        }
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let typ = TerrainType::import(unzipper, support)?;
+        let mut attributes = FxHashMap::default();
+        for key in support.config.terrain_specific_attributes(typ) {
+            let attr = TerrainAttribute::import(unzipper, support, *key, typ)?;
+            attributes.insert(*key, attr);
+        }
+        Ok(Self {
+            environment: support.clone(),
+            typ,
+            attributes,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct TerrainBuilder {
     terrain: Terrain,
@@ -282,7 +306,7 @@ pub struct TerrainBuilder {
 
 impl TerrainBuilder {
     pub fn new(environment: &Environment, typ: TerrainType) -> Self {
-        let mut terrain = Terrain::new(environment.clone(), typ);
+        let terrain = Terrain::new(environment.clone(), typ);
         Self {
             terrain,
         }
@@ -295,7 +319,7 @@ impl TerrainBuilder {
         for (key, value) in &other.attributes {
             // TODO: consider all attributes, not just terrain-specific ones
             if self.terrain.has_attribute(*key) {
-                self.terrain.attributes.insert(*key, *value);
+                self.terrain.attributes.insert(*key, value.clone());
             }
         }
         self
@@ -306,7 +330,7 @@ impl TerrainBuilder {
         self
     }
 
-    pub fn set_capture_progress(mut self, progress: Option<(i8, u8)>) -> Self {
+    pub fn set_capture_progress(mut self, progress: CaptureProgress) -> Self {
         self.terrain.set_capture_progress(progress);
         self
     }

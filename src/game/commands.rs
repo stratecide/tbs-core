@@ -79,19 +79,19 @@ impl<D: Direction> Command<D> {
                 for p in handler.get_map().all_points() {
                     let terrain = handler.get_map().get_terrain(p).unwrap();
                     if let Some((new_owner, progress)) = terrain.get_capture_progress() {
-                        if new_owner == owner_id {
+                        if new_owner.0 == owner_id {
                             if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner_id() != owner_id && u.can_capture()) {
                                 if unit.get_status() == ActionStatus::Capturing {
                                     let max_progress = terrain.get_capture_resistance();
                                     let progress = progress as u16 + (unit.get_hp() as f32 / 10.).ceil() as u16;
                                     if progress < max_progress as u16 {
-                                        handler.terrain_capture_progress(p, Some((new_owner, progress as u8)));
+                                        handler.terrain_capture_progress(p, Some((new_owner, (progress as u8).into())));
                                     } else {
                                         // captured
                                         let terrain = TerrainBuilder::new(handler.environment(), terrain.typ())
                                         .copy_from(terrain)
                                         .set_capture_progress(None)
-                                        .set_owner_id(new_owner)
+                                        .set_owner_id(new_owner.0)
                                         .build_with_defaults();
                                         handler.terrain_replace(p, terrain);
                                     }
@@ -115,7 +115,7 @@ impl<D: Direction> Command<D> {
             }
             Self::UnitCommand(command) => command.execute(handler),
             Self::BuyUnit(pos, unit_type, d) => {
-                let player = handler.get_game().current_player();
+                let player = handler.get_game().current_player().clone();
                 if handler.get_game().get_fog_at(player.get_team(), pos) != FogIntensity::TrueSight {
                     // factories and bubbles provide true-sight
                     return Err(CommandError::NoVision);
@@ -129,7 +129,7 @@ impl<D: Direction> Command<D> {
                         Detail::Bubble(owner, terrain_type) => {
                             bubble_index = Some(index);
                             terrain = TerrainBuilder::new(handler.environment(), terrain_type)
-                            .set_owner_id(owner)
+                            .set_owner_id(owner.0)
                             .build_with_defaults();
                             break;
                         }

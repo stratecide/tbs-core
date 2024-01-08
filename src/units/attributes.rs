@@ -3,45 +3,18 @@ use std::fmt::{Display, Debug};
 use rustc_hash::FxHashMap;
 use zipper::*;
 use serde::Deserialize;
+use zipper_derive::Zippable;
 
-use crate::config::Environment;
+use crate::config::environment::Environment;
 use crate::map::direction::{Direction, Direction4, Direction6};
 use crate::map::point::Point;
+use crate::player::Owner;
 
 use super::unit_types::UnitType;
 use super::unit::*;
 use super::hero::*;
 
 pub const DEFAULT_OWNER: i8 = 0;
-
-
-
-
-
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub enum CommanderType {
-        Vampire,
-        Zombie,
-        None,
-    }
-}
-
-impl CommanderType {
-    fn attribute_keys(&self) -> &'static [AttributeKey] {
-        use AttributeKey as A;
-        match self {
-            Self::Zombie => &[A::Zombified],
-            _ => &[],
-        }
-    }
-    fn attribute_keys_hidden_by_fog(&self) -> &'static [AttributeKey] {
-        use AttributeKey as A;
-        match self {
-            _ => &[],
-        }
-    }
-}
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
@@ -136,8 +109,8 @@ impl<D: Direction> Attribute<D> {
 
     pub(super) fn export(&self, environment: &Environment, zipper: &mut Zipper, typ: UnitType, transported: bool, owner: i8, hero: HeroType) {
         match self {
-            Self::Hp(hp) => U::<100>::from(*hp).export(zipper),
-            Self::Hero(hero) => hero.export(zipper),
+            Self::Hp(hp) => U::<100>::from(*hp).zip(zipper),
+            Self::Hero(hero) => hero.export(zipper, environment),
             Self::Owner(id) => {
                 if environment.config.unit_needs_owner(typ) {
                     zipper.write_u8(0.max(*id) as u8, bits_needed_for_max_value(environment.config.max_player_count() as u32 - 1));
@@ -165,19 +138,19 @@ impl<D: Direction> Attribute<D> {
                 let bits = bits_needed_for_max_value(environment.unit_transport_capacity(typ, owner, hero) as u32);
                 zipper.write_u8(transported.len() as u8, bits);
                 for u in transported {
-                    u.export(zipper, Some((typ, owner)));
+                    u.zip(zipper, Some((typ, owner)));
                 }
             }
             Self::Zombified(z) => zipper.write_bool(*z),
             Self::Unmoved(z) => zipper.write_bool(*z),
-            Self::EnPassant(z) => z.export(zipper),
+            Self::EnPassant(z) => z.export(zipper, environment),
         }
     }
 
-    pub(super) fn import(environment: &Environment, unzipper: &mut Unzipper, key: AttributeKey, typ: UnitType, transported: bool, owner: i8, hero: HeroType) -> Result<Self, ZipperError> {
+    pub(super) fn import(unzipper: &mut Unzipper, environment: &Environment, key: AttributeKey, typ: UnitType, transported: bool, owner: i8, hero: HeroType) -> Result<Self, ZipperError> {
         use AttributeKey as A;
         Ok(match key {
-            A::Hp => Self::Hp(*(U::<100>::import(unzipper)?) as u8),
+            A::Hp => Self::Hp(*(U::<100>::unzip(unzipper)?) as u8),
             A::Hero => Self::Hero(Hero::import(unzipper, environment)?),
             A::Owner => {
                 Self::Owner(if environment.config.unit_needs_owner(typ) {
@@ -217,13 +190,13 @@ impl<D: Direction> Attribute<D> {
                 let len = (unzipper.read_u8(bits)? as usize).min(environment.unit_transport_capacity(typ, owner, hero));
                 let mut result = Vec::new();
                 while result.len() < len {
-                    result.push(Unit::import(environment, unzipper, Some((typ, owner)))?);
+                    result.push(Unit::unzip(unzipper, environment, Some((typ, owner)))?);
                 }
                 Self::Transported(result)
             }
             A::Zombified => Self::Zombified(unzipper.read_bool()?),
             A::Unmoved => Self::Unmoved(unzipper.read_bool()?),
-            A::EnPassant => Self::EnPassant(Option::<Point>::import(unzipper)?),
+            A::EnPassant => Self::EnPassant(Option::<Point>::import(unzipper, environment)?),
         })
     }
     
@@ -331,8 +304,6 @@ pub(crate) use attribute;
 pub(super) struct Hp(pub(super) u8);
 attribute_tuple!(Hp, Hp);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Owner(pub(crate) i8);
 attribute_tuple!(Owner, Owner);
 
 impl TrAttribute<Direction4> for Direction4 {
@@ -367,15 +338,16 @@ impl Default for Amphibious {
     }
 }
 
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+//crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zippable)]
+    #[zippable(bits = 3)]
     pub enum ActionStatus {
         Ready,
         Exhausted,
         Capturing,
         Repairing,
     }
-}
+//}
 attribute!(ActionStatus, ActionStatus);
 
 pub(super) struct Unmoved(pub(super) bool);

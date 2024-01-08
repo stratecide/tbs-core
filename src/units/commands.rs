@@ -2,16 +2,15 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 
-use interfaces::game_interface::ClientPerspective;
+use zipper::*;
 
+use crate::config::environment::Environment;
 use crate::game::commands::*;
 use crate::game::event_handler::*;
 use crate::game::fog::FogIntensity;
-use crate::map::wrapping_map::OrientedPoint;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
-use crate::terrain::*;
 use super::attributes::ActionStatus;
 
 use super::combat::AttackVector;
@@ -74,10 +73,10 @@ impl<D: Direction> UnitAction<D> {
             Self::Capture => {
                 let terrain = handler.get_map().get_terrain(end).unwrap();
                 if let Some(new_progress) = match terrain.get_capture_progress() {
-                    Some((capturing_owner, _)) if capturing_owner == handler.get_game().current_player().get_owner_id() => {
+                    Some((capturing_owner, _)) if capturing_owner.0 == handler.get_game().current_player().get_owner_id() => {
                         None
                     }
-                    _ => Some((handler.get_game().current_player().get_owner_id(), 0))
+                    _ => Some((handler.get_game().current_player().get_owner_id().into(), 0.into()))
                 } {
                     handler.terrain_capture_progress(end, Some(new_progress));
                 }
@@ -299,7 +298,23 @@ pub fn exhaust_all_on_chess_board<D: Direction>(handler: &mut EventHandler<D>, p
     }
 }
 
-pub type UnloadIndex = usize;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UnloadIndex(pub usize);
+
+impl SupportedZippable<&Environment> for UnloadIndex {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.config.max_player_count() as u32));
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(support.config.max_player_count() as u32))? as usize))
+    }
+}
+
+impl From<usize> for UnloadIndex {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
 
 /*#[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 2)]

@@ -1,33 +1,37 @@
 use std::collections::{HashMap, HashSet};
 
 use interfaces::game_interface::ClientPerspective;
+use zipper_derive::Zippable;
+use zipper::Exportable;
 
-use crate::config::Environment;
+use crate::config::environment::Environment;
 use crate::game::fog::FogIntensity;
 use crate::game::game::Game;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
+use crate::player::Owner;
 use crate::terrain::TerrainType;
 use crate::units::unit_types::UnitType;
 
 pub const MAX_STACK_SIZE: u32 = 4;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Zippable)]
+#[zippable(bits = 4, support_ref = Environment)]
 pub enum Detail<D: Direction> {
     Pipe(PipeState<D>),
     Coins1,
     Coins2,
     Coins4,
-    Bubble(i8, TerrainType),
-    Skull(u8, UnitType),
+    Bubble(Owner, TerrainType),
+    Skull(Owner, UnitType),
 }
 impl<D: Direction> Detail<D> {
     pub fn get_vision(&self, game: &Game<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
         let mut result = HashMap::new();
         match self {
             Self::Bubble(owner, _) => {
-                if let Some(player) = game.get_owning_player(*owner) {
+                if let Some(player) = game.get_owning_player(owner.0) {
                     if player.get_team() == team {
                         result.insert(pos, FogIntensity::TrueSight);
                     }
@@ -123,7 +127,7 @@ impl<D: Direction> Detail<D> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Zippable)]
 pub struct PipeState<D: Direction> {
     directions: [D; 2],
     ends: [bool; 2],

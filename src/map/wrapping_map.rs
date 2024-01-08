@@ -10,6 +10,7 @@ pub type Distortion<D> = (bool, D);
 type AreaPoint<D> = (Transformation<D>, Point);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Zippable)]
+#[zippable(support = u16)]
 pub struct Transformation<D>
 where D: Direction {
     pub distortion: Distortion<D>,
@@ -500,7 +501,7 @@ where D: Direction {
     // only needed to save and load the wrapped_neighbors
     seed_transformations: Vec<Transformation<D>>,
     wrapped_neighbors: HashMap<(Point, D), OrientedPoint<D>>,
-#[cfg(feature = "rendering")]
+    #[cfg(feature = "rendering")]
     screen_wrap_vectors: Vec<D::T>,
 }
 
@@ -508,7 +509,7 @@ impl<D> WrappingMap<D>
 where D: Direction {
     fn new(builder: WrappingMapBuilder<D>) -> Self {
         WrappingMap {
-#[cfg(feature = "rendering")]
+            #[cfg(feature = "rendering")]
             screen_wrap_vectors: builder.screen_wrap_vectors(),
             pointmap: builder.map,
             seed_transformations: builder.seed_transformations,
@@ -516,7 +517,7 @@ where D: Direction {
         }
     }
 
-#[cfg(feature = "rendering")]
+    #[cfg(feature = "rendering")]
     pub fn screen_wrap_vectors(&self) -> &Vec<D::T> {
         &self.screen_wrap_vectors
     }
@@ -528,6 +529,13 @@ where D: Direction {
     /*pub fn odd_if_hex(&self) -> bool {
         self.pointmap.odd_if_hex() == ((self.pointmap.height() / 2) % 2 == 0)
     }*/
+    fn max_translation(map_size: MapSize) -> u16 {
+        if D::is_hex() {
+            map_size.width().max(map_size.height()) as u16 * 2
+        } else {
+            map_size.width().max(map_size.height()) as u16
+        }
+    }
 
     pub fn seed_transformations(&self) -> &Vec<Transformation<D>> {
         &self.seed_transformations
@@ -554,19 +562,21 @@ where D: Direction {
 }
 
 impl<D: Direction> Zippable for WrappingMap<D> {
-    fn export(&self, zipper: &mut Zipper) {
-        self.pointmap.export(zipper);
+    fn zip(&self, zipper: &mut Zipper) {
+        self.pointmap.zip(zipper);
         zipper.write_u8(self.seed_transformations.len() as u8, 3);
+        let max_translation = Self::max_translation(self.pointmap.size());
         for trans in &self.seed_transformations {
-            trans.export(zipper);
+            trans.export(zipper, max_translation);
         }
     }
-    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
-        let pointmap = PointMap::import(unzipper)?;
+    fn unzip(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+        let pointmap = PointMap::unzip(unzipper)?;
         let len = unzipper.read_u8(3)?;
         let mut seed_transformations = vec![];
+        let max_translation = Self::max_translation(pointmap.size());
         for _ in 0..len {
-            seed_transformations.push(Transformation::import(unzipper)?);
+            seed_transformations.push(Transformation::import(unzipper, max_translation)?);
         }
         let builder = WrappingMapBuilder::new(pointmap, seed_transformations);
         if let Ok(result) = builder.build() {

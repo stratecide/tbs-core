@@ -5,17 +5,12 @@ use serde::Deserialize;
 use crate::details::Detail;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
-use crate::map::point::Point;
-use crate::terrain::{KRAKEN_ATTACK_RANGE, KRAKEN_MAX_ANGER};
-use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::attributes::AttributeKey;
-use crate::units::combat::{AttackType, AttackVector, attack_targets, after_attacking};
-use crate::units::movement::Path;
-use crate::units::unit::{Unit, UnitBuilder};
+use crate::units::unit::UnitBuilder;
 
 use super::unit::anger_kraken;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum PlayerScript {
     Kraken,
     MassDamage(u8),
@@ -47,7 +42,7 @@ pub(super) fn mass_damage<D: Direction>(handler: &mut EventHandler<D>, team: Cli
             }
         }
     }
-    handler.unit_mass_damage(damage_map);
+    handler.unit_mass_damage(&damage_map);
     handler.unit_mass_death(dead, true);
 }
 
@@ -71,7 +66,7 @@ pub(super) fn zombie_resurrection<D: Direction>(handler: &mut EventHandler<D>, o
         for (index, detail) in handler.get_map().get_details(p).into_iter().enumerate() {
             match detail {
                 Detail::Skull(o, unit_type) => {
-                    if o == owner_id {
+                    if o.0 == owner_id as i8 {
                         handler.detail_remove(p, index.into());
                         let mut unit = UnitBuilder::new(handler.environment(), unit_type)
                         .set_hp(hp)

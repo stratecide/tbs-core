@@ -2,8 +2,17 @@ pub mod commander_type;
 
 use commander_type::CommanderType;
 use num_rational::Rational32;
+use zipper::*;
 
-use crate::{config::Environment, script::{player::PlayerScript, unit::UnitScript, attack::AttackScript, kill::KillScript}, map::{direction::Direction, point::Point}, units::unit::Unit, game::game::Game};
+use crate::config::environment::Environment;
+use crate::script::player::PlayerScript;
+use crate::script::unit::UnitScript;
+use crate::script::attack::AttackScript;
+use crate::script::kill::KillScript;
+use crate::map::direction::Direction;
+use crate::map::point::Point;
+use crate::units::unit::Unit;
+use crate::game::game::Game;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Commander {
@@ -11,6 +20,25 @@ pub struct Commander {
     charge: u32,
     power: usize,
     environment: Environment,
+}
+
+impl SupportedZippable<&Environment> for Commander {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        self.typ.export(zipper, &support.config);
+        zipper.write_u32(self.charge, bits_needed_for_max_value(support.config.max_commander_charge()));
+        zipper.write_u8(self.power as u8, bits_needed_for_max_value(support.config.commander_powers(self.typ).len() as u32 - 1));
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let typ = CommanderType::import(unzipper, &support.config)?;
+        let charge = unzipper.read_u32(bits_needed_for_max_value(support.config.max_commander_charge()))?;
+        let power = unzipper.read_u8(bits_needed_for_max_value(support.config.commander_powers(typ).len() as u32 - 1))? as usize;
+        Ok(Self {
+            typ,
+            charge,
+            power,
+            environment: support.clone(),
+        })
+    }
 }
 
 impl Commander {
@@ -73,23 +101,23 @@ impl Commander {
         };
         power.required_charge
     }
-    pub fn power_activation_effects(&self, index: usize) -> &[PlayerScript] {
+    pub fn power_activation_effects(&self, index: usize) -> Vec<PlayerScript> {
         let power = match self.environment.config.commander_powers(self.typ).get(index) {
             Some(power) => power,
-            None => return &[],
+            None => return Vec::new(),
         };
-        &power.effects
+        power.effects.clone()
     }
 
-    pub fn unit_death_effects<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<&UnitScript> {
+    pub fn unit_death_effects<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
         self.environment.config.commander_unit_death_effects(self, unit, game, pos)
     }
 
-    pub fn unit_attack_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<&AttackScript> {
+    pub fn unit_attack_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<AttackScript> {
         self.environment.config.commander_unit_attack_effects(self, unit, game, pos)
     }
 
-    pub fn unit_kill_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<&KillScript> {
+    pub fn unit_kill_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<KillScript> {
         self.environment.config.commander_unit_kill_effects(self, unit, game, pos)
     }
 

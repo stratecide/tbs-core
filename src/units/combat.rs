@@ -3,12 +3,14 @@ use std::collections::{HashSet, HashMap};
 use num_rational::Rational32;
 use serde::Deserialize;
 use zipper_derive::Zippable;
+use zipper::Exportable;
 
 use crate::game::events::Effect;
 use crate::game::game::Game;
 use crate::game::fog::FogIntensity;
 use crate::game::event_handler::EventHandler;
 use crate::map::point::Point;
+use crate::config::environment::Environment;
 use crate::map::direction::Direction;
 use crate::map::map::{Map, NeighborMode};
 use crate::map::wrapping_map::OrientedPoint;
@@ -97,7 +99,7 @@ fn attack_area_cannon<D: Direction, F: FnMut(OrientedPoint<D>, usize)>(map: &Map
             front = HashMap::new();
             for (position, _) in older_front {
                 if i >= min_range {
-                    callback(position, i);
+                    callback(position.clone(), i);
                 }
                 if let Some(dp) = map.get_neighbor(position.point, position.direction) {
                     front.insert(dp, true);
@@ -110,20 +112,20 @@ fn attack_area_cannon<D: Direction, F: FnMut(OrientedPoint<D>, usize)>(map: &Map
                 if *may_spread {
                     if let Some(dp) = map.get_neighbor(position.point, position.direction.rotate(true)) {
                         let key = OrientedPoint::new(dp.point, dp.mirrored != position.mirrored, dp.direction.rotate(dp.mirrored));
-                        front.insert(key, front.contains_key(&key));
+                        front.insert(key.clone(), front.contains_key(&key));
                     }
                     if let Some(dp) = map.get_neighbor(position.point, position.direction.rotate(false)) {
                         let key = OrientedPoint::new(dp.point, dp.mirrored != position.mirrored, dp.direction.rotate(!dp.mirrored));
-                        front.insert(key, front.contains_key(&key));
+                        front.insert(key.clone(), front.contains_key(&key));
                     }
                 }
             }
         }
         for position in old_front.keys() {
-            callback(*position, max_range * 2 - 1);
+            callback(position.clone(), max_range * 2 - 1);
         }
         for position in front.keys() {
-            callback(*position, max_range * 2);
+            callback(position.clone(), max_range * 2);
         }
     } else {
         let mut front = HashSet::new();
@@ -133,7 +135,7 @@ fn attack_area_cannon<D: Direction, F: FnMut(OrientedPoint<D>, usize)>(map: &Map
             front = HashSet::new();
             for position in old_front {
                 if i * 2 >= min_range {
-                    callback(position, i * 2);
+                    callback(position.clone(), i * 2);
                 }
                 if let Some(dp) = map.get_neighbor(position.point, position.direction) {
                     front.insert(dp);
@@ -154,7 +156,7 @@ fn attack_area_cannon<D: Direction, F: FnMut(OrientedPoint<D>, usize)>(map: &Map
 
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
-#[zippable(bits = 2)]
+#[zippable(bits = 2, support_ref = Environment)]
 pub enum AttackVector<D: Direction> {
     // prefer Direction over Point whenever possible
     Direction(D),
@@ -230,7 +232,7 @@ impl<D: Direction> AttackVector<D> {
                     }) {
                         result.push(Self::Direction(d));
                     }*/
-                    if Self::straight_splash(attacker, game, pos, d, min as usize, max as usize, get_fog).iter()
+                    if Self::straight_splash(attacker, game, pos, d, min as usize, max as usize, &get_fog).iter()
                     .any(|(dp, _)| dp.point == target) {
                         result.push(Self::Direction(d));
                     }
@@ -404,17 +406,17 @@ impl<D: Direction> AttackVector<D> {
      * returns the new position of the attacker or None if the attacker died
      */
     pub fn execute(&self, handler: &mut EventHandler<D>, attacker_pos: Point, path: Option<&Path<D>>, exhaust_after_attacking: bool, execute_scripts: bool, charge_powers: bool) -> Option<(Point, Option<usize>)> {
-        let attacker = handler.get_map().get_unit(attacker_pos).unwrap();
         let attacker_id = handler.observe_unit(attacker_pos, None);
+        let attacker = handler.get_map().get_unit(attacker_pos).cloned().unwrap();
         let (
             mut hero_charge,
             counter_attackers,
             mut defenders,
-        ) = self.execute_attack(handler, attacker, attacker_pos, path, exhaust_after_attacking, execute_scripts);
+        ) = self.execute_attack(handler, &attacker, attacker_pos, path, exhaust_after_attacking, execute_scripts);
         // counter attack
         if path.is_some() {
             for unit_id in counter_attackers {
-                let mut attacker_pos = match handler.get_observed_unit(attacker_id) {
+                let attacker_pos = match handler.get_observed_unit(attacker_id) {
                     Some((p, _)) => *p,
                     _ => break,
                 };
@@ -422,13 +424,13 @@ impl<D: Direction> AttackVector<D> {
                     Some((p, None)) => *p,
                     _ => continue,
                 };
-                let unit = handler.get_map().get_unit(unit_pos).expect(&format!("didn't find counter attacker at {unit_pos:?}"));
-                if !handler.get_game().can_see_unit_at(unit.get_team(), attacker_pos, attacker, true)
-                || !unit.could_attack(attacker)
+                let unit = handler.get_map().get_unit(unit_pos).cloned().expect(&format!("didn't find counter attacker at {unit_pos:?}"));
+                if !handler.get_game().can_see_unit_at(unit.get_team(), attacker_pos, &attacker, true)
+                || !unit.could_attack(&attacker)
                 || attacker.get_team() == unit.get_team() {
                     continue;
                 }
-                let mut attack_vectors = AttackVector::find(unit, handler.get_game(), unit_pos, attacker_pos, |_| FogIntensity::TrueSight);
+                let mut attack_vectors = AttackVector::find(&unit, handler.get_game(), unit_pos, attacker_pos, |_| FogIntensity::TrueSight);
                 let mut attack_vector = attack_vectors.pop();
                 if let AttackVector::Direction(d) = self {
                     let inverse = AttackVector::Direction(d.opposite_direction());
@@ -437,7 +439,7 @@ impl<D: Direction> AttackVector<D> {
                     }
                 }
                 if let Some(attack_vector) = attack_vector {
-                    let (_, _, d2) = attack_vector.execute_attack(handler, unit, unit_pos, None, false, execute_scripts);
+                    let (_, _, d2) = attack_vector.execute_attack(handler, &unit, unit_pos, None, false, execute_scripts);
                     defenders.extend(d2.into_iter());
                 }
             }
@@ -446,7 +448,7 @@ impl<D: Direction> AttackVector<D> {
             hero_charge = 0;
             defenders = Vec::new();
         }
-        after_attacking(handler, attacker, attacker_pos, hero_charge, defenders);
+        after_attacking(handler, &attacker, attacker_pos, hero_charge, defenders);
         handler.get_observed_unit(attacker_id).cloned()
     }
 
@@ -569,20 +571,20 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
     }
     let mut counter_attackers = Vec::new();
     let mut defenders = Vec::new();
-    for (defender_id, _, defender, damage) in attacked_units {
-        if attacker.get_team() != defender.get_team() && !counter_attackers.contains(&defender_id) {
-            counter_attackers.push(defender_id);
+    for (defender_id, _, defender, damage) in &attacked_units {
+        if attacker.get_team() != defender.get_team() && !counter_attackers.contains(defender_id) {
+            counter_attackers.push(*defender_id);
         }
-        defenders.push((attacker.get_owner_id(), defender, damage));
+        defenders.push((attacker.get_owner_id(), defender.clone(), *damage));
     }
     if execute_scripts {
-        let attack_scripts: Vec<&AttackScript> = attacker.get_attack_scripts(handler.get_game(), attacker_pos);
+        let attack_scripts: Vec<AttackScript> = attacker.get_attack_scripts(handler.get_game(), attacker_pos);
         for (defender_id, defender_pos, defender, damage) in attacked_units {
             for script in &attack_scripts {
                 script.trigger(handler, handler.get_observed_unit(attacker_id).cloned(), attacker, defender_pos, &defender, handler.get_observed_unit(defender_id).cloned(), damage);
             }
         }
-        let kill_scripts: Vec<&KillScript> = attacker.get_kill_scripts(handler.get_game(), attacker_pos);
+        let kill_scripts: Vec<KillScript> = attacker.get_kill_scripts(handler.get_game(), attacker_pos);
         for (defender_pos, defender) in killed_units {
             for script in &kill_scripts {
                 script.trigger(handler, handler.get_observed_unit(attacker_id).cloned(), attacker, defender_pos, &defender);
@@ -643,7 +645,7 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
         (unit.clone(), *damage)
     })
     .collect();*/
-    handler.unit_mass_damage(raw_damage);
+    handler.unit_mass_damage(&raw_damage);
     // destroy defeated units
     let dead_units: Vec<(Point, Unit<D>)> = raw_damage.keys()
     .filter_map(|p| handler.get_map().get_unit(*p).and_then(|u| {

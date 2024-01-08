@@ -5,7 +5,7 @@ use num_rational::Rational32;
 use serde::Deserialize;
 use zipper::*;
 
-use crate::config::Environment;
+use crate::config::environment::Environment;
 use crate::game::fog::FogIntensity;
 use crate::map::direction::Direction;
 use crate::game::game::Game;
@@ -15,7 +15,6 @@ use super::attributes::*;
 use super::commands::UnitAction;
 use super::movement::Path;
 use super::unit::Unit;
-use super::unit_types::UnitType;
 
 
 crate::listable_enum! {
@@ -130,26 +129,28 @@ impl Hero {
     pub fn add_options_after_path<D: Direction>(&self, list: &mut Vec<UnitAction<D>>, unit: &Unit<D>, game: &Game<D>, path: &Path<D>, destination: Point, get_fog: impl Fn(Point) -> FogIntensity) {
         // TODO
     }
+}
 
-    pub fn export(&self, zipper: &mut Zipper) {
-        let bits = bits_needed_for_max_value(HeroType::list().len() as u32 - 1);
+impl SupportedZippable<&Environment> for Hero {
+    fn export(&self, zipper: &mut Zipper, environment: &Environment) {
+        let bits = bits_needed_for_max_value(environment.config.hero_count() as u32 - 1);
         zipper.write_u32(HeroType::list().iter().position(|t| *t == self.typ).unwrap_or(0) as u32, bits);
         if self.typ == HeroType::None {
             return;
         }
-        self.origin.export(zipper);
+        self.origin.export(zipper, environment);
         zipper.write_bool(self.power);
-        if !self.power && self.typ.max_charge(&self.environment) > 0 {
-            let bits = bits_needed_for_max_value(self.typ.max_charge(&self.environment) as u32);
+        if !self.power && self.typ.max_charge(&environment) > 0 {
+            let bits = bits_needed_for_max_value(self.typ.max_charge(&environment) as u32);
             zipper.write_u8(self.charge, bits);
         }
     }
 
-    pub fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
-        let bits = bits_needed_for_max_value(HeroType::list().len() as u32 - 1);
+    fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
+        let bits = bits_needed_for_max_value(environment.config.hero_count() as u32 - 1);
         let typ = *HeroType::list().get(unzipper.read_u32(bits)? as usize).ok_or(ZipperError::EnumOutOfBounds("HeroType".to_string()))?;
         let origin = if typ != HeroType::None {
-            Option::<Point>::import(unzipper)?
+            Option::<Point>::import(unzipper, environment)?
         } else {
             None
         };
@@ -166,7 +167,21 @@ impl Hero {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum EarlGrey {
-    Charging(u8),
-    Power,
+pub struct HeroChargeChange(pub i8);
+
+impl SupportedZippable<&Environment> for HeroChargeChange {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        let max = support.config.max_hero_charge() as i8;
+        zipper.write_u8((self.0 + max) as u8, bits_needed_for_max_value(max as u32 * 2));
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let max = support.config.max_hero_charge() as i8;
+        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(max as u32 * 2))? as i8 - max))
+    }
+}
+
+impl From<i8> for HeroChargeChange {
+    fn from(value: i8) -> Self {
+        Self(value)
+    }
 }

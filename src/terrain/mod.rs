@@ -1,14 +1,11 @@
 pub mod attributes;
 pub mod terrain;
 
-use std::collections::HashMap;
 use serde::Deserialize;
 
 use zipper::*;
-use zipper::zipper_derive::*;
 
-use crate::game::event_handler::EventHandler;
-use crate::units::movement::*;
+use crate::config::environment::Environment;
 
 pub const KRAKEN_ATTACK_RANGE: usize = 3;
 pub const KRAKEN_MAX_ANGER: usize = 8;
@@ -47,6 +44,23 @@ crate::enum_with_custom! {
         //Crater,
         TentacleDepths,
         Port,
+    }
+}
+
+impl SupportedZippable<&Environment> for TerrainType {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        let index = support.config.terrain_types().iter().position(|t| t == self).unwrap();
+        let bits = bits_needed_for_max_value(support.config.terrain_count() as u32 - 1);
+        zipper.write_u32(index as u32, bits);
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let bits = bits_needed_for_max_value(support.config.terrain_count() as u32 - 1);
+        let index = unzipper.read_u32(bits)? as usize;
+        if index < support.config.terrain_count() {
+            Ok(support.config.terrain_types()[index])
+        } else {
+            Err(ZipperError::EnumOutOfBounds(format!("TerrainType index {}", index)))
+        }
     }
 }
 
@@ -409,7 +423,7 @@ impl<D: Direction> Terrain<D> {
     }
 }*/
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 pub enum AmphibiousTyping {
     Land,
     Sea,

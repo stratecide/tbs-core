@@ -8,7 +8,7 @@ use crate::map::point::Point;
 use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::units::unit::Unit;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum AttackScript {
     LifeSteal(Rational32),
 }

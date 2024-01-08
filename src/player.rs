@@ -1,10 +1,62 @@
-use interfaces::game_interface::{ClientPerspective, PlayerData};
+use interfaces::game_interface::ClientPerspective;
 use zipper::*;
 
 use crate::commander::Commander;
+use crate::config::config::Config;
+use crate::config::environment::Environment;
 
-pub type Owner = i8;
-pub type Team = u8;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Owner(pub i8);
+
+impl SupportedZippable<&Config> for Owner {
+    fn export(&self, zipper: &mut Zipper, support: &Config) {
+        zipper.write_u8((self.0 + 1) as u8, bits_needed_for_max_value(support.max_player_count() as u32));
+    }
+    fn import(unzipper: &mut Unzipper, support: &Config) -> Result<Self, ZipperError> {
+        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(support.max_player_count() as u32))? as i8 - 1))
+    }
+}
+impl SupportedZippable<&Environment> for Owner {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        self.export(zipper, &*support.config)
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Self::import(unzipper, &*support.config)
+    }
+}
+
+impl From<i8> for Owner {
+    fn from(value: i8) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Team(pub u8);
+
+impl SupportedZippable<&Config> for Team {
+    fn export(&self, zipper: &mut Zipper, support: &Config) {
+        zipper.write_u8(self.0, bits_needed_for_max_value(support.max_player_count() as u32));
+    }
+    fn import(unzipper: &mut Unzipper, support: &Config) -> Result<Self, ZipperError> {
+        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(support.max_player_count() as u32))?))
+    }
+}
+impl SupportedZippable<&Environment> for Team {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        self.export(zipper, &*support.config)
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Self::import(unzipper, &*support.config)
+    }
+}
+
+impl From<u8> for Team {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
+
 pub type Income = I<-1000, 1000>;
 pub type Funds = I<-1_000_000_000, 1_000_000_000>;
 
@@ -13,14 +65,14 @@ pub type Perspective = Option<Team>;
 pub fn from_client_perspective(value: ClientPerspective) -> Perspective {
     match value {
         ClientPerspective::Neutral => None,
-        ClientPerspective::Team(team) => Some(team),
+        ClientPerspective::Team(team) => Some(team.into()),
     }
 }
 
 pub fn to_client_perspective(value: &Perspective) -> ClientPerspective {
     match value {
         None => ClientPerspective::Neutral,
-        Some(team) => ClientPerspective::Team(*team),
+        Some(team) => ClientPerspective::Team(team.0),
     }
 }
 
@@ -54,21 +106,22 @@ impl Player {
     }
 
     pub fn export(&self, zipper: &mut Zipper, hide_secrets: bool) {
-        self.owner_id.export(zipper);
+        let environment = self.commander.environment();
+        zipper.write_u8(self.owner_id, bits_needed_for_max_value(environment.config.max_player_count() as u32 - 1));
         zipper.write_bool(self.dead);
-        self.commander.export(zipper);
+        self.commander.export(zipper, environment);
         if !hide_secrets {
-            self.funds.export(zipper);
+            self.funds.zip(zipper);
         }
     }
-    pub fn import(unzipper: &mut Unzipper, hidden: bool) -> Result<Self, ZipperError> {
-        let owner_id = Owner::import(unzipper)?;
+    pub fn import(unzipper: &mut Unzipper, environment: &Environment, hidden: bool) -> Result<Self, ZipperError> {
+        let owner_id = unzipper.read_u8(bits_needed_for_max_value(environment.config.max_player_count() as u32 - 1))?;
         let dead = unzipper.read_bool()?;
-        let commander = Commander::import(unzipper)?;
+        let commander = Commander::import(unzipper, environment)?;
         let funds = if hidden {
             0.into()
         } else {
-            Funds::import(unzipper)?
+            Funds::unzip(unzipper)?
         };
         Ok(Self {
             owner_id,

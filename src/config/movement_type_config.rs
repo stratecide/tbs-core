@@ -1,13 +1,10 @@
 use serde::Deserialize;
-use num_rational::Rational32;
 
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::terrain::ExtraMovementOptions;
-use crate::units::attributes::*;
 use crate::units::movement::PathStep;
-use crate::units::unit_types::UnitType;
 
 /*#[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -41,7 +38,7 @@ impl MovementPattern {
     pub fn find_steps<D: Direction>(&self, map: &Map<D>, point: Point) -> Vec<PathStep<D>> {
         let mut result = Vec::new();
         let extra_movement_options = map.get_terrain(point).and_then(|t| Some(t.extra_step_options())).unwrap_or(ExtraMovementOptions::None);
-        let mut add_dir = |d: D| {
+        let add_dir = |result: &mut Vec<_>, d: D| {
             result.push(PathStep::Dir(d));
             match extra_movement_options {
                 ExtraMovementOptions::Jump => {
@@ -56,7 +53,7 @@ impl MovementPattern {
             Self::StandardLoopLess |
             Self::Straight => {
                 for d in D::list() {
-                    add_dir(d);
+                    add_dir(&mut result, d);
                 }
             }
             Self::Diagonal => {
@@ -66,7 +63,7 @@ impl MovementPattern {
             }
             Self::Rays => {
                 for d in D::list() {
-                    add_dir(d);
+                    add_dir(&mut result, d);
                     result.push(PathStep::Diagonal(d));
                 }
             }

@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use interfaces::game_interface::{Events, Perspective as IPerspective, ClientPerspective};
 
-use crate::config::Environment;
+use crate::config::environment::Environment;
 use crate::map::map::Map;
 use crate::map::point::Point;
+use crate::terrain::attributes::CaptureProgress;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::*;
 use crate::terrain::TerrainType;
@@ -86,14 +87,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         // hide / reveal player funds if fog started / ended
         let was_foggy = fog_before.is_some();
         if was_foggy != self.get_game().is_foggy() {
-            let players: Vec<Owner> = self.game.players.iter().map(|player| player.get_owner_id()).collect();
+            let player_ids: Vec<i8> = self.game.players.iter().map(|player| player.get_owner_id()).collect();
             if was_foggy {
-                for player in players {
-                    self.add_event(Event::PureRevealFunds(player));
+                for player_id in player_ids {
+                    self.add_event(Event::PureRevealFunds(player_id.into()));
                 }
             } else {
-                for player in players {
-                    self.add_event(Event::PureHideFunds(player));
+                for player_id in player_ids {
+                    self.add_event(Event::PureHideFunds(player_id.into()));
                 }
             }
         }
@@ -112,7 +113,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             }
         }).collect();
         for p in self.get_map().all_points() {
-            if let Some(unit) = self.get_map().get_unit(p) {
+            if let Some(unit) = self.game.get_map().get_unit(p) {
                 if unit.get_owner_id() != self.game.current_player().get_owner_id() {
                     continue;
                 }
@@ -213,32 +214,32 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         .filter(|(_, before, after)| before != after)
         .collect();
         if changes.len() > 0 {
-            self.add_event(Event::PureFogChange(from_client_perspective(team), changes.try_into().unwrap()));
+            self.add_event(Event::PureFogChange(from_client_perspective(team).into(), changes.try_into().unwrap()));
         }
     }
 
-    pub fn commander_charge_add(&mut self, owner: Owner, change: u32) {
+    pub fn commander_charge_add(&mut self, owner: i8, change: u32) {
         if let Some(player) = self.get_game().get_owning_player(owner) {
             let change = change.min(player.commander.get_max_charge() - player.commander.get_charge()) as i32;
             if change > 0 {
-                self.add_event(Event::CommanderCharge(owner, change.into()));
+                self.add_event(Event::CommanderCharge(owner.into(), change.into()));
             }
         }
     }
 
-    pub fn commander_charge_sub(&mut self, owner: Owner, change: u32) {
+    pub fn commander_charge_sub(&mut self, owner: i8, change: u32) {
         if let Some(player) = self.get_game().get_owning_player(owner) {
             let change = -(change as i32).min(player.commander.get_charge() as i32);
             if change < 0 {
-                self.add_event(Event::CommanderCharge(owner, change.into()));
+                self.add_event(Event::CommanderCharge(owner.into(), change.into()));
             }
         }
     }
 
-    pub fn commander_power(&mut self, owner: Owner, index: usize) {
+    pub fn commander_power(&mut self, owner: i8, index: usize) {
         if let Some(player) = self.get_game().get_owning_player(owner) {
             if player.commander.get_active_power() != index {
-                self.add_event(Event::CommanderPowerIndex(owner, player.commander.get_active_power(), index));
+                self.add_event(Event::CommanderPowerIndex(owner.into(), player.commander.get_active_power().into(), index.into()));
             }
         }
     }
@@ -297,7 +298,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let hero = unit.get_hero();
         let change = change.max(-(hero.get_charge() as i8)).min((hero.typ().max_charge(self.environment()) - hero.get_charge()) as i8);
         if change != 0 {
-            self.add_event(Event::HeroCharge(position, change));
+            self.add_event(Event::HeroCharge(position, change.into()));
         }
     }
 
@@ -316,23 +317,23 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn money_income(&mut self, owner: Owner, change: i32) {
+    pub fn money_income(&mut self, owner: i8, change: i32) {
         if change != 0 {
             // TODO: add effect depending on change < 0
-            self.add_event(Event::MoneyChange(owner, change.into()));
+            self.add_event(Event::MoneyChange(owner.into(), change.into()));
         }
     }
 
-    pub fn money_change(&mut self, owner: Owner, change: i32) {
+    pub fn money_change(&mut self, owner: i8, change: i32) {
         if change != 0 {
             // TODO: add effect depending on change < 0
-            self.add_event(Event::MoneyChange(owner, change.into()));
+            self.add_event(Event::MoneyChange(owner.into(), change.into()));
         }
     }
 
-    pub fn money_buy(&mut self, owner: Owner, cost: u32) {
+    pub fn money_buy(&mut self, owner: i8, cost: u32) {
         if cost > 0 {
-            self.add_event(Event::MoneyChange(owner, (-(cost as i32)).into()));
+            self.add_event(Event::MoneyChange(owner.into(), (-(cost as i32)).into()));
         }
     }
 
@@ -343,10 +344,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn terrain_anger(&mut self, position: Point, anger: u8) {
         let old_anger = self.get_map().get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).get_anger();
-        self.add_event(Event::TerrainAnger(position, old_anger, anger));
+        self.add_event(Event::TerrainAnger(position, old_anger.into(), anger.into()));
     }
 
-    pub fn terrain_capture_progress(&mut self, position: Point, progress: Option<(i8, u8)>) {
+    pub fn terrain_capture_progress(&mut self, position: Point, progress: CaptureProgress) {
         let terrain = self.get_map().get_terrain(position).expect(&format!("Missing terrain at {:?}", position));
         let old = terrain.get_capture_progress();
         if terrain.has_attribute(TerrainAttributeKey::CaptureProgress) && old != progress {
@@ -358,7 +359,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let terrain = self.get_map().get_terrain(position).expect(&format!("Missing terrain at {:?}", position));
         let old = terrain.get_built_this_turn();
         if terrain.has_attribute(TerrainAttributeKey::BuiltThisTurn) && old != built_this_turn {
-            self.add_event(Event::UpdateBuiltThisTurn(position, old, built_this_turn));
+            self.add_event(Event::UpdateBuiltThisTurn(position, old.into(), built_this_turn.into()));
         }
     }
 
@@ -386,7 +387,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let unit_team = unit.get_team();
         if let Some(unload_index) = unload_index {
             if let Some(u) = unit.get_transported().get(unload_index) {
-                self.add_event(Event::UnitRemoveBoarded(path.start, unload_index, u.clone()));
+                self.add_event(Event::UnitRemoveBoarded(path.start, unload_index.into(), u.clone()));
                 unit = u.clone();
             } else {
                 panic!("Attempted to unboard unit that doesn't exist!");
@@ -456,10 +457,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                         false
                     }
                     Detail::Bubble(owner, _) => {
-                        *owner == unit.get_owner_id()
+                        owner.0 == unit.get_owner_id()
                     }
                     Detail::Skull(owner, _) => {
-                        *owner as i8 == unit.get_owner_id()
+                        owner.0 == unit.get_owner_id()
                     }
                 }
             }).collect();
@@ -523,9 +524,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn unit_status_boarded(&mut self, position: Point, index: usize, status: ActionStatus) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        let unit = unit.get_transported()[index];
+        let unit = unit.get_transported().get(index).cloned().unwrap();
         // TODO: check if unit can have that status
-        self.add_event(Event::UnitActionStatusBoarded(position, index, unit.get_status(), status));
+        self.add_event(Event::UnitActionStatusBoarded(position, index.into(), unit.get_status(), status));
     }
 
     /*pub fn unit_build_drone(&mut self, position: Point, drone: TransportableDrones) {
@@ -571,16 +572,16 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn unit_damage(&mut self, position: Point, damage: u16) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        self.add_event(Event::UnitHpChange(position, -(damage.min(unit.get_hp() as u16) as i8), (-(damage as i32)).max(-999) as i16));
+        self.add_event(Event::UnitHpChange(position, (-(damage.min(unit.get_hp() as u16) as i32)).into(), (-(damage as i32)).max(-999).into()));
     }
 
-    pub fn unit_mass_damage(&mut self, amounts: HashMap<Point, u16>) {
+    pub fn unit_mass_damage(&mut self, amounts: &HashMap<Point, u16>) {
         //let mut list = Vec::new();
         for (position, damage) in amounts {
             /*let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
             let damage = -(damage as i32);
             list.push((position, damage.max(-(unit.get_hp() as i32)).into(), damage.max(-999).into()));*/
-            self.unit_damage(position, damage);
+            self.unit_damage(*position, *damage);
         }
         //self.add_event(Event::UnitMassHpChange(list.try_into().unwrap()));
     }
@@ -588,13 +589,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn unit_repair(&mut self, position: Point, heal: u8) {
         let hp = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).get_hp();
         self.effect_repair(position);
-        self.add_event(Event::UnitHpChange(position, heal.min(100 - hp) as i8, heal as i16));
+        self.add_event(Event::UnitHpChange(position, (heal.min(100 - hp) as i32).into(), (heal.min(100) as i32).into()));
     }
 
     pub fn unit_heal(&mut self, position: Point, heal: u8) {
         let hp = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).get_hp();
         self.effect_heal(position);
-        self.add_event(Event::UnitHpChange(position, heal.min(100 - hp) as i8, heal as i16));
+        self.add_event(Event::UnitHpChange(position, (heal.min(100 - hp) as i32).into(), (heal.min(100) as i32).into()));
     }
 
     pub fn unit_mass_heal(&mut self, amounts: HashMap<Point, u8>) {
@@ -609,7 +610,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         if transported.len() > index {
             let hp = transported[index].get_hp();
             if hp < 100 {
-                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), heal.min(100 - hp) as i8));
+                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), (heal.min(100 - hp) as i32).into()));
             }
         } else {
             panic!("Can't heal unit at {position:?}, boarded as {index}");
@@ -622,7 +623,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         if transported.len() > index {
             let hp = transported[index].get_hp();
             if hp > 0 {
-                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), -(damage.min(hp) as i8)));
+                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), (-(damage.min(hp) as i32)).into()));
             }
         } else {
             panic!("Can't damage unit at {position:?}, boarded as {index}");
@@ -648,7 +649,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn unit_death_boarded(&mut self, position: Point, index: usize) {
         self.add_event(Event::Effect(Effect::Explode(position)));
-        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
+        let unit = self.game.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
         let transported = unit.get_transported();
         if transported.len() > index {
             if let Some(id) = self.observation_id(position, Some(index)) {
@@ -683,9 +684,16 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn accept(mut self) -> Events<Game<D>> {
         if self.events.get(&IPerspective::Server) == self.events.get(&IPerspective::Neutral) {
             // if no info is hidden, there's no need to store multiple identical entries
-            Events::Public(self.events.remove(&IPerspective::Server).unwrap())
+            let events = self.events.remove(&IPerspective::Server).unwrap();
+            let bytes = Event::export_list(&events, self.environment());
+            Events::Public(events, bytes)
         } else {
-            Events::Secrets(self.events)
+            let environment = self.game.environment();
+            Events::Secrets(self.events.into_iter()
+            .map(|(perspective, events)| {
+                let bytes = Event::export_list(&events, environment);
+                (perspective, (events, bytes))
+            }).collect())
         }
     }
 

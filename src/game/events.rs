@@ -1,14 +1,18 @@
 use interfaces::game_interface::{EventInterface, ClientPerspective};
+use semver::Version;
 use zipper::*;
 use zipper::zipper_derive::*;
 
+use crate::commander::commander_type::CommanderChargeChange;
 use crate::map::map::FieldData;
 use crate::map::point::Point;
 use crate::map::point_map;
+use crate::terrain::attributes::{CaptureProgress, Anger, BuiltThisTurn};
 use crate::units::attributes::{ActionStatus, AttributeKey};
 use crate::units::commands::UnloadIndex;
-use crate::units::hero::Hero;
+use crate::units::hero::{Hero, HeroChargeChange};
 use crate::units::unit::Unit;
+use crate::units::movement::MAX_PATH_LENGTH;
 use crate::{player::*, details};
 use crate::terrain::terrain::*;
 use crate::details::Detail;
@@ -16,13 +20,47 @@ use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::game::fog::*;
 use crate::units::movement::PathStep;
+use crate::config::environment::Environment;
 
-#[derive(Debug, Clone, PartialEq)]
+impl SupportedZippable<&Environment> for (Point, FogIntensity, FogIntensity) {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        self.0.export(zipper, support);
+        self.1.zip(zipper);
+        self.2.zip(zipper);
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Ok((
+            Point::import(unzipper, support)?,
+            FogIntensity::unzip(unzipper)?,
+            FogIntensity::unzip(unzipper)?,
+        ))
+    }
+}
+
+impl<D: Direction> SupportedZippable<&Environment> for (Point, FogIntensity, FogIntensity, FieldData<D>) {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        self.0.export(zipper, support);
+        self.1.zip(zipper);
+        self.2.zip(zipper);
+        self.3.export(zipper, support);
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Ok((
+            Point::import(unzipper, support)?,
+            FogIntensity::unzip(unzipper)?,
+            FogIntensity::unzip(unzipper)?,
+            FieldData::import(unzipper, support)?,
+        ))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(bits = 6, support_ref = Environment)]
 pub enum Event<D:Direction> {
     NextTurn,
     MoneyChange(Owner, Funds),
     Effect(Effect<D>),
-    UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {point_map::MAX_AREA}>),
+    UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
     // fog events
     PureFogChange(Perspective, LVec<(Point, FogIntensity, FogIntensity), {point_map::MAX_AREA}>),
     FogChange(Perspective, LVec<(Point, FogIntensity, FogIntensity, FieldData<D>), {point_map::MAX_AREA}>),
@@ -35,31 +73,32 @@ pub enum Event<D:Direction> {
     UnitRemove(Point, Unit<D>),
     UnitAddBoarded(Point, Unit<D>),
     UnitRemoveBoarded(Point, UnloadIndex, Unit<D>),
-    UnitHpChange(Point, i8, i16),
-    UnitHpChangeBoarded(Point, UnloadIndex, i8),
+    UnitHpChange(Point, I<-100, 99>, I<-999, 100>),
+    UnitHpChangeBoarded(Point, UnloadIndex, I<-100, 99>),
     UnitActionStatus(Point, ActionStatus, ActionStatus),
-    UnitActionStatusBoarded(Point, usize, ActionStatus, ActionStatus),
+    UnitActionStatusBoarded(Point, UnloadIndex, ActionStatus, ActionStatus),
     UnitMovedThisGame(Point),
     EnPassantOpportunity(Point, Option<Point>, Option<Point>),
     UnitDirection(Point, D, D),
     // hero events
     HeroSet(Point, Hero, Hero),
-    HeroCharge(Point, i8),
+    HeroCharge(Point, HeroChargeChange),
     HeroPower(Point),
     // terrain events
     TerrainChange(Point, Terrain, Terrain),
-    TerrainAnger(Point, u8, u8),
-    CaptureProgress(Point, Option<(i8, u8)>, Option<(i8, u8)>),
-    UpdateBuiltThisTurn(Point, u8, u8),
+    TerrainAnger(Point, Anger, Anger),
+    CaptureProgress(Point, CaptureProgress, CaptureProgress),
+    UpdateBuiltThisTurn(Point, BuiltThisTurn, BuiltThisTurn),
     // detail events
     RemoveDetail(Point, U<{details::MAX_STACK_SIZE as i32 - 1}>, Detail<D>),
     ReplaceDetail(Point, LVec<Detail<D>, {details::MAX_STACK_SIZE}>, LVec<Detail<D>, {details::MAX_STACK_SIZE}>),
     // commander events
-    CommanderCharge(Owner, i32),
-    CommanderPowerIndex(Owner, usize, usize),
+    CommanderCharge(Owner, CommanderChargeChange),
+    CommanderPowerIndex(Owner, U<31>, U<31>),
 }
+
 impl<D: Direction> EventInterface for Event<D> {
-    fn export_list(list: &Vec<Self>) -> Vec<u8> {
+    /*fn export_list(list: &Vec<Self>) -> Vec<u8> {
         let mut zipper = Zipper::new();
         for e in list {
             e.export(&mut zipper);
@@ -77,9 +116,30 @@ impl<D: Direction> EventInterface for Event<D> {
             }
         }
         result
-    }
+    }*/
 }
+
 impl<D: Direction> Event<D> {
+    pub fn export_list(list: &Vec<Self>, environment: &Environment) -> Vec<u8> {
+        let mut zipper = Zipper::new();
+        for e in list {
+            e.export(&mut zipper, environment);
+        }
+        zipper.finish()
+    }
+    pub fn import_list(list: Vec<u8>, environment: &Environment, version: Version) -> Result<Vec<Self>, ZipperError> {
+        let mut unzipper = Unzipper::new(list, version);
+        let mut result = vec![];
+        loop {
+            match Self::import(&mut unzipper, environment) {
+                Ok(e) => result.push(e),
+                Err(ZipperError::NotEnoughBits) => break,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(result)
+    }
+
     pub fn apply(&self, game: &mut Game<D>) {
         match self {
             Self::PureFogChange(team, vision_changes) => {
@@ -103,21 +163,21 @@ impl<D: Direction> Event<D> {
             Self::UnitActionStatusBoarded(pos, index, _, action_status) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(*index as usize) {
+                if let Some(boarded) = transported.get_mut(index.0) {
                     boarded.set_status(*action_status);
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
                 let hp = unit.get_hp() as i8;
-                unit.set_hp((hp + *hp_change) as u8);
+                unit.set_hp((hp + **hp_change as i8) as u8);
             }
             Self::UnitHpChangeBoarded(pos, index, hp_change) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(*index as usize) {
+                if let Some(boarded) = transported.get_mut(index.0) {
                     let hp = boarded.get_hp() as i8;
-                    boarded.set_hp((hp + *hp_change) as u8);
+                    boarded.set_hp((hp + **hp_change as i8) as u8);
                 }
             }
             Self::UnitAdd(pos, unit) => {
@@ -134,22 +194,22 @@ impl<D: Direction> Event<D> {
             Self::UnitRemoveBoarded(pos, index, _) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                transported.remove(*index);
+                transported.remove(index.0);
             }
             Self::MoneyChange(owner, change) => {
-                if let Some(player) = game.get_owning_player_mut(*owner) {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
                     player.funds += **change;
                 }
             }
             Self::PureHideFunds(_) => {}
             Self::HideFunds(owner, _) => {
-                if let Some(player) = game.get_owning_player_mut(*owner) {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
                     player.funds = 0.into();
                 }
             }
             Self::PureRevealFunds(_) => {}
             Self::RevealFunds(owner, value) => {
-                if let Some(player) = game.get_owning_player_mut(*owner) {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
                     player.funds = *value;
                 }
             }
@@ -162,10 +222,10 @@ impl<D: Direction> Event<D> {
             Self::Effect(_) => {}
             Self::UnitPath(_, _) => {}
             Self::CommanderCharge(owner, delta) => {
-                game.get_owning_player_mut(*owner).unwrap().commander.add_charge(*delta);
+                game.get_owning_player_mut(owner.0).unwrap().commander.add_charge(delta.0);
             }
             Self::CommanderPowerIndex(owner, _, index) => {
-                game.get_owning_player_mut(*owner).unwrap().commander.set_active_power(*index);
+                game.get_owning_player_mut(owner.0).unwrap().commander.set_active_power(**index as usize);
             }
             Self::UnitMovedThisGame(p) => {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
@@ -189,7 +249,7 @@ impl<D: Direction> Event<D> {
             }
             Self::HeroCharge(p, change) => {
                 if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_charge((hero.get_charge() as i8 + *change) as u8);
+                    hero.set_charge((hero.get_charge() as i8 + change.0) as u8);
                 }
             }
             Self::HeroPower(p) => {
@@ -201,13 +261,13 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
             }
             Self::TerrainAnger(pos, _, anger) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(*anger);
+                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(anger.0);
             }
             Self::CaptureProgress(pos, _, progress) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_capture_progress(*progress);
             }
             Self::UpdateBuiltThisTurn(pos, _, built_this_turn) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(*built_this_turn);
+                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(built_this_turn.0);
             }
         }
     }
@@ -234,21 +294,21 @@ impl<D: Direction> Event<D> {
             Self::UnitActionStatusBoarded(pos, index, action_status, _) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(*index as usize) {
+                if let Some(boarded) = transported.get_mut(index.0) {
                     boarded.set_status(*action_status);
                 }
             }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
                 let hp = unit.get_hp() as i8;
-                unit.set_hp((hp - *hp_change) as u8);
+                unit.set_hp((hp - **hp_change as i8) as u8);
             }
             Self::UnitHpChangeBoarded(pos, index, hp_change) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(*index as usize) {
+                if let Some(boarded) = transported.get_mut(index.0) {
                     let hp = boarded.get_hp() as i8;
-                    boarded.set_hp((hp - *hp_change) as u8);
+                    boarded.set_hp((hp - **hp_change as i8) as u8);
                 }
             }
             Self::UnitAdd(pos, _) => {
@@ -265,22 +325,22 @@ impl<D: Direction> Event<D> {
             Self::UnitRemoveBoarded(pos, index, unit) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                transported.insert(*index, unit.clone());
+                transported.insert(index.0, unit.clone());
             }
             Self::MoneyChange(owner, change) => {
-                if let Some(player) = game.get_owning_player_mut(*owner) {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
                     player.funds -= **change;
                 }
             }
             Self::PureHideFunds(_) => {}
             Self::HideFunds(owner, value) => {
-                if let Some(player) = game.get_owning_player_mut(*owner) {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
                     player.funds = *value;
                 }
             }
             Self::PureRevealFunds(_) => {}
             Self::RevealFunds(owner, _) => {
-                if let Some(player) = game.get_owning_player_mut(*owner) {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
                     player.funds = 0.into();
                 }
             }
@@ -293,10 +353,10 @@ impl<D: Direction> Event<D> {
             Self::Effect(_) => {}
             Self::UnitPath(_, _) => {}
             Self::CommanderCharge(owner, delta) => {
-                game.get_owning_player_mut(*owner).unwrap().commander.add_charge(-*delta);
+                game.get_owning_player_mut(owner.0).unwrap().commander.add_charge(-delta.0);
             }
             Self::CommanderPowerIndex(owner, index, _) => {
-                game.get_owning_player_mut(*owner).unwrap().commander.set_active_power(*index);
+                game.get_owning_player_mut(owner.0).unwrap().commander.set_active_power(**index as usize);
             }
             Self::UnitMovedThisGame(p) => {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
@@ -320,7 +380,7 @@ impl<D: Direction> Event<D> {
             }
             Self::HeroCharge(p, change) => {
                 if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_charge((hero.get_charge() as i8 - *change) as u8);
+                    hero.set_charge((hero.get_charge() as i8 - change.0) as u8);
                 }
             }
             Self::HeroPower(p) => {
@@ -332,13 +392,13 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
             }
             Self::TerrainAnger(pos, anger, _) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(*anger);
+                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(anger.0);
             }
             Self::CaptureProgress(pos, progress, _) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_capture_progress(*progress);
             }
             Self::UpdateBuiltThisTurn(pos, built_this_turn, _) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(*built_this_turn);
+                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(built_this_turn.0);
             }
         }
     }
@@ -402,15 +462,15 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::MoneyChange(owner, _) => {
-                if !game.is_foggy() || team == game.get_team(Some(*owner)) {
+                if !game.is_foggy() || team == game.get_team(Some(owner.0)) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::PureHideFunds(owner) => {
-                if team != game.get_team(Some(*owner)) {
-                    Some(Self::HideFunds(owner.clone(), game.get_owning_player(*owner).unwrap().funds))
+                if team != game.get_team(Some(owner.0)) {
+                    Some(Self::HideFunds(owner.clone(), game.get_owning_player(owner.0).unwrap().funds))
                 } else {
                     None
                 }
@@ -419,8 +479,8 @@ impl<D: Direction> Event<D> {
                 panic!("HideFunds should only ever be created as replacement for PureHideFunds. It shouldn't be replaced itself!");
             }
             Self::PureRevealFunds(owner) => {
-                if team != game.get_team(Some(*owner)) {
-                    Some(Self::RevealFunds(owner.clone(), game.get_owning_player(*owner).unwrap().funds))
+                if team != game.get_team(Some(owner.0)) {
+                    Some(Self::RevealFunds(owner.clone(), game.get_owning_player(owner.0).unwrap().funds))
                 } else {
                     None
                 }
@@ -685,7 +745,7 @@ fn unit_path_fog_replacement<D: Direction, S: PathStepExt<D>>(game: &Game<D>, te
 }*/
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
-#[zippable(bits = 1)]
+#[zippable(bits = 1, support_ref = Environment)]
 pub enum UnitStep<D: Direction> {
     Simple(Point, PathStep<D>),
     Transform(Point, PathStep<D>, Option<Unit<D>>),
@@ -729,7 +789,7 @@ impl<D: Direction> UnitStep<D> {
 }
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
-#[zippable(bits = 8)]
+#[zippable(bits = 8, support_ref = Environment)]
 pub enum Effect<D: Direction> {
     Laser(Point, D),
     Lightning(Point),

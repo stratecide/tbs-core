@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use serde::Deserialize;
 
 use crate::game::event_handler::EventHandler;
@@ -7,11 +7,11 @@ use crate::map::point::Point;
 use crate::terrain::{KRAKEN_ATTACK_RANGE, KRAKEN_MAX_ANGER};
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::attributes::AttributeKey;
-use crate::units::combat::{AttackType, AttackVector, attack_targets, after_attacking};
+use crate::units::combat::{AttackType, AttackVector};
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum UnitScript {
     Kraken,
     Attack(bool, bool),
@@ -47,9 +47,8 @@ pub(super) fn anger_kraken<D: Direction>(handler: &mut EventHandler<D>) {
                         }
                     }
                 }
-                let damaged = damage_map.keys().cloned();
-                handler.unit_mass_damage(damage_map);
-                let dead = damaged.filter(|p| {
+                handler.unit_mass_damage(&damage_map);
+                let dead = damage_map.keys().cloned().filter(|p| {
                     let unit = handler.get_map().get_unit(*p).unwrap();
                     unit.get_hp() == 0
                 }).collect();
@@ -81,7 +80,7 @@ fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &U
                 return;
             }
         }
-        AttackType::Ranged(min, _) => {
+        AttackType::Ranged(_, _) => {
             /*let splash_damage = unit.get_splash_damage();
             let mut targets = Vec::new();
             for (i, layer) in handler.get_map().range_in_layers(position, min as usize + splash_damage.len() - 1).into_iter().enumerate() {

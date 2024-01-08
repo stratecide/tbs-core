@@ -1,9 +1,13 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use interfaces::game_interface::Events;
+use semver::Version;
 use zipper::*;
+use zipper_derive::Zippable;
 
-use crate::config::Environment;
+use crate::config::config::Config;
+use crate::config::environment::Environment;
 use crate::game::settings;
 use crate::game::game::*;
 use crate::game::fog::*;
@@ -13,9 +17,12 @@ use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::details::*;
+use crate::details;
 use crate::terrain::terrain::Terrain;
 use crate::units::hero::Hero;
 use crate::units::unit::Unit;
+
+use super::point_map::MapSize;
 
 #[derive(Clone, PartialEq)]
 pub struct Map<D>
@@ -43,6 +50,10 @@ where D: Direction
             units: HashMap::new(),
             details: HashMap::new(),
         }
+    }
+
+    pub fn environment(&self) -> &Environment {
+        &self.environment
     }
 
     /*pub fn odd_if_hex(&self) -> bool {
@@ -411,8 +422,8 @@ where D: Direction
             for detail in self.get_details(p) {
                 match detail {
                     Detail::Bubble(owner, _) => {
-                        if owner >= 0 {
-                            owners.insert(owner as u8);
+                        if owner.0 >= 0 {
+                            owners.insert(owner.0 as u8);
                         }
                     }
                     _ => {}
@@ -427,39 +438,41 @@ where D: Direction
     pub fn get_field_data(&self, p: Point) -> FieldData<D> {
         FieldData {
             terrain: self.terrain.get(&p).unwrap().clone(),
-            details: self.details.get(&p).cloned().unwrap_or(Vec::new()),
+            details: self.details.get(&p).cloned().map(|v| v.try_into().unwrap()).unwrap_or(LVec::new()),
             unit: self.units.get(&p).cloned(),
         }
     }
     pub fn export_field(&self, zipper: &mut Zipper, p: Point, fog_intensity: FogIntensity) {
         let fd = self.get_field_data(p).fog_replacement(fog_intensity);
-        fd.export(zipper);
+        fd.export(zipper, &self.environment);
     }
 
     pub fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
-        self.wrapping_logic.export(zipper);
+        self.wrapping_logic.zip(zipper);
         for p in self.all_points() {
             self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
         }
     }
 
-    pub fn import_from_unzipper(environment: &Environment, unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
-        let wrapping_logic = WrappingMap::import(unzipper)?;
+    pub fn import_from_unzipper(unzipper: &mut Unzipper, environment: &mut Environment) -> Result<Self, ZipperError> {
+        let wrapping_logic = WrappingMap::unzip(unzipper)?;
+        environment.map_size = wrapping_logic.pointmap().size();
         let mut terrain = HashMap::new();
         let mut units = HashMap::new();
         let mut details = HashMap::new();
         for p in wrapping_logic.pointmap().get_valid_points() {
-            terrain.insert(p, Terrain::import(unzipper)?);
-            let det = LVec::<Detail<D>, MAX_STACK_SIZE>::import(unzipper)?;
+            terrain.insert(p, Terrain::import(unzipper, environment)?);
+            let det = LVec::<Detail<D>, MAX_STACK_SIZE>::import(unzipper, environment)?;
             if det.len() > 0 {
-                details.insert(p, det);
+                details.insert(p, det.into());
             }
             // could be more memory-efficient by returning Option<Unit> from import and removing this read_bool
             if unzipper.read_bool()? {
-                units.insert(p, Unit::import(environment, unzipper, None)?);
+                units.insert(p, Unit::unzip(unzipper, environment, None)?);
             }
         }
         Ok(Self {
+            environment: environment.clone(),
             wrapping_logic,
             terrain,
             units,
@@ -473,21 +486,28 @@ pub enum MapType {
     Hex(Map<Direction6>),
 }
 
-pub fn import_map(environment: &Environment, bytes: Vec<u8>) -> Result<MapType, ZipperError> {
-    let mut unzipper = Unzipper::new(bytes);
+pub fn import_map(config: &Arc<Config>, bytes: Vec<u8>, version: Version) -> Result<MapType, ZipperError> {
+    let mut environment = Environment {
+        config: config.clone(),
+        map_size: MapSize::new(0, 0),
+        settings: None,
+    };
+    let mut unzipper = Unzipper::new(bytes, version);
     if unzipper.read_bool()? {
-        Ok(MapType::Hex(Map::import_from_unzipper(environment, &mut unzipper)?))
+        Ok(MapType::Hex(Map::import_from_unzipper(&mut unzipper, &mut environment)?))
     } else {
-        Ok(MapType::Square(Map::import_from_unzipper(environment, &mut unzipper)?))
+        Ok(MapType::Square(Map::import_from_unzipper(&mut unzipper, &mut environment)?))
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(support_ref = Environment)]
 pub struct FieldData<D: Direction> {
     pub terrain: Terrain,
-    pub details: Vec<Detail<D>>,
+    pub details: LVec<Detail<D>, {details::MAX_STACK_SIZE}>,
     pub unit: Option<Unit<D>>,
 }
+
 impl<D: Direction> FieldData<D> {
     pub fn fog_replacement(self, intensity: FogIntensity) -> Self {
         let details: Vec<_> = self.details.into_iter()

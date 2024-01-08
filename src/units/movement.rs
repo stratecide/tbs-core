@@ -202,6 +202,8 @@ impl<D: Direction> PathStep<D> {
     }
 }
 
+pub const MAX_PATH_LENGTH: u32 = 200;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path<D: Direction> {
     pub start: Point,
@@ -277,36 +279,16 @@ pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D, turn_le
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum TemporaryBallast<D: Direction> {
-    None,
+enum TBallast<D: Direction> {
     MovementPoints(Rational32),
     Direction(Option<D>),
     QueenDirection(Option<(D, bool)>),
     ForbiddenDirection(Option<D>),
-    List(Vec<Self>),
 }
 
-impl<D: Direction> TemporaryBallast<D> {
-    fn from_list(list: Vec<Self>) -> Self {
-        if list.len() == 0 {
-            Self::None
-        } else if list.len() == 1 {
-            list[0]
-        } else {
-            Self::List(list)
-        }
-    }
-
-    fn as_list(&self) -> Vec<&Self> {
-        match self {
-            Self::List(list) => list.iter().collect(),
-            _ => vec![self]
-        }
-    }
-
+impl<D: Direction> TBallast<D> {
     fn heap_order(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::None, Self::None) => Ordering::Equal,
             (Self::MovementPoints(m1), Self::MovementPoints(m2)) => m1.cmp(m2),
             (Self::Direction(_d1), Self::Direction(_d2)) => {
                 Ordering::Equal
@@ -335,28 +317,12 @@ impl<D: Direction> TemporaryBallast<D> {
                     Ordering::Less
                 }*/
             },
-            (Self::List(l1), Self::List(l2)) => {
-                if l1.len() != l2.len() {
-                    panic!("TemporaryBallast have different list sizes: {l1:?} - {l2:?}");
-                }
-                let mut order = Ordering::Equal;
-                for (p1, p2) in l1.iter().zip(l2.iter()) {
-                    let o = p1.heap_order(p2);
-                    if order == Ordering::Equal {
-                        order = o;
-                    } else if o != Ordering::Equal && order != o {
-                        return Ordering::Equal;
-                    }
-                }
-                order
-            }
             _ => panic!("TemporaryBallast have incompatible types: {self:?} - {other:?}")
         }
     }
 
     fn useful_with<'a>(&self, mut others: impl Iterator<Item = &'a Self>, map: &Map<D>, point: Point) -> bool {
         match self {
-            Self::None => !others.next().is_some(),
             Self::MovementPoints(mp) => {
                 others.all(|other| match other {
                     Self::MovementPoints(other) => mp < other,
@@ -398,36 +364,60 @@ impl<D: Direction> TemporaryBallast<D> {
                 }
                 true
             }
-            Self::List(list) => {
-                let mut sub_others = Vec::new();
-                for _ in list {
-                    sub_others.push(Vec::new());
-                }
-                for other in others {
-                    match other {
-                        Self::List(other) => {
-                            if list.len() != other.len() {
-                                panic!("TemporaryBallast have different list sizes: {list:?} - {other:?}");
-                            }
-                            for (i, t) in other.iter().enumerate() {
-                                sub_others[i].push(t);
-                            }
-                        },
-                        _ => panic!("TemporaryBallast have incompatible types: {self:?} - {other:?}")
-                    }
-                }
-                // assumes that no zero-length lists are created (would be Self::None instead)
-                if sub_others[0].len() == 0 {
-                    return true;
-                }
-                for (el, others) in list.iter().zip(sub_others.into_iter()) {
-                    if el.useful_with(others.into_iter(), map, point) {
-                        return true;
-                    }
-                }
-                false
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct TemporaryBallast<D: Direction> {
+    entries: Vec<TBallast<D>>,
+}
+
+impl<D: Direction> TemporaryBallast<D> {
+    fn new(entries: Vec<TBallast<D>>) -> Self {
+        Self {
+            entries,
+        }
+    }
+    fn heap_order(&self, other: &Self) -> Ordering {
+        if self.entries.len() != other.entries.len() {
+            panic!("TemporaryBallast have different list sizes: {:?} - {:?}", self.entries, other.entries);
+        }
+        let mut order = Ordering::Equal;
+        for (p1, p2) in self.entries.iter().zip(other.entries.iter()) {
+            let o = p1.heap_order(p2);
+            if order == Ordering::Equal {
+                order = o;
+            } else if o != Ordering::Equal && order != o {
+                return Ordering::Equal;
             }
         }
+        order
+    }
+
+    fn useful_with<'a>(&self, others: impl Iterator<Item = &'a Self>, map: &Map<D>, point: Point) -> bool {
+        let mut sub_others = Vec::new();
+        for _ in &self.entries {
+            sub_others.push(Vec::new());
+        }
+        for other in others {
+            if self.entries.len() != other.entries.len() {
+                panic!("TemporaryBallast have different list sizes: {:?} - {:?}", self.entries, other.entries);
+            }
+            for (i, t) in other.entries.iter().enumerate() {
+                sub_others[i].push(t);
+            }
+        }
+        // assumes that no zero-length lists are created (would be Self::None instead)
+        if sub_others[0].len() == 0 {
+            return true;
+        }
+        for (el, others) in self.entries.iter().zip(sub_others.into_iter()) {
+            if el.useful_with(others.into_iter(), map, point) {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -855,9 +845,9 @@ where
         let mut mp = unit.movement_points();
         match unit.movement_pattern() {
             MovementPattern::Standard |
-            MovementPattern::StandardLoopLess => temps.push(TemporaryBallast::ForbiddenDirection(None)),
+            MovementPattern::StandardLoopLess => temps.push(TBallast::ForbiddenDirection(None)),
             MovementPattern::Diagonal |
-            MovementPattern::Straight => temps.push(TemporaryBallast::Direction(None)),
+            MovementPattern::Straight => temps.push(TBallast::Direction(None)),
             MovementPattern::Pawn => {
                 let mut dir = None;
                 if terrain.is_chess() {
@@ -871,7 +861,7 @@ where
                         panic!("Pawn Permanent missing PawnDirection: {permanent:?}");
                     }
                 };
-                temps.push(TemporaryBallast::Direction(dir));
+                temps.push(TBallast::Direction(dir));
                 if terrain.extra_step_options() == ExtraMovementOptions::PawnStart {
                     mp += Rational32::from_integer(1);
                 }
@@ -880,10 +870,10 @@ where
             MovementPattern::Knight => {
                 // could add QueenDirection in the future
             }
-            MovementPattern::Rays => temps.push(TemporaryBallast::QueenDirection(None)),
+            MovementPattern::Rays => temps.push(TBallast::QueenDirection(None)),
         }
-        temps.push(TemporaryBallast::MovementPoints(mp));
-        TemporaryBallast::from_list(temps)
+        temps.push(TBallast::MovementPoints(mp));
+        TemporaryBallast::new(temps)
     };
     movement_search_core(
         map,
@@ -895,17 +885,16 @@ where
         },
         base_movement,
         |point, a, b, temporary_ballast| {
-            let temporary_ballast = temporary_ballast.as_list();
             unit.movement_pattern().find_steps(map, point)
             .into_iter()
             .filter(|step| {
-                temporary_ballast.iter().all(|temp| {
+                temporary_ballast.entries.iter().all(|temp| {
                     match (temp, step) {
-                        (TemporaryBallast::ForbiddenDirection(Some(d1)), PathStep::Dir(d2)) => d1 != d2,
-                        (TemporaryBallast::Direction(Some(d1)), PathStep::Dir(d2)) => d1 == d2,
-                        (TemporaryBallast::Direction(Some(d1)), PathStep::Diagonal(d2)) => d1 == d2,
-                        (TemporaryBallast::QueenDirection(Some((d1, true))), PathStep::Dir(d2)) => d1 == d2,
-                        (TemporaryBallast::QueenDirection(Some((d1, false))), PathStep::Diagonal(d2)) => d1 == d2,
+                        (TBallast::ForbiddenDirection(Some(d1)), PathStep::Dir(d2)) => d1 != d2,
+                        (TBallast::Direction(Some(d1)), PathStep::Dir(d2)) => d1 == d2,
+                        (TBallast::Direction(Some(d1)), PathStep::Diagonal(d2)) => d1 == d2,
+                        (TBallast::QueenDirection(Some((d1, true))), PathStep::Dir(d2)) => d1 == d2,
+                        (TBallast::QueenDirection(Some((d1, false))), PathStep::Diagonal(d2)) => d1 == d2,
                         _ => true
                     }
                 })
@@ -916,7 +905,6 @@ where
                 let terrain = map.get_terrain(dp.point).unwrap();
                 if let Some(cost) = permanent_ballast.movement_cost(terrain, unit) {
                     let cost = transform_movement_cost(cost, unit);
-                    let temporary_ballast = temporary_ballast.as_list();
                     // TODO: preventing beach <-> bridge only needs the prev Terrain
                     // if the current one is either bridge or beach
                     let mut permanent = Vec::new();
@@ -937,32 +925,30 @@ where
                         });
                     }
                     let mut temporary = Vec::new();
-                    for p in temporary_ballast {
+                    for p in temporary_ballast.entries.iter() {
                         temporary.push(match p {
-                            TemporaryBallast::None => continue, // since None should be alone
-                            TemporaryBallast::Direction(_) => {
-                                TemporaryBallast::Direction(Some(dp.direction))
+                            TBallast::Direction(_) => {
+                                TBallast::Direction(Some(dp.direction))
                             }
-                            TemporaryBallast::ForbiddenDirection(_) => {
-                                TemporaryBallast::Direction(Some(dp.direction.opposite_direction()))
+                            TBallast::ForbiddenDirection(_) => {
+                                TBallast::Direction(Some(dp.direction.opposite_direction()))
                             }
-                            TemporaryBallast::QueenDirection(_) => {
+                            TBallast::QueenDirection(_) => {
                                 let rook_like = match step {
                                     PathStep::Dir(_) => true,
                                     _ => false,
                                 };
-                                TemporaryBallast::QueenDirection(Some((dp.direction, rook_like)))
+                                TBallast::QueenDirection(Some((dp.direction, rook_like)))
                             }
-                            TemporaryBallast::MovementPoints(mp) => {
+                            TBallast::MovementPoints(mp) => {
                                 if cost > *mp {
                                     return None;
                                 }
-                                TemporaryBallast::MovementPoints(*mp - cost)
+                                TBallast::MovementPoints(*mp - cost)
                             }
-                            TemporaryBallast::List(_) => panic!("recursive TemporaryBallast"),
                         });
                     }
-                    return Some((dp.point, PermanentBallast::new(permanent), TemporaryBallast::from_list(temporary)));
+                    return Some((dp.point, PermanentBallast::new(permanent), TemporaryBallast::new(temporary)));
                 }
             }
             None
@@ -1215,11 +1201,11 @@ where
     };*/
 }
 
-pub fn movement_search_game<'a, D: Direction, U, F>(game: &'a Game<D>, unit: &Unit<D>, path_so_far: &Path<D>, rounds: usize, get_unit: U, mut callback: F)
+pub fn movement_search_game<D: Direction, U, F>(game: &Game<D>, unit: &Unit<D>, path_so_far: &Path<D>, rounds: usize, get_unit: U, mut callback: F)
 where
-U: Fn(Point) -> Option<&'a Unit<D>>,
+U: Fn(Point) -> Option<Unit<D>>,
 F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool) -> PathSearchFeedback {
-    let commander = unit.get_commander(game);
+    //let commander = unit.get_commander(game);
     movement_search_map(
         game.get_map(),
         unit,
@@ -1233,7 +1219,7 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool) -> PathSearchFeedback {
             let mut can_continue = true;
             if let Some(blocking_unit) = get_unit(destination) {
                 can_stop_here = false;
-                let is_self = path_so_far.start == destination && blocking_unit == unit;
+                let is_self = path_so_far.start == destination && blocking_unit == *unit;
                 if !is_self {
                     let mut reject = true;
                     // friendly unit that can simply be moved past
@@ -1338,7 +1324,7 @@ pub fn movement_area_map<D: Direction>(map: &Map<D>, unit: &Unit<D>, path_so_far
 pub fn movement_area_game<D: Direction>(game: &Game<D>, unit: &Unit<D>, path_so_far: &Path<D>, rounds: usize) -> HashMap<Point, usize> {
     let mut result = HashMap::new();
     movement_search_game(game, unit, path_so_far, rounds,
-        |p| game.get_map().get_unit(p),
+        |p| game.get_map().get_unit(p).cloned(),
         |previous_turns: &[Path<D>], path: &Path<D>, destination, can_continue, can_stop_here| {
         if !result.contains_key(&destination) {
             result.insert(destination, previous_turns.len());
@@ -1363,7 +1349,6 @@ where F: Fn(&Path<D>, Point, bool) -> PathSearchFeedback {
         |p| {
             game.get_map().get_unit(p)
             .and_then(|u| u.fog_replacement(game.get_map().get_terrain(p).unwrap(), fog.and_then(|fog| fog.get(&p)).cloned().unwrap_or(FogIntensity::TrueSight)))
-            .as_ref()
         },
         |_, path, destination, can_continue, can_stop_here| {
         if path.steps.len() < path_so_far.steps.len() {

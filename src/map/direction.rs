@@ -8,7 +8,7 @@ use zipper::zipper_derive::*;
 
 
 pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display + TrAttribute<Self> {
-    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
+    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + SupportedZippable<u16>;
     //type P: PipeState<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
     fn is_hex() -> bool;
     fn angle_0() -> Self;
@@ -228,7 +228,8 @@ where D: Direction {
     fn translate_point<P: Position<i16>>(&self, p: &P, odd_if_hex: bool) -> P;
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Zippable)]
+#[zippable(support = u16)]
 pub struct Translation4 {
     x: i16,
     y: i16,
@@ -300,24 +301,8 @@ impl Translation<Direction4> for Translation4 {
     }
 }
 
-const MAX_TRANSLATION4: i32 = 257;
-impl Zippable for Translation4 {
-    fn export(&self, zipper: &mut Zipper) {
-        // custom implementation because Translation can be bigger during calculations than they are allowed to during export
-        I::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::from(self.x.max(-MAX_TRANSLATION4 as i16).min(MAX_TRANSLATION4 as i16)).export(zipper);
-        I::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::from(self.y.max(-MAX_TRANSLATION4 as i16).min(MAX_TRANSLATION4 as i16)).export(zipper);
-    }
-    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
-        let x = I::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::import(unzipper)?;
-        let y = I::<{-MAX_TRANSLATION4}, MAX_TRANSLATION4>::import(unzipper)?;
-        Ok(Self {
-            x: *x as i16,
-            y: *y as i16,
-        })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Zippable)]
+#[zippable(support = u16)]
 pub struct Translation6 {
     d0: i16,
     d60: i16,
@@ -413,23 +398,6 @@ impl Translation<Direction6> for Translation6 {
             }
         }
         P::new(x, y)
-    }
-}
-
-const MAX_TRANSLATION6: i32 = 511;
-impl Zippable for Translation6 {
-    fn export(&self, zipper: &mut Zipper) {
-        // custom implementation because Translation can be bigger during calculations than they are allowed to during export
-        I::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::from(self.d0.max(-MAX_TRANSLATION6 as i16).min(MAX_TRANSLATION6 as i16)).export(zipper);
-        I::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::from(self.d60.max(-MAX_TRANSLATION6 as i16).min(MAX_TRANSLATION6 as i16)).export(zipper);
-    }
-    fn import(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
-        let x = I::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::import(unzipper)?;
-        let y = I::<{-MAX_TRANSLATION6}, MAX_TRANSLATION6>::import(unzipper)?;
-        Ok(Self {
-            d0: *x as i16,
-            d60: *y as i16,
-        })
     }
 }
 

@@ -4,10 +4,11 @@ use crate::details::{MAX_STACK_SIZE, Detail};
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
+use crate::player::Owner;
 use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::units::unit::Unit;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum KillScript {
     Unexhaust,
     DeadSkull,
@@ -26,7 +27,7 @@ impl KillScript {
             Self::DeadSkull => {
                 let details = handler.get_map().get_details(defender_pos);
                 if details.len() < MAX_STACK_SIZE as usize && defender.get_team() != attacker.get_team() && defender.has_attribute(AttributeKey::Zombified) {
-                    handler.detail_add(defender_pos, Detail::Skull(attacker.get_owner_id() as u8, defender.typ()));
+                    handler.detail_add(defender_pos, Detail::Skull(Owner(attacker.get_owner_id()), defender.typ()));
                 }
             },
         }
