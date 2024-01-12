@@ -1,46 +1,16 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fmt::Debug;
-use std::fmt::Display;
 use std::sync::Arc;
-use std::error::Error;
-
-use interfaces::ConfigInterface;
 use interfaces::game_interface::ClientPerspective;
-use num_rational::Rational32;
 
-use crate::commander::Commander;
-use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
-use crate::game::game::Game;
-use crate::map::direction::Direction;
-use crate::map::point::Point;
 use crate::map::point_map::MapSize;
-use crate::script::attack::AttackScript;
-use crate::script::kill::KillScript;
-use crate::script::unit::UnitScript;
-use crate::terrain::AmphibiousTyping;
-use crate::terrain::ExtraMovementOptions;
-use crate::terrain::TerrainType;
-use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::*;
-use crate::units::combat::*;
-use crate::units::movement::MovementType;
-use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::units::attributes::*;
 use crate::units::hero::*;
 use crate::game::settings::GameSettings;
 
 use super::config::Config;
-use super::hero_type_config::HeroTypeConfig;
-use super::commander_power_config::CommanderPowerConfig;
-use super::commander_type_config::CommanderTypeConfig;
-use super::commander_unit_config::CommanderPowerUnitConfig;
-use super::movement_type_config::MovementPattern;
-use super::terrain_type_config::TerrainTypeConfig;
-use super::unit_filter::*;
-use super::unit_type_config::UnitTypeConfig;
 
 #[derive(Clone)]
 pub struct Environment {
@@ -107,27 +77,15 @@ impl Environment {
         .collect()
     }
 
-    pub(crate) fn unit_visibility(&self, typ: UnitType, hero: &Hero, owner: i8) -> UnitVisibility {
-        self.config.unit_config(typ).visibility
-    }
-
     pub fn unit_valid_action_status(&self, _typ: UnitType, _owner: i8) -> &[ActionStatus] {
         // TODO
         &[ActionStatus::Ready, ActionStatus::Exhausted, ActionStatus::Repairing, ActionStatus::Capturing]
     }
 
     pub fn unit_transport_capacity(&self, typ: UnitType, owner: i8, hero: HeroType) -> usize {
-        // TODO
         self.config.unit_config(typ).transport_capacity
+        + self.config.commander_config(self.get_commander(owner)).transport_capacity as usize
         + hero.transport_capacity(self)
-        //+ self.settings.and_then(|s| s.get_player(owner)).and_then(|p| p.commander.transport_capacity()).unwrap_or(0)
-    }
-
-    pub fn unit_heal_transported(&self, typ: UnitType, owner: i8, hero: HeroType) -> i8 {
-        // TODO
-        self.config.unit_config(typ).heal_transported
-        //+ hero.heal_transported(self)
-        //+ self.settings.and_then(|s| s.get_player(owner)).and_then(|p| p.commander.heal_transported()).unwrap_or(0)
     }
 
     pub fn unit_cost(&self, typ: UnitType, owner_id: i8) -> i32 {

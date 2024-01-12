@@ -2,10 +2,11 @@ pub mod attributes;
 pub mod terrain;
 
 use serde::Deserialize;
-
+use std::str::FromStr;
 use zipper::*;
 
 use crate::config::environment::Environment;
+use crate::config::ConfigParseError;
 
 pub const KRAKEN_ATTACK_RANGE: usize = 3;
 pub const KRAKEN_MAX_ANGER: usize = 8;
@@ -64,12 +65,25 @@ impl SupportedZippable<&Environment> for TerrainType {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExtraMovementOptions {
-    #[default]
     None,
     Jump,
     PawnStart,
+}
+
+impl FromStr for ExtraMovementOptions {
+    type Err = ConfigParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.split(&['(', ',', '-', ')'])
+        .map(str::trim);
+        Ok(match it.next().unwrap() {
+            "None" => Self::None,
+            "Jump" => Self::Jump,
+            "PawnStart" => Self::PawnStart,
+            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+        })
+    }
 }
 
 /*macro_rules! land_units {
@@ -423,16 +437,24 @@ impl<D: Direction> Terrain<D> {
     }
 }*/
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AmphibiousTyping {
     Land,
     Sea,
     Beach,
 }
 
-impl Default for AmphibiousTyping {
-    fn default() -> Self {
-        Self::Beach
+impl FromStr for AmphibiousTyping {
+    type Err = ConfigParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.split(&['(', ',', '-', ')'])
+        .map(str::trim);
+        Ok(match it.next().unwrap() {
+            "Land" => Self::Land,
+            "Sea" => Self::Sea,
+            "Beach" => Self::Beach,
+            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+        })
     }
 }
 

@@ -2,13 +2,15 @@ use std::collections::{BinaryHeap, HashSet, HashMap};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::str::FromStr;
 
 use num_rational::Rational32;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use zipper::*;
 use zipper_derive::*;
 
 use crate::config::movement_type_config::MovementPattern;
+use crate::config::ConfigParseError;
 use crate::game::commands::CommandError;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -30,21 +32,23 @@ pub enum PathSearchFeedback {
     Found,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
-pub enum MovementType {
-    Foot,
-    Bike,
-    Wheel,
-    Treads,
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    pub enum MovementType {
+        Foot,
+        Bike,
+        Wheel,
+        Treads,
 
-    Hovercraft,
-    Boat,
-    Ship,
+        Hovercraft,
+        Boat,
+        Ship,
 
-    Heli,
-    Plane,
+        Heli,
+        Plane,
 
-    Chess,
+        Chess,
+    }
 }
 
 /*#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1348,7 +1352,7 @@ where F: Fn(&Path<D>, Point, bool) -> PathSearchFeedback {
     movement_search_game(game, unit, path_so_far, 1,
         |p| {
             game.get_map().get_unit(p)
-            .and_then(|u| u.fog_replacement(game.get_map().get_terrain(p).unwrap(), fog.and_then(|fog| fog.get(&p)).cloned().unwrap_or(FogIntensity::TrueSight)))
+            .and_then(|u| u.fog_replacement(game, p, fog.and_then(|fog| fog.get(&p)).cloned().unwrap_or(FogIntensity::TrueSight)))
         },
         |_, path, destination, can_continue, can_stop_here| {
         if path.steps.len() < path_so_far.steps.len() {

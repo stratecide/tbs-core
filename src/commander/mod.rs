@@ -1,5 +1,7 @@
 pub mod commander_type;
 
+use std::collections::HashSet;
+
 use commander_type::CommanderType;
 use num_rational::Rational32;
 use zipper::*;
@@ -11,6 +13,7 @@ use crate::script::attack::AttackScript;
 use crate::script::kill::KillScript;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
+use crate::units::attributes::AttributeOverride;
 use crate::units::unit::Unit;
 use crate::game::game::Game;
 
@@ -109,28 +112,36 @@ impl Commander {
         power.effects.clone()
     }
 
-    pub fn unit_death_effects<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
+    pub fn unit_start_turn_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
+        self.environment.config.commander_unit_start_turn_effects(self, unit, game, pos)
+    }
+
+    pub fn unit_end_turn_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
+        self.environment.config.commander_unit_end_turn_effects(self, unit, game, pos)
+    }
+
+    pub fn unit_death_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
         self.environment.config.commander_unit_death_effects(self, unit, game, pos)
     }
 
-    pub fn unit_attack_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<AttackScript> {
-        self.environment.config.commander_unit_attack_effects(self, unit, game, pos)
+    pub fn unit_attack_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point, other_unit: &Unit<D>, other_pos: Point) -> Vec<AttackScript> {
+        self.environment.config.commander_unit_attack_effects(self, unit, game, pos, other_unit, other_pos)
     }
 
-    pub fn unit_kill_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<KillScript> {
-        self.environment.config.commander_unit_kill_effects(self, unit, game, pos)
+    pub fn unit_kill_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point, other_unit: &Unit<D>, other_pos: Point) -> Vec<KillScript> {
+        self.environment.config.commander_unit_kill_effects(self, unit, game, pos, other_unit, other_pos)
     }
 
     pub fn movement_bonus<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Rational32 {
         self.environment.config.commander_movement_bonus(self, unit, game, pos)
     }
 
-    pub fn attack_bonus<D: Direction>(&self, attacker: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool) -> Rational32 {
-        self.environment.config.commander_attack_bonus(self, attacker, game, pos, is_counter)
+    pub fn attack_bonus<D: Direction>(&self, attacker: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool, other_unit: &Unit<D>, other_pos: Point) -> Rational32 {
+        self.environment.config.commander_attack_bonus(self, attacker, game, pos, is_counter, other_unit, other_pos)
     }
 
-    pub fn defense_bonus<D: Direction>(&self, defender: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool) -> Rational32 {
-        self.environment.config.commander_defense_bonus(self, defender, game, pos, is_counter)
+    pub fn defense_bonus<D: Direction>(&self, defender: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool, other_unit: &Unit<D>, other_pos: Point) -> Rational32 {
+        self.environment.config.commander_defense_bonus(self, defender, game, pos, is_counter, other_unit, other_pos)
     }
     
 }

@@ -1,0 +1,2 @@
+Id;Name;Visibility;MovementPattern;MovementType;WaterMovementType;MovementPoints;VisionMode;Vision;TrueVision;NeedsOwner;Stealthy;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;CanBuildUnits;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity
+HoverBike;HoverBike;Normal;Standard;Bike;Hovercraft;9/2;Normal;2;1;true;;true;;true;MachineGun;true;Adjacent;;;;100;;;true;

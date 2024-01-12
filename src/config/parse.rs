@@ -1,0 +1,692 @@
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::error::Error;
+use std::fmt::Debug;
+use std::fs;
+use std::hash::Hash;
+use std::path::Path;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use num_rational::Rational32;
+use serde::Deserializer;
+use serde::Serializer;
+use serde::de::Visitor;
+
+use crate::commander::commander_type::CommanderType;
+use crate::terrain::TerrainType;
+use crate::terrain::attributes::TerrainAttributeKey;
+use crate::units::movement::MovementType;
+use crate::units::unit_types::UnitType;
+use crate::units::attributes::*;
+use crate::units::hero::*;
+
+use super::ConfigParseError;
+use super::commander_power_config::CommanderPowerConfigHeader;
+use super::commander_type_config::CommanderTypeConfig;
+use super::commander_power_config::CommanderPowerConfig;
+use super::commander_type_config::CommanderTypeConfigHeader;
+use super::commander_unit_config::*;
+use super::hero_type_config::*;
+use super::terrain_type_config::TerrainTypeConfig;
+use super::terrain_type_config::TerrainTypeConfigHeader;
+use super::unit_filter::*;
+use super::unit_type_config::UnitTypeConfig;
+use super::config::Config;
+use super::unit_type_config::UnitTypeConfigHeader;
+
+const UNIT_CONFIG: &'static str = "units.csv";
+const UNIT_ATTRIBUTES: &'static str = "unit_attributes.csv";
+const UNIT_TRANSPORT: &'static str = "unit_transport.csv";
+const UNIT_DAMAGE: &'static str = "unit_damage.csv";
+const HERO_CONFIG: &'static str = "heroes.csv";
+const UNIT_HEROES: &'static str = "unit_heroes.csv";
+const TERRAIN_CONFIG: &'static str = "terrain.csv";
+const TERRAIN_ATTRIBUTES: &'static str = "terrain_attributes.csv";
+const MOVEMENT_CONFIG: &'static str = "movement.csv";
+const TERRAIN_ATTACK: &'static str = "terrain_attack.csv";
+const TERRAIN_DEFENSE: &'static str = "terrain_defense.csv";
+const TERRAIN_BUILD_REPAIR: &'static str = "terrain_build_repair.csv";
+const COMMANDER_CONFIG: &'static str = "commanders.csv";
+const COMMANDER_POWERS: &'static str = "commander_powers.csv";
+const COMMANDER_ATTRIBUTES: &'static str = "commander_attributes.csv";
+const POWERED_UNITS: &'static str = "unit_powered.csv";
+
+impl Config {
+    pub fn parse(
+        name: String,
+        load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let mut result = Self {
+            name,
+            // units
+            unit_types: Vec::new(),
+            units: HashMap::new(),
+            unit_transports: HashMap::new(),
+            unit_attributes: HashMap::new(),
+            unit_hidden_attributes: HashMap::new(),
+            attack_damage: HashMap::new(),
+            // heroes
+            hero_types: Vec::new(),
+            heroes: HashMap::new(),
+            hero_units: HashMap::new(),
+            hero_powered_units: HashMap::new(),
+            max_hero_charge: 0,
+            // terrain
+            terrain_types: Vec::new(),
+            terrains: HashMap::new(),
+            terrain_attributes: HashMap::new(),
+            terrain_hidden_attributes: HashMap::new(),
+            movement_cost: HashMap::new(),
+            attack_bonus: HashMap::new(),
+            defense_bonus: HashMap::new(),
+            build_or_repair: HashMap::new(),
+            max_capture_resistance: 0,
+            terrain_max_anger: 0,
+            terrain_max_built_this_turn: 0,
+            // commanders
+            commander_types: Vec::new(),
+            commanders: HashMap::new(),
+            commander_powers: HashMap::new(),
+            default_unit_overrides: Vec::new(),
+            commander_units: HashMap::new(),
+            commander_unit_attributes: HashMap::new(),
+            max_commander_charge: 0,
+        };
+
+        // simple unit data
+        let data = load_config(UNIT_CONFIG)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut headers: Vec<UnitTypeConfigHeader> = Vec::new();
+        for h in reader.headers()? {
+            let header = h.parse()?;
+            if headers.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            headers.push(header);
+        }
+        for line in reader.records() {
+            let mut map = HashMap::new();
+            let line = line?;
+            for (i, s) in line.iter().enumerate().take(headers.len()) {
+                map.insert(headers[i], s);
+            }
+            let conf = UnitTypeConfig::parse(&map)?;
+            if result.units.contains_key(&conf.id) {
+                // TODO: error
+            }
+            result.unit_types.push(conf.id);
+            result.units.insert(conf.id, conf);
+        }
+
+        // unit transport
+        let data = load_config(UNIT_TRANSPORT)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut transported: Vec<UnitType> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if transported.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            transported.push(header);
+        }
+        for line in reader.records() {
+            let line = line?;
+            let mut line = line.iter();
+            let typ: UnitType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values: Vec<UnitType> = Vec::new();
+            for (i, val) in line.enumerate() {
+                if val.len() > 0 && i < transported.len() {
+                    values.push(transported[i]);
+                }
+            }
+            if transported.len() > 0 {
+                result.unit_transports.insert(typ, values);
+            }
+        }
+
+        // unit attributes
+        let data = load_config(UNIT_ATTRIBUTES)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut attributes: Vec<AttributeKey> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if attributes.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            attributes.push(header);
+        }
+        for (l, line) in reader.records().enumerate() {
+            let line = line?;
+            let mut line = line.iter();
+            let typ: UnitType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values: Vec<AttributeKey> = Vec::new();
+            let mut hidden: Vec<AttributeKey> = Vec::new();
+            for (i, val) in line.enumerate() {
+                match val {
+                    "true" => values.push(attributes[i]),
+                    "hidden" => {
+                        values.push(attributes[i]);
+                        hidden.push(attributes[i]);
+                    }
+                    "" => (),
+                    e => return Err(Box::new(ConfigParseError::InvalidCellData("unit_attribute_config", l, i, e.to_string()))),
+                }
+            }
+            result.unit_attributes.insert(typ, values);
+            result.unit_hidden_attributes.insert(typ, hidden);
+        }
+
+        // attack damage
+        let data = load_config(UNIT_DAMAGE)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        // TODO: ensure uniqueness of column and row IDs
+        let mut defenders: Vec<UnitType> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if defenders.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            defenders.push(header);
+        }
+        for line in reader.records() {
+            let line = line?;
+            let mut line = line.into_iter();
+            let typ: UnitType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values = HashMap::new();
+            for (i, val) in line.enumerate() {
+                if val.len() > 0 && i < defenders.len() {
+                    values.insert(defenders[i], val.parse()?);
+                }
+            }
+            if defenders.len() > 0 {
+                result.attack_damage.insert(typ, values);
+            }
+        }
+
+        // simple hero data
+        let data = load_config(HERO_CONFIG)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut headers: Vec<HeroTypeConfigHeader> = Vec::new();
+        for h in reader.headers()? {
+            let header = h.parse()?;
+            if headers.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            headers.push(header);
+        }
+        for line in reader.records() {
+            let mut map = HashMap::new();
+            let line = line?;
+            for (i, s) in line.iter().enumerate().take(headers.len()) {
+                map.insert(headers[i], s);
+            }
+            let conf = HeroTypeConfig::parse(&map)?;
+            if result.heroes.contains_key(&conf.id) {
+                // TODO: error
+            }
+            result.hero_types.push(conf.id);
+            result.hero_powered_units.insert(conf.id, HashMap::new());
+            result.max_hero_charge = result.max_hero_charge.max(conf.charge);
+            result.heroes.insert(conf.id, conf);
+        }
+        if result.max_hero_charge > i8::MAX as u8 {
+            return Err(Box::new(ConfigParseError::HeroMaxChargeExceeded(i8::MAX as u8)));
+        }
+
+        // unit is allowed to have that hero
+        let data = load_config(UNIT_HEROES)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        // TODO: ensure uniqueness of column and row IDs
+        let mut units: Vec<UnitType> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if units.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            if let Some(attributes) = result.unit_attributes.get(&header) {
+                if !attributes.contains(&AttributeKey::Hero) {
+                    return Err(Box::new(ConfigParseError::MissingUnitAttribute(header, AttributeKey::Hero)));
+                }
+            } else {
+                return Err(Box::new(ConfigParseError::MissingUnitAttribute(header, AttributeKey::Hero)));
+            }
+            units.push(header);
+        }
+        result.hero_units.insert(HeroType::None, result.unit_types.iter()
+        .filter(|u| result.unit_attributes.get(u).unwrap().contains(&AttributeKey::Hero))
+        .cloned().collect());
+        for line in reader.records() {
+            let line = line?;
+            let mut line = line.into_iter();
+            let typ: HeroType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values = HashSet::new();
+            for (i, val) in line.enumerate() {
+                if val.len() > 0 && i < units.len() {
+                    values.insert(units[i]);
+                }
+            }
+            if units.len() > 0 {
+                result.hero_units.insert(typ, values);
+            }
+        }
+
+        // simple terrain data
+        let data = load_config(TERRAIN_CONFIG)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut headers: Vec<TerrainTypeConfigHeader> = Vec::new();
+        for h in reader.headers()? {
+            let header = h.parse()?;
+            if headers.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            headers.push(header);
+        }
+        for line in reader.records() {
+            let mut map = HashMap::new();
+            let line = line?;
+            for (i, s) in line.iter().enumerate().take(headers.len()) {
+                map.insert(headers[i], s);
+            }
+            let conf = TerrainTypeConfig::parse(&map)?;
+            if result.terrains.contains_key(&conf.id) {
+                // TODO: error
+            }
+            result.terrain_types.push(conf.id);
+            result.max_capture_resistance = result.max_capture_resistance.max(conf.capture_resistance);
+            result.terrain_max_anger = result.terrain_max_anger.max(conf.max_anger);
+            result.terrain_max_built_this_turn = result.terrain_max_built_this_turn.max(conf.max_builds_per_turn);
+            result.terrains.insert(conf.id, conf);
+        }
+
+        // terrain attributes
+        let data = load_config(TERRAIN_ATTRIBUTES)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut attributes: Vec<TerrainAttributeKey> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if attributes.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            attributes.push(header);
+        }
+        for (l, line) in reader.records().enumerate() {
+            let line = line?;
+            let mut line = line.into_iter();
+            let typ: TerrainType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values: Vec<TerrainAttributeKey> = Vec::new();
+            let mut hidden: Vec<TerrainAttributeKey> = Vec::new();
+            for (i, val) in line.enumerate() {
+                match val {
+                    "true" => values.push(attributes[i]),
+                    "hidden" => {
+                        values.push(attributes[i]);
+                        hidden.push(attributes[i]);
+                    }
+                    "" => (),
+                    e => return Err(Box::new(ConfigParseError::InvalidCellData("terrain_attribute_config", l, i, e.to_string()))),
+                }
+            }
+            result.terrain_attributes.insert(typ, values);
+            result.terrain_hidden_attributes.insert(typ, hidden);
+        }
+
+        // movement cost
+        let data = load_config(MOVEMENT_CONFIG)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        // TODO: ensure uniqueness of column and row IDs
+        let mut movement_types: Vec<MovementType> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if movement_types.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            movement_types.push(header);
+        }
+        for line in reader.records() {
+            let line = line?;
+            let mut line = line.into_iter();
+            let typ: TerrainType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values = HashMap::new();
+            for (i, val) in line.enumerate() {
+                if val.len() > 0 && i < movement_types.len() {
+                    values.insert(movement_types[i], val.parse()?);
+                }
+            }
+            if movement_types.len() > 0 {
+                result.movement_cost.insert(typ, values);
+            }
+        }
+
+        // attack bonus
+        let data = load_config(TERRAIN_ATTACK)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        // TODO: ensure uniqueness of column and row IDs
+        let mut attackers: Vec<MovementType> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if attackers.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            attackers.push(header);
+        }
+        for line in reader.records() {
+            let line = line?;
+            let mut line = line.into_iter();
+            let typ: TerrainType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values = HashMap::new();
+            for (i, val) in line.enumerate() {
+                if val.len() > 0 && i < attackers.len() {
+                    values.insert(attackers[i], val.parse()?);
+                }
+            }
+            if attackers.len() > 0 {
+                result.attack_bonus.insert(typ, values);
+            }
+        }
+
+        // defense bonus
+        let data = load_config(TERRAIN_DEFENSE)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        // TODO: ensure uniqueness of column and row IDs
+        let mut defenders: Vec<MovementType> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if defenders.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            defenders.push(header);
+        }
+        for line in reader.records() {
+            let line = line?;
+            let mut line = line.into_iter();
+            let typ: TerrainType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values = HashMap::new();
+            for (i, val) in line.enumerate() {
+                if val.len() > 0 && i < defenders.len() {
+                    values.insert(defenders[i], val.parse()?);
+                }
+            }
+            if defenders.len() > 0 {
+                result.defense_bonus.insert(typ, values);
+            }
+        }
+
+        // terrain building / repairing
+        let data = load_config(TERRAIN_BUILD_REPAIR)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        // TODO: ensure uniqueness of column and row IDs
+        let mut units: Vec<UnitType> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if units.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            units.push(header);
+        }
+        for line in reader.records() {
+            let line = line?;
+            let mut line = line.into_iter();
+            let typ: TerrainType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values = Vec::new();
+            for (i, val) in line.enumerate() {
+                if val.len() > 0 && i < units.len() {
+                    values.push(units[i]);
+                }
+            }
+            if units.len() > 0 {
+                result.build_or_repair.insert(typ, values);
+            }
+        }
+
+        // commanders
+        let data = load_config(COMMANDER_CONFIG)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut headers: Vec<CommanderTypeConfigHeader> = Vec::new();
+        for h in reader.headers()? {
+            let header = h.parse()?;
+            if headers.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            headers.push(header);
+        }
+        for line in reader.records() {
+            let mut map = HashMap::new();
+            let line = line?;
+            for (i, s) in line.iter().enumerate().take(headers.len()) {
+                map.insert(headers[i], s);
+            }
+            let conf = CommanderTypeConfig::parse(&map)?;
+            if result.commanders.contains_key(&conf.id) {
+                // TODO: error
+            }
+            result.commander_types.push(conf.id);
+            result.commander_powers.insert(conf.id, Vec::new());
+            result.commander_units.insert(conf.id, HashMap::new());
+            result.commander_unit_attributes.insert(conf.id, Vec::new());
+            result.max_commander_charge = result.max_commander_charge.max(conf.max_charge);
+            result.commanders.insert(conf.id, conf);
+        }
+
+        // commander powers
+        let data = load_config(COMMANDER_POWERS)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut headers: Vec<CommanderPowerConfigHeader> = Vec::new();
+        for h in reader.headers()? {
+            let header = h.parse()?;
+            if headers.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            headers.push(header);
+        }
+        for line in reader.records() {
+            let mut map = HashMap::new();
+            let line = line?;
+            for (i, s) in line.iter().enumerate().take(headers.len()) {
+                map.insert(headers[i], s);
+            }
+            let conf = CommanderPowerConfig::parse(&map)?;
+            result.commander_powers.get_mut(&conf.id)
+            .ok_or(ConfigParseError::MissingCommanderForPower(conf.id))?
+            .push(conf);
+        }
+
+        // commanders' unit attributes
+        let data = load_config(COMMANDER_ATTRIBUTES)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut attributes: Vec<AttributeKey> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = h.parse()?;
+            if attributes.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            attributes.push(header);
+        }
+        for (l, line) in reader.records().enumerate() {
+            let line = line?;
+            let mut line = line.into_iter();
+            let typ: CommanderType = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let filter: UnitTypeFilter = match line.next() {
+                Some(t) => t.parse().map_err(|_| ConfigParseError::UnknownEnumMember(t.to_string()))?,
+                _ => continue,
+            };
+            let mut values: Vec<AttributeKey> = Vec::new();
+            let mut hidden: Vec<AttributeKey> = Vec::new();
+            for (i, val) in line.enumerate() {
+                match val {
+                    "true" => values.push(attributes[i]),
+                    "false" => {
+                        values.push(attributes[i]);
+                        hidden.push(attributes[i]);
+                    }
+                    "" => (),
+                    e => return Err(Box::new(ConfigParseError::InvalidCellData("unit_attribute_config", l, i, e.to_string()))),
+                }
+            }
+            result.commander_unit_attributes.get_mut(&typ).ok_or(ConfigParseError::MissingCommanderForAttributes(typ))?
+            .push((filter, values, hidden));
+        }
+
+        // unit overrides, has to be after commander and hero parsing
+        for (key, map) in result.commander_units.iter_mut() {
+            map.insert(None, Vec::new());
+            let power_count = result.commander_powers.get(key).unwrap().len();
+            if power_count > u8::MAX as usize {
+                return Err(Box::new(ConfigParseError::TooManyPowers(*key, power_count)));
+            }
+            for i in 0..power_count {
+                map.insert(Some(i as u8), Vec::new());
+            }
+        }
+        for (_, map) in result.hero_powered_units.iter_mut() {
+            map.insert(None, Vec::new());
+            map.insert(Some(true), Vec::new());
+            map.insert(Some(false), Vec::new());
+        }
+        let data = load_config(POWERED_UNITS)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut headers: Vec<CommanderPowerUnitConfigHeader> = Vec::new();
+        for h in reader.headers()? {
+            let header = h.parse()?;
+            if headers.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            headers.push(header);
+        }
+        for line in reader.records() {
+            let mut map = HashMap::new();
+            let line = line?;
+            for (i, s) in line.iter().enumerate().take(headers.len()) {
+                map.insert(headers[i], s);
+            }
+            let conf = CommanderPowerUnitConfig::parse(&map)?;
+            match &conf.power {
+                PowerRestriction::None => result.default_unit_overrides.push(conf),
+                PowerRestriction::Commander(commander_type, power) => {
+                    if let Some(list) = result.commander_units.get_mut(commander_type)
+                    .ok_or(ConfigParseError::MissingCommanderForPower(*commander_type))?
+                    .get_mut(power){
+                        list.push(conf);
+                    }
+                }
+                PowerRestriction::Hero(hero_type, power) => {
+                    result.hero_powered_units.get_mut(hero_type)
+                    .ok_or(ConfigParseError::MissingHeroForPower(*hero_type))?
+                    .get_mut(power).unwrap().push(conf);
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    pub fn parse_folder(folder: PathBuf) -> Result<Self, Box<dyn Error>> {
+        if !folder.exists() || !folder.is_dir() {
+            return Err(Box::new(ConfigParseError::FolderMissing(folder.to_path_buf())))
+        }
+        let name = match folder.file_name().and_then(|s| s.to_str()) {
+            Some(s) => s.to_string(),
+            None => return Err(Box::new(ConfigParseError::FolderMissing(folder.to_path_buf()))),
+        };
+        let load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>> = Box::new(move |filename: &str| {
+            let file = folder.join(filename);
+            if !file.exists() || !file.is_file() {
+                return Err(Box::new(ConfigParseError::FileMissing(filename.to_string())))
+            }
+            println!("{filename}");
+            Ok(fs::read_to_string(file)?)
+        });
+        Self::parse(name, load_config)
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default");
+        Self::parse_folder(path).expect("Failed to parse default config")
+    }
+}
+
+fn _parse<H: Hash + Eq + Debug, T: FromStr>(data: &HashMap<H, &str>, key: H, def: Option<T>) -> Result<T, ConfigParseError> {
+    let value = match data.get(&key) {
+        Some(s) => s,
+        None => {
+            return def.ok_or(ConfigParseError::MissingColumn(format!("{key:?}")))
+        }
+    };
+    if value.len() == 0 && def.is_some() {
+        return Ok(def.unwrap());
+    }
+    value.parse().map_err(|_| ConfigParseError::InvalidColumnValue(format!("{key:?}"), value.to_string()))
+}
+
+pub fn parse<H: Hash + Eq + Debug, T: FromStr>(data: &HashMap<H, &str>, key: H) -> Result<T, ConfigParseError> {
+    _parse(data, key, None)
+}
+pub fn parse_def<H: Hash + Eq + Debug, T: FromStr>(data: &HashMap<H, &str>, key: H, def: T) -> Result<T, ConfigParseError> {
+    _parse(data, key, Some(def))
+}
+
+fn _parse_vec<H: Hash + Eq + Debug, T: FromStr>(data: &HashMap<H, &str>, key: H, def: Option<Vec<T>>) -> Result<Vec<T>, ConfigParseError> {
+    let value = match data.get(&key) {
+        Some(s) => s,
+        None => {
+            return def.ok_or(ConfigParseError::MissingColumn(format!("{key:?}")))
+        }
+    };
+    if value.len() == 0 {
+        return Ok(def.unwrap_or(Vec::new()));
+    }
+    let mut result = Vec::new();
+    for item in value.split(",").map(str::trim) {
+        result.push(item.parse().map_err(|_| ConfigParseError::InvalidColumnValue(format!("{key:?}"), value.to_string()))?)
+    }
+    Ok(result)
+}
+
+pub fn parse_vec<H: Hash + Eq + Debug, T: FromStr>(data: &HashMap<H, &str>, key: H) -> Result<Vec<T>, ConfigParseError> {
+    _parse_vec(data, key, None)
+}
+pub fn parse_vec_def<H: Hash + Eq + Debug, T: FromStr>(data: &HashMap<H, &str>, key: H, def: Vec<T>) -> Result<Vec<T>, ConfigParseError> {
+    _parse_vec(data, key, Some(def))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn import_default_config() {
+        Config::default();
+    }
+}

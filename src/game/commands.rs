@@ -42,14 +42,21 @@ impl<D: Direction> Command<D> {
                                 if u.is_exhausted() {
                                     handler.unit_status_boarded(p, index, ActionStatus::Ready);
                                 }
-                                if unit.heal_transported() > 0 {
-                                    handler.unit_heal_boarded(p, index, unit.heal_transported() as u8);
+                                //if unit.heal_transported() > 0 {
+                                //    handler.unit_heal_boarded(p, index, unit.heal_transported() as u8);
                                 //} else if unit.heal_transported() < 0 {
                                 //    handler.unit_damage_boarded(position, index, -unit.heal_transported() as u8);
                                 //    kill units with 0 HP
-                                }
+                                //}
                             }
                         }
+                    }
+                }
+
+                // trigger scripts
+                for p in handler.get_map().all_points() {
+                    if let Some(unit) = handler.get_map().get_unit(p).cloned() {
+                        unit.on_end_turn(handler, p);
                     }
                 }
 

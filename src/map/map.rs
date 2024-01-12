@@ -204,7 +204,6 @@ where D: Direction
         self.terrain.get_mut(&p)
     }
     pub fn set_terrain(&mut self, p: Point, t: Terrain) {
-        // TODO: return a Result<(), ?>
         if self.is_point_valid(p) {
             self.terrain.insert(p, t);
         }
@@ -217,7 +216,6 @@ where D: Direction
         self.units.get_mut(&p)
     }
     pub fn set_unit(&mut self, p: Point, unit: Option<Unit<D>>) -> Option<Unit<D>> {
-        // TODO: return a Result<(), ?>, returning an error if the point is invalid
         if let Some(unit) = unit {
             if self.is_point_valid(p) {
                 self.units.insert(p, unit)
@@ -344,13 +342,16 @@ where D: Direction
         result
     }
 
-    pub fn mercenary_influence_at(&self, point: Point, owner_id: i8) -> Vec<(Point, Hero)> {
+    pub fn hero_influence_at(&self, point: Point, owner_id: i8) -> Vec<(Point, Unit<D>, Hero)> {
         let mut result = vec![];
         for p in self.all_points() {
             if let Some(unit) = self.get_unit(p) {
+                if !unit.is_hero() || unit.get_owner_id() != owner_id {
+                    continue;
+                }
                 let hero = unit.get_hero();
-                if unit.get_owner_id() == owner_id && hero.in_range(self, p, point) {
-                    result.push((p, hero));
+                if hero.in_range(self, p, point) {
+                    result.push((p, unit.clone(), hero));
                 }
             }
         }
@@ -442,17 +443,6 @@ where D: Direction
             unit: self.units.get(&p).cloned(),
         }
     }
-    pub fn export_field(&self, zipper: &mut Zipper, p: Point, fog_intensity: FogIntensity) {
-        let fd = self.get_field_data(p).fog_replacement(fog_intensity);
-        fd.export(zipper, &self.environment);
-    }
-
-    pub fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
-        self.wrapping_logic.zip(zipper);
-        for p in self.all_points() {
-            self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
-        }
-    }
 
     pub fn import_from_unzipper(unzipper: &mut Unzipper, environment: &mut Environment) -> Result<Self, ZipperError> {
         let wrapping_logic = WrappingMap::unzip(unzipper)?;
@@ -509,12 +499,12 @@ pub struct FieldData<D: Direction> {
 }
 
 impl<D: Direction> FieldData<D> {
-    pub fn fog_replacement(self, intensity: FogIntensity) -> Self {
+    pub fn fog_replacement(self, game: &Game<D>, pos: Point, intensity: FogIntensity) -> Self {
         let details: Vec<_> = self.details.into_iter()
         .filter_map(|d| d.fog_replacement(intensity))
         .collect();
         Self {
-            unit: self.unit.and_then(|unit| unit.fog_replacement(&self.terrain, intensity)),
+            unit: self.unit.and_then(|unit| unit.fog_replacement(game, pos, intensity)),
             details: details.try_into().expect("Detail list shouldn't become longer after filtering"),
             terrain: self.terrain.fog_replacement(intensity),
         }
@@ -531,7 +521,10 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
     fn export(&self) -> Vec<u8> {
         let mut zipper = Zipper::new();
         zipper.write_bool(D::is_hex());
-        self.zip(&mut zipper, None);
+        self.wrapping_logic.zip(&mut zipper);
+        for p in self.all_points() {
+            self.get_field_data(p).export(&mut zipper, &self.environment);
+        }
         zipper.finish()
     }
 

@@ -147,10 +147,4 @@ impl<D: Direction> PipeState<D> {
         }
         None
     }
-    /*fn is_enterable(&self) -> bool;
-    fn enterable_from(&self, d: D) -> bool;
-    fn connections(&self) -> Vec<D>;
-    fn connects_towards(&self, d: D) -> bool;
-    fn connect_to(&mut self, d: D); // TODO: maybe return result depending on whether it was able to connect?
-    fn next_dir(&self, entered_from: D) -> D;*/
 }

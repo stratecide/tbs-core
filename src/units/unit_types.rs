@@ -1,13 +1,14 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use zipper::*;
+use std::str::FromStr;
 
 use crate::map::direction::Direction;
 use crate::config::environment::Environment;
-
+use crate::config::ConfigParseError;
 use super::unit::UnitBuilder;
 
 crate::enum_with_custom! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
     pub enum UnitType {
         HoverBike,
         SmallTank,

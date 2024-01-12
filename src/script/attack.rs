@@ -1,16 +1,34 @@
+use std::str::FromStr;
+
 use num_rational::Rational32;
 use serde::Deserialize;
 
-use crate::details::{MAX_STACK_SIZE, Detail};
+use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
-use crate::units::attributes::{AttributeKey, ActionStatus};
+use crate::units::attributes::ActionStatus;
 use crate::units::unit::Unit;
 
 #[derive(Debug, Clone, Deserialize)]
 pub enum AttackScript {
     LifeSteal(Rational32),
+}
+
+impl FromStr for AttackScript {
+    type Err = ConfigParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.split(&['(', ' ', '-', ')'])
+        .map(str::trim);
+        Ok(match it.next().unwrap() {
+            "LifeSteal" => {
+                let lifesteal = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
+                let lifesteal = lifesteal.parse().map_err(|_| ConfigParseError::InvalidInteger(lifesteal.to_string()))?;
+                Self::LifeSteal(lifesteal)
+            }
+            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+        })
+    }
 }
 
 impl AttackScript {

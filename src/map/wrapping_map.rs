@@ -6,6 +6,8 @@ use std::collections::{HashSet, HashMap};
 use zipper::*;
 use zipper::zipper_derive::*;
 
+pub const MAX_TRANSFORMATIONS: usize = 3;
+
 pub type Distortion<D> = (bool, D);
 type AreaPoint<D> = (Transformation<D>, Point);
 
@@ -142,7 +144,7 @@ where D: Direction
         {
             self.screen_wrap_options = HashMap::new();
         }
-        if self.seed_transformations.len() > 4 { // TODO: maybe 4 isn't even possible
+        if self.seed_transformations.len() > MAX_TRANSFORMATIONS {
             self.error = Some(TransformationError::TooMany);
         } else {
             // check if the given transformations are valid and calculate wrapped_neighbors

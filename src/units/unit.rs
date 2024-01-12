@@ -95,10 +95,6 @@ impl<D: Direction> Unit<D> {
         self.environment.unit_transport_capacity(self.typ, self.get_owner_id(), self.get_hero().typ())
     }
 
-    pub fn heal_transported(&self) -> i8 {
-        self.environment.unit_heal_transported(self.typ, self.get_owner_id(), self.get_hero().typ())
-    }
-
     pub fn movement_pattern(&self) -> MovementPattern {
         self.environment.config.movement_pattern(self.typ)
     }
@@ -324,6 +320,13 @@ impl<D: Direction> Unit<D> {
         self.set(direction);
     }
 
+    pub fn is_hero(&self) -> bool {
+        if let Some(Attribute::Hero(hero)) = self.attributes.get(&AttributeKey::Hero) {
+            hero.typ() != HeroType::None
+        } else {
+            false
+        }
+    }
     pub fn get_hero(&self) -> Hero {
         self.get::<Hero>()
     }
@@ -480,28 +483,78 @@ impl<D: Direction> Unit<D> {
 
     // "scripts"
 
+    pub fn build_overrides(&self, game: &Game<D>, position: Point) -> HashSet<AttributeOverride> {
+        let mut overrides = HashMap::new();
+        for ov in self.environment.config.commander_unit_attribute_overrides(&self.get_commander(game), self, game, position) {
+            overrides.insert(ov.key(), ov.clone());
+        }
+        for (p, hero_unit, hero) in game.get_map().hero_influence_at(position, self.get_owner_id()) {
+            for ov in self.environment.config.hero_attribute_overrides(game, self, position, &hero_unit, p, &hero) {
+                overrides.insert(ov.key(), ov.clone());
+            }
+        }
+        overrides.values()
+        .cloned()
+        .collect()
+    }
+
     pub fn on_start_turn(&self, handler: &mut EventHandler<D>, position: Point) {
-        let effects = self.environment.config.on_start_turn(self.typ).iter();
-        for effect in effects {
-            effect.trigger(handler, position, self)
+        let game = handler.get_game();
+        let mut scripts = self.get_commander(game).unit_start_turn_scripts(self, game, position);
+        for (p, hero_unit, hero) in game.get_map().hero_influence_at(position, self.get_owner_id()) {
+            for script in self.environment.config.hero_start_turn_scripts(game, self, position, &hero_unit, p, &hero) {
+                scripts.push(script.clone());
+            }
+        }
+        for script in scripts {
+            script.trigger(handler, position, self)
+        }
+    }
+
+    pub fn on_end_turn(&self, handler: &mut EventHandler<D>, position: Point) {
+        let game = handler.get_game();
+        let mut scripts = self.get_commander(game).unit_end_turn_scripts(self, game, position);
+        for (p, hero_unit, hero) in game.get_map().hero_influence_at(position, self.get_owner_id()) {
+            for script in self.environment.config.hero_end_turn_scripts(game, self, position, &hero_unit, p, &hero) {
+                scripts.push(script.clone());
+            }
+        }
+        for script in scripts {
+            script.trigger(handler, position, self)
         }
     }
 
     pub fn on_death(&self, handler: &mut EventHandler<D>, position: Point) {
-        let commander_scripts = self.get_commander(handler.get_game()).unit_death_effects(self, handler.get_game(), position);
-        let effects = self.environment.config.on_death(self.typ).iter()
-        .chain(commander_scripts.iter());
-        for effect in effects {
-            effect.trigger(handler, position, self)
+        let game = handler.get_game();
+        let mut scripts = self.get_commander(game).unit_death_scripts(self, game, position);
+        for (p, hero_unit, hero) in game.get_map().hero_influence_at(position, self.get_owner_id()) {
+            for script in self.environment.config.hero_death_scripts(game, self, position, &hero_unit, p, &hero) {
+                scripts.push(script.clone());
+            }
+        }
+        for script in scripts {
+            script.trigger(handler, position, self)
         }
     }
 
-    pub fn get_attack_scripts(&self, game: &Game<D>, position: Point) -> Vec<AttackScript> {
-        self.get_commander(game).unit_attack_scripts(self, game, position)
+    pub fn get_attack_scripts(&self, game: &Game<D>, position: Point, defender: &Unit<D>, defender_pos: Point) -> Vec<AttackScript> {
+        let mut scripts = self.get_commander(game).unit_attack_scripts(self, game, position, defender, defender_pos);
+        for (p, hero_unit, hero) in game.get_map().hero_influence_at(position, self.get_owner_id()) {
+            for script in self.environment.config.hero_attack_scripts(game, self, position, &hero_unit, p, defender, defender_pos, &hero) {
+                scripts.push(script.clone());
+            }
+        }
+        scripts
     }
 
-    pub fn get_kill_scripts(&self, game: &Game<D>, position: Point) -> Vec<KillScript> {
-        self.get_commander(game).unit_kill_scripts(self, game, position)
+    pub fn get_kill_scripts(&self, game: &Game<D>, position: Point, defender: &Unit<D>, defender_pos: Point) -> Vec<KillScript> {
+        let mut scripts = self.get_commander(game).unit_kill_scripts(self, game, position, defender, defender_pos);
+        for (p, hero_unit, hero) in game.get_map().hero_influence_at(position, self.get_owner_id()) {
+            for script in self.environment.config.hero_kill_scripts(game, self, position, &hero_unit, p, defender, defender_pos, &hero) {
+                scripts.push(script.clone());
+            }
+        }
+        scripts
     }
 
     // methods that go beyond getter / setter functionality
@@ -577,17 +630,13 @@ impl<D: Direction> Unit<D> {
         })
     }
 
-    pub fn fog_replacement(&self, terrain: &Terrain, intensity: FogIntensity) -> Option<Self> {
+    pub fn fog_replacement(&self, game: &Game<D>, pos: Point, intensity: FogIntensity) -> Option<Self> {
         let hero = self.get_hero();
-        let visibility = self.environment.unit_visibility(self.typ, &hero, self.get_owner_id());
+        let visibility = self.environment.config.commander_unit_visibility(&self.get_commander(game), self, game, pos);
         match intensity {
             FogIntensity::TrueSight => return Some(self.clone()),
             FogIntensity::NormalVision => {
-                if match visibility {
-                    UnitVisibility::Stealth => true,
-                    UnitVisibility::Normal => terrain.hides_unit(self),
-                    UnitVisibility::AlwaysVisible => false,
-                } {
+                if visibility == UnitVisibility::Stealth {
                     return None
                 }
             }
@@ -595,11 +644,7 @@ impl<D: Direction> Unit<D> {
                 match visibility {
                     UnitVisibility::Stealth => return None,
                     UnitVisibility::Normal => {
-                        if terrain.hides_unit(self) {
-                            return None
-                        } else {
-                            return Some(UnitType::Unknown.instance(&self.environment).build_with_defaults())
-                        }
+                        return Some(UnitType::Unknown.instance(&self.environment).build_with_defaults())
                     }
                     UnitVisibility::AlwaysVisible => (),
                 }
@@ -755,7 +800,7 @@ impl<D: Direction> Unit<D> {
         }
         // terrain has to exist since destination point was found from path
         let terrain = game.get_map().get_terrain(destination).unwrap();
-        let blocking_unit = game.get_map().get_unit(destination).and_then(|u| u.fog_replacement(terrain, get_fog(destination)));
+        let blocking_unit = game.get_map().get_unit(destination).and_then(|u| u.fog_replacement(game, destination, get_fog(destination)));
         if path.start != destination && blocking_unit.is_some() {
             if let Some(transporter) = game.get_map().get_unit(destination) {
                 if transporter.can_transport(self) {
@@ -787,11 +832,11 @@ impl<D: Direction> Unit<D> {
                     }
                 }
             } else if self.can_build_units() && self.transport_capacity() == 0 {
-                let attr_overrides = self.environment.config.unit_build_overrides(self.typ);
+                let attr_overrides = self.build_overrides(game, destination);
                 for unit in self.transportable_units() {
                     if unit.price(&self.environment, self.get_owner_id()) <= funds_after_path {
                         let mut amphibious = Amphibious::default();
-                        for attr_override in attr_overrides {
+                        for attr_override in &attr_overrides {
                             if !self.environment.unit_attributes(*unit, self.get_owner_id()).any(|k| *k == attr_override.key()) {
                                 continue;
                             }

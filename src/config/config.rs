@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::error::Error;
 
 use interfaces::ConfigInterface;
 use num_rational::Rational32;
@@ -25,7 +24,6 @@ use crate::units::unit_types::UnitType;
 use crate::units::attributes::*;
 use crate::units::hero::*;
 
-use super::ConfigParseError;
 use super::hero_type_config::HeroTypeConfig;
 use super::commander_power_config::CommanderPowerConfig;
 use super::commander_type_config::CommanderTypeConfig;
@@ -38,389 +36,47 @@ use super::unit_type_config::UnitTypeConfig;
 const DEFAULT_SPLASH: [Rational32; 1] = [Rational32::new_raw(1, 1)];
 
 pub struct Config {
+    pub(super) name: String,
     // units
-    unit_types: Vec<UnitType>,
-    units: HashMap<UnitType, UnitTypeConfig>,
-    unit_transports: HashMap<UnitType, Vec<UnitType>>,
-    unit_attributes: HashMap<UnitType, Vec<AttributeKey>>,
-    unit_hidden_attributes: HashMap<UnitType, Vec<AttributeKey>>,
-    attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
+    pub(super) unit_types: Vec<UnitType>,
+    pub(super) units: HashMap<UnitType, UnitTypeConfig>,
+    pub(super) unit_transports: HashMap<UnitType, Vec<UnitType>>,
+    pub(super) unit_attributes: HashMap<UnitType, Vec<AttributeKey>>,
+    pub(super) unit_hidden_attributes: HashMap<UnitType, Vec<AttributeKey>>,
+    pub(super) attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
     // heroes
-    hero_types: Vec<HeroType>,
-    heroes: HashMap<HeroType, HeroTypeConfig>,
-    hero_units: HashMap<HeroType, HashSet<UnitType>>,
-    max_hero_charge: u8,
+    pub(super) hero_types: Vec<HeroType>,
+    pub(super) heroes: HashMap<HeroType, HeroTypeConfig>,
+    pub(super) hero_units: HashMap<HeroType, HashSet<UnitType>>,
+    pub(super) hero_powered_units: HashMap<HeroType, HashMap<Option<bool>, Vec<CommanderPowerUnitConfig>>>,
+    pub(super) max_hero_charge: u8,
     // terrain
-    terrain_types: Vec<TerrainType>,
-    terrains: HashMap<TerrainType, TerrainTypeConfig>,
-    terrain_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
-    terrain_hidden_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
-    movement_cost: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    attack_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    defense_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    hides_unit: HashMap<TerrainType, HashSet<UnitType>>,
-    build_or_repair: HashMap<TerrainType, Vec<UnitType>>,
-    max_capture_resistance: u8,
-    terrain_max_anger: u8,
-    terrain_max_built_this_turn: u8,
+    pub(super) terrain_types: Vec<TerrainType>,
+    pub(super) terrains: HashMap<TerrainType, TerrainTypeConfig>,
+    pub(super) terrain_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
+    pub(super) terrain_hidden_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
+    pub(super) movement_cost: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
+    pub(super) attack_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
+    pub(super) defense_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
+    pub(super) build_or_repair: HashMap<TerrainType, Vec<UnitType>>,
+    pub(super) max_capture_resistance: u8,
+    pub(super) terrain_max_anger: u8,
+    pub(super) terrain_max_built_this_turn: u8,
     // commanders
-    commander_types: Vec<CommanderType>,
-    commanders: HashMap<CommanderType, CommanderTypeConfig>,
-    commander_powers: HashMap<CommanderType, Vec<CommanderPowerConfig>>,
-    default_unit_overrides: Vec<CommanderPowerUnitConfig>,
-    commander_units: HashMap<CommanderType, Vec<CommanderPowerUnitConfig>>,
-    commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
-    max_commander_charge: u32,
+    pub(super) commander_types: Vec<CommanderType>,
+    pub(super) commanders: HashMap<CommanderType, CommanderTypeConfig>,
+    pub(super) commander_powers: HashMap<CommanderType, Vec<CommanderPowerConfig>>,
+    pub(super) default_unit_overrides: Vec<CommanderPowerUnitConfig>,
+    pub(super) commander_units: HashMap<CommanderType, HashMap<Option<u8>, Vec<CommanderPowerUnitConfig>>>,
+    pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
+    pub(super) max_commander_charge: u32,
 }
 
 impl ConfigInterface for Config {}
 
 impl Config {
-    pub fn parse(
-        // units
-        unit_type_config: &str,
-        unit_transport_config: &str,
-        unit_attribute_config: &str,
-        attack_damage_config: &str,
-        // heroes
-        hero_type_config: &str,
-        hero_unit_config: &str,
-        // terrain
-        terrain_type_config: &str,
-        terrain_attribute_config: &str,
-        terrain_movement_config: &str,
-        terrain_attack_config: &str,
-        terrain_defense_config: &str,
-        terrain_hiding_config: &str,
-        terrain_build_repair_config: &str,
-        // commanders
-        commander_type_config: &str,
-        commander_power_config: &str,
-        commander_power_unit_config: &str,
-        commander_unit_attribute_config: &str,
-    ) -> Result<Self, Box<dyn Error>> {
-        let mut result = Self {
-            // units
-            unit_types: Vec::new(),
-            units: HashMap::new(),
-            unit_transports: HashMap::new(),
-            unit_attributes: HashMap::new(),
-            unit_hidden_attributes: HashMap::new(),
-            attack_damage: HashMap::new(),
-            // heroes
-            hero_types: Vec::new(),
-            heroes: HashMap::new(),
-            hero_units: HashMap::new(),
-            max_hero_charge: 0,
-            // terrain
-            terrain_types: Vec::new(),
-            terrains: HashMap::new(),
-            terrain_attributes: HashMap::new(),
-            terrain_hidden_attributes: HashMap::new(),
-            movement_cost: HashMap::new(),
-            attack_bonus: HashMap::new(),
-            defense_bonus: HashMap::new(),
-            hides_unit: HashMap::new(),
-            build_or_repair: HashMap::new(),
-            max_capture_resistance: 0,
-            terrain_max_anger: 0,
-            terrain_max_built_this_turn: 0,
-            // commanders
-            commander_types: Vec::new(),
-            commanders: HashMap::new(),
-            commander_powers: HashMap::new(),
-            default_unit_overrides: Vec::new(),
-            commander_units: HashMap::new(),
-            commander_unit_attributes: HashMap::new(),
-            max_commander_charge: 0,
-        };
-        // simple unit data
-        let mut reader = csv::Reader::from_reader(unit_type_config.as_bytes());
-        for line in reader.deserialize() {
-            let line: UnitTypeConfig = line?;
-            result.unit_types.push(line.id);
-            result.units.insert(line.id, line);
-        }
-        // unit transport
-        let mut reader = csv::Reader::from_reader(unit_transport_config.as_bytes());
-        let mut transported: Vec<UnitType> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            transported.push(serde_json::from_str(header)?);
-        }
-        for line in reader.records() {
-            let mut line = line.into_iter();
-            let typ: UnitType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values: Vec<UnitType> = Vec::new();
-            for (i, val) in line.enumerate() {
-                if val.as_slice().len() > 0 && i < transported.len() {
-                    values.push(transported[i]);
-                }
-            }
-            if transported.len() > 0 {
-                result.unit_transports.insert(typ, values);
-            }
-        }
-        // unit attributes
-        let mut reader = csv::Reader::from_reader(unit_attribute_config.as_bytes());
-        let mut attributes: Vec<AttributeKey> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            attributes.push(serde_json::from_str(header)?);
-        }
-        for (l, line) in reader.records().enumerate() {
-            let mut line = line.into_iter();
-            let typ: UnitType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values: Vec<AttributeKey> = Vec::new();
-            let mut hidden: Vec<AttributeKey> = Vec::new();
-            for (i, val) in line.enumerate() {
-                match val.as_slice() {
-                    "true" => values.push(attributes[i]),
-                    "false" => {
-                        values.push(attributes[i]);
-                        hidden.push(attributes[i]);
-                    }
-                    "" => (),
-                    e => return Err(Box::new(ConfigParseError::InvalidCellData("unit_attribute_config", l, i, e.to_string()))),
-                }
-            }
-            result.unit_attributes.insert(typ, values);
-            result.unit_hidden_attributes.insert(typ, hidden);
-        }
-        // attack damage
-        let mut reader = csv::Reader::from_reader(attack_damage_config.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut defenders: Vec<UnitType> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            defenders.push(serde_json::from_str(header)?);
-        }
-        for line in reader.records() {
-            let mut line = line.into_iter();
-            let typ: UnitType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values = HashMap::new();
-            for (i, val) in line.enumerate() {
-                if val.as_slice().len() > 0 && i < defenders.len() {
-                    values.insert(defenders[i], val.as_slice().parse()?);
-                }
-            }
-            if defenders.len() > 0 {
-                result.attack_damage.insert(typ, values);
-            }
-        }
-
-        // simple hero data
-        let mut reader = csv::Reader::from_reader(hero_type_config.as_bytes());
-        for line in reader.deserialize() {
-            let line: HeroTypeConfig = line?;
-            result.hero_types.push(line.id);
-            result.max_hero_charge = result.max_hero_charge.max(line.charge);
-            result.heroes.insert(line.id, line);
-        }
-        if result.max_hero_charge > i8::MAX as u8 {
-            // TODO: return error
-        }
-        // unit is allowed to have that hero
-        let mut reader = csv::Reader::from_reader(hero_unit_config.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut units: Vec<UnitType> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            units.push(serde_json::from_str(header)?);
-        }
-        for line in reader.records() {
-            let mut line = line.into_iter();
-            let typ: HeroType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values = HashSet::new();
-            for (i, val) in line.enumerate() {
-                if val.as_slice().len() > 0 && i < units.len() {
-                    values.insert(units[i]);
-                }
-            }
-            if units.len() > 0 {
-                result.hero_units.insert(typ, values);
-            }
-        }
-
-        // simple terrain data
-        let mut reader = csv::Reader::from_reader(terrain_type_config.as_bytes());
-        for line in reader.deserialize() {
-            let line: TerrainTypeConfig = line?;
-            result.terrain_types.push(line.id);
-            result.max_capture_resistance = result.max_capture_resistance.max(line.capture_resistance);
-            result.terrain_max_anger = result.terrain_max_anger.max(line.max_anger);
-            result.terrain_max_built_this_turn = result.terrain_max_built_this_turn.max(line.max_builds_per_turn);
-            result.terrains.insert(line.id, line);
-        }
-        // attributes
-        let mut reader = csv::Reader::from_reader(terrain_attribute_config.as_bytes());
-        let mut attributes: Vec<TerrainAttributeKey> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            attributes.push(serde_json::from_str(header)?);
-        }
-        for (l, line) in reader.records().enumerate() {
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values: Vec<TerrainAttributeKey> = Vec::new();
-            let mut hidden: Vec<TerrainAttributeKey> = Vec::new();
-            for (i, val) in line.enumerate() {
-                match val.as_slice() {
-                    "true" => values.push(attributes[i]),
-                    "foggy" => {
-                        values.push(attributes[i]);
-                        hidden.push(attributes[i]);
-                    }
-                    "" => (),
-                    e => return Err(Box::new(ConfigParseError::InvalidCellData("terrain_attribute_config", l, i, e.to_string()))),
-                }
-            }
-            result.terrain_attributes.insert(typ, values);
-            result.terrain_hidden_attributes.insert(typ, hidden);
-        }
-        // movement cost
-        let mut reader = csv::Reader::from_reader(terrain_movement_config.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut movement_types: Vec<MovementType> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            movement_types.push(serde_json::from_str(header)?);
-        }
-        for line in reader.records() {
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values = HashMap::new();
-            for (i, val) in line.enumerate() {
-                if val.as_slice().len() > 0 && i < movement_types.len() {
-                    values.insert(movement_types[i], val.as_slice().parse()?);
-                }
-            }
-            if movement_types.len() > 0 {
-                result.movement_cost.insert(typ, values);
-            }
-        }
-        // attack bonus
-        let mut reader = csv::Reader::from_reader(terrain_attack_config.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut attackers: Vec<MovementType> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            attackers.push(serde_json::from_str(header)?);
-        }
-        for line in reader.records() {
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values = HashMap::new();
-            for (i, val) in line.enumerate() {
-                if val.as_slice().len() > 0 && i < attackers.len() {
-                    values.insert(attackers[i], val.as_slice().parse()?);
-                }
-            }
-            if attackers.len() > 0 {
-                result.attack_bonus.insert(typ, values);
-            }
-        }
-        // defense bonus
-        let mut reader = csv::Reader::from_reader(terrain_defense_config.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut defenders: Vec<MovementType> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            defenders.push(serde_json::from_str(header)?);
-        }
-        for line in reader.records() {
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values = HashMap::new();
-            for (i, val) in line.enumerate() {
-                if val.as_slice().len() > 0 && i < defenders.len() {
-                    values.insert(defenders[i], val.as_slice().parse()?);
-                }
-            }
-            if defenders.len() > 0 {
-                result.defense_bonus.insert(typ, values);
-            }
-        }
-        // terrain hides unit
-        let mut reader = csv::Reader::from_reader(terrain_hiding_config.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut units: Vec<UnitType> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            units.push(serde_json::from_str(header)?);
-        }
-        for line in reader.records() {
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values = HashSet::new();
-            for (i, val) in line.enumerate() {
-                if val.as_slice().len() > 0 && i < units.len() {
-                    values.insert(units[i]);
-                }
-            }
-            if units.len() > 0 {
-                result.hides_unit.insert(typ, values);
-            }
-        }
-        // terrain building / repairing
-        let mut reader = csv::Reader::from_reader(terrain_build_repair_config.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut units: Vec<UnitType> = Vec::new();
-        for header in reader.headers()?.into_iter().skip(1) {
-            units.push(serde_json::from_str(header)?);
-        }
-        for line in reader.records() {
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => serde_json::from_str(t.as_slice())?,
-                _ => continue,
-            };
-            let mut values = Vec::new();
-            for (i, val) in line.enumerate() {
-                if val.as_slice().len() > 0 && i < units.len() {
-                    values.push(units[i]);
-                }
-            }
-            if units.len() > 0 {
-                result.build_or_repair.insert(typ, values);
-            }
-        }
-
-        // commanders
-        let mut reader = csv::Reader::from_reader(commander_type_config.as_bytes());
-        for line in reader.deserialize() {
-            let line: CommanderTypeConfig = line?;
-            result.commander_types.push(line.id);
-            result.max_commander_charge = result.max_commander_charge.max(line.max_charge);
-            result.commanders.insert(line.id, line);
-        }
-        if result.max_commander_charge > i32::MAX as u32 {
-            // TODO: return error
-        }
-        Ok(result)
-    }
-
     pub fn name(&self) -> &str {
-        // TODO
-        ""
+        &self.name
     }
 
     pub fn max_player_count(&self) -> i8 {
@@ -516,10 +172,6 @@ impl Config {
         self.unit_config(typ).can_build_units
     }
 
-    pub(crate) fn unit_build_overrides(&self, typ: UnitType) -> &HashSet<AttributeOverride> {
-        &self.unit_config(typ).build_overrides
-    }
-
     pub fn base_cost(&self, typ: UnitType) -> i32 {
         self.unit_config(typ).cost as i32
     }
@@ -542,14 +194,6 @@ impl Config {
 
     pub fn vision_range(&self, typ: UnitType) -> usize {
         self.unit_config(typ).vision
-    }
-
-    pub fn on_start_turn(&self, typ: UnitType) -> &[UnitScript] {
-        &self.unit_config(typ).on_start_turn
-    }
-
-    pub fn on_death(&self, typ: UnitType) -> &[UnitScript] {
-        &self.unit_config(typ).on_death
     }
 
     pub(crate) fn unit_specific_attributes(&self, typ: UnitType) -> &[AttributeKey] {
@@ -607,6 +251,90 @@ impl Config {
         self.hero_config(typ).transport_capacity
     }
 
+    pub(super) fn hero_unit_configs<'a, D: Direction>(&'a self, game: &'a Game<D>, hero: HeroType, power: bool, unit: &'a Unit<D>, unit_pos: Point, hero_unit: &'a Unit<D>, hero_pos: Point, other_unit: Option<(&'a Unit<D>, Point)>) -> impl Iterator<Item = &'a CommanderPowerUnitConfig> {
+        let mut slices = vec![&self.default_unit_overrides];
+        // should always be true
+        if let Some(configs) = self.hero_powered_units.get(&hero) {
+            if let Some(neutral) = configs.get(&None) {
+                slices.push(neutral);
+            }
+            if let Some(power) = configs.get(&Some(power)) {
+                slices.push(power);
+            }
+        }
+        slices.into_iter()
+        .flatten()
+        .filter(move |config| {
+            config.affects.iter().all(|filter| filter.check(self, game, unit, unit_pos, Some((hero_unit, hero_pos)), other_unit))
+        })
+    }
+
+    pub fn aura_attack_bonus<D: Direction>(&self, game: &Game<D>, unit: &Unit<D>, unit_pos: Point, hero_unit: &Unit<D>, hero_pos: Point, other_unit: &Unit<D>, other_pos: Point, hero: HeroType, power: bool, is_counter: bool) -> Rational32 {
+        let mut result = Rational32::from_integer(0);
+        for config in self.hero_unit_configs(game, hero, power, unit, unit_pos, hero_unit, hero_pos, Some((other_unit, other_pos))) {
+            if is_counter {
+                result += config.bonus_counter_attack;
+            } else {
+                result += config.bonus_attack;
+            }
+        }
+        result
+    }
+
+    pub fn aura_defense_bonus<D: Direction>(&self, game: &Game<D>, unit: &Unit<D>, unit_pos: Point, hero_unit: &Unit<D>, hero_pos: Point, other_unit: &Unit<D>, other_pos: Point, hero: HeroType, power: bool, is_counter: bool) -> Rational32 {
+        let mut result = Rational32::from_integer(0);
+        for config in self.hero_unit_configs(game, hero, power, unit, unit_pos, hero_unit, hero_pos, Some((other_unit, other_pos))) {
+            if is_counter {
+                result += config.bonus_counter_defense;
+            } else {
+                result += config.bonus_defense;
+            }
+        }
+        result
+    }
+
+    pub fn hero_attribute_overrides<'a, D: Direction>(&'a self, game: &'a Game<D>, unit: &'a Unit<D>, unit_pos: Point, hero_unit: &'a Unit<D>, hero_pos: Point, hero: &'a Hero) -> impl Iterator<Item = &'a AttributeOverride> {
+        self.hero_unit_configs(game, hero.typ(), hero.is_power_active(), unit, unit_pos, hero_unit, hero_pos, None)
+        .flat_map(|config| {
+            &config.build_overrides
+        })
+    }
+
+    pub fn hero_start_turn_scripts<'a, D: Direction>(&'a self, game: &'a Game<D>, unit: &'a Unit<D>, unit_pos: Point, hero_unit: &'a Unit<D>, hero_pos: Point, hero: &'a Hero) -> impl Iterator<Item = &'a UnitScript> {
+        self.hero_unit_configs(game, hero.typ(), hero.is_power_active(), unit, unit_pos, hero_unit, hero_pos, None)
+        .flat_map(|config| {
+            &config.on_start_turn
+        })
+    }
+
+    pub fn hero_end_turn_scripts<'a, D: Direction>(&'a self, game: &'a Game<D>, unit: &'a Unit<D>, unit_pos: Point, hero_unit: &'a Unit<D>, hero_pos: Point, hero: &'a Hero) -> impl Iterator<Item = &'a UnitScript> {
+        self.hero_unit_configs(game, hero.typ(), hero.is_power_active(), unit, unit_pos, hero_unit, hero_pos, None)
+        .flat_map(|config| {
+            &config.on_end_turn
+        })
+    }
+
+    pub fn hero_death_scripts<'a, D: Direction>(&'a self, game: &'a Game<D>, unit: &'a Unit<D>, unit_pos: Point, hero_unit: &'a Unit<D>, hero_pos: Point, hero: &'a Hero) -> impl Iterator<Item = &'a UnitScript> {
+        self.hero_unit_configs(game, hero.typ(), hero.is_power_active(), unit, unit_pos, hero_unit, hero_pos, None)
+        .flat_map(|config| {
+            &config.on_death
+        })
+    }
+
+    pub fn hero_attack_scripts<'a, D: Direction>(&'a self, game: &'a Game<D>, unit: &'a Unit<D>, unit_pos: Point, hero_unit: &'a Unit<D>, hero_pos: Point, other_unit: &'a Unit<D>, other_pos: Point, hero: &'a Hero) -> impl Iterator<Item = &'a AttackScript> {
+        self.hero_unit_configs(game, hero.typ(), hero.is_power_active(), unit, unit_pos, hero_unit, hero_pos, Some((other_unit, other_pos)))
+        .flat_map(|config| {
+            &config.on_attack
+        })
+    }
+
+    pub fn hero_kill_scripts<'a, D: Direction>(&'a self, game: &'a Game<D>, unit: &'a Unit<D>, unit_pos: Point, hero_unit: &'a Unit<D>, hero_pos: Point, other_unit: &'a Unit<D>, other_pos: Point, hero: &'a Hero) -> impl Iterator<Item = &'a KillScript> {
+        self.hero_unit_configs(game, hero.typ(), hero.is_power_active(), unit, unit_pos, hero_unit, hero_pos, Some((other_unit, other_pos)))
+        .flat_map(|config| {
+            &config.on_kill
+        })
+    }
+
     // terrain
 
     pub fn terrain_count(&self) -> usize {
@@ -643,10 +371,6 @@ impl Config {
 
     pub fn terrain_chess(&self, typ: TerrainType) -> bool {
         self.terrain_config(typ).chess
-    }
-
-    pub fn terrain_max_capture_progress(&self, typ: TerrainType) -> u8 {
-        self.terrain_config(typ).max_capture_progress
     }
 
     pub fn terrain_max_built_this_turn(&self) -> u8 {
@@ -707,12 +431,6 @@ impl Config {
 
     pub fn terrain_sells_hero(&self, typ: TerrainType) -> bool {
         self.terrain_config(typ).can_sell_hero
-    }
-
-    pub fn terrain_hides_unit(&self, typ: TerrainType, unit: UnitType) -> bool {
-        self.hides_unit.get(&typ)
-        .and_then(|map| Some(map.contains(&unit)))
-        .unwrap_or(false)
     }
 
     pub fn terrain_build_or_repair(&self, typ: TerrainType) -> &[UnitType] {
@@ -789,42 +507,77 @@ impl Config {
 
     // commander unit
 
-    pub(super) fn commander_unit_configs<'a, D: Direction>(&'a self, commander: &'a Commander, unit: &'a Unit<D>, game: &'a Game<D>, pos: Point) -> impl Iterator<Item = &'a CommanderPowerUnitConfig> {
+    pub(super) fn commander_unit_configs<'a, D: Direction>(&'a self, commander: &'a Commander, unit: &'a Unit<D>, game: &'a Game<D>, pos: Point, other_unit: Option<(&'a Unit<D>, Point)>) -> impl Iterator<Item = &'a CommanderPowerUnitConfig> {
+        let mut slices = vec![&self.default_unit_overrides];
+        // should always be true
         if let Some(configs) = self.commander_units.get(&commander.typ()) {
-            configs.as_slice()
-        } else {
-            &[]
-        }.iter()
+            if let Some(neutral) = configs.get(&None) {
+                slices.push(neutral);
+            }
+            if let Some(power) = configs.get(&Some(commander.get_active_power() as u8)) {
+                slices.push(power);
+            }
+        }
+        slices.into_iter()
+        .flatten()
         .filter(move |config| {
-            (config.commander_power_id.is_none() || config.commander_power_id == Some(commander.get_active_power() as u8))
-            && config.affects.iter().all(|filter| filter.check(self, unit, game, pos))
+            config.affects.iter().all(|filter| filter.check(self, game, unit, pos, None, other_unit))
         })
-        .chain(
-            self.default_unit_overrides.iter().filter(move |config| {
-                config.affects.iter().all(|filter| filter.check(self, unit, game, pos))
-            })
-        )
+    }
+
+    pub fn commander_unit_visibility<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point) -> UnitVisibility {
+        let mut result = self.unit_config(unit.typ()).visibility;
+        for config in self.commander_unit_configs(commander, unit, game, pos, None) {
+            if let Some(visibility) = config.visibility {
+                result = visibility;
+            }
+        }
+        // TODO: hero
+        result
+    }
+
+    pub fn commander_unit_attribute_overrides<'a, D: Direction>(&'a self, commander: &'a Commander, unit: &'a Unit<D>, game: &'a Game<D>, pos: Point) -> impl Iterator<Item = &'a AttributeOverride> {
+        self.commander_unit_configs(commander, unit, game, pos, None)
+        .flat_map(|config| {
+            &config.build_overrides
+        })
+    }
+
+    pub fn commander_unit_start_turn_effects<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
+        let mut result = Vec::new();
+        for config in self.commander_unit_configs(commander, unit, game, pos, None) {
+            result.extend(config.on_start_turn.iter().cloned())
+        }
+        result
+    }
+
+    pub fn commander_unit_end_turn_effects<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
+        let mut result = Vec::new();
+        for config in self.commander_unit_configs(commander, unit, game, pos, None) {
+            result.extend(config.on_end_turn.iter().cloned())
+        }
+        result
     }
 
     pub fn commander_unit_death_effects<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
         let mut result = Vec::new();
-        for config in self.commander_unit_configs(commander, unit, game, pos) {
+        for config in self.commander_unit_configs(commander, unit, game, pos, None) {
             result.extend(config.on_death.iter().cloned())
         }
         result
     }
 
-    pub fn commander_unit_attack_effects<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<AttackScript> {
+    pub fn commander_unit_attack_effects<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point, other_unit: &Unit<D>, other_pos: Point) -> Vec<AttackScript> {
         let mut result = Vec::new();
-        for config in self.commander_unit_configs(commander, unit, game, pos) {
+        for config in self.commander_unit_configs(commander, unit, game, pos, Some((other_unit, other_pos))) {
             result.extend(config.on_attack.iter().cloned())
         }
         result
     }
 
-    pub fn commander_unit_kill_effects<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<KillScript> {
+    pub fn commander_unit_kill_effects<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point, other_unit: &Unit<D>, other_pos: Point) -> Vec<KillScript> {
         let mut result = Vec::new();
-        for config in self.commander_unit_configs(commander, unit, game, pos) {
+        for config in self.commander_unit_configs(commander, unit, game, pos, Some((other_unit, other_pos))) {
             result.extend(config.on_kill.iter().cloned())
         }
         result
@@ -832,15 +585,15 @@ impl Config {
 
     pub fn commander_movement_bonus<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Rational32 {
         let mut result = Rational32::from_integer(0);
-        for config in self.commander_unit_configs(commander, unit, game, pos) {
+        for config in self.commander_unit_configs(commander, unit, game, pos, None) {
             result += config.bonus_movement_points;
         }
         result
     }
 
-    pub fn commander_attack_bonus<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool) -> Rational32 {
+    pub fn commander_attack_bonus<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool, other_unit: &Unit<D>, other_pos: Point) -> Rational32 {
         let mut result = Rational32::from_integer(0);
-        for config in self.commander_unit_configs(commander, unit, game, pos) {
+        for config in self.commander_unit_configs(commander, unit, game, pos, Some((other_unit, other_pos))) {
             if is_counter {
                 result += config.bonus_counter_attack;
             } else {
@@ -850,9 +603,9 @@ impl Config {
         result
     }
 
-    pub fn commander_defense_bonus<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool) -> Rational32 {
+    pub fn commander_defense_bonus<D: Direction>(&self, commander: &Commander, unit: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool, other_unit: &Unit<D>, other_pos: Point) -> Rational32 {
         let mut result = Rational32::from_integer(0);
-        for config in self.commander_unit_configs(commander, unit, game, pos) {
+        for config in self.commander_unit_configs(commander, unit, game, pos, Some((other_unit, other_pos))) {
             if is_counter {
                 result += config.bonus_counter_defense;
             } else {
@@ -860,14 +613,5 @@ impl Config {
             }
         }
         result
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn export_import_map_d4() {
-        // TODO
     }
 }

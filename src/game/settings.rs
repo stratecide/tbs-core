@@ -111,7 +111,6 @@ pub struct PlayerSettings {
 
 impl PlayerSettings {
     pub fn new(owner_id: u8) -> Self {
-        // TODO: validate input after importing. commander_options shouldn't contain the same commander multiple times
         let commander_options = CommanderType::list();
         let commander = commander_options.get(0).cloned().unwrap_or(CommanderType::None);
         Self {

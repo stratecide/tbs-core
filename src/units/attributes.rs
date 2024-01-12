@@ -1,14 +1,17 @@
+use std::collections::HashSet;
 use std::fmt::{Display, Debug};
+use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
 use zipper::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use zipper_derive::Zippable;
 
 use crate::config::environment::Environment;
 use crate::map::direction::{Direction, Direction4, Direction6};
 use crate::map::point::Point;
 use crate::player::Owner;
+use crate::config::ConfigParseError;
 
 use super::unit_types::UnitType;
 use super::unit::*;
@@ -17,20 +20,22 @@ use super::hero::*;
 pub const DEFAULT_OWNER: i8 = 0;
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
-pub(crate) enum AttributeKey {
-    Hp,
-    Hero,
-    Owner,
-    ActionStatus,
-    Amphibious,
-    Direction,
-    DroneStationId,
-    DroneId,
-    Transported,
-    Zombified,
-    Unmoved,
-    EnPassant,
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum AttributeKey {
+        Hp,
+        Hero,
+        Owner,
+        ActionStatus,
+        Amphibious,
+        Direction,
+        DroneStationId,
+        DroneId,
+        Transported,
+        Zombified,
+        Unmoved,
+        EnPassant,
+    }
 }
 
 impl Display for AttributeKey {
@@ -227,12 +232,34 @@ pub(crate) trait TrAttribute<D: Direction>: TryFrom<Attribute<D>, Error = Attrib
     fn key() -> AttributeKey;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
-pub(crate) enum AttributeOverride {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AttributeOverride {
     InWater,
     OnLand,
     Hp(u8),
     Zombified
+}
+
+impl FromStr for AttributeOverride {
+    type Err = ConfigParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.split(&['(', '-', ')'])
+        .map(str::trim);
+        Ok(match it.next().unwrap() {
+            "InWater" => Self::InWater,
+            "OnLand" => Self::OnLand,
+            "Zombified" => Self::Zombified,
+            "Hp" => {
+                let hp = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
+                let hp: u8 = hp.parse().map_err(|_| ConfigParseError::InvalidInteger(hp.to_string()))?;
+                if hp == 0 || hp > 100 {
+                    return Err(ConfigParseError::InvalidInteger(hp.to_string()));
+                }
+                Self::Hp(hp)
+            }
+            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+        })
+    }
 }
 
 impl AttributeOverride {
@@ -359,13 +386,14 @@ pub(super) struct Zombified(pub(super) bool);
 attribute_tuple!(Zombified, Zombified);
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
-pub enum UnitVisibility {
-    Stealth,
-    Normal,
-    AlwaysVisible,
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    pub enum UnitVisibility {
+        Stealth,
+        Normal,
+        AlwaysVisible,
+    }
 }
-
 
 
 

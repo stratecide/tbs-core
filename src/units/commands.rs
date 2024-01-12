@@ -181,7 +181,7 @@ impl<D: Direction> UnitCommand<D> {
         let terrain = handler.get_map().get_terrain(start).ok_or(CommandError::InvalidPoint(start))?;
         let team = handler.get_game().current_player().get_team();
         let fog_intensity = handler.get_game().get_fog_at(team, start);
-        let unit = handler.get_map().get_unit(start).and_then(|u| u.fog_replacement(terrain, fog_intensity)).ok_or(CommandError::MissingUnit)?;
+        let unit = handler.get_map().get_unit(start).and_then(|u| u.fog_replacement(handler.get_game(), start, fog_intensity)).ok_or(CommandError::MissingUnit)?;
         let unit = if let Some(index) = self.unload_index {
             let boarded = unit.get_transported();
             boarded.get(index).ok_or(CommandError::MissingBoardedUnit)?.clone()

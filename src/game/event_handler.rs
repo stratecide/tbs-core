@@ -517,16 +517,18 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn unit_status(&mut self, position: Point, status: ActionStatus) {
-        // TODO: check if unit can have that status
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        self.add_event(Event::UnitActionStatus(position, unit.get_status(), status));
+        if unit.can_have_status(status) && status != unit.get_status() {
+            self.add_event(Event::UnitActionStatus(position, unit.get_status(), status));
+        }
     }
 
     pub fn unit_status_boarded(&mut self, position: Point, index: usize, status: ActionStatus) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        let unit = unit.get_transported().get(index).cloned().unwrap();
-        // TODO: check if unit can have that status
-        self.add_event(Event::UnitActionStatusBoarded(position, index.into(), unit.get_status(), status));
+        let unit = unit.get_transported().get(index).unwrap();
+        if unit.can_have_status(status) && status != unit.get_status() {
+            self.add_event(Event::UnitActionStatusBoarded(position, index.into(), unit.get_status(), status));
+        }
     }
 
     /*pub fn unit_build_drone(&mut self, position: Point, drone: TransportableDrones) {

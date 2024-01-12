@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
-use serde::Deserialize;
+use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 
+use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -11,10 +13,29 @@ use crate::units::combat::{AttackType, AttackVector};
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UnitScript {
     Kraken,
     Attack(bool, bool),
+}
+
+impl FromStr for UnitScript {
+    type Err = ConfigParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.split(&['(', '-', ')'])
+        .map(str::trim);
+        Ok(match it.next().unwrap() {
+            "Kraken" => Self::Kraken,
+            "Attack" => {
+                let allow_counter = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
+                let allow_counter: bool = allow_counter.starts_with('t');
+                let charge_powers = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
+                let charge_powers: bool = charge_powers.starts_with('t');
+                Self::Attack(allow_counter, charge_powers)
+            }
+            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+        })
+    }
 }
 
 impl UnitScript {

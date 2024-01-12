@@ -1,10 +1,11 @@
-use serde::Deserialize;
-
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::terrain::ExtraMovementOptions;
 use crate::units::movement::PathStep;
+use super::ConfigParseError;
 
 /*#[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -14,16 +15,18 @@ pub struct MovementTypeConfig {
     permanent: PermanentBallast<D: Direction>,
 }*/
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum MovementPattern {
-    Standard,
-    StandardLoopLess,
-    None,
-    Straight, // Rook
-    Diagonal, // Bishop
-    Rays, // Queen
-    Knight,
-    Pawn,
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    pub enum MovementPattern {
+        Standard,
+        StandardLoopLess,
+        None,
+        Straight, // Rook
+        Diagonal, // Bishop
+        Rays, // Queen
+        Knight,
+        Pawn,
+    }
 }
 
 impl MovementPattern {

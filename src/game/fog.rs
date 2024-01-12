@@ -1,8 +1,11 @@
 use std::fmt::Display;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use zipper::*;
 use zipper::zipper_derive::*;
+
+use crate::config::ConfigParseError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable, PartialOrd, Ord)]
 #[zippable(bits = 2)]
@@ -192,10 +195,12 @@ fn gradient_progress(gradient: &[FogSetting], bright_duration: FogDuration, dark
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-pub enum VisionMode {
-    Normal,
-    Movement,
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    pub enum VisionMode {
+        Normal,
+        Movement,
+    }
 }
 
 impl VisionMode {

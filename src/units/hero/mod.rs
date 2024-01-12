@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::str::FromStr;
 
 use num_rational::Rational32;
 use serde::Deserialize;
@@ -11,6 +12,7 @@ use crate::map::direction::Direction;
 use crate::game::game::Game;
 use crate::map::map::Map;
 use crate::map::point::Point;
+use crate::config::ConfigParseError;
 use super::attributes::*;
 use super::commands::UnitAction;
 use super::movement::Path;
@@ -118,13 +120,13 @@ impl Hero {
         result
     }
 
-    pub fn aura_attack_bonus<D: Direction>(&self, attacker: &Unit<D>, is_counter: bool) -> Rational32 {
-        Rational32::from_integer(1)
+    /*pub fn aura_attack_bonus<D: Direction>(&self, attacker: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool) -> Rational32 {
+        self.environment.config.aura_attack_bonus(self.typ, self.power, attacker, game, pos, is_counter)
     }
 
-    pub fn aura_defense_bonus<D: Direction>(&self, defender: &Unit<D>, is_counter: bool) -> Rational32 {
-        Rational32::from_integer(1)
-    }
+    pub fn aura_defense_bonus<D: Direction>(&self, defender: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool) -> Rational32 {
+        self.environment.config.aura_defense_bonus(self.typ, self.power, defender, game, pos, is_counter)
+    }*/
 
     pub fn add_options_after_path<D: Direction>(&self, list: &mut Vec<UnitAction<D>>, unit: &Unit<D>, game: &Game<D>, path: &Path<D>, destination: Point, get_fog: impl Fn(Point) -> FogIntensity) {
         // TODO

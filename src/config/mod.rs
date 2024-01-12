@@ -7,17 +7,42 @@ mod commander_power_config;
 mod commander_unit_config;
 mod unit_filter;
 pub mod config;
+pub mod parse;
 pub mod environment;
 
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::error::Error;
+use std::path::PathBuf;
 
 use crate::commander::commander_type::CommanderType;
+use crate::units::attributes::AttributeKey;
+use crate::units::hero::HeroType;
+use crate::units::unit_types::UnitType;
+
 #[derive(Debug, Clone)]
 pub enum ConfigParseError {
+    CommanderMaxChargeExceeded(u32),
+    DuplicateHeader(String),
+    EmptyList,
+    FileMissing(String),
+    FolderMissing(PathBuf),
+    HeroMaxChargeExceeded(u8),
     InvalidCellData(&'static str, usize, usize, String),
+    InvalidColumnValue(String, String),
+    InvalidBool(String),
+    InvalidInteger(String),
+    InvalidRatio(String),
+    MissingColumn(String),
+    MissingCommanderForAttributes(CommanderType),
     MissingCommanderForPower(CommanderType),
+    MissingHeroForPower(HeroType),
+    MissingUnitAttribute(UnitType, AttributeKey),
+    NameTooShort,
+    NotEnoughValues(String),
+    NumberTooBig(String),
+    TooManyPowers(CommanderType, usize),
+    UnknownEnumMember(String),
 }
 
 impl Display for ConfigParseError {

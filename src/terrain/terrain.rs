@@ -135,13 +135,10 @@ impl Terrain {
         self.environment.config.terrain_movement_cost(self.typ, movement_type)
     }
 
-    pub fn hides_unit<D: Direction>(&self, unit: &Unit<D>) -> bool {
-        self.environment.config.terrain_hides_unit(self.typ, unit.typ())
-    }
-
     // getters + setters that relate to attributes
 
     pub fn has_attribute(&self, key: TerrainAttributeKey) -> bool {
+        // TODO: consider all attributes, not just terrain-specific ones
         self.environment.config.terrain_specific_attributes(self.typ).contains(&key)
     }
 
@@ -317,7 +314,6 @@ impl TerrainBuilder {
             panic!("Can't copy from terrain from different environment");
         }
         for (key, value) in &other.attributes {
-            // TODO: consider all attributes, not just terrain-specific ones
             if self.terrain.has_attribute(*key) {
                 self.terrain.attributes.insert(*key, value.clone());
             }

@@ -9,14 +9,16 @@ use crate::player::Owner;
 
 use super::TerrainType;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
-pub(crate) enum TerrainAttributeKey {
-    //PipeConnection,
-    Owner,
-    CaptureProgress,
-    BuiltThisTurn,
-    Exhausted,
-    Anger,
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    pub enum TerrainAttributeKey {
+        //PipeConnection,
+        Owner,
+        CaptureProgress,
+        BuiltThisTurn,
+        Exhausted,
+        Anger,
+    }
 }
 
 impl Display for TerrainAttributeKey {
@@ -87,7 +89,7 @@ impl TerrainAttribute {
                     } else {
                         zipper.write_u8((new_owner.0 + 1) as u8, bits_needed_for_max_value(environment.config.max_player_count() as u32));
                     }
-                    zipper.write_u8(*progress, bits_needed_for_max_value(environment.config.terrain_max_capture_progress(typ) as u32));
+                    zipper.write_u8(*progress, bits_needed_for_max_value(environment.config.terrain_capture_resistance(typ) as u32));
                 }
             }
             Self::BuiltThisTurn(counter) => zipper.write_u8(*counter, bits_needed_for_max_value(environment.config.terrain_max_builds_per_turn(typ) as u32)),
@@ -114,7 +116,7 @@ impl TerrainAttribute {
                     } else {
                         unzipper.read_u8(bits_needed_for_max_value(environment.config.max_player_count() as u32))? as i8 - 1
                     }.min(environment.config.max_player_count() - 1);
-                    let progress = unzipper.read_u8(bits_needed_for_max_value(environment.config.terrain_max_capture_progress(typ) as u32))?;
+                    let progress = unzipper.read_u8(bits_needed_for_max_value(environment.config.terrain_capture_resistance(typ) as u32))?;
                     Some((new_owner.into(), progress))
                 } else {
                     None

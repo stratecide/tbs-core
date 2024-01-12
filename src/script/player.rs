@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use interfaces::game_interface::ClientPerspective;
 use serde::Deserialize;
 
+use crate::config::ConfigParseError;
 use crate::details::Detail;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
@@ -10,12 +12,39 @@ use crate::units::unit::UnitBuilder;
 
 use super::unit::anger_kraken;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum PlayerScript {
     Kraken,
     MassDamage(u8),
     MassHeal(u8),
     ZombieResurrection(u8),
+}
+
+impl FromStr for PlayerScript {
+    type Err = ConfigParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.split(&['(', ' ', '-', ')'])
+        .map(str::trim);
+        Ok(match it.next().unwrap() {
+            "Kraken" => Self::Kraken,
+            "MassDamage" => {
+                let damage = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
+                let damage = damage.parse().map_err(|_| ConfigParseError::InvalidInteger(damage.to_string()))?;
+                Self::MassDamage(1.max(damage))
+            }
+            "MassHeal" => {
+                let heal = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
+                let heal = heal.parse().map_err(|_| ConfigParseError::InvalidInteger(heal.to_string()))?;
+                Self::MassHeal(1.max(heal))
+            }
+            "ZombieResurrection" => {
+                let hp = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
+                let hp = hp.parse().map_err(|_| ConfigParseError::InvalidInteger(hp.to_string()))?;
+                Self::ZombieResurrection(1.max(100.min(hp)))
+            }
+            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+        })
+    }
 }
 
 impl PlayerScript {

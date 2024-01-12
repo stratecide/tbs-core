@@ -16,6 +16,7 @@ use crate::game::fog::*;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
 use crate::player::*;
+use crate::units::attributes::AttributeKey;
 use crate::units::hero::HeroType;
 use crate::units::movement::Path;
 use crate::units::unit::*;
@@ -189,7 +190,7 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn can_see_unit_at(&self, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {
-        match unit.fog_replacement(self.map.get_terrain(position).expect(&format!("No terrain at {position:?}")), self.get_fog_at(team, position)) {
+        match unit.fog_replacement(self, position, self.get_fog_at(team, position)) {
             None => false,
             Some(unit) => accept_unknowns || unit.typ() != UnitType::Unknown,
         }
@@ -238,6 +239,24 @@ impl<D: Direction> Game<D> {
         }
         result
     }
+
+    pub fn visible_unit_with_attribute(&self, team: ClientPerspective, pos: Point, attribute: AttributeKey) -> bool {
+        self.get_map().get_unit(pos).unwrap().fog_replacement(self, pos, self.get_fog_at(team, pos))
+        .and_then(|u| Some(u.has_attribute(attribute))).unwrap_or(false)
+    }
+
+    pub fn export_field(&self, zipper: &mut Zipper, p: Point, fog_intensity: FogIntensity) {
+        let fd = self.map.get_field_data(p).fog_replacement(self, p, fog_intensity);
+        fd.export(zipper, &self.environment);
+    }
+
+    pub fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
+        self.map.wrapping_logic().zip(zipper);
+        for p in self.map.all_points() {
+            self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
+        }
+    }
+
 }
 
 fn export_fog(zipper: &mut Zipper, points: &Vec<Point>, fog: &HashMap<Point, FogIntensity>) {
@@ -392,7 +411,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
         // server perspective
         let mut zipper = Zipper::new();
         self.environment.settings.as_ref().unwrap().export(&mut zipper, &self.environment.config, true);
-        self.map.zip(&mut zipper, None);
+        self.zip(&mut zipper, None);
         zipper.write_u32(self.current_turn, 32);
         zipper.write_bool(self.ended);
         self.fog_mode.zip(&mut zipper);
@@ -408,7 +427,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
             let server = zipper.finish();
             // "None" perspective, visible to all
             let mut zipper = Zipper::new();
-            self.map.zip(&mut zipper, Some(neutral_fog));
+            self.zip(&mut zipper, Some(neutral_fog));
             zipper.write_u32(self.current_turn, 32);
             zipper.write_bool(self.ended);
             self.fog_mode.zip(&mut zipper);
@@ -428,7 +447,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
                     for p in &points {
                         let fog_intensity = fog.get(p).cloned().unwrap_or(FogIntensity::TrueSight);
                         if fog_intensity < neutral_fog.get(p).cloned().unwrap_or(FogIntensity::TrueSight) {
-                            self.map.export_field(&mut zipper, *p, fog_intensity);
+                            self.export_field(&mut zipper, *p, fog_intensity);
                         }
                     }
                     for player in self.players.iter() {

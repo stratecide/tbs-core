@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use serde::Deserialize;
 
+use crate::config::ConfigParseError;
 use crate::details::{MAX_STACK_SIZE, Detail};
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
@@ -12,6 +15,19 @@ use crate::units::unit::Unit;
 pub enum KillScript {
     Unexhaust,
     DeadSkull,
+}
+
+impl FromStr for KillScript {
+    type Err = ConfigParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.split(&['(', ' ', '-', ')'])
+        .map(str::trim);
+        Ok(match it.next().unwrap() {
+            "Unexhaust" => Self::Unexhaust,
+            "DeadSkull" => Self::DeadSkull,
+            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+        })
+    }
 }
 
 impl KillScript {
