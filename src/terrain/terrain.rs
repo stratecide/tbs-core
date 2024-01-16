@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use interfaces::game_interface::ClientPerspective;
 use num_rational::Rational32;
@@ -9,6 +10,7 @@ use zipper::*;
 use crate::config::environment::Environment;
 use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::game::Game;
+use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
@@ -44,6 +46,10 @@ impl Terrain {
             typ,
             attributes: FxHashMap::default(),
         }
+    }
+
+    pub(crate) fn start_game(&mut self, settings: &Arc<GameSettings>) {
+        self.environment.start_game(settings);
     }
 
     // getters that aren't influenced by attributes
@@ -146,7 +152,7 @@ impl Terrain {
         if let Some(a) = self.attributes.get(&T::key()) {
             T::try_from(a.clone()).expect("Impossible! attribute of wrong type")
         } else {
-            println!("Units of type {:?} don't have {} attribute, but it was requested anyways", self.typ, T::key());
+            //println!("Terrain of type {:?} doesn't have {} attribute, but it was requested anyways", self.typ, T::key());
             T::try_from(T::key().default(self.typ, &self.environment)).expect("Impossible! attribute defaults to wrong type")
         }
     }

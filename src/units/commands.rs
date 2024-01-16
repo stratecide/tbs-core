@@ -136,16 +136,16 @@ impl<D: Direction> UnitAction<D> {
                 true
             }
             Self::BuyUnit(unit_type, dir) => {
-                let destination = handler.get_map().get_neighbor(end, *dir).unwrap();
-                if handler.get_map().get_unit(destination.point).is_some() {
-                    handler.effect_fog_surprise(destination.point);
+                let (destination, distortion) = handler.get_map().get_neighbor(end, *dir).unwrap();
+                if handler.get_map().get_unit(destination).is_some() {
+                    handler.effect_fog_surprise(destination);
                 } else {
                     let owner_id = handler.get_game().current_player().get_owner_id();
                     let cost = unit_type.price(handler.environment(), owner_id);
                     let mut unit = unit_type.instance(handler.environment())
                     .set_owner_id(owner_id)
                     .set_status(ActionStatus::Exhausted)
-                    .set_direction(destination.direction);
+                    .set_direction(distortion.update_direction(*dir));
                     if let Some(drone_id) = handler.get_map().get_unit(end).unwrap().get_drone_station_id() {
                         // TODO: only a drone-station should be able to build drones
                         unit = unit.set_drone_id(drone_id);
@@ -157,7 +157,7 @@ impl<D: Direction> UnitAction<D> {
                     };
                     handler.money_buy(owner_id, cost as u32);
                     let unit = handler.animate_unit_path(&unit, &path, false);
-                    handler.unit_creation(destination.point, unit);
+                    handler.unit_creation(destination, unit);
                 }
                 true
             }
@@ -229,7 +229,7 @@ impl<D: Direction> UnitCommand<D> {
                 // doesn't matter if path_taken_works is true or not at this point
                 break
             } else if !path_taken_works {
-                fog_trap = Some(path_taken.end(handler.get_map()).unwrap());
+                fog_trap = Some(path_taken.end(handler.get_map()).unwrap().0);
                 path_taken.steps.pop();
             }
         }
@@ -248,13 +248,13 @@ impl<D: Direction> UnitCommand<D> {
             if path_taken.steps.len() == 0 && self.unload_index.is_some() {
                 handler.unit_status_boarded(path_taken.start, self.unload_index.unwrap(), ActionStatus::Exhausted);
             } else {
-                handler.unit_status(path_taken.end(handler.get_map())?, ActionStatus::Exhausted);
+                handler.unit_status(path_taken.end(handler.get_map())?.0, ActionStatus::Exhausted);
             }
         } else {
             if path_taken.steps.len() > 0 {
                 handler.unit_path(self.unload_index, &path_taken, board_at_the_end, false);
             }
-            let end = path_taken.end(handler.get_map()).unwrap();
+            let end = path_taken.end(handler.get_map()).unwrap().0;
             self.action.execute(handler, end, &path_taken);
         }
         exhaust_all_on_chess_board(handler, path_taken.start);

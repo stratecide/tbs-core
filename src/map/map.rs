@@ -8,7 +8,7 @@ use zipper_derive::Zippable;
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;
-use crate::game::settings;
+use crate::game::settings::{self, GameSettings};
 use crate::game::game::*;
 use crate::game::fog::*;
 use crate::game::events;
@@ -80,16 +80,28 @@ where D: Direction
         self.wrapping_logic.pointmap().is_point_valid(point)
     }
 
+    pub fn get_direction(&self, from: Point, to: Point) -> Option<D> {
+        for d in D::list() {
+            if let Some((p, _)) = self.get_neighbor(from, d) {
+                if p == to {
+                    return Some(d);
+                }
+            }
+        }
+        None
+    }
+
     /**
      * checks the pipe at dp.point for whether it can be entered by dp.direction and if true, returns the position of the next pipe tile
      * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
      */
-    fn next_pipe_tile(&self, dp: &OrientedPoint<D>) -> Option<OrientedPoint<D>> {
-        for det in self.details.get(&dp.point)? {
+    fn next_pipe_tile(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
+        for det in self.details.get(&point)? {
             match det {
-                Detail::Pipe(connection) => {
-                    if let Some(d) = connection.transform_direction(dp.direction) {
-                        return self.wrapping_logic.get_neighbor(dp.point, d)
+                Detail::Pipe(pipe_state) => {
+                    if let Some(disto) = pipe_state.distortion(direction) {
+                        return self.wrapping_logic.get_neighbor(point, disto.update_direction(direction))
+                        .and_then(|(p, d)| Some((p, disto + d)))
                     }
                 }
                 _ => (),
@@ -98,32 +110,24 @@ where D: Direction
         None
     }
 
-    pub fn get_direction(&self, from: Point, to: Point) -> Option<D> {
-        for d in D::list() {
-            if let Some(dp) = self.get_neighbor(from, d) {
-                if dp.point == to {
-                    return Some(d);
-                }
-            }
-        }
-        None
-    }
-
-    pub fn get_neighbor(&self, p: Point, d: D) -> Option<OrientedPoint<D>> {
-        if let Some(n) = self.wrapping_logic.get_neighbor(p, d) {
-            for det in self.get_details(n.point) {
+    pub fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
+        if let Some((point, mut distortion)) = self.wrapping_logic.get_neighbor(p, d) {
+            for det in self.get_details(point) {
                 match det {
                     Detail::Pipe(pipe_state) => {
-                        if pipe_state.transform_direction(n.direction).is_some() {
-                            let mut dp = n.clone();
-                            while let Some(next) = self.next_pipe_tile(&dp) {
-                                dp = next;
-                                if dp.point == n.point {
+                        if let Some(disto) = pipe_state.distortion(distortion.update_direction(d)) {
+                        //if pipe_state.transform_direction(n.1.update_direction(d)).is_some() {
+                            distortion += disto;
+                            let mut current = point;
+                            while let Some((next, disto)) = self.next_pipe_tile(current, distortion.update_direction(d)) {
+                                current = next;
+                                distortion += disto;
+                                if current == point {
                                     // infinite loop, abort
                                     return None;
                                 }
                             }
-                            return Some(dp);
+                            return Some((current, distortion));
                         } else {
                             break;
                         }
@@ -131,7 +135,7 @@ where D: Direction
                     _ => (),
                 }
             }
-            Some(n)
+            Some((point, distortion))
         } else {
             None
         }
@@ -142,13 +146,13 @@ where D: Direction
         for d in D::list() {
             match mode {
                 NeighborMode::Direct => {
-                    if let Some(neighbor) = self.wrapping_logic.get_neighbor(p, d) {
-                        result.push(neighbor);
+                    if let Some((p, distortion)) = self.wrapping_logic.get_neighbor(p, d) {
+                        result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
                     }
                 }
                 NeighborMode::FollowPipes => {
-                    if let Some(neighbor) = self.get_neighbor(p, d) {
-                        result.push(neighbor);
+                    if let Some((p, distortion)) = self.get_neighbor(p, d) {
+                        result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
                     }
                 }
             }
@@ -160,15 +164,16 @@ where D: Direction
     // the result may be shorter than the requested length if not enough points could be found
     pub fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
         let mut result = vec![OrientedPoint::new(start, false, d)];
+        let mut distortion = Distortion::neutral();
         while result.len() < length {
             let current = result.get(result.len() - 1).unwrap();
             let next = match mode {
-                NeighborMode::Direct => self.wrapping_logic.get_neighbor(current.point, current.direction),
-                NeighborMode::FollowPipes => self.get_neighbor(current.point, current.direction),
+                NeighborMode::Direct => self.wrapping_logic.get_neighbor(current.point, distortion.update_direction(d)),
+                NeighborMode::FollowPipes => self.get_neighbor(current.point, distortion.update_direction(d)),
             };
-            if let Some(mut dp) = next {
-                dp.mirrored = dp.mirrored != current.mirrored;
-                result.push(dp);
+            if let Some((p, disto)) = next {
+                distortion += disto;
+                result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
             } else {
                 break;
             }
@@ -303,13 +308,13 @@ where D: Direction
             let mut result_layer = HashSet::new();
             for (p, dir, dir_change) in previous_layer {
                 result_layer.insert(p);
-                if let Some(dp) = self.get_neighbor(p, dir) {
-                    let dir_change = match (dp.mirrored, dir_change) {
+                if let Some((point, distortion)) = self.get_neighbor(p, dir) {
+                    let dir_change = match (distortion.is_mirrored(), dir_change) {
                         (_, None) => None,
                         (true, Some(angle)) => Some(angle.mirror_vertically()),
                         (false, Some(angle)) => Some(angle),
                     };
-                    layer.insert((dp.point, dp.direction, dir_change));
+                    layer.insert((point, distortion.update_direction(dir), dir_change));
                 }
                 let mut dir_changes = vec![];
                 if let Some(dir_change) = dir_change {
@@ -321,14 +326,12 @@ where D: Direction
                     dir_changes.push(d.mirror_vertically());
                     dir_changes.push(d);
                 }
-                for dir_change in dir_changes {
-                    if let Some(dp) = self.get_neighbor(p, dir.rotate_by(dir_change)) {
-                        let mut dir_change = dir_change;
-                        if dp.mirrored {
+                for mut dir_change in dir_changes {
+                    if let Some((point, distortion)) = self.get_neighbor(p, dir.rotate_by(dir_change)) {
+                        if distortion.is_mirrored() {
                             dir_change = dir_change.mirror_vertically();
                         }
-                        let dir = dp.direction.rotate_by(dir_change.mirror_vertically());
-                        layer.insert((dp.point, dir, Some(dir_change)));
+                        layer.insert((point, distortion.update_direction(dir), Some(dir_change)));
                     }
                 }
             }
@@ -469,6 +472,17 @@ where D: Direction
             details,
         })
     }
+
+    pub(crate) fn start_game(&mut self, settings: &Arc<GameSettings>) {
+        self.environment.start_game(settings);
+        for p in self.all_points() {
+            self.terrain.get_mut(&p).unwrap().start_game(settings);
+            if let Some(unit) = self.units.get_mut(&p) {
+                unit.start_game(settings);
+            }
+        }
+    }
+
 }
 
 pub enum MapType {

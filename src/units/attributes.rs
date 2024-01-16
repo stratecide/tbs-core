@@ -1,10 +1,8 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fmt::{Display, Debug};
 use std::str::FromStr;
 
-use rustc_hash::FxHashMap;
 use zipper::*;
-use serde::{Deserialize, Serialize};
 use zipper_derive::Zippable;
 
 use crate::config::environment::Environment;
@@ -205,7 +203,7 @@ impl<D: Direction> Attribute<D> {
         })
     }
     
-    pub(super) fn build_from_transporter(key: AttributeKey) -> Option<Box<dyn Fn(&FxHashMap<AttributeKey, Attribute<D>>) -> Option<Attribute<D>>>> {
+    pub(super) fn build_from_transporter(key: AttributeKey) -> Option<Box<dyn Fn(&HashMap<AttributeKey, Attribute<D>>) -> Option<Attribute<D>>>> {
         match key {
             AttributeKey::DroneId => Some(Box::new(|attributes| {
                 if let Some(Attribute::DroneStationId(id)) = attributes.get(&AttributeKey::DroneStationId) {
@@ -232,7 +230,7 @@ pub(crate) trait TrAttribute<D: Direction>: TryFrom<Attribute<D>, Error = Attrib
     fn key() -> AttributeKey;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AttributeOverride {
     InWater,
     OnLand,
@@ -351,7 +349,7 @@ pub(super) struct DroneId(pub(super) u16);
 attribute_tuple!(DroneId, DroneId);
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum Amphibious {
         OnLand,
         InWater,
@@ -387,7 +385,7 @@ attribute_tuple!(Zombified, Zombified);
 
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum UnitVisibility {
         Stealth,
         Normal,
@@ -414,7 +412,7 @@ mod tests {
         assert_eq!(unit.get_hero(), Hero::new(HeroType::None));
         assert_eq!(unit.get_hp(), 100);
 
-        let mut attributes = FxHashMap::default();
+        let mut attributes = HashMap::default();
         attributes.insert(AttributeKey::Owner, Attribute::Owner(DEFAULT_OWNER));
         attributes.insert(AttributeKey::Hp, Attribute::Hp(100));
         attributes.insert(AttributeKey::Hero, Attribute::Hero(Hero::new(HeroType::None)));

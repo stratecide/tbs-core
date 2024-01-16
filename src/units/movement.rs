@@ -2,22 +2,19 @@ use std::collections::{BinaryHeap, HashSet, HashMap};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::str::FromStr;
 
 use num_rational::Rational32;
-use serde::{Deserialize, Serialize};
 use zipper::*;
 use zipper_derive::*;
 
 use crate::config::movement_type_config::MovementPattern;
-use crate::config::ConfigParseError;
 use crate::game::commands::CommandError;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::game::fog::FogIntensity;
 use crate::map::map::*;
-use crate::map::wrapping_map::OrientedPoint;
+use crate::map::wrapping_map::{OrientedPoint, Distortion};
 use crate::terrain::{AmphibiousTyping, ExtraMovementOptions};
 use crate::terrain::terrain::Terrain;
 
@@ -33,7 +30,7 @@ pub enum PathSearchFeedback {
 }
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum MovementType {
         Foot,
         Bike,
@@ -157,39 +154,25 @@ pub enum PathStep<D: Direction> {
     //Point(Point),
 }
 impl<D: Direction> PathStep<D> {
-    pub fn progress(&self, map: &Map<D>, pos: Point) -> Result<Point, CommandError> {
-        Ok(self.progress_reversible(map, pos)?.0.point)
-    }
-
-    pub fn progress_reversible(&self, map: &Map<D>, pos: Point) -> Result<(OrientedPoint<D>, Self), CommandError> {
-        match self {
+    pub fn progress(&self, map: &Map<D>, pos: Point) -> Result<(Point, Distortion<D>), CommandError> {
+        match *self {
             Self::Dir(d) => {
-                if let Some(o) = map.get_neighbor(pos, *d) {
-                    Ok((o.clone(), Self::Dir(o.direction.opposite_direction())))
-                } else {
-                    Err(CommandError::InvalidPath)
-                }
+                map.get_neighbor(pos, d)
+                .ok_or(CommandError::InvalidPath)
             }
             Self::Jump(d) => {
-                if let Some(o) = map.get_neighbor(pos, *d).and_then(|o| map.get_neighbor(o.point, o.direction)) {
-                    Ok((o.clone(), Self::Jump(o.direction.opposite_direction())))
-                } else {
-                    Err(CommandError::InvalidPath)
-                }
+                map.get_neighbor(pos, d).and_then(|(pos, distortion)| {
+                    map.get_neighbor(pos, distortion.update_direction(d))
+                    .map(|(pos, disto)| (pos, distortion + disto))
+                }).ok_or(CommandError::InvalidPath)
             }
             Self::Diagonal(d) => {
-                if let Some(o) = get_diagonal_neighbor(map, pos, *d) {
-                    Ok((o.clone(), Self::Diagonal(o.direction.opposite_direction())))
-                } else {
-                    Err(CommandError::InvalidPath)
-                }
+                get_diagonal_neighbor(map, pos, d)
+                .ok_or(CommandError::InvalidPath)
             }
             Self::Knight(d, turn_left) => {
-                if let Some(o) = get_knight_neighbor(map, pos, *d, *turn_left) {
-                    Ok((o.clone(), Self::Knight(o.direction.opposite_direction(), *turn_left != o.mirrored)))
-                } else {
-                    Err(CommandError::InvalidPath)
-                }
+                get_knight_neighbor(map, pos, d, turn_left)
+                .ok_or(CommandError::InvalidPath)
             }
             //Self::Point(p) => Ok((OrientedPoint::new(*p, false, D::list()[0]), Self::Point(pos))),
         }
@@ -221,19 +204,22 @@ impl<D: Direction> Path<D> {
         }
     }
 
-    pub fn end(&self, map: &Map<D>) -> Result<Point, CommandError> {
+    pub fn end(&self, map: &Map<D>) -> Result<(Point, Distortion<D>), CommandError> {
         let mut current = self.start;
+        let mut distortion = Distortion::neutral();
         for step in &self.steps {
-            current = step.progress(map, current)?;
+            let c = step.progress(map, current)?;
+            current = c.0;
+            distortion += c.1;
         }
-        Ok(current)
+        Ok((current, distortion))
     }
     
     pub fn points(&self, map: &Map<D>) -> Result<Vec<Point>, CommandError> {
         let mut points = vec![self.start];
         let mut current = self.start;
         for step in self.steps.iter() {
-            current = step.progress(map, current)?;
+            current = step.progress(map, current)?.0;
             points.push(current);
         }
         Ok(points)
@@ -241,44 +227,33 @@ impl<D: Direction> Path<D> {
 }
 
 // rotated slightly counter-clockwise compared to dir
-pub fn get_diagonal_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D) -> Option<OrientedPoint<D>> {
-    if let Some(dp1) = map.wrapping_logic().get_neighbor(p, dir) {
-        if let Some(dp2) = map.wrapping_logic().get_neighbor(dp1.point, dp1.direction.rotate(dp1.mirrored)) {
-            return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction.rotate(dp1.mirrored == dp2.mirrored)));
-        }
-    }
-    if let Some(dp1) = map.wrapping_logic().get_neighbor(p, dir.rotate(false)) {
-        if let Some(dp2) = map.wrapping_logic().get_neighbor(dp1.point, dp1.direction.rotate(!dp1.mirrored)) {
-            return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction));
+pub fn get_diagonal_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D) -> Option<(Point, Distortion<D>)> {
+    let map = map.wrapping_logic();
+    let dir2 = dir.rotate(false);
+    for (dir, dir2) in [(dir, dir2), (dir2, dir)] {
+        if let Some((p1, distortion)) = map.get_neighbor(p, dir) {
+            if let Some((p2, disto2)) = map.get_neighbor(p1, distortion.update_direction(dir2)) {
+                return Some((p2, distortion + disto2));
+            }
         }
     }
     None
 }
 
-pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D, turn_left: bool) -> Option<OrientedPoint<D>> {
-    if turn_left {
-        if let Some(dp1) = map.wrapping_logic().get_neighbor(p, dir) {
-            if let Some(dp2) = get_diagonal_neighbor(map, dp1.point, dp1.direction) {
-                return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction));
+// moves 2 fields in the given direction, then turns left or right and moves another field
+pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D, turn_left: bool) -> Option<(Point, Distortion<D>)> {
+    let map = map.wrapping_logic();
+    let dir2 = dir.rotate(false);
+    for (dir, dir2, dir3) in [(dir, dir, dir2), (dir, dir2, dir), (dir2, dir, dir)] {
+        if let Some((p, distortion)) = map.get_neighbor(p, dir) {
+            if let Some((p, disto)) = map.get_neighbor(p, distortion.update_direction(dir2)) {
+                let distortion = distortion + disto;
+                if let Some((p, disto)) = map.get_neighbor(p, distortion.update_direction(dir3)) {
+                    return Some((p, distortion + disto));
+                }
             }
         }
-        if let Some(dp1) = get_diagonal_neighbor(map, p, dir) {
-            if let Some(dp2) = map.wrapping_logic().get_neighbor(dp1.point, dp1.direction) {
-                return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction));
-            }
-        }
-    } else {
-        if let Some(dp1) = map.wrapping_logic().get_neighbor(p, dir) {
-            if let Some(dp2) = get_diagonal_neighbor(map, dp1.point, dp1.direction.rotate(!dp1.mirrored)) {
-                return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction.rotate(dp1.mirrored != dp2.mirrored)));
-            }
-        }
-        if let Some(dp1) = get_diagonal_neighbor(map, p, dir.rotate(true)) {
-            if let Some(dp2) = map.wrapping_logic().get_neighbor(dp1.point, dp1.direction.rotate(dp1.mirrored)) {
-                return Some(OrientedPoint::new(dp2.point, dp1.mirrored != dp2.mirrored, dp2.direction));
-            }
-        }
-    };
+    }
     None
 }
 
@@ -286,6 +261,7 @@ pub fn get_knight_neighbor<D: Direction>(map: &Map<D>, p: Point, dir: D, turn_le
 enum TBallast<D: Direction> {
     MovementPoints(Rational32),
     Direction(Option<D>),
+    DiagonalDirection(Option<D>),
     QueenDirection(Option<(D, bool)>),
     ForbiddenDirection(Option<D>),
 }
@@ -336,6 +312,12 @@ impl<D: Direction> TBallast<D> {
             Self::Direction(dir) => {
                 others.all(|other| match other {
                     Self::Direction(other) => other.is_some() && dir != other,
+                    _ => panic!("TemporaryBallast have incompatible types: {self:?} - {other:?}")
+                })
+            }
+            Self::DiagonalDirection(dir) => {
+                others.all(|other| match other {
+                    Self::DiagonalDirection(other) => other.is_some() && dir != other,
                     _ => panic!("TemporaryBallast have incompatible types: {self:?} - {other:?}")
                 })
             }
@@ -850,8 +832,8 @@ where
         match unit.movement_pattern() {
             MovementPattern::Standard |
             MovementPattern::StandardLoopLess => temps.push(TBallast::ForbiddenDirection(None)),
-            MovementPattern::Diagonal |
             MovementPattern::Straight => temps.push(TBallast::Direction(None)),
+            MovementPattern::Diagonal => temps.push(TBallast::DiagonalDirection(None)),
             MovementPattern::Pawn => {
                 let mut dir = None;
                 if terrain.is_chess() {
@@ -905,8 +887,8 @@ where
             }).collect()
         },
         |point, step, permanent_ballast, temporary_ballast| {
-            if let Ok((dp, _)) = step.progress_reversible(map, point) {
-                let terrain = map.get_terrain(dp.point).unwrap();
+            if let Ok((point, distortion)) = step.progress(map, point) {
+                let terrain = map.get_terrain(point).unwrap();
                 if let Some(cost) = permanent_ballast.movement_cost(terrain, unit) {
                     let cost = transform_movement_cost(cost, unit);
                     // TODO: preventing beach <-> bridge only needs the prev Terrain
@@ -918,13 +900,7 @@ where
                                 PbEntry::Amphibious(terrain.get_amphibious().unwrap_or(*amph))
                             }
                             PbEntry::PawnDirection(dir) => {
-                                let mut direction = dp.direction;
-                                if let PathStep::Diagonal(d) = step {
-                                    if d != *dir {
-                                        direction = direction.rotate(dp.mirrored);
-                                    }
-                                }
-                                PbEntry::PawnDirection(direction)
+                                PbEntry::PawnDirection(distortion.update_direction(*dir))
                             }
                         });
                     }
@@ -932,17 +908,19 @@ where
                     for p in temporary_ballast.entries.iter() {
                         temporary.push(match p {
                             TBallast::Direction(_) => {
-                                TBallast::Direction(Some(dp.direction))
+                                TBallast::Direction(step.dir().map(|d| distortion.update_direction(d)))
+                            }
+                            TBallast::DiagonalDirection(_) => {
+                                TBallast::DiagonalDirection(step.dir().map(|d| distortion.update_diagonal_direction(d)))
                             }
                             TBallast::ForbiddenDirection(_) => {
-                                TBallast::Direction(Some(dp.direction.opposite_direction()))
+                                TBallast::ForbiddenDirection(step.dir().map(|d| distortion.update_direction(d.opposite_direction())))
                             }
                             TBallast::QueenDirection(_) => {
-                                let rook_like = match step {
-                                    PathStep::Dir(_) => true,
-                                    _ => false,
-                                };
-                                TBallast::QueenDirection(Some((dp.direction, rook_like)))
+                                match step {
+                                    PathStep::Dir(_) => TBallast::QueenDirection(step.dir().map(|d| (distortion.update_direction(d), true))),
+                                    _ => TBallast::QueenDirection(step.dir().map(|d| (distortion.update_diagonal_direction(d), false))),
+                                }
                             }
                             TBallast::MovementPoints(mp) => {
                                 if cost > *mp {
@@ -952,7 +930,7 @@ where
                             }
                         });
                     }
-                    return Some((dp.point, PermanentBallast::new(permanent), TemporaryBallast::new(temporary)));
+                    return Some((point, PermanentBallast::new(permanent), TemporaryBallast::new(temporary)));
                 }
             }
             None
@@ -1222,9 +1200,9 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool) -> PathSearchFeedback {
             let mut can_stop_here = true;
             let mut can_continue = true;
             if let Some(blocking_unit) = get_unit(destination) {
-                can_stop_here = false;
                 let is_self = path_so_far.start == destination && blocking_unit == *unit;
                 if !is_self {
+                    can_stop_here = false;
                     let mut reject = true;
                     // friendly unit that can simply be moved past
                     if unit.get_team() == blocking_unit.get_team() && blocking_unit.can_be_moved_through() {

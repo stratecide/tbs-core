@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use interfaces::game_interface::ClientPerspective;
 use num_rational::Rational32;
-use rustc_hash::FxHashMap;
 use zipper::*;
 
 use crate::commander::commander_type::CommanderType;
@@ -20,6 +19,7 @@ use crate::commander::Commander;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
+use crate::map::wrapping_map::Distortion;
 use crate::player::{Player, Owner};
 use crate::script::attack::AttackScript;
 use crate::script::kill::KillScript;
@@ -39,7 +39,7 @@ use super::hero::*;
 pub struct Unit<D: Direction> {
     environment: Environment,
     typ: UnitType,
-    attributes: FxHashMap<AttributeKey, Attribute<D>>,
+    attributes: HashMap<AttributeKey, Attribute<D>>,
 }
 
 impl<D: Direction> Debug for Unit<D> {
@@ -57,7 +57,7 @@ impl<D: Direction> Unit<D> {
         Self {
             environment,
             typ,
-            attributes: FxHashMap::default(),
+            attributes: HashMap::default(),
         }
     }
 
@@ -265,7 +265,7 @@ impl<D: Direction> Unit<D> {
         if let Some(a) = self.attributes.get(&T::key()) {
             T::try_from(a.clone()).expect("Impossible! attribute of wrong type")
         } else {
-            println!("Units of type {:?} don't have {} attribute, but it was requested anyways", self.typ, T::key());
+            //println!("Units of type {:?} don't have {} attribute, but it was requested anyways", self.typ, T::key());
             T::try_from(T::key().default(self.typ, &self.environment)).expect("Impossible! attribute defaults to wrong type")
         }
     }
@@ -590,7 +590,7 @@ impl<D: Direction> Unit<D> {
             return Err(ZipperError::InconsistentData);
         }
         let typ = units[index];
-        let mut attributes = FxHashMap::default();
+        let mut attributes = HashMap::default();
         let mut owner = transporter.map(|t| t.1).unwrap_or(-1);
         let mut hero = HeroType::None;
         for key in environment.unit_attributes(typ, owner) {
@@ -690,7 +690,10 @@ impl<D: Direction> Unit<D> {
         if AttackType::None == self.attack_pattern() {
             return None;
         }
-        if path_so_far.steps.len() == 0 && self.attack_pattern().attackable_positions(game.get_map(), path_so_far.start, self).contains(&goal) {
+        let get_fog = |p| {
+            FogIntensity::TrueSight
+        };
+        if path_so_far.steps.len() == 0 && AttackVector::find(self, game, path_so_far.start, Some(goal), get_fog).len() > 0 {
             return Some(path_so_far.clone());
         }
         if !self.can_attack_after_moving() && !self.can_take() {
@@ -702,7 +705,7 @@ impl<D: Direction> Unit<D> {
                 PathSearchFeedback::ContinueWithoutStopping
             } else if goal == p && can_stop_here && self.can_take() {
                 PathSearchFeedback::Found
-            } else if self.can_attack_after_moving() && self.attack_pattern().attackable_positions(game.get_map(), p, self).contains(&goal) {
+            } else if self.can_attack_after_moving() && AttackVector::find(self, game, p, Some(goal), get_fog).len() > 0 {
                 PathSearchFeedback::Found
             } else {
                 PathSearchFeedback::Continue
@@ -710,9 +713,9 @@ impl<D: Direction> Unit<D> {
         })
     }
 
-    pub fn transformed_by_movement(&mut self, map: &Map<D>, from: Point, to: Point) -> bool {
+    pub fn transformed_by_movement(&mut self, map: &Map<D>, from: Point, to: Point, distortion: Distortion<D>) -> bool {
         let prev_terrain = map.get_terrain(from).unwrap();
-        let mut changed = FxHashMap::default();
+        let mut changed = HashMap::new();
         if let Some(Attribute::Amphibious(amphibious)) = self.attributes.get(&AttributeKey::Amphibious) {
             let new_amph = match map.get_terrain(to).unwrap().get_amphibious() {
                 None => None,
@@ -722,6 +725,12 @@ impl<D: Direction> Unit<D> {
             };
             if new_amph.is_some() && new_amph != Some(*amphibious) {
                 changed.insert(AttributeKey::Amphibious, Attribute::Amphibious(new_amph.unwrap()));
+            }
+        }
+        if let Some(Attribute::Direction(dir)) = self.attributes.get(&AttributeKey::Direction) {
+            let new_dir = distortion.update_direction(*dir);
+            if new_dir != *dir {
+                changed.insert(AttributeKey::Direction, Attribute::Direction(new_dir));
             }
         }
         if changed.len() > 0 {
@@ -734,7 +743,7 @@ impl<D: Direction> Unit<D> {
         }
     }
 
-    pub fn could_attack(&self, defender: &Self) -> bool {
+    pub fn could_attack(&self, defender: &Self, allow_friendly_fire: bool) -> bool {
         let base_damage = self.base_damage(defender.typ());
         if base_damage.is_none() {
             return false;
@@ -745,7 +754,7 @@ impl<D: Direction> Unit<D> {
         if self.displacement() == Displacement::None && base_damage == Some(0) {
             return false;
         }
-        if !match self.attack_targeting() {
+        if !allow_friendly_fire && !match self.attack_targeting() {
             AttackTargeting::All => true,
             AttackTargeting::Enemy => self.get_team() != defender.get_team(),
             AttackTargeting::Friendly => self.get_team() == defender.get_team(),
@@ -763,21 +772,23 @@ impl<D: Direction> Unit<D> {
     pub fn threatens(&self, defender: &Self) -> bool {
         //let terrain = game.get_map().get_terrain(target_pos).unwrap();
         //let in_water = terrain.is_water();
-        self.could_attack(defender) && defender.get_team() != self.get_team()
+        self.could_attack(defender, false) && defender.get_team() != self.get_team()
     }
 
     pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
-        let points = if let Ok(p) = path.points(game.get_map()) {
-            p
-        } else {
-            return Vec::new();
-        };
         let mut this = self.clone();
-        for i in 1..(points.len() - 1) {
-            this.transformed_by_movement(game.get_map(), points[i - 1], points[i]);
+        let mut current = path.start;
+        for step in &path.steps {
+            let (next, distortion) = match step.progress(game.get_map(), current) {
+                Ok(n) => n,
+                _ => return Vec::new(),
+            };
+            this.transformed_by_movement(game.get_map(), current, next, distortion);
+            current = next;
         }
-        this._options_after_path_transformed(game, path, points[points.len() - 1])
+        this._options_after_path_transformed(game, path, current)
     }
+
     fn _options_after_path_transformed(&self, game: &Game<D>, path: &Path<D>, destination: Point) -> Vec<UnitAction<D>> {
         let fog = game.get_fog().get(&self.get_team());
         let get_fog = |p| {
@@ -848,7 +859,7 @@ impl<D: Direction> Unit<D> {
                         }
                         for d in D::list() {
                             if game.get_map().get_neighbor(destination, d)
-                            .and_then(|dp| game.get_map().get_terrain(dp.point).unwrap().movement_cost(self.environment.config.movement_type(*unit, amphibious)))
+                            .and_then(|(p, _)| game.get_map().get_terrain(p).unwrap().movement_cost(self.environment.config.movement_type(*unit, amphibious)))
                             .is_some() {
                                 result.push(UnitAction::BuyUnit(*unit, d));
                             }
@@ -858,12 +869,8 @@ impl<D: Direction> Unit<D> {
             }
             // attack
             if self.can_attack_after_moving() || path.steps.len() == 0 {
-                for target in self.attack_pattern().attackable_positions(game.get_map(), destination, self) {
-                    // TODO: AttackVector::find will call attack_pattern().attackable_positions
-                    // this could be optimized in the future
-                    for attack_vector in AttackVector::find(self, game, destination, target, get_fog) {
-                        result.push(UnitAction::Attack(attack_vector));
-                    }
+                for attack_vector in AttackVector::find(self, game, destination, None, get_fog) {
+                    result.push(UnitAction::Attack(attack_vector));
                 }
             }
             if self.can_capture() && terrain.has_attribute(TerrainAttributeKey::Owner) && terrain.get_team() != self.get_team() {
@@ -876,6 +883,7 @@ impl<D: Direction> Unit<D> {
             }
             result.push(UnitAction::Wait);
         }
+        println!("unit actions: {result:?}");
         result
     }
 }

@@ -1,19 +1,21 @@
 pub mod attributes;
 pub mod terrain;
+mod test;
 
-use serde::Deserialize;
 use std::str::FromStr;
 use zipper::*;
 
 use crate::config::environment::Environment;
 use crate::config::ConfigParseError;
 
+use self::terrain::TerrainBuilder;
+
 pub const KRAKEN_ATTACK_RANGE: usize = 3;
 pub const KRAKEN_MAX_ANGER: usize = 8;
 
 
 crate::enum_with_custom! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum TerrainType {
         Airport,
         Beach,
@@ -62,6 +64,12 @@ impl SupportedZippable<&Environment> for TerrainType {
         } else {
             Err(ZipperError::EnumOutOfBounds(format!("TerrainType index {}", index)))
         }
+    }
+}
+
+impl TerrainType {
+    pub fn instance(&self, environment: &Environment) -> TerrainBuilder {
+        TerrainBuilder::new(environment, *self)
     }
 }
 

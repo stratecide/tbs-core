@@ -5,6 +5,7 @@ use interfaces::game_interface::{Events, Perspective as IPerspective, ClientPers
 use crate::config::environment::Environment;
 use crate::map::map::Map;
 use crate::map::point::Point;
+use crate::map::wrapping_map::Distortion;
 use crate::terrain::attributes::CaptureProgress;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::*;
@@ -26,7 +27,7 @@ pub struct EventHandler<'a, D: Direction> {
     game: &'a mut Game<D>,
     events: HashMap<IPerspective, Vec<Event<D>>>,
     random: Box<dyn Fn() -> f32>,
-    observed_units: HashMap<usize, (Point, Option<usize>)>,
+    observed_units: HashMap<usize, (Point, Option<usize>, Distortion<D>)>,
     next_observed_unit_id: usize,
 }
 
@@ -59,24 +60,29 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.game.environment()
     }
 
-    pub fn observe_unit(&mut self, position: Point, unload_index: Option<usize>) -> usize {
-        if let Some((id, _)) = self.observed_units.iter()
-        .find(|(_, (p, i))| *p == position && *i == unload_index) {
-            *id
+    pub fn observe_unit(&mut self, position: Point, unload_index: Option<usize>) -> (usize, Distortion<D>) {
+        if let Some((id, (_, _, distortion))) = self.observed_units.iter()
+        .find(|(_, (p, i, _))| *p == position && *i == unload_index) {
+            (*id, *distortion)
         } else {
-            self.observed_units.insert(self.next_observed_unit_id, (position, unload_index));
+            self.observed_units.insert(self.next_observed_unit_id, (position, unload_index, Distortion::neutral()));
             self.next_observed_unit_id += 1;
-            self.next_observed_unit_id - 1
+            (self.next_observed_unit_id - 1, Distortion::neutral())
         }
     }
-    pub fn get_observed_unit(&self, id: usize) -> Option<&(Point, Option<usize>)> {
+    pub fn get_observed_unit(&self, id: usize) -> Option<&(Point, Option<usize>, Distortion<D>)> {
         self.observed_units.get(&id)
     }
 
-    fn observation_id(&self, position: Point, unload_index: Option<usize>) -> Option<usize> {
+    pub fn get_observed_unit_pos(&self, id: usize) -> Option<(Point, Option<usize>)> {
+        self.observed_units.get(&id)
+        .map(|(p, unload_index, _)| (*p, *unload_index))
+    }
+
+    fn observation_id(&self, position: Point, unload_index: Option<usize>) -> Option<(usize, Distortion<D>)> {
         self.observed_units.iter()
-        .find(|(_, (p, i))| *p == position && *i == unload_index)
-        .map(|(id, _)| *id)
+        .find(|(_, (p, i, _))| *p == position && *i == unload_index)
+        .map(|(id, (_, _, distortion))| (*id, *distortion))
     }
 
     pub fn next_turn(&mut self) {
@@ -120,8 +126,8 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 if let Some(drone_id) = unit.get_drone_id() {
                     if let Some((destination, capacity)) = drone_parents.get_mut(&drone_id) {
                         // move drone back aboard its parent
-                        if let Some(id) = self.observation_id(p, None) {
-                            self.observed_units.insert(id, (*destination, Some(self.get_map().get_unit(*destination).unwrap().get_transported().len())));
+                        if let Some((id, distortion)) = self.observation_id(p, None) {
+                            self.observed_units.insert(id, (*destination, Some(self.get_map().get_unit(*destination).unwrap().get_transported().len()), distortion));
                         }
                         let mut u = unit.clone();
                         self.add_event(Event::UnitRemove(p, u.clone()));
@@ -396,15 +402,15 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             self.add_event(Event::UnitRemove(path.start, unit.clone()));
         }
         let transformed_unit = self.animate_unit_path(&unit, path, involuntarily);
-        let path_end = path.end(self.get_map()).unwrap();
+        let (path_end, distortion) = path.end(self.get_map()).unwrap();
         if board_at_the_end {
-            if let Some(id) = self.observation_id(path.start, unload_index) {
-                self.observed_units.insert(id, (path_end, Some(self.get_map().get_unit(path_end).unwrap().get_transported().len())));
+            if let Some((id, disto)) = self.observation_id(path.start, unload_index) {
+                self.observed_units.insert(id, (path_end, Some(self.get_map().get_unit(path_end).unwrap().get_transported().len()), disto + distortion));
             }
             self.add_event(Event::UnitAddBoarded(path_end, transformed_unit));
         } else {
-            if let Some(id) = self.observation_id(path.start, unload_index) {
-                self.observed_units.insert(id, (path_end, None));
+            if let Some((id, disto)) = self.observation_id(path.start, unload_index) {
+                self.observed_units.insert(id, (path_end, None, disto + distortion));
             }
             self.add_event(Event::UnitAdd(path_end, transformed_unit));
         }
@@ -475,9 +481,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let mut previous = None;
         let mut transformed_unit = unit.clone();
         let mut steps = Vec::new();
+        let mut wrapping_rotation = D::angle_0();
+        let mut wrapping_mirrored = false;
         for step in &path.steps {
-            let next = step.progress(self.get_map(), current).unwrap();
-            if !involuntarily && transformed_unit.transformed_by_movement(self.get_map(), current, next) {
+            let (next, distortion) = step.progress(self.get_map(), current).unwrap();
+            if !involuntarily && transformed_unit.transformed_by_movement(self.get_map(), current, next, distortion) {
                 steps.push(UnitStep::Transform(current, *step, Some(transformed_unit.clone())));
             } else {
                 steps.push(UnitStep::Simple(current, *step));
@@ -636,11 +644,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.add_event(Event::Effect(Effect::Explode(position)));
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         self.add_event(Event::UnitRemove(position, unit.clone()));
-        if let Some(id) = self.observation_id(position, None) {
+        if let Some((id, _)) = self.observation_id(position, None) {
             self.observed_units.remove(&id);
         }
         for i in 0..unit.get_transported().len() {
-            if let Some(id) = self.observation_id(position, Some(i)) {
+            if let Some((id, _)) = self.observation_id(position, Some(i)) {
                 self.observed_units.remove(&id);
             }
         }
@@ -654,7 +662,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let unit = self.game.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
         let transported = unit.get_transported();
         if transported.len() > index {
-            if let Some(id) = self.observation_id(position, Some(index)) {
+            if let Some((id, _)) = self.observation_id(position, Some(index)) {
                 self.observed_units.remove(&id);
             }
             self.add_event(Event::UnitRemoveBoarded(position, index.into(), transported[index].clone()));

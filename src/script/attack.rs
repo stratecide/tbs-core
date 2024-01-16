@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use num_rational::Rational32;
-use serde::Deserialize;
 
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
@@ -10,7 +9,7 @@ use crate::map::point::Point;
 use crate::units::attributes::ActionStatus;
 use crate::units::unit::Unit;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum AttackScript {
     LifeSteal(Rational32),
 }

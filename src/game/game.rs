@@ -38,7 +38,8 @@ pub struct Game<D: Direction> {
 }
 
 impl<D: Direction> Game<D> {
-    fn new(map: Map<D>, settings: &settings::GameSettings) -> Self {
+    fn new(mut map: Map<D>, settings: &settings::GameSettings) -> Self {
+        map.start_game(&Arc::new(settings.clone()));
         let players: Vec<Player> = settings.players.iter()
             .map(|player| player.build(map.environment()))
             .collect();

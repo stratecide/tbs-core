@@ -8,11 +8,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use num_rational::Rational32;
-use serde::Deserializer;
-use serde::Serializer;
-use serde::de::Visitor;
-
 use crate::commander::commander_type::CommanderType;
 use crate::terrain::TerrainType;
 use crate::terrain::attributes::TerrainAttributeKey;
@@ -626,6 +621,11 @@ impl Config {
             Ok(fs::read_to_string(file)?)
         });
         Self::parse(name, load_config)
+    }
+
+    pub (crate) fn test_config() -> Self {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default_test");
+        Self::parse_folder(path).expect("Failed to parse default config")
     }
 }
 

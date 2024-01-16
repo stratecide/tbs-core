@@ -1,7 +1,5 @@
 use std::str::FromStr;
 
-use serde::Deserialize;
-
 use crate::config::ConfigParseError;
 use crate::details::{MAX_STACK_SIZE, Detail};
 use crate::game::event_handler::EventHandler;
@@ -11,7 +9,7 @@ use crate::player::Owner;
 use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::units::unit::Unit;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum KillScript {
     Unexhaust,
     DeadSkull,

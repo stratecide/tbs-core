@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use zipper::*;
 use std::str::FromStr;
 
@@ -8,14 +7,53 @@ use crate::config::ConfigParseError;
 use super::unit::UnitBuilder;
 
 crate::enum_with_custom! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum UnitType {
         HoverBike,
+        // ground units
+        Sniper,
+        Bazooka,
+        DragonHead,
+        Artillery,
         SmallTank,
-        DroneTower,
+        BigTank,
+        AntiAir,
+        RocketLauncher,
+        Magnet,
+        // sea units
+        LaserShark,
+        TransportBoat,
+        DroneBoat,
+        WaveBreaker,
+        Submarine,
+        Cruiser,
+        Carrier,
+        SwimmingFactory,
+        // air units
+        TransportHeli,
+        AttackHeli,
+        Blimp,
+        Bomber,
+        Fighter,
+        // drones
         LightDrone,
-        Tentacle,
+        HeavyDrone,
+        //structures
         Pyramid,
+        MegaCannon,
+        LaserCannon,
+        DroneTower,
+        ShockTower,
+        LifeCrystal,
+        Tentacle,
+        // chess
+        Pawn,
+        Rook,
+        Bishop,
+        Knight,
+        Queen,
+        King,
+            // question mark
         Unknown,
     }
 }

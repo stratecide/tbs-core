@@ -1,11 +1,8 @@
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::terrain::ExtraMovementOptions;
 use crate::units::movement::PathStep;
-use super::ConfigParseError;
 
 /*#[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -16,7 +13,7 @@ pub struct MovementTypeConfig {
 }*/
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum MovementPattern {
         Standard,
         StandardLoopLess,

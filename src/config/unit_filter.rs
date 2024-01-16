@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use serde::Deserialize;
-
 use crate::game::game::Game;
 use crate::map::point::Point;
 use crate::terrain::TerrainType;
@@ -50,7 +48,7 @@ impl UnitTypeFilter {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub(super) enum UnitFilter {
     Unit(HashSet<UnitType>),
     Movement(HashSet<MovementType>),

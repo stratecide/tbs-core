@@ -1,0 +1,6 @@
+Id;Name;Visibility;MovementPattern;MovementType;WaterMovementType;MovementPoints;VisionMode;Vision;TrueVision;NeedsOwner;Stealthy;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;CanBuildUnits;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity
+HoverBike;HoverBike;Normal;Standard;Bike;Hovercraft;9/2;Normal;2;1;true;;true;;true;MachineGun;true;Adjacent;;;;100;;;true;
+Sniper;Sniper;Normal;Standard;Foot;;3;Normal;3;1;true;;true;;true;Rifle;true;Ranged(1,1);;;;150;;;true;
+Magnet;Magnet;Normal;Standard;Wheel;;5;Normal;2;1;true;;true;;true;Bonk;true;Straight(2,0);All;;;400;InsteadOfAttack;-1;true;
+BigTank;BigTank;Normal;Standard;Treads;;5;Normal;1;1;true;;true;;true;Shells;true;Adjacent;;;;1600;;;true;
+0;StraightPusher;Normal;Standard;Treads;;5;Normal;1;1;true;;true;;true;Shells;true;Straight(1,0);;1, 1/10;;1600;AfterCounter;2;true;

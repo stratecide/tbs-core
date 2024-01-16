@@ -1,6 +1,5 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
 
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
@@ -13,7 +12,7 @@ use crate::units::combat::{AttackType, AttackVector};
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum UnitScript {
     Kraken,
     Attack(bool, bool),
@@ -22,7 +21,7 @@ pub enum UnitScript {
 impl FromStr for UnitScript {
     type Err = ConfigParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', '-', ')'])
+        let mut it = s.split(&['(', ' ', '-', ')'])
         .map(str::trim);
         Ok(match it.next().unwrap() {
             "Kraken" => Self::Kraken,
@@ -95,8 +94,8 @@ fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &U
             if !unit.has_attribute(AttributeKey::Direction) {
                 return;
             }
-            if let Some(dp) = handler.get_map().get_neighbor(position, unit.get_direction()) {
-                AttackVector::DirectedPoint(dp.point, dp.direction)
+            if let Some((point, distortion)) = handler.get_map().get_neighbor(position, unit.get_direction()) {
+                AttackVector::DirectedPoint(point, distortion.update_direction(unit.get_direction()))
             } else {
                 return;
             }

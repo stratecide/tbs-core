@@ -10,6 +10,7 @@ use crate::game::game::Game;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
+use crate::map::wrapping_map::Distortion;
 use crate::player::Owner;
 use crate::terrain::TerrainType;
 use crate::units::unit_types::UnitType;
@@ -106,13 +107,13 @@ impl<D: Direction> Detail<D> {
         match self {
             Self::Pipe(connection) => {
                 for (i, d) in connection.directions.iter().cloned().enumerate() {
-                    if let Some(dp) = map.wrapping_logic().get_neighbor(pos, d) {
+                    if let Some((point, distortion)) = map.wrapping_logic().get_neighbor(pos, d) {
                         // ends don't matter if there's no neighbor
                         connection.ends[i] = true;
-                        for det in map.get_details(dp.point) {
+                        for det in map.get_details(point) {
                             match det {
                                 Self::Pipe(connection2) => {
-                                    if connection2.transform_direction(dp.direction).is_some() {
+                                    if connection2.distortion(distortion.update_direction(d)).is_some() {
                                         connection.ends[i] = false;
                                     }
                                 }
@@ -136,9 +137,18 @@ pub struct PipeState<D: Direction> {
 impl<D: Direction> PipeState<D> {
     /**
      * @d: direction that leads into this PipeState
-     * return: if d is a valid entry, returns Direction that leads out of this PipeState. None otherwise
+     * return: if d is a valid entry, returns Distortion to apply. None otherwise
      */
-    pub fn transform_direction(&self, entry: D) -> Option<D> {
+    pub fn distortion(&self, entry: D) -> Option<Distortion<D>> {
+        let entry = entry.opposite_direction();
+        for (i, dir) in self.directions.iter().enumerate() {
+            if *dir == entry {
+                return Some(Distortion::new(false, self.directions[1 - i].rotate_by(entry.opposite_direction().mirror_vertically())));
+            }
+        }
+        None
+    }
+    /*pub fn transform_direction(&self, entry: D) -> Option<D> {
         let entry = entry.opposite_direction();
         for (i, dir) in self.directions.iter().enumerate() {
             if *dir == entry {
@@ -146,5 +156,5 @@ impl<D: Direction> PipeState<D> {
             }
         }
         None
-    }
+    }*/
 }

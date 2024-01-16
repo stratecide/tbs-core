@@ -87,7 +87,7 @@ impl<D: Direction> Command<D> {
                     let terrain = handler.get_map().get_terrain(p).unwrap();
                     if let Some((new_owner, progress)) = terrain.get_capture_progress() {
                         if new_owner.0 == owner_id {
-                            if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner_id() != owner_id && u.can_capture()) {
+                            if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id && u.can_capture()) {
                                 if unit.get_status() == ActionStatus::Capturing {
                                     let max_progress = terrain.get_capture_resistance();
                                     let progress = progress as u16 + (unit.get_hp() as f32 / 10.).ceil() as u16;
@@ -162,6 +162,9 @@ impl<D: Direction> Command<D> {
                 let mut unit = UnitBuilder::new(handler.environment(), unit_type)
                 .set_owner_id(player.get_owner_id())
                 .set_direction(d);
+                if bubble_index == None {
+                    unit = unit.set_status(ActionStatus::Exhausted);
+                }
                 if handler.environment().unit_attributes(unit_type, player.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
                     unit = unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
                 }

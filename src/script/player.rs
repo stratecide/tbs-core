@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use interfaces::game_interface::ClientPerspective;
-use serde::Deserialize;
 
 use crate::config::ConfigParseError;
 use crate::details::Detail;

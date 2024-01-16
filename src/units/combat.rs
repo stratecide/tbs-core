@@ -1,7 +1,6 @@
 use std::collections::{HashSet, HashMap};
 use std::str::FromStr;
 use num_rational::Rational32;
-use serde::{Deserialize, Serialize};
 use zipper_derive::Zippable;
 use zipper::Exportable;
 
@@ -14,16 +13,14 @@ use crate::map::point::Point;
 use crate::config::environment::Environment;
 use crate::map::direction::Direction;
 use crate::map::map::{Map, NeighborMode};
-use crate::map::wrapping_map::OrientedPoint;
-use crate::script::attack::AttackScript;
-use crate::script::kill::KillScript;
+use crate::map::wrapping_map::{OrientedPoint, Distortion};
 
 use super::attributes::{AttributeKey, ActionStatus};
 use super::movement::{PathStep, get_diagonal_neighbor};
 use super::{unit::Unit, movement::Path};
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttackType {
     None,
     Adjacent,
@@ -62,7 +59,7 @@ impl FromStr for AttackType {
     }
 }
 
-impl AttackType {
+/*impl AttackType {
     pub fn attackable_positions<D: Direction>(&self, map: &Map<D>, position: Point, unit: &Unit<D>) -> HashSet<Point> {
         let mut result = HashSet::new();
         match self {
@@ -74,15 +71,17 @@ impl AttackType {
             }
             Self::Straight(min_range, max_range) => {
                 for d in D::list() {
-                    let mut current_pos = OrientedPoint::new(position, false, d);
+                    let mut position = position;
+                    let mut distortion = Distortion::neutral();
                     for i in 0..*max_range {
-                        if let Some(dp) = map.get_neighbor(current_pos.point, current_pos.direction) {
+                        if let Some((point, disto)) = map.get_neighbor(position, distortion.update_direction(d)) {
                             if i + 1 >= *min_range {
-                                result.insert(dp.point);
-                            } else if map.get_unit(dp.point).is_some() {
+                                result.insert(point);
+                            } else if map.get_unit(point).is_some() {
                                 break;
                             }
-                            current_pos = dp;
+                            position = point;
+                            distortion += disto;
                         } else {
                             break;
                         }
@@ -115,76 +114,75 @@ impl AttackType {
         }
         result
     }
-}
+}*/
 
-fn attack_area_cannon<D: Direction, F: FnMut(OrientedPoint<D>, usize)>(map: &Map<D>, dp: OrientedPoint<D>, min_range: usize, max_range: usize, mut callback: F) {
+fn attack_area_cannon<D: Direction, F: FnMut(Point, D, usize)>(map: &Map<D>, point: Point, dir: D, min_range: usize, max_range: usize, mut callback: F) {
     if D::is_hex() {
         let mut old_front = HashMap::new();
         let mut front = HashMap::new();
-        front.insert(dp, true);
+        front.insert((point, Distortion::neutral()), true);
         for i in 0..(max_range * 2 - 1) {
             let older_front = old_front;
             old_front = front;
             front = HashMap::new();
-            for (position, _) in older_front {
+            for ((point, distortion), _) in older_front {
+                let dir = distortion.update_direction(dir);
                 if i >= min_range {
-                    callback(position.clone(), i);
+                    callback(point, dir, i);
                 }
-                if let Some(dp) = map.get_neighbor(position.point, position.direction) {
-                    front.insert(dp, true);
+                if let Some((point, distortion)) = map.get_neighbor(point, dir) {
+                    front.insert((point, distortion), true);
                 }
             }
             // in order to not spread too much, only spread if
             //      - previously moved straight forward
-            //      - current position was spread to from both sides
-            for (position, may_spread) in &old_front {
-                if *may_spread {
-                    if let Some(dp) = map.get_neighbor(position.point, position.direction.rotate(true)) {
-                        let key = OrientedPoint::new(dp.point, dp.mirrored != position.mirrored, dp.direction.rotate(dp.mirrored));
-                        front.insert(key.clone(), front.contains_key(&key));
-                    }
-                    if let Some(dp) = map.get_neighbor(position.point, position.direction.rotate(false)) {
-                        let key = OrientedPoint::new(dp.point, dp.mirrored != position.mirrored, dp.direction.rotate(!dp.mirrored));
+            //      - current point was spread to from both sides
+            for ((point, distortion), _) in old_front.iter()
+            .filter(|(_, may_spread)| **may_spread) {
+                for clockwise in [true, false] {
+                    if let Some((p, disto)) = map.get_neighbor(*point, distortion.update_direction(dir.rotate(clockwise))) {
+                        let key = (p, *distortion + disto);
                         front.insert(key.clone(), front.contains_key(&key));
                     }
                 }
             }
         }
-        for position in old_front.keys() {
-            callback(position.clone(), max_range * 2 - 1);
+        for (point, distortion) in old_front.keys() {
+            callback(*point, distortion.update_direction(dir), max_range * 2 - 1);
         }
-        for position in front.keys() {
-            callback(position.clone(), max_range * 2);
+        for (point, distortion) in front.keys() {
+            callback(*point, distortion.update_direction(dir), max_range * 2);
         }
     } else {
         let mut front = HashSet::new();
-        front.insert(dp);
+        front.insert((point, Distortion::neutral()));
         for i in 0..max_range {
             let old_front = front;
             front = HashSet::new();
-            for position in old_front {
+            for (point, distortion) in old_front {
+                let d = distortion.update_direction(dir);
                 if i * 2 >= min_range {
-                    callback(position.clone(), i * 2);
+                    callback(point, d, i * 2);
                 }
-                if let Some(dp) = map.get_neighbor(position.point, position.direction) {
-                    front.insert(dp);
+                if let Some((point, disto)) = map.get_neighbor(point, d) {
+                    front.insert((point, distortion + disto));
                 }
-                if let Some(dp) = get_diagonal_neighbor(map, position.point, position.direction) {
-                    front.insert(dp);
+                if let Some((point, disto)) = get_diagonal_neighbor(map, point, d) {
+                    front.insert((point, distortion + disto));
                 }
-                if let Some(dp) = get_diagonal_neighbor(map, position.point, position.direction.rotate(true)) {
-                    front.insert(OrientedPoint::new(dp.point, dp.mirrored != position.mirrored, dp.direction.rotate(dp.mirrored)));
+                if let Some((point, disto)) = get_diagonal_neighbor(map, point, d.rotate(true)) {
+                    front.insert((point, distortion + disto));
                 }
             }
         }
-        for position in front {
-            callback(position, max_range * 2);
+        for (point, distortion) in front {
+            callback(point, distortion.update_direction(dir), max_range * 2);
         }
     }
 }
 
 
-#[derive(Debug, Clone, PartialEq, Zippable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Zippable)]
 #[zippable(bits = 2, support_ref = Environment)]
 pub enum AttackVector<D: Direction> {
     // prefer Direction over Point whenever possible
@@ -197,51 +195,71 @@ impl<D: Direction> AttackVector<D> {
     // returns all AttackVectors with which the unit at target position can be attacked
     // if there is no unit or it can't be attacked, an empty Vec is returned
     // TODO: make sure the same Self isn't returned multiple times
-    pub fn find(attacker: &Unit<D>, game: &Game<D>, pos: Point, target: Point, get_fog: impl Fn(Point) -> FogIntensity) -> Vec<Self> {
-        let defender = match game.get_map().get_unit(target)
-        .and_then(|u| u.fog_replacement(game, target, get_fog(target))) {
-            None => return Vec::new(),
-            Some(defender) => defender,
+    pub fn find(attacker: &Unit<D>, game: &Game<D>, pos: Point, target: Option<Point>, get_fog: impl Fn(Point) -> FogIntensity) -> HashSet<Self> {
+        let valid_target: Box<dyn Fn(Point) -> bool> = if let Some(target) = target {
+            let defender = match game.get_map().get_unit(target)
+            .and_then(|u| u.fog_replacement(game, target, get_fog(target))) {
+                None => return HashSet::new(),
+                Some(defender) => defender,
+            };
+            if !attacker.could_attack(&defender, false) {
+                return HashSet::new();
+            }
+            Box::new(move |t| t == target)
+        } else {
+            Box::new(|target| {
+                match game.get_map().get_unit(target)
+                .and_then(|u| u.fog_replacement(game, target, get_fog(target))) {
+                    None => false,
+                    Some(defender) => attacker.could_attack(&defender, false),
+                }
+            })
         };
-        if !attacker.could_attack(&defender) {
-            return Vec::new();
-        }
         // TODO: check if target is protected by terrain (e.g. tank can only attack stranded Submarines)
-        let mut result = Vec::new();
-        let splash_damage = attacker.get_splash_damage();
+        let mut result = HashSet::new();
+        //let splash_damage = attacker.get_splash_damage();
         match attacker.attack_pattern() {
             AttackType::None => (),
             AttackType::Straight(min, max) => {
                 for d in D::list() {
                     if Self::straight_splash(attacker, game, pos, d, min as usize, max as usize, &get_fog).iter()
-                    .any(|(dp, _)| dp.point == target) {
-                        result.push(Self::Direction(d));
+                    .any(|(dp, _)| valid_target(dp.point)) {
+                        result.insert(Self::Direction(d));
                     }
                 }
             }
             AttackType::Adjacent => {
                 for d in D::list() {
                     if let Some(dp) = game.get_map().get_neighbor(pos, d) {
-                        if dp.point == target {
-                            result.push(Self::Direction(d));
+                        if valid_target(dp.0) {
+                            result.insert(Self::Direction(d));
                         }
                     }
                 }
             }
-            AttackType::Ranged(min, max) => {
-                if attacker.attack_pattern().attackable_positions(game.get_map(), pos, attacker).contains(&target) {
-                    // TODO: consider splash damage
-                    result.push(Self::Point(target));
+            AttackType::Ranged(min_range, max_range) => {
+                let range_bonus = game.get_map().get_terrain(pos).unwrap().range_bonus(attacker);
+                let min_range = min_range + range_bonus;
+                let max_range = max_range + range_bonus;
+                // each point in a layer is probably in it 2 times
+                let mut layers = game.get_map().range_in_layers(pos, max_range as usize);
+                for _ in min_range-1..max_range {
+                    for p in layers.pop().unwrap() {
+                        if valid_target(p) {
+                            result.insert(Self::Point(p));
+                        }
+                    }
                 }
             }
             AttackType::Triangle(min, max) => {
                 if attacker.has_attribute(AttributeKey::Direction) {
                     let direction = attacker.get_direction();
-                    if let Some(dp) = game.get_map().get_neighbor(pos, direction) {
-                        attack_area_cannon(game.get_map(), dp, min as usize, max as usize, |dp, _| {
-                            if dp.point == target {
+                    if let Some((point, distortion)) = game.get_map().get_neighbor(pos, direction) {
+                        let direction = distortion.update_direction(direction);
+                        attack_area_cannon(game.get_map(), point, direction, min as usize, max as usize, |point, d, _| {
+                            if valid_target(point) {
                                 // TODO: consider splash damage
-                                result.push(Self::DirectedPoint(dp.point, dp.direction));
+                                result.insert(Self::DirectedPoint(point, d));
                             }
                         });
                     }
@@ -277,7 +295,7 @@ impl<D: Direction> AttackVector<D> {
                 Some(u) => u,
                 _ => return false,
             };
-            if !attacker.could_attack(&defender) {
+            if !attacker.could_attack(&defender, false) {
                 return false;
             }
             // TODO: check if target is protected by terrain (e.g. tank can only attack stranded Submarines)
@@ -313,22 +331,22 @@ impl<D: Direction> AttackVector<D> {
         }
     }
 
-    fn adjacent_splash(attacker: &Unit<D>, game: &Game<D>, pos: Point, dir: D) -> Vec<(OrientedPoint<D>, Rational32)> {
+    fn adjacent_splash(attacker: &Unit<D>, game: &Game<D>, pos: Point, dir: D) -> Vec<(Point, Option<D>, Rational32)> {
         let splash_damage = attacker.get_splash_damage();
         let mut result = Vec::new();
-        if let Some(dp) = game.get_map().get_neighbor(pos, dir) {
-            result.push((dp, splash_damage[0]));
+        if let Some((pos, distortion)) = game.get_map().get_neighbor(pos, dir) {
+            result.push((pos, Some(distortion.update_direction(dir)), splash_damage[0]));
         }
         let mut clockwise = dir;
         let mut counter_clockwise = dir;
         for i in 1..splash_damage.len() {
             clockwise = clockwise.rotate(true);
             counter_clockwise = counter_clockwise.rotate(false);
-            if let Some(dp) = game.get_map().get_neighbor(pos, clockwise) {
-                result.push((dp, splash_damage[i]));
+            if let Some((pos, distortion)) = game.get_map().get_neighbor(pos, clockwise) {
+                result.push((pos, Some(distortion.update_direction(clockwise)), splash_damage[i]));
             }
-            if let Some(dp) = game.get_map().get_neighbor(pos, counter_clockwise) {
-                result.push((dp, splash_damage[i]));
+            if let Some((pos, distortion)) = game.get_map().get_neighbor(pos, counter_clockwise) {
+                result.push((pos, Some(distortion.update_direction(counter_clockwise)), splash_damage[i]));
             }
         }
         result
@@ -345,12 +363,12 @@ impl<D: Direction> AttackVector<D> {
         result
     }
 
-    fn triangle_splash(attacker: &Unit<D>, game: &Game<D>, pos: Point, dir: D) -> Vec<(OrientedPoint<D>, Rational32)> {
+    fn triangle_splash(attacker: &Unit<D>, game: &Game<D>, pos: Point, dir: D) -> Vec<(Point, Option<D>, Rational32)> {
         let splash_damage = attacker.get_splash_damage();
         let mut result = Vec::new();
-        attack_area_cannon(game.get_map(), OrientedPoint::new(pos, false, dir), 0, (splash_damage.len() + 1) / 2, |dp, splash_index| {
+        attack_area_cannon(game.get_map(), pos, dir, 0, (splash_damage.len() + 1) / 2, |pos, dir, splash_index| {
             if splash_index < splash_damage.len() {
-                result.push((dp, splash_damage[splash_index]));
+                result.push((pos, Some(dir), splash_damage[splash_index]));
             }
         });
         result
@@ -365,19 +383,15 @@ impl<D: Direction> AttackVector<D> {
                 .collect()
             }
             (AttackType::Adjacent, Self::Direction(dir)) => {
-                Self::adjacent_splash(attacker, game, pos, *dir).into_iter()
-                .map(|(dp, ratio)| (dp.point, Some(dp.direction), ratio))
-                .collect()
+                Self::adjacent_splash(attacker, game, pos, *dir)
             }
-            (AttackType::Ranged(min, max), Self::Point(p)) => {
+            (AttackType::Ranged(_min, _max), Self::Point(p)) => {
                 Self::ranged_splash(attacker, game, *p).into_iter()
                 .map(|(p, ratio)| (p, None, ratio))
                 .collect()
             }
-            (AttackType::Triangle(min, max), Self::DirectedPoint(pos, dir)) => {
-                Self::triangle_splash(attacker, game, *pos, *dir).into_iter()
-                .map(|(dp, ratio)| (dp.point, Some(dp.direction), ratio))
-                .collect()
+            (AttackType::Triangle(_min, _max), Self::DirectedPoint(pos, dir)) => {
+                Self::triangle_splash(attacker, game, *pos, *dir)
             }
             _ => panic!("AttackPattern is incompatible with AttackVector"),
         }
@@ -387,8 +401,12 @@ impl<D: Direction> AttackVector<D> {
      * returns the new position of the attacker or None if the attacker died
      */
     pub fn execute(&self, handler: &mut EventHandler<D>, attacker_pos: Point, path: Option<&Path<D>>, exhaust_after_attacking: bool, execute_scripts: bool, charge_powers: bool) -> Option<(Point, Option<usize>)> {
-        let attacker_id = handler.observe_unit(attacker_pos, None);
+        let (attacker_id, _) = handler.observe_unit(attacker_pos, None);
         let attacker = handler.get_map().get_unit(attacker_pos).cloned().unwrap();
+        let mut after_battle_displacements = Vec::new();
+        if attacker.displacement() == Displacement::AfterCounter {
+            after_battle_displacements.push((self.clone(), attacker.clone(), attacker_pos));
+        }
         let (
             mut hero_charge,
             counter_attackers,
@@ -398,20 +416,21 @@ impl<D: Direction> AttackVector<D> {
         if path.is_some() {
             for unit_id in counter_attackers {
                 let attacker_pos = match handler.get_observed_unit(attacker_id) {
-                    Some((p, _)) => *p,
+                    Some((p, _, _)) => *p,
                     _ => break,
                 };
                 let unit_pos = match handler.get_observed_unit(unit_id) {
-                    Some((p, None)) => *p,
+                    Some((p, None, _)) => *p,
                     _ => continue,
                 };
                 let unit = handler.get_map().get_unit(unit_pos).cloned().expect(&format!("didn't find counter attacker at {unit_pos:?}"));
                 if !handler.get_game().can_see_unit_at(unit.get_team(), attacker_pos, &attacker, true)
-                || !unit.could_attack(&attacker)
+                || !unit.could_attack(&attacker, false)
                 || attacker.get_team() == unit.get_team() {
                     continue;
                 }
-                let mut attack_vectors = AttackVector::find(&unit, handler.get_game(), unit_pos, attacker_pos, |_| FogIntensity::TrueSight);
+                let mut attack_vectors: Vec<_> = AttackVector::find(&unit, handler.get_game(), unit_pos, Some(attacker_pos), |_| FogIntensity::TrueSight)
+                .into_iter().collect();
                 let mut attack_vector = attack_vectors.pop();
                 if let AttackVector::Direction(d) = self {
                     let inverse = AttackVector::Direction(d.opposite_direction());
@@ -420,17 +439,26 @@ impl<D: Direction> AttackVector<D> {
                     }
                 }
                 if let Some(attack_vector) = attack_vector {
+                    if unit.displacement() == Displacement::AfterCounter {
+                        after_battle_displacements.push((attack_vector.clone(), unit.clone(), unit_pos));
+                    }
                     let (_, _, d2) = attack_vector.execute_attack(handler, &unit, unit_pos, None, false, execute_scripts);
                     defenders.extend(d2.into_iter());
                 }
             }
+        }
+        for (attack_vector, attacker, attacker_pos) in after_battle_displacements {
+            let defenders = attack_vector.get_splash(&attacker, handler.get_game(), attacker_pos, |_| FogIntensity::TrueSight);
+            let defenders = filter_attack_targets(handler.get_game(), &attacker, defenders);
+            displace(handler, &attacker, defenders);
         }
         if !charge_powers {
             hero_charge = 0;
             defenders = Vec::new();
         }
         after_attacking(handler, &attacker, attacker_pos, hero_charge, defenders);
-        handler.get_observed_unit(attacker_id).cloned()
+        handler.get_observed_unit(attacker_id)
+        .map(|(p, unload_index, _)| (*p, *unload_index))
     }
 
     // set path to None if this is a counter-attack
@@ -441,13 +469,13 @@ impl<D: Direction> AttackVector<D> {
 }
 
 pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<&Path<D>>, targets: Vec<(Point, Option<D>, Rational32)>, exhaust_after_attacking: bool, execute_scripts: bool) -> (u32, Vec<usize>, Vec<(i8, Unit<D>, u8)>) {
-    let attacker_id = handler.observe_unit(attacker_pos, None);
+    let (attacker_id, _) = handler.observe_unit(attacker_pos, None);
     let mut defenders = filter_attack_targets(handler.get_game(), attacker, targets);
     let mut hero_charge;
     let mut attacked_units = Vec::new();
     let mut killed_units = Vec::new();
     match attacker.displacement() {
-        Displacement::None => {
+        Displacement::None | Displacement::AfterCounter => {
             (defenders, hero_charge, attacked_units, killed_units) = deal_damage(handler, attacker, attacker_pos, path, defenders);
         }
         Displacement::BeforeAttack => {
@@ -464,9 +492,9 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             for (p, d, ratio) in defenders {
                 if let Some(d) = d {
                     collided.push((p, None, ratio));
-                    if let Some(dp) = handler.get_map().get_neighbor(p, d) {
-                        if handler.get_map().get_unit(dp.point).is_some() {
-                            collided.push((dp.point, None, ratio));
+                    if let Some((p, _)) = handler.get_map().get_neighbor(p, d) {
+                        if handler.get_map().get_unit(p).is_some() {
+                            collided.push((p, None, ratio));
                         }
                     }
                 }
@@ -543,8 +571,8 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
 
     if exhaust_after_attacking {
         match handler.get_observed_unit(attacker_id) {
-            Some((p, None)) => handler.unit_status(*p, ActionStatus::Exhausted),
-            Some((p, Some(index))) => handler.unit_status_boarded(*p, *index, ActionStatus::Exhausted),
+            Some((p, None, _)) => handler.unit_status(*p, ActionStatus::Exhausted),
+            Some((p, Some(index), _)) => handler.unit_status_boarded(*p, *index, ActionStatus::Exhausted),
             None => (),
         }
     }
@@ -557,14 +585,14 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
         defenders.push((attacker.get_owner_id(), defender.clone(), *damage));
     }
     if execute_scripts {
-        for (defender_id, defender_pos, defender, damage) in attacked_units {
-            for script in attacker.get_attack_scripts(handler.get_game(), attacker_pos, &defender, defender_pos) {
-                script.trigger(handler, handler.get_observed_unit(attacker_id).cloned(), attacker, defender_pos, &defender, handler.get_observed_unit(defender_id).cloned(), damage);
+        for (defender_id, defender_pos, defender, damage) in &attacked_units {
+            for script in attacker.get_attack_scripts(handler.get_game(), attacker_pos, defender, *defender_pos) {
+                script.trigger(handler, handler.get_observed_unit_pos(attacker_id), attacker, *defender_pos, defender, handler.get_observed_unit_pos(*defender_id), *damage);
             }
         }
         for (defender_pos, defender) in killed_units {
             for script in attacker.get_kill_scripts(handler.get_game(), attacker_pos, &defender, defender_pos) {
-                script.trigger(handler, handler.get_observed_unit(attacker_id).cloned(), attacker, defender_pos, &defender);
+                script.trigger(handler, handler.get_observed_unit_pos(attacker_id), attacker, defender_pos, &defender);
             }
         }
     }
@@ -575,7 +603,7 @@ fn filter_attack_targets<D: Direction>(game: &Game<D>, attacker: &Unit<D>, targe
     targets.into_iter()
     .filter(|(p, _, _)| {
         if let Some(defender) = game.get_map().get_unit(*p) {
-            attacker.could_attack(defender)
+            attacker.could_attack(defender, true)
         } else {
             false
         }
@@ -584,16 +612,15 @@ fn filter_attack_targets<D: Direction>(game: &Game<D>, attacker: &Unit<D>, targe
 }
 
 fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<&Path<D>>, targets: Vec<(Point, Option<D>, Rational32)>) -> (Vec<(Point, Option<D>, Rational32)>, u32, Vec<(usize, Point, Unit<D>, u8)>, Vec<(Point, Unit<D>)>) {
-    let is_counter = path.is_none();
     let mut raw_damage = HashMap::new();
     let mut hero_charge = 0;
-    for (defender_pos, _, factor) in targets.iter().cloned() {
+    for (defender_pos, dir, factor) in targets.iter().cloned() {
         let defender = handler.get_map().get_unit(defender_pos).unwrap();
         let hp = defender.get_hp();
         if hp == 0 {
             continue;
         }
-        let damage = calculate_attack_damage(handler.get_game(), attacker, attacker_pos, path, defender, defender_pos);
+        let damage = calculate_attack_damage(handler.get_game(), attacker, attacker_pos, path, defender, defender_pos, factor);
         if damage == 0 {
             continue;
         }
@@ -613,7 +640,7 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
     .map(|(p, raw_damage)| {
         let unit = handler.get_map().get_unit(*p).unwrap().clone();
         let hp = unit.get_hp() as u16;
-        (handler.observe_unit(*p, None), *p, unit, hp.min(*raw_damage) as u8)
+        (handler.observe_unit(*p, None).0, *p, unit, hp.min(*raw_damage) as u8)
     })
     //.filter(|(_, _, u, _)| u.get_team() != attacker.get_team())
     .collect();
@@ -646,7 +673,7 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
     (filter_attack_targets(handler.get_game(), attacker, targets), hero_charge, attack_script_targets, dead_units)
 }
 
-fn calculate_attack_damage<D: Direction>(game: &Game<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<&Path<D>>, defender: &Unit<D>, defender_pos: Point) -> i32 {
+fn calculate_attack_damage<D: Direction>(game: &Game<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<&Path<D>>, defender: &Unit<D>, defender_pos: Point, factor: Rational32) -> i32 {
     let is_counter = path.is_none();
     let defensive_terrain = game.get_map().get_terrain(defender_pos).unwrap();
     let terrain_defense = Rational32::from_integer(1) + defensive_terrain.defense_bonus(defender);
@@ -670,7 +697,7 @@ fn calculate_attack_damage<D: Direction>(game: &Game<D>, attacker: &Unit<D>, att
     for (p, hero_unit, hero) in game.get_map().hero_influence_at(attacker_pos, attacker.get_owner_id()) {
         attack_bonus += game.environment().config.aura_attack_bonus(game, attacker, attacker_pos, &hero_unit, p, defender, defender_pos, hero.typ(), hero.is_power_active(), is_counter);
     }
-    (Rational32::from_integer(attacker.get_hp() as i32) / 100 * attack * attack_bonus / defense_bonus / terrain_defense)
+    (Rational32::from_integer(attacker.get_hp() as i32) / 100 * attack * attack_bonus * factor / defense_bonus / terrain_defense)
     .ceil().to_integer()
 }
 
@@ -686,7 +713,7 @@ fn displace<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, mut
             } else {
                 *d
             };
-            let mut line = handler.get_map().get_line(*pos, d, distance.abs() as usize, NeighborMode::FollowPipes);
+            let mut line = handler.get_map().get_line(*pos, d, distance.abs() as usize + 1, NeighborMode::FollowPipes);
             while line.len() > 1 {
                 let end = line.pop().unwrap().point;
                 if handler.get_map().get_unit(end).is_none() {
@@ -741,7 +768,7 @@ pub(crate) fn after_attacking<D: Direction>(handler: &mut EventHandler<D>, attac
 }
 
 crate::listable_enum! {
-    #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     pub enum WeaponType {
         MachineGun,
         Shells,
@@ -751,6 +778,7 @@ crate::listable_enum! {
         Torpedo,
         Rifle,
         Bombs,
+        Bonk,
         // immobile ranged
         SurfaceMissiles,
         AirMissiles,
@@ -864,18 +892,18 @@ pub enum ArmorType {
 }*/
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Displacement {
         None,
         InsteadOfAttack,
         BeforeAttack,
         BetweenAttacks,
-        // AfterCounter makes no sense to me
+        AfterCounter,
     }
 }
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum AttackTargeting {
         Enemy,
         Friendly,
@@ -884,5 +912,117 @@ crate::listable_enum! {
         // special case for King-Castling
         // same owner + both unmoved
         OwnedBothUnmoved,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use interfaces::game_interface::GameInterface;
+    use interfaces::map_interface::MapInterface;
+
+    use crate::config::config::Config;
+    use crate::config::environment::Environment;
+    use crate::game::commands::Command;
+    use crate::game::fog::FogMode;
+    use crate::game::settings::{GameSettings, PlayerSettings};
+    use crate::map::direction::Direction4;
+    use crate::map::map::Map;
+    use crate::map::point::{Point, Position};
+    use crate::map::point_map::PointMap;
+    use crate::map::wrapping_map::*;
+    use crate::terrain::TerrainType;
+    use crate::units::commands::{UnitCommand, UnitAction};
+    use crate::units::movement::Path;
+    use crate::units::unit_types::UnitType;
+
+    use super::*;
+
+
+    #[test]
+    fn terrain_defense() {
+        let map = PointMap::new(4, 4, false);
+        let environment = Environment {
+            config: Arc::new(Config::test_config()),
+            map_size: map.size(),
+            settings: None,
+        };
+        let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
+        let mut map = Map::new(wmap, &environment);
+        map.set_terrain(Point::new(0, 0), TerrainType::Street.instance(&environment).build_with_defaults());
+        map.set_terrain(Point::new(1, 0), TerrainType::Grass.instance(&environment).build_with_defaults());
+        map.set_terrain(Point::new(2, 0), TerrainType::Forest.instance(&environment).build_with_defaults());
+        map.set_terrain(Point::new(3, 0), TerrainType::Mountain.instance(&environment).build_with_defaults());
+        map.set_unit(Point::new(0, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(3, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(0, 1), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
+        let (mut game, _) = map.game_server(&GameSettings {
+            name: "terrain_defense".to_string(),
+            fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
+            players: vec![
+                PlayerSettings::new(0),
+                PlayerSettings::new(1),
+            ],
+        }, || 0.);
+        for x in 0..4 {
+            game.handle_command(Command::UnitCommand(UnitCommand {
+                unload_index: None,
+                path: Path::new(Point::new(x, 1)),
+                action: UnitAction::Attack(AttackVector::Point(Point::new(x, 0))),
+            }), || 0.).unwrap();
+        }
+        assert_eq!(40, game.get_map().get_unit(Point::new(0, 0)).unwrap().get_hp());
+        assert_eq!(45, game.get_map().get_unit(Point::new(1, 0)).unwrap().get_hp());
+        assert_eq!(50, game.get_map().get_unit(Point::new(2, 0)).unwrap().get_hp());
+        assert_eq!(53, game.get_map().get_unit(Point::new(3, 0)).unwrap().get_hp());
+    }
+
+    #[test]
+    fn displacement() {
+        let map = PointMap::new(5, 4, false);
+        let environment = Environment {
+            config: Arc::new(Config::test_config()),
+            map_size: map.size(),
+            settings: None,
+        };
+        let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
+        let mut map = Map::new(wmap, &environment);
+        map.set_unit(Point::new(1, 0), Some(UnitType::Magnet.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(1).build_with_defaults()));
+        let (mut game, _) = map.game_server(&GameSettings {
+            name: "displacement".to_string(),
+            fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
+            players: vec![
+                PlayerSettings::new(0),
+                PlayerSettings::new(1),
+            ],
+        }, || 0.);
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(1, 0)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        }), || 0.).unwrap();
+        assert_eq!(100, game.get_map().get_unit(Point::new(1, 0)).unwrap().get_hp());
+        assert_eq!(100, game.get_map().get_unit(Point::new(2, 0)).unwrap().get_hp());
+        assert_eq!(None, game.get_map().get_unit(Point::new(3, 0)));
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(1, 1)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        }), || 0.).unwrap();
+        assert_eq!(70, game.get_map().get_unit(Point::new(0, 1)).unwrap().get_hp());
+        for x in 1..=3 {
+            assert_eq!(None, game.get_map().get_unit(Point::new(x, 1)));
+        }
+        assert_eq!(94, game.get_map().get_unit(Point::new(4, 1)).unwrap().get_hp());
     }
 }

@@ -1,0 +1,7 @@
+Id;Name;NeedsOwner;CaptureResistance;UpdateAmphibious;MaxBuildsPerTurn;MaxAnger;VisionRange;IncomeFactor;Repair;Build;SellsHero;Chess;MovementOptions
+Grass;Grass;;;Land;;;;;;;;;
+Street;Street;;;Land;;;;;;;;;
+Forest;Forest;;;Land;;;;;;;;;
+Mountain;Mountain;;;Land;;;;;;;;;
+City;City;;10;Land;;;0;1;true;;;;
+Factory;Factory;;10;Land;4;;0;;true;true;;;

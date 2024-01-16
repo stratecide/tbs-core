@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
-
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
 

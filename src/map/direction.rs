@@ -1,5 +1,6 @@
 use std::fmt;
 use std::hash::Hash;
+use std::ops::{Add, Sub, Neg, AddAssign, SubAssign};
 use crate::map::point::*;
 use crate::units::attributes::{Attribute, AttributeError, AttributeKey, TrAttribute};
 
@@ -212,13 +213,11 @@ impl fmt::Display for Direction6 {
     }
 }
 
-pub trait Translation<D>: Clone + PartialEq
+pub trait Translation<D>: Clone + Copy + PartialEq + Neg<Output = Self> + Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign
 where D: Direction {
     fn new(direction: D, distance: i16) -> Self;
     fn len(&self) -> u16;
     fn between<P: Position<i16>>(from: &P, to: &P, odd_if_hex: bool) -> Self;
-    fn plus(&self, other: &Self) -> Self;
-    fn minus(&self, other: &Self) -> Self;
     fn multiply(&self, factor: i16) -> Self;
     fn is_parallel(&self, other: &Self) -> bool;
     #[cfg(feature = "rendering")]
@@ -234,6 +233,7 @@ pub struct Translation4 {
     x: i16,
     y: i16,
 }
+
 impl Translation<Direction4> for Translation4 {
     fn new(direction: Direction4, distance: i16) -> Self {
         match direction {
@@ -250,18 +250,6 @@ impl Translation<Direction4> for Translation4 {
         Translation4 {
             x: to.x() - from.x(),
             y: to.y() - from.y(),
-        }
-    }
-    fn plus(&self, other: &Self) -> Self {
-        Translation4 {
-            x: self.x + other.x,
-            y: self.y + other.y,
-        }
-    }
-    fn minus(&self, other: &Self) -> Self {
-        Translation4 {
-            x: self.x - other.x,
-            y: self.y - other.y,
         }
     }
     fn multiply(&self, factor: i16) -> Self {
@@ -301,6 +289,43 @@ impl Translation<Direction4> for Translation4 {
     }
 }
 
+impl Add for Translation4 {
+    type Output = Self;
+    fn add(mut self, rhs: Self) -> Self::Output {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self
+    }
+}
+
+impl Neg for Translation4 {
+    type Output = Self;
+    fn neg(mut self) -> Self::Output {
+        self.x = -self.x;
+        self.y = -self.y;
+        self
+    }
+}
+
+impl Sub for Translation4 {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + rhs.neg()
+    }
+}
+
+impl AddAssign for Translation4 {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs
+    }
+}
+
+impl SubAssign for Translation4 {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Zippable)]
 #[zippable(support = u16)]
 pub struct Translation6 {
@@ -335,21 +360,6 @@ impl Translation<Direction6> for Translation6 {
         Translation6 {
             d0: x + y / 2,
             d60: -y,
-        }
-    }
-    fn plus(&self, other: &Self) -> Self {
-        if self.d60.abs() > 1000 || other.d60.abs() > 1000 {
-            println!("Translation6 are going too far!, {:?}, {:?}", self, other);
-        }
-        Translation6 {
-            d0: self.d0 + other.d0,
-            d60: self.d60 + other.d60,
-        }
-    }
-    fn minus(&self, other: &Self) -> Self {
-        Translation6 {
-            d0: self.d0 - other.d0,
-            d60: self.d60 - other.d60,
         }
     }
     fn multiply(&self, factor: i16) -> Self {
@@ -398,6 +408,46 @@ impl Translation<Direction6> for Translation6 {
             }
         }
         P::new(x, y)
+    }
+}
+
+impl Add for Translation6 {
+    type Output = Self;
+    fn add(mut self, rhs: Self) -> Self::Output {
+        self.d0 += rhs.d0;
+        self.d60 += rhs.d60;
+        if self.d0.abs() > 1000 || self.d60.abs() > 1000 {
+            println!("Translation6 are going too far: {:?}!", self);
+        }
+        self
+    }
+}
+
+impl Neg for Translation6 {
+    type Output = Self;
+    fn neg(mut self) -> Self::Output {
+        self.d0 = -self.d0;
+        self.d60 = -self.d60;
+        self
+    }
+}
+
+impl Sub for Translation6 {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + rhs.neg()
+    }
+}
+
+impl AddAssign for Translation6 {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs
+    }
+}
+
+impl SubAssign for Translation6 {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs
     }
 }
 

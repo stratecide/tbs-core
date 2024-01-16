@@ -58,7 +58,7 @@ macro_rules! enum_with_custom {(
         $(#[$meta])*
         $vis enum $name {
             $($member),*,
-            Custom(usize)
+            Custom(u32)
         }
 
         impl $name {

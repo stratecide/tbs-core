@@ -747,7 +747,7 @@ impl<D: Direction> UnitStep<D> {
             Self::Simple(p, step) => (*p, *step, Some(unit.clone())),
             Self::Transform(p, step, unit2) => (*p, *step, unit2.clone()),
         };
-        let p2 = step.progress(game.get_map(), p).unwrap();
+        let p2 = step.progress(game.get_map(), p).unwrap().0;
         let unit1 = unit.fog_replacement(game, p, game.get_fog_at(team, p));
         let unit2 = unit2.and_then(|unit| unit.fog_replacement(game, p2, game.get_fog_at(team, p2)));
         if let Some(unit2) = unit2.clone() {

@@ -1,7 +1,6 @@
 use std::fmt::{Display, Debug};
 
 use zipper::*;
-use serde::Deserialize;
 
 use crate::config::environment::Environment;
 use crate::units::attributes::DEFAULT_OWNER;
@@ -10,7 +9,7 @@ use crate::player::Owner;
 use super::TerrainType;
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum TerrainAttributeKey {
         //PipeConnection,
         Owner,

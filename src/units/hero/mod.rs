@@ -1,9 +1,5 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::str::FromStr;
-
-use num_rational::Rational32;
-use serde::Deserialize;
 use zipper::*;
 
 use crate::config::environment::Environment;
@@ -12,7 +8,6 @@ use crate::map::direction::Direction;
 use crate::game::game::Game;
 use crate::map::map::Map;
 use crate::map::point::Point;
-use crate::config::ConfigParseError;
 use super::attributes::*;
 use super::commands::UnitAction;
 use super::movement::Path;
@@ -20,7 +15,7 @@ use super::unit::Unit;
 
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum HeroType {
         None,
         EarlGrey,
