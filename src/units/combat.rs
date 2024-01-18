@@ -472,8 +472,8 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
     let (attacker_id, _) = handler.observe_unit(attacker_pos, None);
     let mut defenders = filter_attack_targets(handler.get_game(), attacker, targets);
     let mut hero_charge;
-    let mut attacked_units = Vec::new();
-    let mut killed_units = Vec::new();
+    let mut attacked_units;
+    let mut killed_units;
     match attacker.displacement() {
         Displacement::None | Displacement::AfterCounter => {
             (defenders, hero_charge, attacked_units, killed_units) = deal_damage(handler, attacker, attacker_pos, path, defenders);
@@ -614,6 +614,7 @@ fn filter_attack_targets<D: Direction>(game: &Game<D>, attacker: &Unit<D>, targe
 fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<&Path<D>>, targets: Vec<(Point, Option<D>, Rational32)>) -> (Vec<(Point, Option<D>, Rational32)>, u32, Vec<(usize, Point, Unit<D>, u8)>, Vec<(Point, Unit<D>)>) {
     let mut raw_damage = HashMap::new();
     let mut hero_charge = 0;
+    let mut attack_script_targets = Vec::new();
     for (defender_pos, dir, factor) in targets.iter().cloned() {
         let defender = handler.get_map().get_unit(defender_pos).unwrap();
         let hp = defender.get_hp();
@@ -630,17 +631,21 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
             if attacker.get_team() != defender.get_team() {
                 hero_charge += 1;
             }
+            if !raw_damage.contains_key(&defender_pos) {
+                attack_script_targets.push(defender_pos);
+            }
             let previous_damage = raw_damage.remove(&defender_pos).unwrap_or(0);
             raw_damage.insert(defender_pos, previous_damage + damage as u16);
         } else {
             handler.unit_heal(defender_pos.clone(), (-damage) as u8);
         }
     }
-    let attack_script_targets: Vec<(usize, Point, Unit<D>, u8)> = raw_damage.iter()
-    .map(|(p, raw_damage)| {
-        let unit = handler.get_map().get_unit(*p).unwrap().clone();
+    let attack_script_targets: Vec<(usize, Point, Unit<D>, u8)> = attack_script_targets.into_iter()
+    .map(|p| {
+        let raw_damage = *raw_damage.get(&p).unwrap();
+        let unit = handler.get_map().get_unit(p).unwrap().clone();
         let hp = unit.get_hp() as u16;
-        (handler.observe_unit(*p, None).0, *p, unit, hp.min(*raw_damage) as u8)
+        (handler.observe_unit(p, None).0, p, unit, hp.min(raw_damage) as u8)
     })
     //.filter(|(_, _, u, _)| u.get_team() != attacker.get_team())
     .collect();
@@ -954,14 +959,14 @@ mod tests {
         map.set_terrain(Point::new(1, 0), TerrainType::Grass.instance(&environment).build_with_defaults());
         map.set_terrain(Point::new(2, 0), TerrainType::Forest.instance(&environment).build_with_defaults());
         map.set_terrain(Point::new(3, 0), TerrainType::Mountain.instance(&environment).build_with_defaults());
-        map.set_unit(Point::new(0, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(1, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(3, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(0, 1), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(0, 0), Some(UnitType::Bazooka.instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 0), Some(UnitType::Bazooka.instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 0), Some(UnitType::Bazooka.instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(3, 0), Some(UnitType::Bazooka.instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(0, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
         let (mut game, _) = map.game_server(&GameSettings {
             name: "terrain_defense".to_string(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
@@ -974,13 +979,13 @@ mod tests {
             game.handle_command(Command::UnitCommand(UnitCommand {
                 unload_index: None,
                 path: Path::new(Point::new(x, 1)),
-                action: UnitAction::Attack(AttackVector::Point(Point::new(x, 0))),
+                action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
             }), || 0.).unwrap();
         }
-        assert_eq!(40, game.get_map().get_unit(Point::new(0, 0)).unwrap().get_hp());
-        assert_eq!(45, game.get_map().get_unit(Point::new(1, 0)).unwrap().get_hp());
-        assert_eq!(50, game.get_map().get_unit(Point::new(2, 0)).unwrap().get_hp());
-        assert_eq!(53, game.get_map().get_unit(Point::new(3, 0)).unwrap().get_hp());
+        let base_damage = 100. - game.get_map().get_unit(Point::new(0, 0)).unwrap().get_hp() as f32;
+        assert_eq!(100 - (base_damage / 1.1).ceil() as u8, game.get_map().get_unit(Point::new(1, 0)).unwrap().get_hp());
+        assert_eq!(100 - (base_damage / 1.2).ceil() as u8, game.get_map().get_unit(Point::new(2, 0)).unwrap().get_hp());
+        assert_eq!(100 - (base_damage / 1.3).ceil() as u8, game.get_map().get_unit(Point::new(3, 0)).unwrap().get_hp());
     }
 
     #[test]

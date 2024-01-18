@@ -1,3 +1,9 @@
-;HoverBike;Sniper
-City;true;true
-Factory;true;true
+;HoverBike;Sniper;Bazooka;Magnet;DragonHead;Artillery;SmallTank;BigTank;AntiAir;RocketLauncher;LaserShark;TransportBoat;DroneBoat;WaveBreaker;Submarine;Cruiser;Carrier;SwimmingFactory;TransportHeli;AttackHeli;Blimp;Bomber;Fighter;LightDrone;Pyramid;MegaCannon;LaserCannon;DroneTower;ShockTower;LifeCrystal;Tentacle;Pawn;Rook;Bishop;Knight;Queen;King;0
+Airport;;;;;;;;;;;;;;;;;;;true;true;true;true;true;;;;;;;;;;;;;;;
+City;true;true;true;true;true;true;true;true;true;true;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Factory;true;true;true;true;true;true;true;true;true;true;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Hq;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;;true;true;true;true;true;;;;;;;;;;;;;;;
+OilPlatform;;;;;;;;;;;true;true;true;true;true;true;true;;;;;;;;;;;;;;;;;;;;;
+Port;;;;;;;;;;;true;true;true;true;true;true;true;;;;;;;;;;;;;;;;;;;;;
+ConstructionSite;;;;;;;;;;;;;;;;;;;;;;;;;;true;true;true;true;;;;;;;;;
+Memorial;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;;true;true;true;true;true;;;;;;;;;;;;;;;

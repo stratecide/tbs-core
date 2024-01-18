@@ -13,13 +13,13 @@ crate::enum_with_custom! {
         // ground units
         Sniper,
         Bazooka,
+        Magnet,
         DragonHead,
         Artillery,
         SmallTank,
         BigTank,
         AntiAir,
         RocketLauncher,
-        Magnet,
         // sea units
         LaserShark,
         TransportBoat,

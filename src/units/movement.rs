@@ -45,6 +45,7 @@ crate::listable_enum! {
         Plane,
 
         Chess,
+        None,
     }
 }
 

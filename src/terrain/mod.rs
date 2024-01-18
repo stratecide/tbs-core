@@ -42,7 +42,7 @@ crate::enum_with_custom! {
         Sea,
         ShallowSea,
         Street,
-        Tavern,
+        Memorial,
         //TrashIsland,
         //Crater,
         TentacleDepths,

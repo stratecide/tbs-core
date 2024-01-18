@@ -95,7 +95,7 @@ impl Environment {
     // terrain
 
     pub fn default_terrain(&self) -> Terrain {
-        TerrainBuilder::new(self, self.config.terrain_types()[0])
+        TerrainBuilder::new(self, crate::terrain::TerrainType::Grass)
         .build()
         // TODO: when validating the config, make sure this unwrap doesn't panic
         .unwrap()
