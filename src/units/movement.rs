@@ -283,6 +283,9 @@ impl<D: Direction> TBallast<D> {
                     Ordering::Less
                 }*/
             },
+            (Self::DiagonalDirection(_), Self::DiagonalDirection(_)) => {
+                Ordering::Equal
+            },
             (Self::QueenDirection(_), Self::QueenDirection(_)) => {
                 Ordering::Equal
             },

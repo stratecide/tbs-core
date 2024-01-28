@@ -33,7 +33,7 @@ mod tests {
             settings: None,
         };
         let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
-        let mut map = Map::new(wmap, &environment);
+        let mut map = Map::new2(wmap, &environment);
         map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build_with_defaults());
         map.set_unit(Point::new(0, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(3, 3), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
@@ -41,8 +41,8 @@ mod tests {
             name: "capture_city".to_string(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
             players: vec![
-                PlayerSettings::new(0),
-                PlayerSettings::new(1),
+                PlayerSettings::new(&environment.config, 0),
+                PlayerSettings::new(&environment.config, 1),
             ],
         }, || 0.);
         game.handle_command(Command::UnitCommand(UnitCommand {
@@ -70,7 +70,7 @@ mod tests {
             settings: None,
         };
         let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
-        let mut map = Map::new(wmap, &environment);
+        let mut map = Map::new2(wmap, &environment);
         map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build_with_defaults());
         map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build_with_defaults());
         map.set_unit(Point::new(3, 3), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
@@ -78,8 +78,8 @@ mod tests {
             name: "build_unit".to_string(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
             players: vec![
-                PlayerSettings::new(0),
-                PlayerSettings::new(1),
+                PlayerSettings::new(&environment.config, 0),
+                PlayerSettings::new(&environment.config, 1),
             ],
         }, || 0.);
         assert_eq!(100, *game.current_player().funds);

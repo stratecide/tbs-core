@@ -135,6 +135,13 @@ pub struct PipeState<D: Direction> {
 }
 
 impl<D: Direction> PipeState<D> {
+    pub fn directions(&self) -> [(D, bool); 2] {
+        [
+            (self.directions[0], self.ends[0]),
+            (self.directions[1], self.ends[1]),
+        ]
+    }
+
     /**
      * @d: direction that leads into this PipeState
      * return: if d is a valid entry, returns Distortion to apply. None otherwise

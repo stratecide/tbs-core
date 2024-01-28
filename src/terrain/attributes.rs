@@ -3,7 +3,6 @@ use std::fmt::{Display, Debug};
 use zipper::*;
 
 use crate::config::environment::Environment;
-use crate::units::attributes::DEFAULT_OWNER;
 use crate::player::Owner;
 
 use super::TerrainType;
@@ -34,11 +33,11 @@ impl Display for TerrainAttributeKey {
 }
 
 impl TerrainAttributeKey {
-    pub(super) fn default(&self, typ: TerrainType, env: &Environment) -> TerrainAttribute {
+    pub fn default(&self, _: &Environment) -> TerrainAttribute {
         use TerrainAttribute as A;
         match self {
             //Self::PipeConnection => A::PipeConnection(D::angle_0().pipe_entry()),
-            Self::Owner => A::Owner(if env.config.terrain_needs_owner(typ) {DEFAULT_OWNER} else {-1}),
+            Self::Owner => A::Owner(0),
             Self::CaptureProgress => A::CaptureProgress(None),
             Self::BuiltThisTurn => A::BuiltThisTurn(0),
             Self::Exhausted => A::Exhausted(false),
@@ -48,7 +47,7 @@ impl TerrainAttributeKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum TerrainAttribute {
+pub enum TerrainAttribute {
     //PipeConnection(D::P),
     Owner(i8),
     CaptureProgress(CaptureProgress),
@@ -58,7 +57,7 @@ pub(crate) enum TerrainAttribute {
 }
 
 impl TerrainAttribute {
-    pub(crate) fn key(&self) -> TerrainAttributeKey {
+    pub fn key(&self) -> TerrainAttributeKey {
         use TerrainAttributeKey as A;
         match self {
             //Self::PipeConnection(_) => A::PipeConnection,
@@ -211,7 +210,7 @@ impl SupportedZippable<&Environment> for (Owner, u8) {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct Anger(pub(crate) u8);
+pub struct Anger(pub u8);
 attribute_tuple!(Anger, Anger);
 
 impl SupportedZippable<&Environment> for Anger {
@@ -230,7 +229,7 @@ impl From<u8> for Anger {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct BuiltThisTurn(pub(crate) u8);
+pub struct BuiltThisTurn(pub u8);
 attribute_tuple!(BuiltThisTurn, BuiltThisTurn);
 
 impl SupportedZippable<&Environment> for BuiltThisTurn {

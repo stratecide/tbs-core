@@ -114,11 +114,11 @@ impl Player {
             self.funds.zip(zipper);
         }
     }
-    pub fn import(unzipper: &mut Unzipper, environment: &Environment, hidden: bool) -> Result<Self, ZipperError> {
+    pub fn import(unzipper: &mut Unzipper, environment: &Environment, hide_secrets: bool) -> Result<Self, ZipperError> {
         let owner_id = unzipper.read_u8(bits_needed_for_max_value(environment.config.max_player_count() as u32 - 1))?;
         let dead = unzipper.read_bool()?;
         let commander = Commander::import(unzipper, environment)?;
-        let funds = if hidden {
+        let funds = if hide_secrets {
             0.into()
         } else {
             Funds::unzip(unzipper)?

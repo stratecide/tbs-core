@@ -62,6 +62,10 @@ impl Commander {
         self.typ
     }
 
+    pub fn name(&self) -> &str {
+        self.environment.config.commander_name(self.typ)
+    }
+
     pub fn get_charge(&self) -> u32 {
         self.charge
     }
@@ -70,6 +74,16 @@ impl Commander {
     }
     pub fn add_charge(&mut self, delta: i32) {
         self.charge = (self.charge as i32 + delta).max(0) as u32;
+    }
+
+    pub fn power_count(&self) -> usize {
+        self.environment.config.commander_powers(self.typ).len()
+    }
+
+    pub fn power_name(&self, index: usize) -> &str {
+        self.environment.config.commander_powers(self.typ)
+        .get(index).and_then(|p| Some(p.name.as_str()))
+        .unwrap_or("")
     }
 
     pub fn get_next_power(&self) -> usize {

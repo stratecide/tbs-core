@@ -34,6 +34,16 @@ impl<D: Direction> Distortion<D> {
     pub fn is_mirrored(&self) -> bool {
         self.mirrored
     }
+    pub fn get_mirrored_mut(&mut self) -> &mut bool {
+        &mut self.mirrored
+    }
+
+    pub fn get_rotation(&self) -> D {
+        self.rotation
+    }
+    pub fn get_rotation_mut(&mut self) -> &mut D {
+        &mut self.rotation
+    }
 
     pub fn update_direction(&self, direction: D) -> D {
         let mut direction = direction.rotate_by(self.rotation.mirror_vertically());

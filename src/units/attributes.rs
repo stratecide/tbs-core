@@ -56,12 +56,12 @@ impl Display for AttributeKey {
 }
 
 impl AttributeKey {
-    pub(super) fn default<D: Direction>(&self, typ: UnitType, env: &Environment) -> Attribute<D> {
+    pub fn default<D: Direction>(&self, env: &Environment) -> Attribute<D> {
         use Attribute as A;
         match self {
             Self::Hp => A::Hp(100),
             Self::Hero => A::Hero(Hero::new(env, HeroType::None, None)),
-            Self::Owner => A::Owner(if env.config.unit_needs_owner(typ) {DEFAULT_OWNER} else {-1}),
+            Self::Owner => A::Owner(0),
             Self::ActionStatus => A::ActionStatus(ActionStatus::Ready),
             Self::Amphibious => A::Amphibious(Amphibious::default()),
             Self::Direction => A::Direction(D::angle_0()),
@@ -76,7 +76,7 @@ impl AttributeKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Attribute<D: Direction> {
+pub enum Attribute<D: Direction> {
     Hp(u8),
     Hero(Hero),
     Owner(i8),
@@ -92,7 +92,7 @@ pub(crate) enum Attribute<D: Direction> {
 }
 
 impl<D: Direction> Attribute<D> {
-    pub(crate) fn key(&self) -> AttributeKey {
+    pub fn key(&self) -> AttributeKey {
         use AttributeKey as A;
         match self {
             Self::Hp(_) => A::Hp,
@@ -355,6 +355,16 @@ crate::listable_enum! {
         InWater,
     }
 }
+
+impl Display for Amphibious {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Self::OnLand => "Land-Mode",
+            Self::InWater => "Sea-Mode",
+        })
+    }
+}
+
 attribute!(Amphibious, Amphibious);
 
 impl Default for Amphibious {
@@ -373,6 +383,18 @@ impl Default for Amphibious {
         Repairing,
     }
 //}
+
+impl Display for ActionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Self::Ready => "Ready",
+            Self::Exhausted => "Exhausted",
+            Self::Capturing => "Capturing",
+            Self::Repairing => "Repairing",
+        })
+    }
+}
+
 attribute!(ActionStatus, ActionStatus);
 
 pub(super) struct Unmoved(pub(super) bool);

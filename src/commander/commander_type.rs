@@ -3,7 +3,7 @@ use zipper::*;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
 
-crate::listable_enum! {
+crate::enum_with_custom! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum CommanderType {
         None,

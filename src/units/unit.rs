@@ -1,5 +1,6 @@
 use std::collections::{HashSet, HashMap};
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -45,8 +46,10 @@ pub struct Unit<D: Direction> {
 impl<D: Direction> Debug for Unit<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.name())?;
-        for v in self.attributes.values() {
-            write!(f, "{v:?}")?;
+        let mut keys: Vec<_> = self.attributes.keys().collect();
+        keys.sort();
+        for key in keys {
+            write!(f, "{:?}", self.attributes.get(key).unwrap())?;
         }
         write!(f, ")")
     }
@@ -70,7 +73,7 @@ impl<D: Direction> Unit<D> {
         }
         for key in self.environment.unit_attributes(self.typ, self.get_owner_id()) {
             if !self.attributes.contains_key(key) {
-                self.attributes.insert(*key, key.default(self.typ, &self.environment));
+                self.attributes.insert(*key, key.default(&self.environment));
             }
         }
     }
@@ -83,6 +86,10 @@ impl<D: Direction> Unit<D> {
 
     pub fn name(&self) -> &str {
         self.environment.config.unit_name(self.typ)
+    }
+
+    pub fn value(&self) -> i32 {
+        self.typ.price(&self.environment, self.get_owner_id()) * self.get_hp() as i32 / 100
     }
 
     pub fn transportable_units(&self) -> &[UnitType] {
@@ -266,7 +273,7 @@ impl<D: Direction> Unit<D> {
             T::try_from(a.clone()).expect("Impossible! attribute of wrong type")
         } else {
             //println!("Units of type {:?} don't have {} attribute, but it was requested anyways", self.typ, T::key());
-            T::try_from(T::key().default(self.typ, &self.environment)).expect("Impossible! attribute defaults to wrong type")
+            T::try_from(T::key().default(&self.environment)).expect("Impossible! attribute defaults to wrong type")
         }
     }
 
@@ -292,7 +299,7 @@ impl<D: Direction> Unit<D> {
                 self.attributes.remove(key);
             }
             for key in co_after.iter().filter(|k| !co_before.contains(k)) {
-                self.attributes.insert(*key, key.default(self.typ, &self.environment));
+                self.attributes.insert(*key, key.default(&self.environment));
             }
             self.fix_transported();
         }
@@ -572,7 +579,7 @@ impl<D: Direction> Unit<D> {
             if transporter.is_some() && Attribute::<D>::build_from_transporter(*key).is_some() {
                 continue;
             }
-            let value = key.default(self.typ, &self.environment);
+            let value = key.default(&self.environment);
             let value = self.attributes.get(key).unwrap_or(&value);
             value.export(&self.environment, zipper, self.typ, transporter.is_some(), owner, self.get_hero().typ());
         }
@@ -674,6 +681,22 @@ impl<D: Direction> Unit<D> {
         .collect()
     }
 
+    pub fn attackable_positions(&self, game: &Game<D>, path: &Path<D>, get_fog: impl Fn(Point) -> FogIntensity) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        if let Ok((destination, _)) = path.end(game.get_map()) {
+            let mut this = self.clone();
+            this.transformed_by_path(game.get_map(), path);
+            if this.can_attack_after_moving() || path.steps.len() == 0 {
+                for attack_vector in AttackVector::find(&this, game, destination, None, &get_fog) {
+                    for (point, _, _) in attack_vector.get_splash(&this, game, destination, &get_fog) {
+                        result.insert(point);
+                    }
+                }
+            }
+        }
+        result
+    }
+
     pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<Path<D>> {
         search_path(game, self, path_so_far, None, |_path, p, can_stop_here| {
             if goal == p {
@@ -743,6 +766,20 @@ impl<D: Direction> Unit<D> {
         }
     }
 
+    pub fn transformed_by_path(&mut self, map: &Map<D>, path: &Path<D>) -> bool {
+        let mut current = path.start;
+        let mut changed = false;
+        for step in &path.steps {
+            let (next, distortion) = match step.progress(map, current) {
+                Ok(n) => n,
+                _ => return changed,
+            };
+            changed = self.transformed_by_movement(map, current, next, distortion) || changed;
+            current = next;
+        }
+        changed
+    }
+
     pub fn could_attack(&self, defender: &Self, allow_friendly_fire: bool) -> bool {
         let base_damage = self.base_damage(defender.typ());
         if base_damage.is_none() {
@@ -777,16 +814,12 @@ impl<D: Direction> Unit<D> {
 
     pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>) -> Vec<UnitAction<D>> {
         let mut this = self.clone();
-        let mut current = path.start;
-        for step in &path.steps {
-            let (next, distortion) = match step.progress(game.get_map(), current) {
-                Ok(n) => n,
-                _ => return Vec::new(),
-            };
-            this.transformed_by_movement(game.get_map(), current, next, distortion);
-            current = next;
+        this.transformed_by_path(game.get_map(), path);
+        if let Ok((end, _)) = path.end(game.get_map()) {
+            this._options_after_path_transformed(game, path, end)
+        } else {
+            Vec::new()
         }
-        this._options_after_path_transformed(game, path, current)
     }
 
     fn _options_after_path_transformed(&self, game: &Game<D>, path: &Path<D>, destination: Point) -> Vec<UnitAction<D>> {
@@ -897,6 +930,14 @@ impl<D: Direction> SupportedZippable<&Environment> for Unit<D> {
     }
 }
 
+impl<D: Direction> Hash for Unit<D> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let mut zipper = Zipper::new();
+        self.export(&mut zipper, &self.environment);
+        zipper.finish().hash(state);
+    }
+}
+
 pub struct TransportedRef<'a, D: Direction> {
     unit: &'a mut Unit<D>,
 }
@@ -953,6 +994,14 @@ impl<D: Direction> UnitBuilder<D> {
         self
     }
 
+    pub fn set_attribute(mut self, attribute: &Attribute<D>) -> Self {
+        let key = attribute.key();
+        if self.unit.has_attribute(key) {
+            self.unit.attributes.insert(key, attribute.clone());
+        }
+        self
+    }
+
     pub fn set_owner_id(mut self, id: i8) -> Self {
         self.unit.set_owner_id(id);
         self
@@ -983,8 +1032,22 @@ impl<D: Direction> UnitBuilder<D> {
         self
     }
 
+    pub fn set_amphibious(mut self, amphibious: Amphibious) -> Self {
+        self.unit.set_amphibious(amphibious);
+        self
+    }
+
     pub fn set_zombified(mut self, zombified: bool) -> Self {
         self.unit.set_zombified(zombified);
+        self
+    }
+
+    pub fn set_transported(mut self, transported: Vec<Unit<D>>) -> Self {
+        if let Some(mut transported_mut) = self.unit.get_transported_mut() {
+            for unit in transported {
+                transported_mut.push(unit);
+            }
+        }
         self
     }
 
@@ -1013,7 +1076,7 @@ impl<D: Direction> UnitBuilder<D> {
                     println!("WARNING: building unit with missing Attribute {key}");
                     //return Err(AttributeError { requested: *key, received: None });
                 }*/
-                unit.attributes.insert(*key, key.default(self.unit.typ(), &self.unit.environment));
+                unit.attributes.insert(*key, key.default(&self.unit.environment));
             }
         }
         unit

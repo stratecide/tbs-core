@@ -32,8 +32,10 @@ pub struct Terrain {
 impl Debug for Terrain {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.name())?;
-        for v in self.attributes.values() {
-            write!(f, "{v:?}")?;
+        let mut keys: Vec<_> = self.attributes.keys().collect();
+        keys.sort();
+        for key in keys {
+            write!(f, "{:?}", self.attributes.get(key).unwrap())?;
         }
         write!(f, ")")
     }
@@ -153,7 +155,7 @@ impl Terrain {
             T::try_from(a.clone()).expect("Impossible! attribute of wrong type")
         } else {
             //println!("Terrain of type {:?} doesn't have {} attribute, but it was requested anyways", self.typ, T::key());
-            T::try_from(T::key().default(self.typ, &self.environment)).expect("Impossible! attribute defaults to wrong type")
+            T::try_from(T::key().default(&self.environment)).expect("Impossible! attribute defaults to wrong type")
         }
     }
 
@@ -282,7 +284,7 @@ impl SupportedZippable<&Environment> for Terrain {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         self.typ.export(zipper, support);
         for key in support.config.terrain_specific_attributes(self.typ) {
-            let value = key.default(self.typ, &self.environment);
+            let value = key.default(&self.environment);
             let value = self.attributes.get(key).unwrap_or(&value);
             value.export(zipper, support, self.typ);
         }
@@ -327,6 +329,14 @@ impl TerrainBuilder {
         self
     }
 
+    pub fn set_attribute(mut self, attribute: &TerrainAttribute) -> Self {
+        let key = attribute.key();
+        if self.terrain.has_attribute(key) {
+            self.terrain.attributes.insert(key, attribute.clone());
+        }
+        self
+    }
+
     pub fn set_owner_id(mut self, id: i8) -> Self {
         self.terrain.set_owner_id(id);
         self
@@ -358,7 +368,7 @@ impl TerrainBuilder {
                     println!("WARNING: building terrain with missing Attribute {key}");
                     //return Err(AttributeError { requested: *key, received: None });
                 }*/
-                terrain.attributes.insert(*key, key.default(self.terrain.typ(), &self.terrain.environment));
+                terrain.attributes.insert(*key, key.default(&self.terrain.environment));
             }
         }
         terrain

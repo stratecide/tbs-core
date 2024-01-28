@@ -106,7 +106,7 @@ impl FogSetting {
 
 pub type FogDuration = I<1, 255>;
 
-#[derive(Debug, Clone, PartialEq, Zippable)]
+#[derive(Debug, Clone, PartialEq, Eq, Zippable)]
 #[zippable(bits = 4)]
 pub enum FogMode {
     Constant(FogSetting),

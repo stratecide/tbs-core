@@ -139,10 +139,12 @@ impl PointMap {
 
 #[cfg(test)]
 mod tests {
-    use crate::map::point::Point;
+    use semver::Version;
+
+    use crate::{map::point::Point, VERSION};
     use super::*;
 
-    
+
     #[test]
     fn filled_point_map() {
         let map = PointMap::new(5, 6, false);
@@ -159,5 +161,20 @@ mod tests {
         for y in 0..6 {
             assert!(!map.is_point_valid(Point::new(5, y)));
         }
+    }
+
+    #[test]
+    fn export_import_point_map() {
+        let mut map = PointMap::new(5, 6, false);
+        map.set_valid(Point::new(2, 5), false);
+        map.set_valid(Point::new(1, 0), false);
+        let mut zipper = Zipper::new();
+        map.zip(&mut zipper);
+        zipper.write_u8(0b10101010, 8);
+        let data = zipper.finish();
+        println!("export_import_point_map, {data:?}");
+        let mut unzipper = Unzipper::new(data, Version::parse(VERSION).unwrap());
+        assert_eq!(Ok(map), PointMap::unzip(&mut unzipper));
+        assert_eq!(Ok(0b10101010), unzipper.read_u8(8));
     }
 }

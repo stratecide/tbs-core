@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::sync::Arc;
 
 use interfaces::game_interface::Events;
@@ -16,7 +17,7 @@ use crate::game::settings::PlayerSettings;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
-use crate::details::*;
+use crate::{details::*, VERSION};
 use crate::details;
 use crate::terrain::terrain::Terrain;
 use crate::units::hero::Hero;
@@ -35,10 +36,50 @@ where D: Direction
     details: HashMap<Point, Vec<Detail<D>>>,
 }
 
+impl<D: Direction> Debug for Map<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{:?}", self.environment)?;
+        writeln!(f, "{:?}", self.wrapping_logic)?;
+        for p in self.all_points() {
+            write!(f, "{},{}: {:?}", p.x, p.y, self.terrain.get(&p).unwrap())?;
+            if let Some(details) = self.details.get(&p) {
+                write!(f, " +")?;
+                for detail in details {
+                    write!(f, " {detail:?}")?;
+                }
+            }
+            if let Some(unit) = self.units.get(&p) {
+                write!(f, " - {unit:?}")?;
+            }
+            writeln!(f, "")?;
+        }
+        Ok(())
+    }
+}
+
 impl<D> Map<D>
 where D: Direction
 {
-    pub fn new(wrapping_logic: WrappingMap<D>, environment: &Environment) -> Self {
+    pub fn new(wrapping_logic: WrappingMap<D>, config: &Arc<Config>) -> Self {
+        let environment = Environment {
+            config: config.clone(),
+            map_size: wrapping_logic.pointmap().size(),
+            settings: None,
+        };
+        let mut terrain = HashMap::new();
+        for p in wrapping_logic.pointmap().get_valid_points() {
+            terrain.insert(p, environment.default_terrain());
+        }
+        Map {
+            environment,
+            wrapping_logic,
+            terrain,
+            units: HashMap::new(),
+            details: HashMap::new(),
+        }
+    }
+
+    pub fn new2(wrapping_logic: WrappingMap<D>, environment: &Environment) -> Self {
         let mut terrain = HashMap::new();
         for p in wrapping_logic.pointmap().get_valid_points() {
             terrain.insert(p, environment.default_terrain());
@@ -548,7 +589,7 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
             return Err(interfaces::map_interface::NotPlayable::TooFewPlayers);
         }
         let players:Vec<PlayerSettings> = owners.into_iter()
-            .map(|owner| PlayerSettings::new(owner))
+            .map(|owner| PlayerSettings::new(&self.environment.config, owner))
             .collect();
         Ok(settings::GameSettings {
             name: "".to_string(),
@@ -560,10 +601,17 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
     fn game_server<R: 'static + Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, Events<Game<D>>) {
         Game::new_server(self, settings, random)
     }
-    fn game_client(self, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Game<D> {
+    fn game_client(self, settings: &settings::GameSettings, events: &[events::Event<D>]) -> Game<D> {
         Game::new_client(self, settings, events)
     }
 
+    fn get_config(&self) -> &Arc<Config> {
+        &self.environment().config
+    }
+
+    fn get_version() -> Version {
+        Version::parse(VERSION).expect(&format!("Cargo version has invalid format: {}", VERSION))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

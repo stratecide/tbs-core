@@ -72,7 +72,11 @@ pub struct Config {
     pub(super) max_commander_charge: u32,
 }
 
-impl ConfigInterface for Config {}
+impl ConfigInterface for Config {
+    fn id(&self) -> &str {
+        &self.name
+    }
+}
 
 impl Config {
     pub fn name(&self) -> &str {
@@ -196,12 +200,17 @@ impl Config {
         self.unit_config(typ).vision
     }
 
-    pub(crate) fn unit_specific_attributes(&self, typ: UnitType) -> &[AttributeKey] {
+    pub fn unit_specific_attributes(&self, typ: UnitType) -> &[AttributeKey] {
         self.unit_attributes.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
     }
 
     pub(crate) fn unit_specific_hidden_attributes(&self, typ: UnitType) -> &[AttributeKey] {
         self.unit_hidden_attributes.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
+    }
+
+    pub fn unit_specific_statuses(&self, typ: UnitType) -> &[ActionStatus] {
+        // TODO
+        &[ActionStatus::Ready, ActionStatus::Exhausted, ActionStatus::Repairing, ActionStatus::Capturing]
     }
 
     pub fn unit_transportable(&self, typ: UnitType) -> &[UnitType] {
@@ -224,6 +233,10 @@ impl Config {
 
     pub(super) fn hero_config(&self, typ: HeroType) -> &HeroTypeConfig {
         self.heroes.get(&typ).expect(&format!("Environment doesn't contain hero type {typ:?}"))
+    }
+
+    pub fn hero_name(&self, typ: HeroType) -> &str {
+        &self.hero_config(typ).name
     }
 
     pub fn hero_price(&self, typ: HeroType, unit: UnitType) -> Option<i32> {
@@ -441,7 +454,7 @@ impl Config {
         }
     }
 
-    pub(crate) fn terrain_specific_attributes(&self, typ: TerrainType) -> &[TerrainAttributeKey] {
+    pub fn terrain_specific_attributes(&self, typ: TerrainType) -> &[TerrainAttributeKey] {
         self.terrain_attributes.get(&typ).expect(&format!("Environment doesn't contain terrain type {typ:?}"))
     }
 

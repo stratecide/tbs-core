@@ -15,7 +15,7 @@ use crate::game::events;
 use crate::game::fog::*;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
-use crate::player::*;
+use crate::{player::*, VERSION};
 use crate::units::attributes::AttributeKey;
 use crate::units::hero::HeroType;
 use crate::units::movement::Path;
@@ -26,7 +26,7 @@ use super::events::Event;
 use super::settings::GameSettings;
 use super::{event_handler, commands};
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Game<D: Direction> {
     environment: Environment,
     map: Map<D>,
@@ -39,7 +39,10 @@ pub struct Game<D: Direction> {
 
 impl<D: Direction> Game<D> {
     fn new(mut map: Map<D>, settings: &settings::GameSettings) -> Self {
-        map.start_game(&Arc::new(settings.clone()));
+        let settings = settings.start();
+        map.start_game(&Arc::new(settings));
+        let settings = map.environment().settings.as_ref().unwrap();
+        let fog_mode = settings.fog_mode.clone();
         let players: Vec<Player> = settings.players.iter()
             .map(|player| player.build(map.environment()))
             .collect();
@@ -50,7 +53,7 @@ impl<D: Direction> Game<D> {
             ended: false,
             players: players.try_into().unwrap(),
             map,
-            fog_mode: settings.fog_mode.clone(),
+            fog_mode,
         }
     }
 
@@ -60,7 +63,7 @@ impl<D: Direction> Game<D> {
         (this, events)
     }
 
-    pub fn new_client(map: Map<D>, settings: &settings::GameSettings, events: &Vec<events::Event<D>>) -> Self {
+    pub fn new_client(map: Map<D>, settings: &settings::GameSettings, events: &[events::Event<D>]) -> Self {
         let mut this = Self::new(map, settings);
         for e in events {
             this.handle_event(e);
@@ -216,14 +219,14 @@ impl<D: Direction> Game<D> {
                 }
             }
         }
-        HeroType::list()
+        self.environment.config.hero_types()
         .into_iter()
         .filter(|m| !used.contains(m))
         .cloned()
         .collect()
     }
     
-    pub fn undo(&mut self, events: &Vec<events::Event<D>>) {
+    pub fn undo(&mut self, events: &[events::Event<D>]) {
         for event in events.iter().rev() {
             event.undo(self);
         }
@@ -252,6 +255,8 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
+        zipper.write_bool(D::is_hex());
+        self.environment.settings.as_ref().unwrap().export(zipper, &self.environment.config, true);
         self.map.wrapping_logic().zip(zipper);
         for p in self.map.all_points() {
             self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
@@ -292,11 +297,13 @@ fn create_base_fog<D: Direction>(_map: &Map<D>, players: &[Player]) -> HashMap<C
     fog
 }
 
-fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: Arc<Config>, name: String, is_server: bool) -> Result<Game<D>, ZipperError> {
+fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: &Arc<Config>, name: String, is_server: bool) -> Result<Game<D>, ZipperError> {
+    // is_hex: skip because at this point we already know
+    unzipper.read_bool()?;
     let mut environment = Environment {
         config: config.clone(),
         map_size: MapSize::new(0, 0),
-        settings: Some(Arc::new(GameSettings::import(unzipper, &config, name, true)?)),
+        settings: Some(Arc::new(GameSettings::import(unzipper, config, name, true)?)),
     };
     let map = Map::<D>::import_from_unzipper(unzipper, &mut environment)?;
     let current_turn = unzipper.read_u32(32)?;
@@ -323,9 +330,9 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
     type Command = commands::Command<D>;
     type CommandError = commands::CommandError;
     type ImportError = ZipperError;
-    type Config = Config;
+    type Config = Arc<Config>;
 
-    fn import_server(data: game_interface::ExportedGame, config: Arc<Config>, name: String, version: Version) -> Result<Box<Self>, ZipperError> {
+    fn import_server(data: game_interface::ExportedGame, config: &Arc<Config>, name: String, version: Version) -> Result<Box<Self>, ZipperError> {
         if let Some(mut hidden_data) = data.hidden {
             let mut unzipper = Unzipper::new(hidden_data.server, version.clone());
             let mut game = import_game_base(&mut unzipper, config, name, true)?;
@@ -348,7 +355,7 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
         }
     }
 
-    fn import_client(public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, config: Arc<Config>, name: String, version: Version) -> Result<Box<Game<D>>, ZipperError> {
+    fn import_client(public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, config: &Arc<Config>, name: String, version: Version) -> Result<Box<Game<D>>, ZipperError> {
         let mut unzipper = Unzipper::new(public, version.clone());
         let mut game = import_game_base(&mut unzipper, config, name, false)?;
         let points = game.map.all_points();
@@ -411,7 +418,6 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
     fn export(&self) -> game_interface::ExportedGame {
         // server perspective
         let mut zipper = Zipper::new();
-        self.environment.settings.as_ref().unwrap().export(&mut zipper, &self.environment.config, true);
         self.zip(&mut zipper, None);
         zipper.write_u32(self.current_turn, 32);
         zipper.write_bool(self.ended);
@@ -506,6 +512,18 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
     
     fn import_events(&self, bytes: Vec<u8>, version: Version) -> Result<Vec<Self::Event>, Self::ImportError> {
         Event::import_list(bytes, &self.environment, version)
+    }
+
+    fn get_config(&self) -> &Self::Config {
+        &self.environment.config
+    }
+
+    fn get_name(&self) -> &str {
+        self.environment.config.name()
+    }
+
+    fn get_version() -> Version {
+        Version::parse(VERSION).expect(&format!("Cargo version has invalid format: {}", VERSION))
     }
 }
 

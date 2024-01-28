@@ -14,7 +14,7 @@ use super::movement::Path;
 use super::unit::Unit;
 
 
-crate::listable_enum! {
+crate::enum_with_custom! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum HeroType {
         None,
@@ -131,7 +131,7 @@ impl Hero {
 impl SupportedZippable<&Environment> for Hero {
     fn export(&self, zipper: &mut Zipper, environment: &Environment) {
         let bits = bits_needed_for_max_value(environment.config.hero_count() as u32 - 1);
-        zipper.write_u32(HeroType::list().iter().position(|t| *t == self.typ).unwrap_or(0) as u32, bits);
+        zipper.write_u32(environment.config.hero_types().iter().position(|t| *t == self.typ).unwrap_or(0) as u32, bits);
         if self.typ == HeroType::None {
             return;
         }
@@ -145,7 +145,7 @@ impl SupportedZippable<&Environment> for Hero {
 
     fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
         let bits = bits_needed_for_max_value(environment.config.hero_count() as u32 - 1);
-        let typ = *HeroType::list().get(unzipper.read_u32(bits)? as usize).ok_or(ZipperError::EnumOutOfBounds("HeroType".to_string()))?;
+        let typ = *environment.config.hero_types().get(unzipper.read_u32(bits)? as usize).ok_or(ZipperError::EnumOutOfBounds("HeroType".to_string()))?;
         let origin = if typ != HeroType::None {
             Option::<Point>::import(unzipper, environment)?
         } else {

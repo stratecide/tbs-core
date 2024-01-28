@@ -954,7 +954,7 @@ mod tests {
             settings: None,
         };
         let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
-        let mut map = Map::new(wmap, &environment);
+        let mut map = Map::new2(wmap, &environment);
         map.set_terrain(Point::new(0, 0), TerrainType::Street.instance(&environment).build_with_defaults());
         map.set_terrain(Point::new(1, 0), TerrainType::Grass.instance(&environment).build_with_defaults());
         map.set_terrain(Point::new(2, 0), TerrainType::Forest.instance(&environment).build_with_defaults());
@@ -971,8 +971,8 @@ mod tests {
             name: "terrain_defense".to_string(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
             players: vec![
-                PlayerSettings::new(0),
-                PlayerSettings::new(1),
+                PlayerSettings::new(&environment.config, 0),
+                PlayerSettings::new(&environment.config, 1),
             ],
         }, || 0.);
         for x in 0..4 {
@@ -997,7 +997,7 @@ mod tests {
             settings: None,
         };
         let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
-        let mut map = Map::new(wmap, &environment);
+        let mut map = Map::new2(wmap, &environment);
         map.set_unit(Point::new(1, 0), Some(UnitType::Magnet.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(3, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(1, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(0).build_with_defaults()));
@@ -1007,8 +1007,8 @@ mod tests {
             name: "displacement".to_string(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
             players: vec![
-                PlayerSettings::new(0),
-                PlayerSettings::new(1),
+                PlayerSettings::new(&environment.config, 0),
+                PlayerSettings::new(&environment.config, 1),
             ],
         }, || 0.);
         game.handle_command(Command::UnitCommand(UnitCommand {

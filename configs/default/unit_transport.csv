@@ -1,1 +1,7 @@
-
+;HoverBike;Sniper;Bazooka;Magnet;DragonHead;Artillery;SmallTank;BigTank;AntiAir;RocketLauncher;LaserShark;TransportBoat;DroneBoat;WaveBreaker;Submarine;Cruiser;Carrier;SwimmingFactory;LightDrone;0
+TransportBoat;true;true;true;true;true;true;true;true;true;true;;;;;;;;;;true
+DroneBoat;;;;;;;;;;;;;;;;;;;true;
+Carrier;;;;;;;;;;;;;;;;;;;true;
+DroneTower;;;;;;;;;;;;;;;;;;;true;
+TransportHeli;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;;true
+SwimmingFactory;true;true;true;true;true;true;true;true;true;true;;;;;;;;;;true

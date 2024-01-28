@@ -77,9 +77,9 @@ impl Environment {
         .collect()
     }
 
-    pub fn unit_valid_action_status(&self, _typ: UnitType, _owner: i8) -> &[ActionStatus] {
+    pub fn unit_valid_action_status(&self, typ: UnitType, _owner: i8) -> &[ActionStatus] {
         // TODO
-        &[ActionStatus::Ready, ActionStatus::Exhausted, ActionStatus::Repairing, ActionStatus::Capturing]
+        self.config.unit_specific_statuses(typ)
     }
 
     pub fn unit_transport_capacity(&self, typ: UnitType, owner: i8, hero: HeroType) -> usize {
@@ -106,7 +106,7 @@ impl PartialEq for Environment {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.config, &other.config)
         && match (&self.settings, &other.settings) {
-            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (Some(a), Some(b)) => **a == **b,
             (None, None) => true,
             _ => false
         }
@@ -116,7 +116,7 @@ impl Eq for Environment {}
 impl Debug for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(settings) = &self.settings {
-            write!(f, "Game '{}' with", settings.name)?;
+            write!(f, "Game '{:?}' with ", **settings)?;
         }
         write!(f, "Ruleset: '{}'", self.config.name())
     }

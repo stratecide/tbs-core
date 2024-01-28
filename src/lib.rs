@@ -83,15 +83,24 @@ macro_rules! enum_with_custom {(
             }*/
         }
 
-        impl FromStr for $name {
-            type Err = ConfigParseError;
+        impl std::str::FromStr for $name {
+            type Err = crate::config::ConfigParseError;
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 if let Ok(custom) = s.parse() {
                     return Ok(Self::Custom(custom));
                 }
                 match s {
                     $(stringify!($member) => Ok(Self::$member),)*
-                    _ => Err(ConfigParseError::UnknownEnumMember(s.to_string()))
+                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(s.to_string()))
+                }
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    $(Self::$member => write!(f, "{}", stringify!($member)),)*
+                    Self::Custom(c) => write!(f, "{c}"),
                 }
             }
         }
