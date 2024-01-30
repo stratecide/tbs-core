@@ -19,6 +19,8 @@ use super::movement::Path;
 use super::movement::PathSearchFeedback;
 use super::movement::PathStep;
 use super::movement::search_path;
+use super::movement::PathStepTakes;
+use super::movement::TemporaryBallast;
 use super::unit::Unit;
 use super::unit_types::UnitType;
 
@@ -27,6 +29,7 @@ pub const UNIT_REPAIR: u32 = 30;
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnitAction<D: Direction> {
     Wait,
+    Take,
     Enter,
     Capture,
     Repair,
@@ -44,6 +47,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Wait => write!(f, "Wait"),
+            Self::Take => write!(f, "Take"),
             Self::Enter => write!(f, "Enter"),
             Self::Capture => write!(f, "Capture"),
             Self::Repair => write!(f, "Repair"),
@@ -61,9 +65,36 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
 }
 
 impl<D: Direction> UnitAction<D> {
-    pub fn execute(&self, handler: &mut EventHandler<D>, end: Point, path: &Path<D>) {
+    pub fn execute(&self, handler: &mut EventHandler<D>, end: Point, path: &Path<D>, ballast: &TemporaryBallast<D>) {
         let needs_to_exhaust = match self {
             Self::Wait => true,
+            Self::Take => {
+                let attacker = handler.get_map().get_unit(end).unwrap().clone();
+                if attacker.has_attribute(super::attributes::AttributeKey::EnPassant) {
+                    let mut deaths = HashSet::new();
+                    for dp in handler.get_map().all_points() {
+                        if let Some(u) = handler.get_map().get_unit(dp) {
+                            if attacker.could_take(&u, PathStepTakes::Allow) && u.get_en_passant() == Some(end) {
+                                deaths.insert(dp);
+                            }
+                        }
+                    }
+                    handler.trigger_all_unit_scripts(
+                        |game, unit, unit_pos, transporter, heroes| {
+                            if deaths.contains(&unit_pos) {
+                                unit.on_death(game, unit_pos, transporter, Some((&attacker, end)), heroes, &[])
+                            } else {
+                                Vec::new()
+                            }
+                        },
+                        |handler| handler.unit_mass_death(&deaths),
+                        |handler, script, unit_pos, unit, _observation_id| {
+                            script.trigger(handler, unit_pos, unit);
+                        }
+                    );
+                }
+                true
+            }
             Self::Enter => {
                 let transporter = handler.get_map().get_unit(end).unwrap();
                 let index = transporter.get_transported().len() - 1;
@@ -99,20 +130,26 @@ impl<D: Direction> UnitAction<D> {
                 }
             }
             Self::Attack(attack_vector) => {
-                attack_vector.execute(handler, end, Some(path), true, true, true);
+                let transporter = if let Some(unit) = handler.get_map().get_unit(path.start).filter(|_| path.start != end) {
+                    Some(unit.clone())
+                } else {
+                    None
+                };
+                let transporter = transporter.as_ref().map(|u| (u, path.start));
+                attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true);
                 false
             }
             Self::BuyMercenary(hero_type) => {
                 let unit = handler.get_map().get_unit(end).unwrap();
                 let cost = hero_type.price(handler.environment(), &unit).unwrap();
                 handler.money_change(unit.get_owner_id(), cost);
-                handler.unit_set_hero(end, Hero::new(handler.environment(), *hero_type, Some(end)));
+                handler.unit_set_hero(end, Hero::new(*hero_type, Some(end)));
                 true
             }
             Self::MercenaryPowerSimple => {
                 let hero = handler.get_map().get_unit(end).unwrap().get_hero();
                 let change = hero.get_charge();
-                handler.hero_charge_sub(end, change.into());
+                handler.hero_charge_sub(end, None, change.into());
                 handler.hero_power_start(end);
                 true
             }
@@ -200,7 +237,7 @@ impl<D: Direction> UnitCommand<D> {
         let fog = handler.get_game().get_fog().get(&team);
         let board_at_the_end = self.action == UnitAction::Enter;
         // check whether the path seemed possible for the player (ignores fog traps)
-        if !search_path(handler.get_game(), &unit, &self.path, fog, |path, p, can_stop_here| {
+        let ballast = search_path(handler.get_game(), &unit, &self.path, fog, |path, p, can_stop_here, _| {
             if *path == self.path && board_at_the_end {
                 if let Some(transporter) = handler.get_map().get_unit(p) {
                     if p != path.start && transporter.can_transport(&unit) {
@@ -211,10 +248,9 @@ impl<D: Direction> UnitCommand<D> {
                 return PathSearchFeedback::Found;
             }
             PathSearchFeedback::Rejected
-        }).is_some() {
-            return Err(CommandError::InvalidPath);
-        }
-        if !unit.options_after_path(handler.get_game(), &self.path).contains(&self.action) {
+        }).ok_or(CommandError::InvalidPath)?.1;
+        let transporter = handler.get_map().get_unit(self.path.start).filter(|_| self.path.start != self.path.end(handler.get_map()).unwrap().0);
+        if !unit.options_after_path(handler.get_game(), &self.path, transporter, ballast.get_entries()).contains(&self.action) {
             return Err(CommandError::InvalidAction);
         }
 
@@ -255,14 +291,14 @@ impl<D: Direction> UnitCommand<D> {
                 handler.unit_path(self.unload_index, &path_taken, board_at_the_end, false);
             }
             let end = path_taken.end(handler.get_map()).unwrap().0;
-            self.action.execute(handler, end, &path_taken);
+            self.action.execute(handler, end, &path_taken, &ballast);
         }
         exhaust_all_on_chess_board(handler, path_taken.start);
         Ok(())
     }
 
     pub fn check_path(game: &Game<D>, unit: &Unit<D>, path_taken: &Path<D>, vision: Option<&HashMap<Point, FogIntensity>>, board_at_the_end: bool) -> bool {
-        search_path(game, unit, &path_taken, vision, |path, p, can_stop_here| {
+        search_path(game, unit, &path_taken, vision, |path, p, can_stop_here, _| {
             if path == path_taken && board_at_the_end {
                 if let Some(transporter) = game.get_map().get_unit(p) {
                     if p != path.start && transporter.can_transport(unit) {

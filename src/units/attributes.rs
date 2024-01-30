@@ -56,11 +56,11 @@ impl Display for AttributeKey {
 }
 
 impl AttributeKey {
-    pub fn default<D: Direction>(&self, env: &Environment) -> Attribute<D> {
+    pub fn default<D: Direction>(&self) -> Attribute<D> {
         use Attribute as A;
         match self {
             Self::Hp => A::Hp(100),
-            Self::Hero => A::Hero(Hero::new(env, HeroType::None, None)),
+            Self::Hero => A::Hero(Hero::new(HeroType::None, None)),
             Self::Owner => A::Owner(0),
             Self::ActionStatus => A::ActionStatus(ActionStatus::Ready),
             Self::Amphibious => A::Amphibious(Amphibious::default()),

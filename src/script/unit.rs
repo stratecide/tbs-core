@@ -59,11 +59,6 @@ pub(super) fn anger_kraken<D: Direction>(handler: &mut EventHandler<D>) {
                         if unit.get_owner_id() > 0 {
                             let damage = damage_map.remove(&p).unwrap_or(0) + 40;
                             damage_map.insert(p, damage);
-                            let hp = unit.get_hp();
-                            handler.unit_damage(p, damage);
-                            if damage >= hp as u16 {
-                                handler.unit_death(p, true);
-                            }
                         }
                     }
                 }
@@ -72,8 +67,8 @@ pub(super) fn anger_kraken<D: Direction>(handler: &mut EventHandler<D>) {
                     let unit = handler.get_map().get_unit(*p).unwrap();
                     unit.get_hp() == 0
                 }).collect();
-                // if this triggered death effects, an infinite loop would be possible
-                handler.unit_mass_death(dead, false);
+                // if this triggered on_death effects, an infinite loop would be possible
+                handler.unit_mass_death(&dead);
             }
             handler.terrain_anger(p, anger as u8);
         }
@@ -133,10 +128,6 @@ fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &U
             return;
         }
     };
-    let path = if allow_counter {
-        Some(Path::new(position))
-    } else {
-        None
-    };
-    attack_vector.execute(handler, position, path.as_ref(), false, false, charge_powers);
+    // TODO: allow_counter is currently ignored
+    attack_vector.execute(handler, position, None, false, false, charge_powers);
 }

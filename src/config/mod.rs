@@ -6,6 +6,7 @@ mod commander_type_config;
 mod commander_power_config;
 mod commander_unit_config;
 mod unit_filter;
+mod number_modification;
 pub mod config;
 pub mod parse;
 pub mod environment;
@@ -33,6 +34,8 @@ pub enum ConfigParseError {
     InvalidBool(String),
     InvalidInteger(String),
     InvalidRatio(String),
+    InvalidNumber(String),
+    InvalidNumberModifier(String),
     MissingColumn(String),
     MissingCommanderForAttributes(CommanderType),
     MissingCommanderForPower(CommanderType),

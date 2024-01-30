@@ -78,19 +78,12 @@ impl Terrain {
 
     pub fn attack_bonus<D: Direction>(&self, unit: &Unit<D>) -> Rational32 {
         let bonus = self.environment.config.terrain_attack_bonus(self.typ, unit.default_movement_type());
-        // TODO: commander could have bonus attack in e.g. forest
         bonus
     }
     
     pub fn defense_bonus<D: Direction>(&self, unit: &Unit<D>) -> Rational32 {
         let bonus = self.environment.config.terrain_defense_bonus(self.typ, unit.default_movement_type());
-        // TODO: commander could have bonus defense in e.g. forest
         bonus
-    }
-
-    pub fn range_bonus<D: Direction>(&self, unit: &Unit<D>) -> u8 {
-        // TODO
-        0
     }
 
     pub fn income_factor(&self) -> i32 {
@@ -155,7 +148,7 @@ impl Terrain {
             T::try_from(a.clone()).expect("Impossible! attribute of wrong type")
         } else {
             //println!("Terrain of type {:?} doesn't have {} attribute, but it was requested anyways", self.typ, T::key());
-            T::try_from(T::key().default(&self.environment)).expect("Impossible! attribute defaults to wrong type")
+            T::try_from(T::key().default()).expect("Impossible! attribute defaults to wrong type")
         }
     }
 
@@ -284,7 +277,7 @@ impl SupportedZippable<&Environment> for Terrain {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         self.typ.export(zipper, support);
         for key in support.config.terrain_specific_attributes(self.typ) {
-            let value = key.default(&self.environment);
+            let value = key.default();
             let value = self.attributes.get(key).unwrap_or(&value);
             value.export(zipper, support, self.typ);
         }
@@ -368,7 +361,7 @@ impl TerrainBuilder {
                     println!("WARNING: building terrain with missing Attribute {key}");
                     //return Err(AttributeError { requested: *key, received: None });
                 }*/
-                terrain.attributes.insert(*key, key.default(&self.terrain.environment));
+                terrain.attributes.insert(*key, key.default());
             }
         }
         terrain

@@ -11,9 +11,9 @@ use crate::script::kill::KillScript;
 use crate::script::unit::UnitScript;
 use crate::units::attributes::*;
 use crate::units::combat::*;
-use crate::units::hero::HeroType;
 use crate::units::movement::MovementType;
 
+use super::number_modification::NumberMod;
 use super::ConfigParseError;
 use super::unit_filter::UnitFilter;
 
@@ -21,14 +21,16 @@ use super::unit_filter::UnitFilter;
 pub(super) struct CommanderPowerUnitConfig {
     pub(super) power: PowerRestriction,
     pub(super) affects: Vec<UnitFilter>,
-    pub(super) bonus_attack: Rational32,
-    pub(super) bonus_defense: Rational32,
-    pub(super) bonus_counter_attack: Rational32,
-    pub(super) bonus_counter_defense: Rational32,
+    pub(super) attack: NumberMod<Rational32>,
+    pub(super) defense: NumberMod<Rational32>,
+    pub(super) counter_attack: NumberMod<Rational32>,
+    pub(super) counter_defense: NumberMod<Rational32>,
+    pub(super) min_range: NumberMod<usize>,
+    pub(super) max_range: NumberMod<usize>,
     pub(super) visibility: Option<UnitVisibility>,
     pub(super) movement_type: Option<MovementType>,
     pub(super) water_movement_type: Option<MovementType>,
-    pub(super) bonus_movement_points: Rational32,
+    pub(super) movement_points: NumberMod<Rational32>,
     pub(super) bonus_vision: usize,
     pub(super) bonus_true_vision: usize,
     pub(super) stealthy: Option<bool>,
@@ -50,63 +52,61 @@ pub(super) struct CommanderPowerUnitConfig {
 impl CommanderPowerUnitConfig {
     pub fn parse(data: &HashMap<CommanderPowerUnitConfigHeader, &str>) -> Result<Self, ConfigParseError> {
         use CommanderPowerUnitConfigHeader as H;
-        use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
         let result = Self {
             power: match data.get(&H::Power) {
-                Some(s) => s.parse()?,
-                None => PowerRestriction::None,
+                Some(s) if s.len() > 0 => s.parse()?,
+                _ => PowerRestriction::None,
             },
             affects: parse_vec_def(data, H::Affects, Vec::new())?,
-            bonus_attack: parse_def(data, H::Attack, Rational32::from_integer(0))?,
-            bonus_counter_attack: parse_def(data, H::CounterAttack, Rational32::from_integer(0))?,
-            bonus_defense: parse_def(data, H::Defense, Rational32::from_integer(0))?,
-            bonus_counter_defense: parse_def(data, H::CounterDefense, Rational32::from_integer(0))?,
+            attack: parse_def(data, H::Attack, NumberMod::Keep)?,
+            counter_attack: parse_def(data, H::CounterAttack, NumberMod::Keep)?,
+            defense: parse_def(data, H::Defense, NumberMod::Keep)?,
+            counter_defense: parse_def(data, H::CounterDefense, NumberMod::Keep)?,
+            min_range: parse_def(data, H::MinRange, NumberMod::Keep)?,
+            max_range: parse_def(data, H::MaxRange, NumberMod::Keep)?,
             visibility: match data.get(&H::Visibility) {
-                Some(s) => Some(s.parse()?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse()?),
+                _ => None,
             },
             movement_type: match data.get(&H::MovementType) {
-                Some(s) => Some(s.parse()?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse()?),
+                _ => None,
             },
             water_movement_type: match data.get(&H::WaterMovementType) {
-                Some(s) => Some(s.parse()?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse()?),
+                _ => None,
             },
-            bonus_movement_points: parse_def(data, H::MovementPoints, Rational32::from_integer(0))?,
+            movement_points: parse_def(data, H::MovementPoints, NumberMod::Keep)?,
             bonus_vision: parse_def(data, H::Vision, 0)?,
             bonus_true_vision: parse_def(data, H::TrueVision, 0)?,
             stealthy: match data.get(&H::Stealthy) {
-                Some(s) => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
+                _ => None,
             },
             attack_targets: match data.get(&H::AttackTargets) {
-                Some(s) => Some(s.parse()?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse()?),
+                _ => None,
             },
             splash_damage: parse_vec_def(data, H::SplashDamage, Vec::new())?,
             cost_factor: match data.get(&H::CostFactor) {
-                Some(s) => Some(s.parse().map_err(|_| ConfigParseError::InvalidRatio(s.to_string()))?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidRatio(s.to_string()))?),
+                _ => None,
             },
             extra_cost: match data.get(&H::ExtraCost) {
-                Some(s) => Some(s.parse().map_err(|_| ConfigParseError::InvalidInteger(s.to_string()))?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidInteger(s.to_string()))?),
+                _ => None,
             },
             displacement: match data.get(&H::Displacement) {
-                Some(s) => Some(s.parse()?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse()?),
+                _ => None,
             },
             displacement_distance: match data.get(&H::DisplacementDistance) {
-                Some(s) => Some(s.parse().map_err(|_| ConfigParseError::InvalidInteger(s.to_string()))?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidInteger(s.to_string()))?),
+                _ => None,
             },
             can_be_displaced: match data.get(&H::CanBeDisplaced) {
-                Some(s) => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
-                None => None,
+                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
+                _ => None,
             },
             build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new())?.into_iter().collect(),
             on_start_turn: parse_vec_def(data, H::OnStartTurn, Vec::new())?,
@@ -139,6 +139,8 @@ crate::listable_enum! {
         CounterAttack,
         Defense,
         CounterDefense,
+        MinRange,
+        MaxRange,
         Visibility,
         MovementType,
         WaterMovementType,
@@ -172,7 +174,7 @@ crate::listable_enum! {
 pub(super) enum PowerRestriction {
     None,
     Commander(CommanderType, Option<u8>),
-    Hero(HeroType, Option<bool>),
+    //Hero(HeroType, Option<bool>),
 }
 
 impl FromStr for PowerRestriction {
@@ -181,7 +183,7 @@ impl FromStr for PowerRestriction {
         let mut it = s.split(&['(', ' ', '-', ')'])
         .map(str::trim);
         Ok(match it.next().unwrap() {
-            "None" => Self::None,
+            "None" | "" => Self::None,
             "Commander" | "Co" => {
                 let commander: CommanderType = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?.parse()?;
                 let power = if let Some(power) = it.next() {
@@ -191,7 +193,7 @@ impl FromStr for PowerRestriction {
                 };
                 Self::Commander(commander, power)
             }
-            "Hero" | "He" => {
+            /*"Hero" | "He" => {
                 let commander: HeroType = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?.parse()?;
                 let power = if let Some(power) = it.next() {
                     Some(power.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?)
@@ -199,7 +201,7 @@ impl FromStr for PowerRestriction {
                     None
                 };
                 Self::Hero(commander, power)
-            }
+            }*/
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         })
     }

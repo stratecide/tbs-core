@@ -386,7 +386,7 @@ where D: Direction
         result
     }
 
-    pub fn hero_influence_at(&self, point: Point, owner_id: i8) -> Vec<(Point, Unit<D>, Hero)> {
+    pub fn hero_influence_at(&self, point: Point, owner_id: i8) -> Vec<(Unit<D>, Hero, Point, Option<usize>)> {
         let mut result = vec![];
         for p in self.all_points() {
             if let Some(unit) = self.get_unit(p) {
@@ -395,7 +395,15 @@ where D: Direction
                 }
                 let hero = unit.get_hero();
                 if hero.in_range(self, p, point) {
-                    result.push((p, unit.clone(), hero));
+                    result.push((unit.clone(), hero, p, None));
+                }
+                for (i, unit) in unit.get_transported().iter().enumerate() {
+                    if unit.is_hero() {
+                        let hero = unit.get_hero();
+                        if hero.in_range(self, p, point) {
+                            result.push((unit.clone(), hero, p, Some(i)));
+                        }
+                    }
                 }
             }
         }

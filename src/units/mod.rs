@@ -1,7 +1,3 @@
-/*pub mod chess;
-pub mod structures;
-pub mod mercenary;
-pub mod normal_units;*/
 pub mod commands;
 pub mod movement;
 pub mod combat;
@@ -11,10 +7,6 @@ pub mod unit_types;
 pub mod unit;
 
 use zipper::*;
-/*use self::chess::*;
-use self::structures::*;
-use self::mercenary::*;
-use self::normal_units::*;*/
 
 pub type Hp = U<100>;
 

@@ -97,9 +97,11 @@ impl Commander {
     pub fn get_active_power(&self) -> usize {
         self.power
     }
+
     pub fn set_active_power(&mut self, index: usize) {
         self.power = index;
     }
+
     pub fn can_activate_power(&self, index: usize) -> bool {
         if self.power == index {
             return false;
@@ -111,6 +113,7 @@ impl Commander {
         power.usable_from_power.contains(&(self.power as u8))
         && power.required_charge <= self.charge
     }
+
     pub fn power_cost(&self, index: usize) -> u32 {
         let power = match self.environment.config.commander_powers(self.typ).get(index) {
             Some(power) => power,
@@ -118,6 +121,7 @@ impl Commander {
         };
         power.required_charge
     }
+
     pub fn power_activation_effects(&self, index: usize) -> Vec<PlayerScript> {
         let power = match self.environment.config.commander_powers(self.typ).get(index) {
             Some(power) => power,
@@ -126,7 +130,7 @@ impl Commander {
         power.effects.clone()
     }
 
-    pub fn unit_start_turn_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
+    /*pub fn unit_start_turn_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
         self.environment.config.commander_unit_start_turn_effects(self, unit, game, pos)
     }
 
@@ -156,6 +160,6 @@ impl Commander {
 
     pub fn defense_bonus<D: Direction>(&self, defender: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool, other_unit: &Unit<D>, other_pos: Point) -> Rational32 {
         self.environment.config.commander_defense_bonus(self, defender, game, pos, is_counter, other_unit, other_pos)
-    }
+    }*/
     
 }

@@ -236,9 +236,10 @@ impl<D: Direction> Game<D> {
         let mut result = HashSet::new();
         for p in self.map.all_points() {
             if let Some(unit) = self.map.get_unit(p) {
-                if self.can_see_unit_at(team, p, unit, false) && unit.threatens(threatened) && unit.shortest_path_to_attack(self, &Path::new(p), pos).is_some() {
+                if self.can_see_unit_at(team, p, unit, false) && unit.threatens(threatened) && unit.shortest_path_to_attack(self, &Path::new(p), pos, None).is_some() {
                     result.insert(p);
                 }
+                // TODO: also check transported units
             }
         }
         result

@@ -71,7 +71,19 @@ pub(super) fn mass_damage<D: Direction>(handler: &mut EventHandler<D>, team: Cli
         }
     }
     handler.unit_mass_damage(&damage_map);
-    handler.unit_mass_death(dead, true);
+    handler.trigger_all_unit_scripts(
+        |game, unit, unit_pos, transporter, heroes| {
+            if dead.contains(&unit_pos) {
+                unit.on_death(game, unit_pos, transporter, None, heroes, &[])
+            } else {
+                Vec::new()
+            }
+        },
+        |handler| handler.unit_mass_death(&dead),
+        |handler, script, unit_pos, unit, _observation_id| {
+            script.trigger(handler, unit_pos, unit);
+        }
+    );
 }
 
 pub(super) fn mass_heal<D: Direction>(handler: &mut EventHandler<D>, owner_id: i8, heal: u8) {

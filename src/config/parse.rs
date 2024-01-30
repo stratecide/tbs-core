@@ -61,11 +61,12 @@ impl Config {
             unit_attributes: HashMap::new(),
             unit_hidden_attributes: HashMap::new(),
             attack_damage: HashMap::new(),
+            max_transported: 0,
             // heroes
             hero_types: Vec::new(),
             heroes: HashMap::new(),
             hero_units: HashMap::new(),
-            hero_powered_units: HashMap::new(),
+            //hero_powered_units: HashMap::new(),
             max_hero_charge: 0,
             // terrain
             terrain_types: Vec::new(),
@@ -111,6 +112,7 @@ impl Config {
                 // TODO: error
             }
             result.unit_types.push(conf.id);
+            result.max_transported = result.max_transported.max(conf.transport_capacity);
             result.units.insert(conf.id, conf);
         }
 
@@ -219,6 +221,7 @@ impl Config {
             }
             headers.push(header);
         }
+        let mut bonus_transported = 0;
         for line in reader.records() {
             let mut map = HashMap::new();
             let line = line?;
@@ -230,10 +233,12 @@ impl Config {
                 // TODO: error
             }
             result.hero_types.push(conf.id);
-            result.hero_powered_units.insert(conf.id, HashMap::new());
+            //result.hero_powered_units.insert(conf.id, HashMap::new());
             result.max_hero_charge = result.max_hero_charge.max(conf.charge);
+            bonus_transported = bonus_transported.max(conf.transport_capacity as usize);
             result.heroes.insert(conf.id, conf);
         }
+        result.max_transported += bonus_transported;
         if result.max_hero_charge > i8::MAX as u8 {
             return Err(Box::new(ConfigParseError::HeroMaxChargeExceeded(i8::MAX as u8)));
         }
@@ -472,6 +477,7 @@ impl Config {
             }
             headers.push(header);
         }
+        let mut bonus_transported = 0;
         for line in reader.records() {
             let mut map = HashMap::new();
             let line = line?;
@@ -487,8 +493,10 @@ impl Config {
             result.commander_units.insert(conf.id, HashMap::new());
             result.commander_unit_attributes.insert(conf.id, Vec::new());
             result.max_commander_charge = result.max_commander_charge.max(conf.max_charge);
+            bonus_transported = bonus_transported.max(conf.transport_capacity as usize);
             result.commanders.insert(conf.id, conf);
         }
+        result.max_transported += bonus_transported;
 
         // commander powers
         let data = load_config(COMMANDER_POWERS)?;
@@ -563,11 +571,11 @@ impl Config {
                 map.insert(Some(i as u8), Vec::new());
             }
         }
-        for (_, map) in result.hero_powered_units.iter_mut() {
+        /*for (_, map) in result.hero_powered_units.iter_mut() {
             map.insert(None, Vec::new());
             map.insert(Some(true), Vec::new());
             map.insert(Some(false), Vec::new());
-        }
+        }*/
         let data = load_config(POWERED_UNITS)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         let mut headers: Vec<CommanderPowerUnitConfigHeader> = Vec::new();
@@ -594,11 +602,11 @@ impl Config {
                         list.push(conf);
                     }
                 }
-                PowerRestriction::Hero(hero_type, power) => {
+                /*PowerRestriction::Hero(hero_type, power) => {
                     result.hero_powered_units.get_mut(hero_type)
                     .ok_or(ConfigParseError::MissingHeroForPower(*hero_type))?
                     .get_mut(power).unwrap().push(conf);
-                }
+                }*/
             }
         }
         Ok(result)
@@ -623,9 +631,10 @@ impl Config {
         Self::parse(name, load_config)
     }
 
+    #[allow(dead_code)]
     pub (crate) fn test_config() -> Self {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default_test");
-        Self::parse_folder(path).expect("Failed to parse default config")
+        Self::parse_folder(path).expect("Failed to parse test config")
     }
 }
 
@@ -668,7 +677,7 @@ fn _parse_vec<H: Hash + Eq + Debug, T: FromStr>(data: &HashMap<H, &str>, key: H,
     }
     let mut result = Vec::new();
     for item in value.split(",").map(str::trim) {
-        result.push(item.parse().map_err(|_| ConfigParseError::InvalidColumnValue(format!("{key:?}"), value.to_string()))?)
+        result.push(item.parse().map_err(|_| ConfigParseError::InvalidColumnValue(format!("{key:?}"), item.to_string()))?)
     }
     Ok(result)
 }

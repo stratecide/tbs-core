@@ -33,7 +33,7 @@ impl Display for TerrainAttributeKey {
 }
 
 impl TerrainAttributeKey {
-    pub fn default(&self, _: &Environment) -> TerrainAttribute {
+    pub fn default(&self) -> TerrainAttribute {
         use TerrainAttribute as A;
         match self {
             //Self::PipeConnection => A::PipeConnection(D::angle_0().pipe_entry()),

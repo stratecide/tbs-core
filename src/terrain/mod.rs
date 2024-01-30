@@ -77,7 +77,7 @@ impl TerrainType {
 pub enum ExtraMovementOptions {
     None,
     Jump,
-    PawnStart,
+    //PawnStart,
 }
 
 impl FromStr for ExtraMovementOptions {
@@ -88,7 +88,7 @@ impl FromStr for ExtraMovementOptions {
         Ok(match it.next().unwrap() {
             "None" => Self::None,
             "Jump" => Self::Jump,
-            "PawnStart" => Self::PawnStart,
+            //"PawnStart" => Self::PawnStart,
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         })
     }

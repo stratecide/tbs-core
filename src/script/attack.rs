@@ -54,7 +54,8 @@ impl AttackScript {
                         } else {
                             handler.unit_damage(pos, (-health_change) as u16);
                             if handler.get_map().get_unit(pos).unwrap().get_hp() == 0 {
-                                handler.unit_death(pos, false);
+                                // if this triggered on_death effects, an infinite loop could be possible
+                                handler.unit_death(pos);
                             }
                         }
                     }

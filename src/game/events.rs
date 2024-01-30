@@ -85,6 +85,7 @@ pub enum Event<D:Direction> {
     // hero events
     HeroSet(Point, Hero, Hero),
     HeroCharge(Point, HeroChargeChange),
+    HeroChargeTransported(Point, UnloadIndex, HeroChargeChange),
     HeroPower(Point),
     // terrain events
     TerrainChange(Point, Terrain, Terrain),
@@ -231,8 +232,19 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::HeroCharge(p, change) => {
+                let environment = game.environment().clone();
                 if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_charge((hero.get_charge() as i8 + change.0) as u8);
+                    hero.set_charge(&environment, (hero.get_charge() as i8 + change.0) as u8);
+                }
+            }
+            Self::HeroChargeTransported(p, unload_index, change) => {
+                let environment = game.environment().clone();
+                if let Some(mut transported) = game.get_map_mut().get_unit_mut(*p)
+                .and_then(|u| u.get_transported_mut()) {
+                    if let Some(hero) = transported.get_mut(unload_index.0)
+                    .and_then(|u| u.get_hero_mut()) {
+                        hero.set_charge(&environment, (hero.get_charge() as i8 + change.0) as u8);
+                    }
                 }
             }
             Self::HeroPower(p) => {
@@ -362,8 +374,19 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::HeroCharge(p, change) => {
+                let environment = game.environment().clone();
                 if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_charge((hero.get_charge() as i8 - change.0) as u8);
+                    hero.set_charge(&environment, (hero.get_charge() as i8 - change.0) as u8);
+                }
+            }
+            Self::HeroChargeTransported(p, unload_index, change) => {
+                let environment = game.environment().clone();
+                if let Some(mut transported) = game.get_map_mut().get_unit_mut(*p)
+                .and_then(|u| u.get_transported_mut()) {
+                    if let Some(hero) = transported.get_mut(unload_index.0)
+                    .and_then(|u| u.get_hero_mut()) {
+                        hero.set_charge(&environment, (hero.get_charge() as i8 - change.0) as u8);
+                    }
                 }
             }
             Self::HeroPower(p) => {
@@ -434,7 +457,8 @@ impl<D: Direction> Event<D> {
             Self::UnitActionStatusBoarded(p, _, _, _) |
             Self::UnitHpChangeBoarded(p, _, _) |
             Self::UnitAddBoarded(p, _) |
-            Self::UnitRemoveBoarded(p, _, _) => {
+            Self::UnitRemoveBoarded(p, _, _) |
+            Self::HeroChargeTransported(p, _, _) => {
                 if game.visible_unit_with_attribute(team, *p, AttributeKey::Transported) {
                     Some(self.clone())
                 } else {
@@ -585,7 +609,7 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::TerrainAnger(pos, _, _) => {
+            Self::TerrainAnger(_, _, _) => {
                 Some(self.clone())
             }
             Self::CaptureProgress(pos, _, _) => {

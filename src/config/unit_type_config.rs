@@ -77,7 +77,7 @@ impl UnitTypeConfig {
             true_vision: parse_def(data, H::TrueVision, 0)?,
             needs_owner: parse_def(data, H::NeedsOwner, true)?,
             stealthy: parse_def(data, H::Stealthy, false)?,
-            can_be_moved_through: parse_def(data, H::CanBeMovedThrough, true)?,
+            can_be_moved_through: parse_def(data, H::CanBeMovedThrough, false)?,
             can_take: parse_def(data, H::CanTake, false)?,
             can_be_taken: parse_def(data, H::CanBeTaken, true)?,
             weapon: parse_def(data, H::Weapon, WeaponType::MachineGun)?,

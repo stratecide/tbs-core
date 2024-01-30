@@ -53,23 +53,20 @@ impl<D: Direction> Command<D> {
                     }
                 }
 
-                // trigger scripts
-                for p in handler.get_map().all_points() {
-                    if let Some(unit) = handler.get_map().get_unit(p).cloned() {
-                        unit.on_end_turn(handler, p);
+                // unit end turn event
+                handler.trigger_all_unit_scripts(
+                    |game, unit, unit_pos, transporter, heroes| {
+                        unit.on_end_turn(game, unit_pos, transporter, heroes)
+                    },
+                    |_observation_id| {},
+                    |this, script, unit_pos, unit, _observation_id| {
+                        script.trigger(this, unit_pos, unit);
                     }
-                }
+                );
 
                 // reset built_this_turn-counter for realties
                 for p in handler.get_map().all_points() {
                     handler.terrain_built_this_turn(p, 0);
-                }
-
-                // end merc powers
-                for p in handler.get_map().all_points() {
-                    if let Some(_) = handler.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id) {
-                        handler.hero_power_end(p);
-                    }
                 }
 
                 let fog_before = if handler.get_game().is_foggy() {

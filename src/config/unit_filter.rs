@@ -2,9 +2,11 @@ use std::collections::HashSet;
 use std::str::FromStr;
 
 use crate::game::game::Game;
+use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::terrain::TerrainType;
-use crate::units::movement::MovementType;
+use crate::units::hero::Hero;
+use crate::units::movement::{MovementType, TBallast};
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
@@ -48,6 +50,10 @@ impl UnitTypeFilter {
     }
 }
 
+
+/**
+ * UnitFilter is the first thing to replace with Rhai
+ */
 #[derive(Debug, Clone)]
 pub(super) enum UnitFilter {
     Unit(HashSet<UnitType>),
@@ -59,7 +65,8 @@ impl FromStr for UnitFilter {
     type Err = ConfigParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut it = s.split(&['(', ' ', ')'])
-        .map(str::trim);
+        .map(str::trim)
+        .filter(|s| s.len() > 0);
         Ok(match it.next().unwrap() {
             "Unit" | "U" => {
                 let mut set = HashSet::new();
@@ -70,15 +77,15 @@ impl FromStr for UnitFilter {
             }
             "Movement" | "M" => {
                 let mut set = HashSet::new();
-                for unit in it {
-                    set.insert(unit.parse()?);
+                for movement_type in it {
+                    set.insert(movement_type.parse()?);
                 }
                 Self::Movement(set)
             }
             "Terrain" | "T" => {
                 let mut set = HashSet::new();
-                for unit in it {
-                    set.insert(unit.parse()?);
+                for terrain in it {
+                    set.insert(terrain.parse()?);
                 }
                 Self::Terrain(set)
             }
@@ -88,11 +95,24 @@ impl FromStr for UnitFilter {
 }
 
 impl UnitFilter {
-    pub fn check<D: Direction>(&self, _config: &Config, game: &Game<D>, unit: &Unit<D>, unit_pos: Point, hero: Option<(&Unit<D>, Point)>, other_unit: Option<(&Unit<D>, Point)>) -> bool {
+    pub fn check<D: Direction>(
+        &self,
+        map: &Map<D>,
+        unit: &Unit<D>,
+        unit_pos: (Point, Option<usize>),
+        // when moving out of a transporter, or start_turn for transported units
+        transporter: Option<(&Unit<D>, Point)>,
+        // the attacked unit, the unit this one was destroyed by, ...
+        other_unit: Option<(&Unit<D>, Point)>,
+        // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
+        heroes: &[&(Unit<D>, Hero, Point, Option<usize>)],
+        // empty if the unit hasn't moved
+        temporary_ballast: &[TBallast<D>],
+    ) -> bool {
         match self {
             Self::Unit(u) => u.contains(&unit.typ()),
             Self::Movement(m) => m.contains(&unit.default_movement_type()),
-            Self::Terrain(t) => t.contains(&game.get_map().get_terrain(unit_pos).unwrap().typ()),
+            Self::Terrain(t) => t.contains(&map.get_terrain(unit_pos.0).unwrap().typ()),
         }
     }
 }

@@ -2,7 +2,7 @@ Id;Name;NeedsOwner;CaptureResistance;UpdateAmphibious;MaxBuildsPerTurn;MaxAnger;
 Airport;Airport;;10;Land;4;;0;;true;true;;;
 Beach;Beach;;;Beach;;;;;;;;;
 Bridge;Bridge;;;;;;;;;;;;
-ChessPawnTile;Special Checkerboard;;;Land;;;;;;;;true;PawnStart
+ChessPawnTile;Special Checkerboard;;;Land;;;;;;;;true;
 ChessTile;Checkerboard;;;Land;;;;;;;;true;
 City;City;;10;Land;;;0;1;true;;;;
 ConstructionSite;Construction Site;;10;Land;4;;0;;true;true;;;

@@ -36,10 +36,13 @@ impl HeroType {
     }
 }
 
-// TODO: implement Display and Debug
+// TODO: implement Display
+/**
+ * Hero purposefully doesn't have Environment.
+ * This way, it's easier to create a dummy unit without access to Environment/Config
+ */
 #[derive(Clone, PartialEq, Eq)]
 pub struct Hero {
-    environment: Environment,
     typ: HeroType,
     power: bool,
     charge: u8,
@@ -57,13 +60,12 @@ impl Debug for Hero {
 }
 
 impl Hero {
-    pub fn new(environment: &Environment, typ: HeroType, origin: Option<Point>) -> Self {
+    pub fn new(typ: HeroType, origin: Option<Point>) -> Self {
         Self {
             typ,
             power: false,
             charge: 0,
             origin,
-            environment: environment.clone(),
         }
     }
 
@@ -75,14 +77,14 @@ impl Hero {
         self.origin
     }
 
-    pub fn max_charge(&self) -> u8 {
-        self.typ.max_charge(&self.environment)
+    pub fn max_charge(&self, environment: &Environment) -> u8 {
+        self.typ.max_charge(environment)
     }
     pub fn get_charge(&self) -> u8 {
         self.charge
     }
-    pub fn set_charge(&mut self, charge: u8) {
-        self.charge = charge.min(self.typ.max_charge(&self.environment));
+    pub fn set_charge(&mut self, environment: &Environment, charge: u8) {
+        self.charge = charge.min(self.typ.max_charge(environment));
     }
 
     pub fn is_power_active(&self) -> bool {
@@ -92,9 +94,9 @@ impl Hero {
         self.power = active;
     }
 
-    pub fn aura_range(&self) -> usize {
-        let mut range = self.environment.config.hero_aura_range(self.typ);
-        if self.is_power_active() || self.charge == self.max_charge() {
+    pub fn aura_range(&self, environment: &Environment) -> usize {
+        let mut range = environment.config.hero_aura_range(self.typ);
+        if self.is_power_active() || self.charge == self.max_charge(environment) {
             range += 1;
         }
         range as usize
@@ -107,7 +109,7 @@ impl Hero {
     pub fn aura<D: Direction>(&self, map: &Map<D>, position: Point) -> HashSet<Point> {
         let mut result = HashSet::new();
         result.insert(position.clone());
-        for layer in map.range_in_layers(position, self.aura_range()) {
+        for layer in map.range_in_layers(position, self.aura_range(map.environment())) {
             for p in layer {
                 result.insert(p);
             }
@@ -115,16 +117,8 @@ impl Hero {
         result
     }
 
-    /*pub fn aura_attack_bonus<D: Direction>(&self, attacker: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool) -> Rational32 {
-        self.environment.config.aura_attack_bonus(self.typ, self.power, attacker, game, pos, is_counter)
-    }
-
-    pub fn aura_defense_bonus<D: Direction>(&self, defender: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool) -> Rational32 {
-        self.environment.config.aura_defense_bonus(self.typ, self.power, defender, game, pos, is_counter)
-    }*/
-
     pub fn add_options_after_path<D: Direction>(&self, list: &mut Vec<UnitAction<D>>, unit: &Unit<D>, game: &Game<D>, path: &Path<D>, destination: Point, get_fog: impl Fn(Point) -> FogIntensity) {
-        // TODO
+        // TODO activate power
     }
 }
 
@@ -151,7 +145,7 @@ impl SupportedZippable<&Environment> for Hero {
         } else {
             None
         };
-        let mut result = Self::new(environment, typ, origin);
+        let mut result = Self::new(typ, origin);
         if typ != HeroType::None {
             result.power = unzipper.read_bool()?;
             if !result.power && typ.max_charge(environment) > 0 {
