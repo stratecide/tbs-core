@@ -57,8 +57,8 @@ crate::enum_with_custom! {
 }
 
 impl UnitType {
-    pub fn price(&self, environment: &Environment, owner_id: i8) -> i32 {
-        environment.unit_cost(*self, owner_id)
+    pub fn base_cost(&self, environment: &Environment) -> i32 {
+        environment.config.base_cost(*self)
     }
 
     pub fn instance<D: Direction>(&self, environment: &Environment) -> UnitBuilder<D> {

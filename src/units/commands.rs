@@ -13,6 +13,7 @@ use crate::map::point::Point;
 use crate::game::game::Game;
 use super::attributes::ActionStatus;
 
+use super::attributes::AttributeKey;
 use super::combat::AttackVector;
 use super::hero::*;
 use super::movement::Path;
@@ -22,6 +23,7 @@ use super::movement::search_path;
 use super::movement::PathStepTakes;
 use super::movement::TemporaryBallast;
 use super::unit::Unit;
+use super::unit::UnitBuilder;
 use super::unit_types::UnitType;
 
 pub const UNIT_REPAIR: u32 = 30;
@@ -116,11 +118,16 @@ impl<D: Direction> UnitAction<D> {
             }
             Self::Repair => {
                 let unit = handler.get_map().get_unit(end).unwrap();
-                let heal:u32 = UNIT_REPAIR
-                    .min(100 - unit.get_hp() as u32)
-                    .min(*handler.get_game().current_player().funds as u32 * 100 / unit.typ().price(handler.environment(), unit.get_owner_id()) as u32);
+                let heroes = handler.get_map().hero_influence_at(end, unit.get_owner_id());
+                let heroes: Vec<_> = heroes.iter().collect();
+                let full_price = unit.full_price(handler.get_game(), end, None, &heroes).max(0) as u32;
+                let mut heal = UNIT_REPAIR
+                    .min(100 - unit.get_hp() as u32);
+                if full_price > 0 {
+                    heal = heal.min(*handler.get_game().current_player().funds as u32 * 100 / full_price);
+                }
                 if heal > 0 {
-                    let cost = unit.typ().price(handler.environment(), unit.get_owner_id()) as u32 * heal / 100;
+                    let cost = full_price * heal / 100;
                     handler.money_buy(unit.get_owner_id(), cost);
                     handler.unit_repair(end, heal as u8);
                     handler.unit_status(end, ActionStatus::Repairing);
@@ -130,11 +137,7 @@ impl<D: Direction> UnitAction<D> {
                 }
             }
             Self::Attack(attack_vector) => {
-                let transporter = if let Some(unit) = handler.get_map().get_unit(path.start).filter(|_| path.start != end) {
-                    Some(unit.clone())
-                } else {
-                    None
-                };
+                let transporter = handler.get_map().get_unit(path.start).filter(|_| path.start != end).cloned();
                 let transporter = transporter.as_ref().map(|u| (u, path.start));
                 attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true);
                 false
@@ -162,37 +165,42 @@ impl<D: Direction> UnitAction<D> {
                 true
             }
             Self::BuyTransportedUnit(unit_type) => {
-                let owner_id = handler.get_game().current_player().get_owner_id();
-                let cost = unit_type.price(handler.environment(), owner_id);
-                let unit = unit_type.instance(handler.environment())
-                .set_owner_id(owner_id)
-                .set_status(ActionStatus::Exhausted)
-                .build_with_defaults();
-                handler.money_buy(owner_id, cost as u32);
+                let transporter = handler.get_map().get_unit(path.start).filter(|_| path.start != end);
+                let factory_unit = handler.get_map().get_unit(end).unwrap();
+                let heroes = handler.get_map().hero_influence_at(end, factory_unit.get_owner_id());
+                let heroes: Vec<_> = heroes.iter().collect();
+                let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, *unit_type, transporter.map(|u| (u, path.start)), &heroes, ballast.get_entries());
+                unit.set_status(ActionStatus::Exhausted);
+                unit.set_direction(unit.get_direction().rotate_by(factory_unit.get_direction()));
+                if handler.environment().unit_attributes(*unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
+                    unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
+                }
+                // TODO: don't cast the i32 to u32
+                handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
                 handler.unit_add_transported(end, unit);
                 true
             }
             Self::BuyUnit(unit_type, dir) => {
-                let (destination, distortion) = handler.get_map().get_neighbor(end, *dir).unwrap();
+                let (destination, _) = handler.get_map().get_neighbor(end, *dir).unwrap();
                 if handler.get_map().get_unit(destination).is_some() {
                     handler.effect_fog_surprise(destination);
                 } else {
-                    let owner_id = handler.get_game().current_player().get_owner_id();
-                    let cost = unit_type.price(handler.environment(), owner_id);
-                    let mut unit = unit_type.instance(handler.environment())
-                    .set_owner_id(owner_id)
-                    .set_status(ActionStatus::Exhausted)
-                    .set_direction(distortion.update_direction(*dir));
-                    if let Some(drone_id) = handler.get_map().get_unit(end).unwrap().get_drone_station_id() {
-                        // TODO: only a drone-station should be able to build drones
-                        unit = unit.set_drone_id(drone_id);
+                    let transporter = handler.get_map().get_unit(path.start).filter(|_| path.start != end);
+                    let factory_unit = handler.get_map().get_unit(end).unwrap();
+                    let heroes = handler.get_map().hero_influence_at(end, factory_unit.get_owner_id());
+                    let heroes: Vec<_> = heroes.iter().collect();
+                    let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, *unit_type, transporter.map(|u| (u, path.start)), &heroes, ballast.get_entries());
+                    unit.set_status(ActionStatus::Exhausted);
+                    unit.set_direction(unit.get_direction().rotate_by(*dir));
+                    if handler.environment().unit_attributes(*unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
+                        unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
                     }
-                    let unit = unit.build_with_defaults();
                     let path = Path {
                         start: end,
                         steps: vec![PathStep::Dir(*dir)],
                     };
-                    handler.money_buy(owner_id, cost as u32);
+                    // TODO: don't cast the i32 to u32
+                    handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
                     let unit = handler.animate_unit_path(&unit, &path, false);
                     handler.unit_creation(destination, unit);
                 }

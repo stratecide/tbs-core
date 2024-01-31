@@ -570,6 +570,21 @@ impl Config {
         })
     }
 
+    pub fn unit_cost<D: Direction>(
+        &self,
+        game: &Game<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        factory_unit: Option<&Unit<D>>, // if built by a unit
+        heroes: &[&(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> i32 {
+        let iter = self.unit_power_configs(Some(game), game.get_map(), unit, (unit_pos, None), factory_unit.map(|u| (u, unit_pos)), None, heroes, &[]);
+        NumberMod::update_value_repeatedly(
+            self.base_cost(unit.typ()),
+            iter.map(|c| &c.cost)
+        )
+    }
+
     pub fn unit_visibility<D: Direction>(
         &self,
         game: &Game<D>,

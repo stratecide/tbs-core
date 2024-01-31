@@ -73,6 +73,7 @@ impl<T: Debug + Clone + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output 
         }
     }
 
+    // TODO: prevent overflow / underflow
     pub fn update_value(&self, value: T) -> T {
         match self.clone() {
             Self::Keep => value,

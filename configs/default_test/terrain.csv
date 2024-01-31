@@ -25,4 +25,4 @@ ShallowSea;Shallows;;;Sea;;;;;;;;;
 Street;Street;;;Land;;;;;;;;;
 Memorial;Memorial;;;Beach;;;;;;;true;;
 TentacleDepths;Tentacle Depths;;;Sea;;;;;;;;;
-Port;Port;;;Sea;;;;;;;;;
+Port;Port;;10;Sea;4;;0;;true;true;;;

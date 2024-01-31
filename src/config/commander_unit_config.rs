@@ -36,8 +36,7 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) stealthy: Option<bool>,
     pub(super) attack_targets: Option<AttackTargeting>,
     pub(super) splash_damage: Vec<Rational32>, // doesn't override if empty. contains factor per additional distance
-    pub(super) cost_factor: Option<Rational32>,
-    pub(super) extra_cost: Option<i32>,
+    pub(super) cost: NumberMod<i32>,
     pub(super) displacement: Option<Displacement>, // implies that attack_pattern is Adjacent or Straight
     pub(super) displacement_distance: Option<i8>, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: Option<bool>,
@@ -88,14 +87,7 @@ impl CommanderPowerUnitConfig {
                 _ => None,
             },
             splash_damage: parse_vec_def(data, H::SplashDamage, Vec::new())?,
-            cost_factor: match data.get(&H::CostFactor) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidRatio(s.to_string()))?),
-                _ => None,
-            },
-            extra_cost: match data.get(&H::ExtraCost) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidInteger(s.to_string()))?),
-                _ => None,
-            },
+            cost: parse_def(data, H::Cost, NumberMod::Keep)?,
             displacement: match data.get(&H::Displacement) {
                 Some(s) if s.len() > 0 => Some(s.parse()?),
                 _ => None,
@@ -157,8 +149,7 @@ crate::listable_enum! {
         AttackTargets,
         SplashDamage,
         CanBuildUnits,
-        CostFactor,
-        ExtraCost,
+        Cost,
         Displacement,
         DisplacementDistance,
         CanBeDisplaced,

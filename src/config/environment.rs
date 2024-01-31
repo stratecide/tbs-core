@@ -88,10 +88,6 @@ impl Environment {
         + hero.transport_capacity(self)
     }
 
-    pub fn unit_cost(&self, typ: UnitType, owner_id: i8) -> i32 {
-        self.config.base_cost(typ)
-    }
-
     // terrain
 
     pub fn default_terrain(&self) -> Terrain {

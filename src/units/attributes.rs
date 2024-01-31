@@ -271,6 +271,17 @@ impl AttributeOverride {
     }
 }
 
+impl<D: Direction> From<&AttributeOverride> for Attribute<D> {
+    fn from(value: &AttributeOverride) -> Self {
+        match value {
+            AttributeOverride::Hp(hp) => Attribute::Hp(*hp),
+            AttributeOverride::InWater => Attribute::Amphibious(Amphibious::InWater),
+            AttributeOverride::OnLand => Attribute::Amphibious(Amphibious::OnLand),
+            AttributeOverride::Zombified => Attribute::Zombified(true),
+        }
+    }
+}
+
 macro_rules! attribute_tuple {
     ($name: ty, $attr: ident) => {
         impl<D: Direction> TryFrom<Attribute<D>> for $name {

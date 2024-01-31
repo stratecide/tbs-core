@@ -193,22 +193,36 @@ pub enum AttackVector<D: Direction> {
 }
 
 impl<D: Direction> AttackVector<D> {
+    pub fn get_unit<'a>(game: &'a Game<D>, attacker: &'a Unit<D>, original_pos: Point, pos: Point, get_fog: &'a impl Fn(Point) -> FogIntensity, transporter: Option<&'a Unit<D>>) -> Box<dyn Fn(Point) -> Option<Unit<D>> + 'a> {
+        let f = move |p| {
+            if p == pos {
+                Some(attacker.clone())
+            } else if p == original_pos {
+                transporter.cloned()
+            } else {
+                game.get_map().get_unit(p)
+                .and_then(|u| u.fog_replacement(game, p, get_fog(p)))
+            }
+        };
+        Box::new(f)
+    }
+
     // returns all AttackVectors with which the unit at target position can be attacked
     // if there is no unit or it can't be attacked, an empty Vec is returned
     // TODO: make sure the same Self isn't returned multiple times
-    pub fn find(attacker: &Unit<D>, game: &Game<D>, pos: Point, target: Option<Point>, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>]) -> HashSet<Self> {
+    pub fn find(attacker: &Unit<D>, game: &Game<D>, original_pos: Point, pos: Point, target: Option<Point>, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<&Unit<D>>, temporary_ballast: &[TBallast<D>]) -> HashSet<Self> {
         let splash_damage = attacker.get_splash_damage();
         let displacement_distance = attacker.displacement_distance();
+        let get_unit = Self::get_unit(game, attacker, original_pos, pos, &get_fog, transporter);
         let valid_target: Box<dyn Fn(Point, usize, Option<D>) -> bool> = if let Some(target) = target {
-            let defender = match game.get_map().get_unit(target)
-            .and_then(|u| u.fog_replacement(game, target, get_fog(target))) {
+            let defender = match get_unit(target) {
                 None => return HashSet::new(),
                 Some(defender) => defender,
             };
             if !attacker.could_attack(&defender, false) {
                 return HashSet::new();
             }
-            let get_fog = &get_fog;
+            let get_unit = &get_unit;
             Box::new(move |p, splash_index, displacement_direction| {
                 if p != target {
                     return false;
@@ -229,10 +243,7 @@ impl<D: Direction> AttackVector<D> {
                     .skip(1)
                     .any(|dp| {
                         // not blocked by the attacker or any other unit
-                        dp.point != pos &&
-                        game.get_map().get_unit(dp.point)
-                        .and_then(|u| u.fog_replacement(game, dp.point, get_fog(dp.point)))
-                        .is_none()
+                        dp.point != pos && get_unit(dp.point).is_none()
                     })
                 } else {
                     false
@@ -240,8 +251,7 @@ impl<D: Direction> AttackVector<D> {
             })
         } else {
             Box::new(|target, splash_index, displacement_direction| {
-                let defender = match game.get_map().get_unit(target)
-                .and_then(|u| u.fog_replacement(game, target, get_fog(target))) {
+                let defender = match get_unit(target) {
                     Some(u) => u,
                     _ => return false,
                 };
@@ -264,30 +274,28 @@ impl<D: Direction> AttackVector<D> {
                     .skip(1)
                     .any(|dp| {
                         // not blocked by the attacker or any other unit
-                        dp.point != pos &&
-                        game.get_map().get_unit(dp.point)
-                        .and_then(|u| u.fog_replacement(game, dp.point, get_fog(dp.point)))
-                        .is_none()
+                        dp.point != pos && get_unit(dp.point).is_none()
                     })
                 } else {
                     false
                 }
             })
         };
-        Self::_search(attacker, game, pos, &get_fog, transporter, temporary_ballast, valid_target)
+        Self::_search(attacker, game, pos, &get_unit, transporter.map(|u| (u, original_pos)), temporary_ballast, valid_target)
     }
 
     // doesn't check if there's a unit at the target position that can be attacked
-    pub fn search(attacker: &Unit<D>, game: &Game<D>, pos: Point, target: Option<Point>, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>]) -> HashSet<Self> {
+    pub fn search(attacker: &Unit<D>, game: &Game<D>, original_pos: Point, pos: Point, target: Option<Point>, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<&Unit<D>>, temporary_ballast: &[TBallast<D>]) -> HashSet<Self> {
         let splash_damage = attacker.get_splash_damage();
         let displacement_distance = attacker.displacement_distance();
-        Self::_search(attacker, game, pos, get_fog, transporter, temporary_ballast, |p, splash_index, dir| {
+        let get_unit = Self::get_unit(game, attacker, original_pos, pos, &get_fog, transporter);
+        Self::_search(attacker, game, pos, &get_unit, transporter.map(|u| (u, original_pos)), temporary_ballast, |p, splash_index, dir| {
             (target == None || target == Some(p))
             && (splash_damage[splash_index] != Rational32::from_integer(0) || displacement_distance != 0 && dir.is_some())
         })
     }
 
-    fn _search(attacker: &Unit<D>, game: &Game<D>, pos: Point, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>], valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> HashSet<Self> {
+    fn _search(attacker: &Unit<D>, game: &Game<D>, pos: Point, get_unit: &impl Fn(Point) -> Option<Unit<D>>, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>], valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> HashSet<Self> {
         // TODO: check if target is protected by terrain (e.g. tank can only attack stranded Submarines)
         let mut result = HashSet::new();
         //let splash_damage = attacker.get_splash_damage();
@@ -299,7 +307,7 @@ impl<D: Direction> AttackVector<D> {
                 let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range as usize);
                 let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range as usize);
                 for d in D::list() {
-                    if Self::straight_splash(attacker, game, pos, d, min_range, max_range, &get_fog, &valid_target).iter()
+                    if Self::straight_splash(attacker, game, pos, d, min_range, max_range, get_unit, &valid_target).iter()
                     .enumerate()
                     .any(|(i, (dp, _))| valid_target(dp.point, i, Some(dp.direction))) {
                         result.insert(Self::Direction(d));
@@ -350,7 +358,7 @@ impl<D: Direction> AttackVector<D> {
         result
     }
 
-    fn straight_splash(attacker: &Unit<D>, game: &Game<D>, pos: Point, dir: D, min: usize, max: usize, get_fog: impl Fn(Point) -> FogIntensity, valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> Vec<(OrientedPoint<D>, Rational32)> {
+    fn straight_splash(attacker: &Unit<D>, game: &Game<D>, pos: Point, dir: D, min: usize, max: usize, get_unit: impl Fn(Point) -> Option<Unit<D>>, valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> Vec<(OrientedPoint<D>, Rational32)> {
         let splash_damage = attacker.get_splash_damage();
         let points: Vec<_> = game.get_map().get_line(pos, dir, max + splash_damage.len(), NeighborMode::FollowPipes)
         .into_iter()
@@ -358,9 +366,7 @@ impl<D: Direction> AttackVector<D> {
         //.map(|dp| dp.point)
         .collect();
         let blocking_unit = points.iter().enumerate().position(|(i, dp)| {
-            i < max && game.get_map().get_unit(dp.point)
-                .and_then(|u| u.fog_replacement(game, dp.point, get_fog(dp.point)))
-                .is_some()
+            i < max && get_unit(dp.point).is_some()
         });
         if blocking_unit.and_then(|i| Some(i + 1 < min)).unwrap_or(false) {
             // blocked by unit before min range
@@ -425,11 +431,11 @@ impl<D: Direction> AttackVector<D> {
         result
     }
 
-    pub fn get_splash(&self, attacker: &Unit<D>, game: &Game<D>, pos: Point, get_fog: impl Fn(Point) -> FogIntensity) -> Vec<(Point, Option<D>, Rational32)> {
+    pub fn get_splash(&self, attacker: &Unit<D>, game: &Game<D>, pos: Point, get_unit: &impl Fn(Point) -> Option<Unit<D>>) -> Vec<(Point, Option<D>, Rational32)> {
         match (attacker.attack_pattern(), self) {
             (AttackType::None, _) => Vec::new(),
             (AttackType::Straight(min, max), Self::Direction(dir)) => {
-                Self::straight_splash(attacker, game, pos, *dir, min as usize, max as usize, get_fog, |_, _, _| true).into_iter()
+                Self::straight_splash(attacker, game, pos, *dir, min as usize, max as usize, get_unit, |_, _, _| true).into_iter()
                 .map(|(dp, ratio)| (dp.point, Some(dp.direction), ratio))
                 .collect()
             }
@@ -466,7 +472,7 @@ impl<D: Direction> AttackVector<D> {
         let (
             mut hero_charge,
             counter_attackers,
-            mut defenders,
+            mut commander_charge,
         ) = self.execute_attack(handler, &attacker, attacker_pos, path, &attacker_heroes, exhaust_after_attacking, execute_scripts);
         // counter attack
         if path.is_some() {
@@ -485,7 +491,7 @@ impl<D: Direction> AttackVector<D> {
                 || attacker.get_team() == unit.get_team() {
                     continue;
                 }
-                let mut attack_vectors: Vec<_> = AttackVector::find(&unit, handler.get_game(), unit_pos, Some(attacker_pos), |_| FogIntensity::TrueSight, None, &[])
+                let mut attack_vectors: Vec<_> = AttackVector::find(&unit, handler.get_game(), unit_pos, unit_pos, Some(attacker_pos), |_| FogIntensity::TrueSight, None, &[])
                 .into_iter().collect();
                 let mut attack_vector = attack_vectors.pop();
                 if let AttackVector::Direction(d) = self {
@@ -501,32 +507,32 @@ impl<D: Direction> AttackVector<D> {
                     let heroes: Vec<_> = handler.get_map().hero_influence_at(unit_pos, unit.get_owner_id());
                     let heroes: Vec<_> = heroes.iter().collect();
                     let (_, _, d2) = attack_vector.execute_attack(handler, &unit, unit_pos, None, &heroes, false, execute_scripts);
-                    defenders.extend(d2.into_iter());
+                    commander_charge.extend(d2.into_iter());
                 }
             }
         }
         for (attack_vector, attacker, attacker_pos) in after_battle_displacements {
-            let defenders = attack_vector.get_splash(&attacker, handler.get_game(), attacker_pos, |_| FogIntensity::TrueSight);
+            let defenders = attack_vector.get_splash(&attacker, handler.get_game(), attacker_pos, &|p| handler.get_map().get_unit(p).cloned());
             let defenders = filter_attack_targets(handler.get_game(), &attacker, defenders);
             displace(handler, &attacker, defenders);
         }
         if !charge_powers {
             hero_charge = 0;
-            defenders = Vec::new();
+            commander_charge = Vec::new();
         }
-        after_attacking(handler, attacker_id, hero_charge, attacker_hero_ids, defenders);
+        after_attacking(handler, attacker_id, hero_charge, attacker_hero_ids, commander_charge);
         handler.get_observed_unit(attacker_id)
         .map(|(p, unload_index, _)| (*p, *unload_index))
     }
 
     // set path to None if this is a counter-attack
-    fn execute_attack(&self, handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &TemporaryBallast<D>)>, attacker_heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], exhaust_after_attacking: bool, execute_scripts: bool) -> (u32, Vec<usize>, Vec<(i8, Unit<D>, u8)>) {
-        let defenders = self.get_splash(attacker, handler.get_game(), attacker_pos, |_| FogIntensity::TrueSight);
+    fn execute_attack(&self, handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &TemporaryBallast<D>)>, attacker_heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], exhaust_after_attacking: bool, execute_scripts: bool) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
+        let defenders = self.get_splash(attacker, handler.get_game(), attacker_pos, &|p| handler.get_map().get_unit(p).cloned());
         attack_targets(handler, attacker, attacker_pos, path, defenders, attacker_heroes, exhaust_after_attacking, execute_scripts)
     }
 }
 
-pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &TemporaryBallast<D>)>, targets: Vec<(Point, Option<D>, Rational32)>, attacker_heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], exhaust_after_attacking: bool, execute_scripts: bool) -> (u32, Vec<usize>, Vec<(i8, Unit<D>, u8)>) {
+pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &TemporaryBallast<D>)>, targets: Vec<(Point, Option<D>, Rational32)>, attacker_heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], exhaust_after_attacking: bool, execute_scripts: bool) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
     let (attacker_id, _) = handler.observe_unit(attacker_pos, None);
     let mut defenders = filter_attack_targets(handler.get_game(), attacker, targets);
     let mut hero_charge;
@@ -636,11 +642,18 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
     }
     let mut counter_attackers = Vec::new();
     let mut defenders = Vec::new();
-    for (defender_id, _, defender, damage) in &attacked_units {
-        if attacker.get_team() != defender.get_team() && !counter_attackers.contains(defender_id) {
-            counter_attackers.push(*defender_id);
+    for (defender_id, defender_pos, defender, damage) in &attacked_units {
+        if attacker.get_team() != defender.get_team() {
+            defenders.push((
+                attacker.get_owner_id(),
+                defender.get_owner_id(),
+                (Rational32::from_integer(*damage as i32) * Rational32::from_integer(defender.full_price(handler.get_game(), *defender_pos, None, &[])) / Rational32::from_integer(100))
+                .ceil().to_integer().max(0) as u32,
+            ));
+            if !counter_attackers.contains(defender_id) {
+                counter_attackers.push(*defender_id);
+            }
         }
-        defenders.push((attacker.get_owner_id(), defender.clone(), *damage));
     }
     if execute_scripts {
         let temporary_ballast = path.map(|(_, _, t)| t.get_entries()).unwrap_or(&[]);
@@ -831,7 +844,7 @@ fn displace<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, mut
     filter_attack_targets(handler.get_game(), attacker, targets)
 }
 
-pub(crate) fn after_attacking<D: Direction>(handler: &mut EventHandler<D>, attacker_id: usize, hero_charge: u32, hero_ids: Vec<usize>, defenders: Vec<(i8, Unit<D>, u8)>) {
+pub(crate) fn after_attacking<D: Direction>(handler: &mut EventHandler<D>, attacker_id: usize, hero_charge: u32, hero_ids: Vec<usize>, commander_charge: Vec<(i8, i8, u32)>) {
     // add charge to heroes
     if hero_charge > 0 {
         for id in hero_ids {
@@ -846,17 +859,17 @@ pub(crate) fn after_attacking<D: Direction>(handler: &mut EventHandler<D>, attac
         }
     }
     // add charge to commanders
-    if defenders.len() > 0 {
+    if commander_charge.len() > 0 {
         let mut charges = HashMap::new();
-        for (attacker_owner, defender, damage) in defenders {
-            let commander_charge = Rational32::from_integer(damage as i32) * Rational32::from_integer(defender.typ().price(handler.environment(), defender.get_owner_id())) / Rational32::from_integer(100);
-            let old_charge = charges.remove(&defender.get_owner_id()).unwrap_or(0);
-            charges.insert(defender.get_owner_id(), old_charge + commander_charge.ceil().to_integer());
+        for (attacker_owner, defender_owner, charge) in commander_charge {
+            //let commander_charge = Rational32::from_integer(damage as i32) * Rational32::from_integer(defender.full_price(handler.get_game(), defender_po)) / Rational32::from_integer(100);
+            let old_charge = charges.remove(&defender_owner).unwrap_or(0);
+            charges.insert(defender_owner, old_charge + charge);
             let old_charge = charges.remove(&attacker_owner).unwrap_or(0);
-            charges.insert(attacker_owner, old_charge + (commander_charge / Rational32::from_integer(2)).ceil().to_integer());
+            charges.insert(attacker_owner, old_charge + charge / 2);
         }
         for (owner, commander_charge) in charges {
-            handler.commander_charge_add(owner, commander_charge as u32);
+            handler.commander_charge_add(owner, commander_charge);
         }
     }
     // units may have died, hero/co ability may change fog

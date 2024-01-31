@@ -150,22 +150,22 @@ impl<D: Direction> Command<D> {
                 if !terrain.buildable_units().contains(&unit_type) {
                     return Err(CommandError::InvalidUnitType);
                 }
-                let cost = unit_type.price(handler.environment(), player.get_owner_id())
-                + terrain.get_built_this_turn() as i32 * handler.environment().built_this_turn_cost_factor();
+
+                let heroes = handler.get_map().hero_influence_at(pos, player.get_owner_id());
+                let heroes: Vec<_> = heroes.iter().collect();
+                let (mut unit, cost) = terrain.unit_shop_option(handler.get_game(), pos, unit_type, &heroes);
                 if cost > *handler.get_game().current_player().funds {
                     return Err(CommandError::NotEnoughMoney)
                 }
                 handler.money_buy(owner_id, cost.max(0) as u32);
-                let mut unit = UnitBuilder::new(handler.environment(), unit_type)
-                .set_owner_id(player.get_owner_id())
-                .set_direction(d);
                 if bubble_index == None {
-                    unit = unit.set_status(ActionStatus::Exhausted);
+                    unit.set_status(ActionStatus::Exhausted);
                 }
+                unit.set_direction(unit.get_direction().rotate_by(d));
                 if handler.environment().unit_attributes(unit_type, player.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
-                    unit = unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
+                    unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
                 }
-                handler.unit_creation(pos, unit.build_with_defaults());
+                handler.unit_creation(pos, unit);
                 if let Some(bubble_index) = bubble_index {
                     handler.detail_remove(pos, bubble_index);
                 }

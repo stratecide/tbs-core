@@ -29,6 +29,7 @@ macro_rules! listable_enum {(
         }
 
         impl $name {
+            #[allow(dead_code)]
             pub const fn list() -> &'static [Self] {
                 &[$($name::$member,)*]
             }
@@ -100,7 +101,7 @@ macro_rules! enum_with_custom {(
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
                     $(Self::$member => write!(f, "{}", stringify!($member)),)*
-                    Self::Custom(c) => write!(f, "{c}"),
+                    Self::Custom(c) => write!(f, "{}{c}", stringify!($name)),
                 }
             }
         }

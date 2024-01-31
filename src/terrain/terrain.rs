@@ -15,8 +15,10 @@ use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::player::{Player, Owner};
+use crate::units::attributes::ActionStatus;
+use crate::units::hero::Hero;
 use crate::units::movement::MovementType;
-use crate::units::unit::Unit;
+use crate::units::unit::{Unit, UnitBuilder};
 use crate::units::unit_types::UnitType;
 
 use super::{TerrainType, AmphibiousTyping, ExtraMovementOptions};
@@ -270,6 +272,32 @@ impl Terrain {
             }
         }
         true
+    }
+
+    pub(crate) fn unit_shop_option<D: Direction>(&self, game: &Game<D>, pos: Point, unit_type: UnitType, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)]) -> (Unit<D>, i32) {
+        let builder: UnitBuilder<D> = unit_type.instance(&self.environment)
+        .set_status(ActionStatus::Exhausted);
+        // TODO: terrain build-overrides for commanders, heroes
+        /*for attr in terrain.build_overrides(&heroes) {
+            builder = builder.set_attribute(&attr.into());
+        }*/
+        let unit = builder
+        .set_owner_id(self.get_owner_id())
+        .build_with_defaults();
+        let cost = unit.full_price(game, pos, None, &heroes)
+        + self.get_built_this_turn() as i32 * self.environment.built_this_turn_cost_factor();
+        (unit, cost)
+    }
+
+    pub fn unit_shop<D: Direction>(&self, game: &Game<D>, pos: Point) -> Vec<(Unit<D>, i32)> {
+        if !self.can_build() {
+            return Vec::new();
+        }
+        let heroes = game.get_map().hero_influence_at(pos, self.get_owner_id());
+        let heroes: Vec<_> = heroes.iter().collect();
+        self.buildable_units().iter().map(|unit_type| {
+            self.unit_shop_option(game, pos, *unit_type, &heroes)
+        }).collect()
     }
 }
 
