@@ -69,7 +69,7 @@ impl AttributeKey {
             Self::DroneStationId => A::DroneStationId(0),
             Self::Transported => A::Transported(Vec::new()),
             Self::Zombified => A::Zombified(false),
-            Self::Unmoved => A::Unmoved(false),
+            Self::Unmoved => A::Unmoved(true),
             Self::EnPassant => A::EnPassant(None),
         }
     }
