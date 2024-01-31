@@ -13,9 +13,9 @@ LaserShark;Laser-Shark;Normal;Standard;Boat;;4;Normal;3;1;true;;true;true;Rifle;
 TransportBoat;Transport Boat;Normal;Standard;Boat;;6;Normal;1;1;true;;true;true;;true;;;;;600;;;true;2
 DroneBoat;Drone Boat;Normal;Standard;Boat;;4;Normal;2;1;true;;true;true;;true;;;;true;600;;;true;1
 WaveBreaker;Wave-Breaker;Normal;Standard;Boat;;6;Normal;3;1;true;;true;true;Shells;true;Adjacent;;;;700;;;true;
-Submarine;Submarine;Stealth;Standard;Treads;;6;Normal;4;1;true;true;true;true;Torpedo;true;Adjacent;;;;1000;;;true;
-Cruiser;Cruiser;Normal;Standard;Treads;;5;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;;1600;;;true;
-Carrier;Carrier;Normal;Standard;Treads;;4;Normal;2;1;true;;true;true;;true;;;;;1500;;;true;2
+Submarine;Submarine;Stealth;Standard;Ship;;6;Normal;4;1;true;true;true;true;Torpedo;true;Adjacent;;;;1000;;;true;
+Cruiser;Cruiser;Normal;Standard;Ship;;5;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;;1600;;;true;
+Carrier;Carrier;Normal;Standard;Ship;;4;Normal;2;1;true;;true;true;;true;;;;;1500;;;true;2
 SwimmingFactory;Swimming Factory;Normal;Standard;Boat;;5;Normal;1;1;true;;true;true;;true;Adjacent;;;true;700;;;true;
 TransportHeli;Transport-Heli;Normal;Standard;Heli;;5;Normal;2;1;true;;true;true;;true;;;;;1000;;;true;1
 AttackHeli;Attack-Heli;Normal;Standard;Heli;;6;Normal;3;1;true;;true;true;Rocket;true;Adjacent;;;;900;;;true;
