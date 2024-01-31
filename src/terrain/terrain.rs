@@ -304,7 +304,8 @@ pub struct TerrainBuilder {
 
 impl TerrainBuilder {
     pub fn new(environment: &Environment, typ: TerrainType) -> Self {
-        let terrain = Terrain::new(environment.clone(), typ);
+        let mut terrain = Terrain::new(environment.clone(), typ);
+        terrain.set_owner_id(-1);
         Self {
             terrain,
         }
