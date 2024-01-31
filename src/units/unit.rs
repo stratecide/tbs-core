@@ -703,7 +703,7 @@ impl<D: Direction> Unit<D> {
             this.transformed_by_path(game.get_map(), path);
             if this.can_attack_after_moving() || path.steps.len() == 0 {
                 let transporter = transporter.map(|u| (u, path.start));
-                for attack_vector in AttackVector::find(&this, game, destination, None, &get_fog, transporter, ballast) {
+                for attack_vector in AttackVector::search(&this, game, destination, None, &get_fog, transporter, ballast) {
                     for (point, _, _) in attack_vector.get_splash(&this, game, destination, &get_fog) {
                         result.insert(point);
                     }
@@ -745,7 +745,7 @@ impl<D: Direction> Unit<D> {
                 PathSearchFeedback::ContinueWithoutStopping
             } else if goal == p && can_stop_here && takes != PathStepTakes::Deny {
                 PathSearchFeedback::Found
-            } else if (path.steps.len() == 0 || self.can_attack_after_moving()) && AttackVector::find(self, game, p, Some(goal), get_fog, transporter, ballast.get_entries()).len() > 0 {
+            } else if (path.steps.len() == 0 || self.can_attack_after_moving()) && AttackVector::search(self, game, p, Some(goal), get_fog, transporter, ballast.get_entries()).len() > 0 {
                 PathSearchFeedback::Found
             } else {
                 PathSearchFeedback::Continue

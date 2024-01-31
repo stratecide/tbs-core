@@ -1,8 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use num_rational::Rational32;
 
 use crate::game::fog::VisionMode;
-use crate::script::unit::UnitScript;
 use crate::units::attributes::*;
 use crate::units::combat::*;
 use crate::units::movement::MovementType;
@@ -30,7 +29,6 @@ pub struct UnitTypeConfig {
     pub(super) needs_owner: bool,
     pub(super) stealthy: bool,
     pub(super) can_be_moved_through: bool,
-    pub(super) can_take: bool,
     pub(super) can_be_taken: bool,
     pub(super) weapon: WeaponType,
     pub(super) can_attack_after_moving: bool,
@@ -75,13 +73,12 @@ impl UnitTypeConfig {
             vision_mode: parse_def(data, H::VisionMode, VisionMode::Normal)?,
             vision: parse_def(data, H::Vision, 0)?,
             true_vision: parse_def(data, H::TrueVision, 0)?,
-            needs_owner: parse_def(data, H::NeedsOwner, true)?,
+            needs_owner: parse_def(data, H::NeedsOwner, false)?,
             stealthy: parse_def(data, H::Stealthy, false)?,
             can_be_moved_through: parse_def(data, H::CanBeMovedThrough, false)?,
-            can_take: parse_def(data, H::CanTake, false)?,
-            can_be_taken: parse_def(data, H::CanBeTaken, true)?,
+            can_be_taken: parse_def(data, H::CanBeTaken, false)?,
             weapon: parse_def(data, H::Weapon, WeaponType::MachineGun)?,
-            can_attack_after_moving: parse_def(data, H::CanAttackAfterMoving, true)?,
+            can_attack_after_moving: parse_def(data, H::CanAttackAfterMoving, false)?,
             attack_pattern: parse_def(data, H::AttackPattern, AttackType::None)?,
             attack_targets: parse_def(data, H::AttackTargets, AttackTargeting::Enemy)?,
             splash_damage: parse_vec_def(data, H::SplashDamage, vec![Rational32::from_integer(1)])?,
@@ -89,7 +86,7 @@ impl UnitTypeConfig {
             cost: parse(data, H::Cost)?,
             displacement: parse_def(data, H::Displacement, Displacement::None)?,
             displacement_distance: parse_def(data, H::DisplacementDistance, 0)?,
-            can_be_displaced: parse_def(data, H::CanBeDisplaced, true)?,
+            can_be_displaced: parse_def(data, H::CanBeDisplaced, false)?,
             transport_capacity: parse_def(data, H::TransportCapacity, 0)?,
         };
         result.simple_validation()?;
@@ -123,7 +120,6 @@ crate::listable_enum! {
         NeedsOwner,
         Stealthy,
         CanBeMovedThrough,
-        CanTake,
         CanBeTaken,
         Weapon,
         CanAttackAfterMoving,

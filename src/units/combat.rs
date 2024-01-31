@@ -197,7 +197,9 @@ impl<D: Direction> AttackVector<D> {
     // if there is no unit or it can't be attacked, an empty Vec is returned
     // TODO: make sure the same Self isn't returned multiple times
     pub fn find(attacker: &Unit<D>, game: &Game<D>, pos: Point, target: Option<Point>, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>]) -> HashSet<Self> {
-        let valid_target: Box<dyn Fn(Point) -> bool> = if let Some(target) = target {
+        let splash_damage = attacker.get_splash_damage();
+        let displacement_distance = attacker.displacement_distance();
+        let valid_target: Box<dyn Fn(Point, usize, Option<D>) -> bool> = if let Some(target) = target {
             let defender = match game.get_map().get_unit(target)
             .and_then(|u| u.fog_replacement(game, target, get_fog(target))) {
                 None => return HashSet::new(),
@@ -206,16 +208,86 @@ impl<D: Direction> AttackVector<D> {
             if !attacker.could_attack(&defender, false) {
                 return HashSet::new();
             }
-            Box::new(move |t| t == target)
+            let get_fog = &get_fog;
+            Box::new(move |p, splash_index, displacement_direction| {
+                if p != target {
+                    return false;
+                }
+                if splash_damage[splash_index] != Rational32::from_integer(0) && attacker.base_damage(defender.typ()) != Some(0) {
+                    true
+                } else if attacker.displacement() == Displacement::None {
+                    false
+                } else if let Some(displacement_direction) = displacement_direction {
+                    // check if displacement would succeed
+                    let target_points = if displacement_distance < 0 {
+                        game.get_map().get_line(target, displacement_direction.opposite_direction(), (-displacement_distance) as usize + 1, NeighborMode::FollowPipes)
+                    } else {
+                        game.get_map().get_line(target, displacement_direction, displacement_distance as usize + splash_damage.len() - splash_index, NeighborMode::FollowPipes)
+                    };
+                    target_points
+                    .into_iter()
+                    .skip(1)
+                    .any(|dp| {
+                        // not blocked by the attacker or any other unit
+                        dp.point != pos &&
+                        game.get_map().get_unit(dp.point)
+                        .and_then(|u| u.fog_replacement(game, dp.point, get_fog(dp.point)))
+                        .is_none()
+                    })
+                } else {
+                    false
+                }
+            })
         } else {
-            Box::new(|target| {
-                match game.get_map().get_unit(target)
+            Box::new(|target, splash_index, displacement_direction| {
+                let defender = match game.get_map().get_unit(target)
                 .and_then(|u| u.fog_replacement(game, target, get_fog(target))) {
-                    None => false,
-                    Some(defender) => attacker.could_attack(&defender, false),
+                    Some(u) => u,
+                    _ => return false,
+                };
+                if !attacker.could_attack(&defender, false) {
+                    return false;
+                }
+                if splash_damage[splash_index] != Rational32::from_integer(0) && attacker.base_damage(defender.typ()) != Some(0) {
+                    true
+                } else if attacker.displacement() == Displacement::None {
+                    false
+                } else if let Some(displacement_direction) = displacement_direction {
+                    // check if displacement would succeed
+                    let target_points = if displacement_distance < 0 {
+                        game.get_map().get_line(target, displacement_direction.opposite_direction(), (-displacement_distance) as usize + 1, NeighborMode::FollowPipes)
+                    } else {
+                        game.get_map().get_line(target, displacement_direction, displacement_distance as usize + splash_damage.len() - splash_index, NeighborMode::FollowPipes)
+                    };
+                    target_points
+                    .into_iter()
+                    .skip(1)
+                    .any(|dp| {
+                        // not blocked by the attacker or any other unit
+                        dp.point != pos &&
+                        game.get_map().get_unit(dp.point)
+                        .and_then(|u| u.fog_replacement(game, dp.point, get_fog(dp.point)))
+                        .is_none()
+                    })
+                } else {
+                    false
                 }
             })
         };
+        Self::_search(attacker, game, pos, &get_fog, transporter, temporary_ballast, valid_target)
+    }
+
+    // doesn't check if there's a unit at the target position that can be attacked
+    pub fn search(attacker: &Unit<D>, game: &Game<D>, pos: Point, target: Option<Point>, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>]) -> HashSet<Self> {
+        let splash_damage = attacker.get_splash_damage();
+        let displacement_distance = attacker.displacement_distance();
+        Self::_search(attacker, game, pos, get_fog, transporter, temporary_ballast, |p, splash_index, dir| {
+            (target == None || target == Some(p))
+            && (splash_damage[splash_index] != Rational32::from_integer(0) || displacement_distance != 0 && dir.is_some())
+        })
+    }
+
+    fn _search(attacker: &Unit<D>, game: &Game<D>, pos: Point, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>], valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> HashSet<Self> {
         // TODO: check if target is protected by terrain (e.g. tank can only attack stranded Submarines)
         let mut result = HashSet::new();
         //let splash_damage = attacker.get_splash_damage();
@@ -227,16 +299,18 @@ impl<D: Direction> AttackVector<D> {
                 let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range as usize);
                 let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range as usize);
                 for d in D::list() {
-                    if Self::straight_splash(attacker, game, pos, d, min_range, max_range, &get_fog).iter()
-                    .any(|(dp, _)| valid_target(dp.point)) {
+                    if Self::straight_splash(attacker, game, pos, d, min_range, max_range, &get_fog, &valid_target).iter()
+                    .enumerate()
+                    .any(|(i, (dp, _))| valid_target(dp.point, i, Some(dp.direction))) {
                         result.insert(Self::Direction(d));
                     }
                 }
             }
             AttackType::Adjacent => {
                 for d in D::list() {
-                    if let Some(dp) = game.get_map().get_neighbor(pos, d) {
-                        if valid_target(dp.0) {
+                    if let Some((p, distortion)) = game.get_map().get_neighbor(pos, d) {
+                        // TODO: ignores splash
+                        if valid_target(p, 0, Some(distortion.update_direction(d))) {
                             result.insert(Self::Direction(d));
                         }
                     }
@@ -249,7 +323,8 @@ impl<D: Direction> AttackVector<D> {
                 let mut layers = game.get_map().range_in_layers(pos, max_range as usize);
                 for _ in min_range-1..max_range {
                     for p in layers.pop().unwrap() {
-                        if valid_target(p) {
+                        // TODO: ignores splash
+                        if valid_target(p, 0, None) {
                             result.insert(Self::Point(p));
                         }
                     }
@@ -262,8 +337,8 @@ impl<D: Direction> AttackVector<D> {
                         let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range as usize);
                         let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range as usize);
                         let direction = distortion.update_direction(direction);
-                        attack_area_cannon(game.get_map(), point, direction, min_range, max_range, |point, d, _| {
-                            if valid_target(point) {
+                        attack_area_cannon(game.get_map(), point, direction, min_range, max_range, |point, d, splash_index| {
+                            if valid_target(point, splash_index, Some(d)) {
                                 // TODO: consider splash damage
                                 result.insert(Self::DirectedPoint(point, d));
                             }
@@ -275,7 +350,7 @@ impl<D: Direction> AttackVector<D> {
         result
     }
 
-    fn straight_splash(attacker: &Unit<D>, game: &Game<D>, pos: Point, dir: D, min: usize, max: usize, get_fog: impl Fn(Point) -> FogIntensity) -> Vec<(OrientedPoint<D>, Rational32)> {
+    fn straight_splash(attacker: &Unit<D>, game: &Game<D>, pos: Point, dir: D, min: usize, max: usize, get_fog: impl Fn(Point) -> FogIntensity, valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> Vec<(OrientedPoint<D>, Rational32)> {
         let splash_damage = attacker.get_splash_damage();
         let points: Vec<_> = game.get_map().get_line(pos, dir, max + splash_damage.len(), NeighborMode::FollowPipes)
         .into_iter()
@@ -296,37 +371,7 @@ impl<D: Direction> AttackVector<D> {
         .take(splash_damage.len())
         .enumerate()
         .any(|(i, dp)| {
-            let defender = match game.get_map().get_unit(dp.point)
-            .and_then(|u| u.fog_replacement(game, dp.point, get_fog(dp.point))) {
-                Some(u) => u,
-                _ => return false,
-            };
-            if !attacker.could_attack(&defender, false) {
-                return false;
-            }
-            // TODO: check if target is protected by terrain (e.g. tank can only attack stranded Submarines)
-            if splash_damage[i] != Rational32::from_integer(0) && attacker.base_damage(defender.typ()) != Some(0) {
-                true
-            } else if attacker.displacement() == Displacement::None {
-                false
-            } else {
-                // check if displacement would succeed
-                let target_points = if attacker.displacement_distance() < 0 {
-                    game.get_map().get_line(dp.point, dp.direction.opposite_direction(), (-attacker.displacement_distance()) as usize + 1, NeighborMode::FollowPipes)
-                } else {
-                    game.get_map().get_line(dp.point, dp.direction, attacker.displacement_distance() as usize + splash_damage.len() - i, NeighborMode::FollowPipes)
-                };
-                target_points
-                .into_iter()
-                .skip(1)
-                .any(|dp| {
-                    // not blocked by the attacker or any other unit
-                    dp.point != pos &&
-                    game.get_map().get_unit(dp.point)
-                    .and_then(|u| u.fog_replacement(game, dp.point, get_fog(dp.point)))
-                    .is_none()
-                })
-            }
+            valid_target(dp.point, i, Some(dp.direction))
         }) {
             points.into_iter()
             .skip(blocking_unit.unwrap_or(max - 1))
@@ -384,7 +429,7 @@ impl<D: Direction> AttackVector<D> {
         match (attacker.attack_pattern(), self) {
             (AttackType::None, _) => Vec::new(),
             (AttackType::Straight(min, max), Self::Direction(dir)) => {
-                Self::straight_splash(attacker, game, pos, *dir, min as usize, max as usize, get_fog).into_iter()
+                Self::straight_splash(attacker, game, pos, *dir, min as usize, max as usize, get_fog, |_, _, _| true).into_iter()
                 .map(|(dp, ratio)| (dp.point, Some(dp.direction), ratio))
                 .collect()
             }

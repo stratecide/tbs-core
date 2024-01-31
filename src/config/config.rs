@@ -140,10 +140,6 @@ impl Config {
         self.unit_config(typ).can_be_moved_through
     }
 
-    pub fn can_take(&self, typ: UnitType) -> bool {
-        self.unit_config(typ).can_take
-    }
-
     pub fn can_be_taken(&self, typ: UnitType) -> bool {
         self.unit_config(typ).can_be_taken
     }
