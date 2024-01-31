@@ -512,15 +512,13 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn build_overrides(&self, game: &Game<D>, position: Point, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>]) -> HashSet<AttributeOverride> {
-        let heroes = game.get_map().hero_influence_at(position, self.get_owner_id());
-        let heroes: Vec<_> = heroes.iter().collect();
-        let mut overrides = self.environment.config.unit_attribute_overrides(
+    pub fn build_overrides(&self, game: &Game<D>, position: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> HashSet<AttributeOverride> {
+        let overrides = self.environment.config.unit_attribute_overrides(
             game,
             self,
             position,
             transporter,
-            &heroes,
+            heroes,
             temporary_ballast,
         );
         overrides.values()
@@ -912,35 +910,21 @@ impl<D: Direction> Unit<D> {
                 }
                 if free_space > 0 {
                     let transporter = transporter.map(|u| (u, path.start));
-                    let attr_overrides = self.build_overrides(game, destination, transporter, ballast);
-                    for unit_type in self.transportable_units() {
-                        let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment);
-                        for attr in &attr_overrides {
-                            builder = builder.set_attribute(&attr.into());
-                        }
-                        builder = builder.set_owner_id(self.get_owner_id());
-                        let unit = builder.build_with_defaults();
-                        if unit.full_price(game, destination, Some(self), heroes.as_slice()) <= funds_after_path {
-                            result.push(UnitAction::BuyTransportedUnit(*unit_type));
+                    for (unit, cost) in self.unit_shop(game, destination, transporter, ballast) {
+                        if cost <= funds_after_path {
+                            result.push(UnitAction::BuyTransportedUnit(unit.typ()));
                         }
                     }
                 }
             } else if self.can_build_units() && self.transport_capacity() == 0 {
                 let transporter = transporter.map(|u| (u, path.start));
-                let attr_overrides = self.build_overrides(game, destination, transporter, ballast);
-                for unit_type in self.transportable_units() {
-                    let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment);
-                    for attr in &attr_overrides {
-                        builder = builder.set_attribute(&attr.into());
-                    }
-                    builder = builder.set_owner_id(self.get_owner_id());
-                    let unit = builder.build_with_defaults();
-                    if unit.full_price(game, destination, Some(self), heroes.as_slice()) <= funds_after_path {
+                for (unit, cost) in self.unit_shop(game, destination, transporter, ballast) {
+                    if cost <= funds_after_path {
                         for d in D::list() {
                             if game.get_map().get_neighbor(destination, d)
                             .and_then(|(p, _)| game.get_map().get_terrain(p).unwrap().movement_cost(unit.default_movement_type()))
                             .is_some() {
-                                result.push(UnitAction::BuyUnit(*unit_type, d));
+                                result.push(UnitAction::BuyUnit(unit.typ(), d));
                             }
                         }
                     }
@@ -983,7 +967,7 @@ impl<D: Direction> Unit<D> {
     }
 
     pub(crate) fn unit_shop_option(&self, game: &Game<D>, pos: Point, unit_type: UnitType, transporter: Option<(&Unit<D>, Point)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], ballast: &[TBallast<D>]) -> (Unit<D>, i32) {
-        let attr_overrides = self.build_overrides(game, pos, transporter, ballast);
+        let attr_overrides = self.build_overrides(game, pos, transporter, heroes, ballast);
         let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment)
         .set_status(ActionStatus::Exhausted);
         for attr in &attr_overrides {
@@ -996,7 +980,9 @@ impl<D: Direction> Unit<D> {
         let mut unit = builder
         .set_owner_id(self.get_owner_id())
         .build_with_defaults();
-        unit.set_direction(unit.get_direction().rotate_by(self.get_direction()));
+        if self.has_attribute(AttributeKey::Direction) {
+            unit.set_direction(unit.get_direction().rotate_by(self.get_direction()));
+        }
         let heroes = game.get_map().hero_influence_at(pos, self.get_owner_id());
         let heroes: Vec<_> = heroes.iter().collect();
         let cost = unit.full_price(game, pos, Some(self), &heroes);

@@ -171,7 +171,6 @@ impl<D: Direction> UnitAction<D> {
                 let heroes: Vec<_> = heroes.iter().collect();
                 let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, *unit_type, transporter.map(|u| (u, path.start)), &heroes, ballast.get_entries());
                 unit.set_status(ActionStatus::Exhausted);
-                unit.set_direction(unit.get_direction().rotate_by(factory_unit.get_direction()));
                 if handler.environment().unit_attributes(*unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
                     unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
                 }

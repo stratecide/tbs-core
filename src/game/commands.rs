@@ -161,7 +161,7 @@ impl<D: Direction> Command<D> {
                 if bubble_index == None {
                     unit.set_status(ActionStatus::Exhausted);
                 }
-                unit.set_direction(unit.get_direction().rotate_by(d));
+                unit.set_direction(d);
                 if handler.environment().unit_attributes(unit_type, player.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
                     unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
                 }
