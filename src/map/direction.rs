@@ -1,25 +1,32 @@
 use std::fmt;
 use std::hash::Hash;
-use std::ops::{Add, Sub, Neg, AddAssign, SubAssign};
+use std::ops::{Add, AddAssign, Neg, Rem, Sub, SubAssign};
 use crate::map::point::*;
 use crate::units::attributes::{Attribute, AttributeError, AttributeKey, TrAttribute};
 
+use num_rational::Rational32;
 use zipper::*;
 use zipper::zipper_derive::*;
 
 
 pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display + TrAttribute<Self> {
-    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + SupportedZippable<u16>;
+    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + SupportedZippable<u16> + Rem<Output = Self::T>;
     //type P: PipeState<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
     fn is_hex() -> bool;
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
     //fn pipe_entry(&self) -> Self::P;
     fn list() -> Vec<Self>; // TODO: turn into &'static[Self]
+    /**
+     * swaps left and right, keeps up and down
+     */
     fn mirror_horizontally(&self) -> Self;
     //fn rotate_point_map(&self, map: &PointMap) -> PointMap;
+    fn get_global_neighbor(&self, point: GlobalPoint, odd_if_hex: bool) -> GlobalPoint {
+        self.translation(1).translate_point(&point, odd_if_hex)
+    }
     fn get_neighbor(&self, point: Point, odd_if_hex: bool) -> Option<Point> {
-        let gp = self.translation(1).translate_point(&GlobalPoint::new(point.x() as i16, point.y() as i16), odd_if_hex);
+        let gp = self.get_global_neighbor(GlobalPoint::new(point.x() as i16, point.y() as i16), odd_if_hex);
         if gp.x() >= 0 && gp.x() <= 255 && gp.y() >= 0 && gp.y() <= 255 {
             Some(Point::new(gp.x() as u8, gp.y() as u8))
         } else {
@@ -50,6 +57,9 @@ pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zip
         let index2 = other.list_index();
         list[(index + index2) % list.len()]
     }
+    /**
+     * swaps up and down, keeps left and right
+     */
     fn mirror_vertically(&self) -> Self {
         let list = Self::list();
         let index = self.list_index();
@@ -234,6 +244,24 @@ pub struct Translation4 {
     y: i16,
 }
 
+impl Rem for Translation4 {
+    type Output = Self;
+    fn rem(self, rhs: Self) -> Self::Output {
+        let mut x = self.x as i32;
+        let mut y = self.y as i32;
+            // dot product with the normalized wrapping_vector
+        let vector_length = rhs.x as i32 * rhs.x as i32 + rhs.y as i32 * rhs.y as i32;
+        let factor = Rational32::from_integer(rhs.x as i32 * x + rhs.y as i32 * y) / Rational32::from_integer(vector_length);
+        let factor = factor.round().to_integer();
+        x -= rhs.x as i32 * factor;
+        y -= rhs.y as i32 * factor;
+        Self {
+            x: x as i16,
+            y: y as i16,
+        }
+    }
+}
+
 impl Translation<Direction4> for Translation4 {
     fn new(direction: Direction4, distance: i16) -> Self {
         match direction {
@@ -332,6 +360,25 @@ pub struct Translation6 {
     d0: i16,
     d60: i16,
 }
+
+impl Rem for Translation6 {
+    type Output = Self;
+    fn rem(self, rhs: Self) -> Self::Output {
+        let mut x = self.d0 as i32;
+        let mut y = self.d60 as i32;
+            // dot product with the normalized wrapping_vector
+        let vector_length = rhs.d0 as i32 * rhs.d0 as i32 + rhs.d60 as i32 * rhs.d60 as i32;
+        let factor = Rational32::from_integer(rhs.d0 as i32 * x + rhs.d60 as i32 * y) / Rational32::from_integer(vector_length);
+        let factor = factor.round().to_integer();
+        x -= rhs.d0 as i32 * factor;
+        y -= rhs.d60 as i32 * factor;
+        Self {
+            d0: x as i16,
+            d60: y as i16,
+        }
+    }
+}
+
 impl Translation<Direction6> for Translation6 {
     fn new(direction: Direction6, distance: i16) -> Self {
         match direction {

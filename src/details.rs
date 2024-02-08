@@ -135,6 +135,16 @@ pub struct PipeState<D: Direction> {
 }
 
 impl<D: Direction> PipeState<D> {
+    pub fn new(d1: D, d2: D) -> Option<Self> {
+        if d1 == d2 {
+            return None;
+        }
+        Some(Self {
+            directions: [d1, d2],
+            ends: [true; 2],
+        })
+    }
+
     pub fn directions(&self) -> [(D, bool); 2] {
         [
             (self.directions[0], self.ends[0]),
@@ -155,13 +165,38 @@ impl<D: Direction> PipeState<D> {
         }
         None
     }
-    /*pub fn transform_direction(&self, entry: D) -> Option<D> {
-        let entry = entry.opposite_direction();
-        for (i, dir) in self.directions.iter().enumerate() {
-            if *dir == entry {
-                return Some(self.directions[1 - i]);
+    
+    pub fn is_open(&self, d: D) -> bool {
+        for i in 0..self.directions.len() {
+            if d == self.directions[i] {
+                return self.ends[i];
             }
         }
-        None
-    }*/
+        false
+    }
+}
+
+impl<D: Direction> Default for PipeState<D> {
+    fn default() -> Self {
+        Self {
+            directions: [D::angle_0(), D::angle_0().opposite_direction()],
+            ends: [true; 2],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::map::{direction::Direction4, wrapping_map::Distortion};
+
+    use super::PipeState;
+
+
+    #[test]
+    fn pipe_state() {
+        let pipe = PipeState::new(Direction4::D180, Direction4::D90).unwrap();
+        assert_eq!(pipe.distortion(Direction4::D0), Some(Distortion::new(false, Direction4::D90)));
+        assert_eq!(pipe.distortion(Direction4::D0).unwrap().update_direction(Direction4::D0), Direction4::D90);
+        assert_eq!(pipe.distortion(Direction4::D270).unwrap().update_direction(Direction4::D270), Direction4::D180);
+    }
 }

@@ -156,6 +156,9 @@ where D: Direction
             for det in self.get_details(point) {
                 match det {
                     Detail::Pipe(pipe_state) => {
+                        if !pipe_state.is_open(distortion.update_direction(d).opposite_direction()) {
+                            continue;
+                        }
                         if let Some(disto) = pipe_state.distortion(distortion.update_direction(d)) {
                         //if pipe_state.transform_direction(n.1.update_direction(d)).is_some() {
                             distortion += disto;
@@ -169,8 +172,6 @@ where D: Direction
                                 }
                             }
                             return Some((current, distortion));
-                        } else {
-                            break;
                         }
                     }
                     _ => (),

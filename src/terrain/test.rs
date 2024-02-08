@@ -18,7 +18,6 @@ mod tests {
     use crate::map::point_map::PointMap;
     use crate::terrain::TerrainType;
     use crate::map::wrapping_map::*;
-    use crate::units::combat::AttackVector;
     use crate::units::commands::{UnitCommand, UnitAction};
     use crate::units::movement::{Path, PathStep};
     use crate::units::unit_types::UnitType;
@@ -32,7 +31,7 @@ mod tests {
             map_size: map.size(),
             settings: None,
         };
-        let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
         let mut map = Map::new2(wmap, &environment);
         map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build_with_defaults());
         map.set_unit(Point::new(0, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
@@ -69,7 +68,7 @@ mod tests {
             map_size: map.size(),
             settings: None,
         };
-        let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
         let mut map = Map::new2(wmap, &environment);
         map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build_with_defaults());
         map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build_with_defaults());

@@ -54,7 +54,7 @@ mod tests {
     use crate::map::point::Point;
     use crate::map::point::Position;
     use crate::map::point_map::PointMap;
-    use crate::map::wrapping_map::WrappingMapBuilder;
+    use crate::map::wrapping_map::WMBuilder;
     use crate::terrain::TerrainType;
     use crate::units::unit_types::UnitType;
     use crate::VERSION;
@@ -64,8 +64,8 @@ mod tests {
         let version = Version::parse(VERSION).unwrap();
         let config = Arc::new(Config::test_config());
         let map = PointMap::new(8, 8, false);
-        let map = WrappingMapBuilder::<Direction4>::new(map, vec![]);
-        let mut map = Map::new(map.build().unwrap(), &config);
+        let map = WMBuilder::<Direction4>::new(map);
+        let mut map = Map::new(map.build(), &config);
         let environment = map.environment().clone();
         for p in map.all_points() {
             if p.y == 1 || p.y == 6 {

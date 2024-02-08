@@ -963,7 +963,7 @@ mod tests {
             map_size: map.size(),
             settings: None,
         };
-        let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
         let mut map = Map::new2(wmap, &environment);
         map.set_terrain(Point::new(0, 0), TerrainType::Street.instance(&environment).build_with_defaults());
         map.set_terrain(Point::new(1, 0), TerrainType::Grass.instance(&environment).build_with_defaults());
@@ -1006,7 +1006,7 @@ mod tests {
             map_size: map.size(),
             settings: None,
         };
-        let wmap: WrappingMap<Direction4> = WrappingMapBuilder::new(map, Vec::new()).build().unwrap();
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
         let mut map = Map::new2(wmap, &environment);
         map.set_unit(Point::new(1, 0), Some(UnitType::Magnet.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(3, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
