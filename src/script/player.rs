@@ -6,6 +6,7 @@ use crate::config::ConfigParseError;
 use crate::details::Detail;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
+use crate::map::point::Point;
 use crate::units::attributes::AttributeKey;
 use crate::units::unit::UnitBuilder;
 
@@ -100,24 +101,29 @@ pub(super) fn mass_heal<D: Direction>(handler: &mut EventHandler<D>, owner_id: i
 
 pub(super) fn zombie_resurrection<D: Direction>(handler: &mut EventHandler<D>, owner_id: u8, hp: u8) {
     for p in handler.get_map().all_points() {
-        if handler.get_map().get_unit(p).is_some() {
-            continue;
-        }
-        for (index, detail) in handler.get_map().get_details(p).into_iter().enumerate() {
-            match detail {
-                Detail::Skull(o, unit_type) => {
-                    if o.0 == owner_id as i8 {
-                        handler.detail_remove(p, index.into());
-                        let mut unit = UnitBuilder::new(handler.environment(), unit_type)
-                        .set_hp(hp)
-                        .set_zombified(true)
-                        .build_with_defaults();
-                        handler.unit_creation(p, unit);
-                    }
-                    break;
+        resurrect_zombie(handler, p, owner_id as i8, hp);
+    }
+}
+
+pub(super) fn resurrect_zombie<D: Direction>(handler: &mut EventHandler<D>, p: Point, owner_id: i8, hp: u8) {
+    if handler.get_map().get_unit(p).is_some() {
+        return;
+    }
+    for (index, detail) in handler.get_map().get_details(p).into_iter().enumerate() {
+        match detail {
+            Detail::Skull(o, unit_type) => {
+                if o.0 == owner_id {
+                    handler.detail_remove(p, index.into());
+                    let unit = UnitBuilder::new(handler.environment(), unit_type)
+                    .set_owner_id(owner_id)
+                    .set_hp(hp)
+                    .set_zombified(true)
+                    .build_with_defaults();
+                    handler.unit_creation(p, unit);
                 }
-                _ => ()
+                break;
             }
+            _ => ()
         }
     }
 }

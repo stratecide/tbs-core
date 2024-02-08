@@ -153,13 +153,15 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
-                let hp = unit.get_hp() as i8;
-                unit.set_hp((hp + **hp_change as i8) as u8);
+                if unit.has_attribute(AttributeKey::Hp) {
+                    let hp = unit.get_hp() as i8;
+                    unit.set_hp((hp + **hp_change as i8) as u8);
+                }
             }
             Self::UnitHpChangeBoarded(pos, index, hp_change) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(index.0) {
+                if let Some(boarded) = transported.get_mut(index.0).filter(|u| u.has_attribute(AttributeKey::Hp)) {
                     let hp = boarded.get_hp() as i8;
                     boarded.set_hp((hp + **hp_change as i8) as u8);
                 }
@@ -295,13 +297,15 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitHpChange(pos, hp_change, _) => {
                 let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
-                let hp = unit.get_hp() as i8;
-                unit.set_hp((hp - **hp_change as i8) as u8);
+                if unit.has_attribute(AttributeKey::Hp) {
+                    let hp = unit.get_hp() as i8;
+                    unit.set_hp((hp - **hp_change as i8) as u8);
+                }
             }
             Self::UnitHpChangeBoarded(pos, index, hp_change) => {
                 let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
                 let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(index.0) {
+                if let Some(boarded) = transported.get_mut(index.0).filter(|u| u.has_attribute(AttributeKey::Hp)) {
                     let hp = boarded.get_hp() as i8;
                     boarded.set_hp((hp - **hp_change as i8) as u8);
                 }

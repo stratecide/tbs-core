@@ -515,6 +515,9 @@ impl Config {
             for (i, s) in line.iter().enumerate().take(headers.len()) {
                 map.insert(headers[i], s);
             }
+            if map.get(&CommanderPowerConfigHeader::Id).unwrap_or(&"").len() == 0 {
+                continue;
+            }
             let conf = CommanderPowerConfig::parse(&map)?;
             result.commander_powers.get_mut(&conf.id)
             .ok_or(ConfigParseError::MissingCommanderForPower(conf.id))?
@@ -525,7 +528,7 @@ impl Config {
         let data = load_config(COMMANDER_ATTRIBUTES)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         let mut attributes: Vec<AttributeKey> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
+        for h in reader.headers()?.into_iter().skip(2) {
             let header = h.parse()?;
             if attributes.contains(&header) {
                 return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))

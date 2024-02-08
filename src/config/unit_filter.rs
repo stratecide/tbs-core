@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use crate::game::game::Game;
 use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::terrain::TerrainType;
@@ -11,6 +10,7 @@ use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
 
+use super::movement_type_config::MovementPattern;
 use super::ConfigParseError;
 use super::config::Config;
 
@@ -19,6 +19,7 @@ use super::config::Config;
 #[derive(Debug, Clone)]
 pub(super) enum UnitTypeFilter {
     Unit(HashSet<UnitType>),
+    MovementPattern(HashSet<MovementPattern>),
 }
 
 impl FromStr for UnitTypeFilter {
@@ -37,15 +38,26 @@ impl FromStr for UnitTypeFilter {
                 }
                 Self::Unit(set)
             }
+            "MP" | "MovementPattern" => {
+                let mut set = HashSet::new();
+                for s in it {
+                    set.insert(s.parse()?);
+                }
+                if set.len() == 0 {
+                    return Err(ConfigParseError::EmptyList);
+                }
+                Self::MovementPattern(set)
+            }
             _ => return Err(ConfigParseError::UnknownEnumMember(s.to_string()))
         })
     }
 }
 
 impl UnitTypeFilter {
-    pub fn check(&self, _config: &Config, unit_type: UnitType) -> bool {
+    pub fn check(&self, config: &Config, unit_type: UnitType) -> bool {
         match self {
             Self::Unit(u) => u.contains(&unit_type),
+            Self::MovementPattern(m) => m.contains(&config.movement_pattern(unit_type)),
         }
     }
 }
@@ -59,6 +71,7 @@ pub(super) enum UnitFilter {
     Unit(HashSet<UnitType>),
     Movement(HashSet<MovementType>),
     Terrain(HashSet<TerrainType>),
+    MovementPattern(HashSet<MovementPattern>),
 }
 
 impl FromStr for UnitFilter {
@@ -89,6 +102,16 @@ impl FromStr for UnitFilter {
                 }
                 Self::Terrain(set)
             }
+            "MP" | "MovementPattern" => {
+                let mut set = HashSet::new();
+                for s in it {
+                    set.insert(s.parse()?);
+                }
+                if set.len() == 0 {
+                    return Err(ConfigParseError::EmptyList);
+                }
+                Self::MovementPattern(set)
+            }
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         })
     }
@@ -113,6 +136,7 @@ impl UnitFilter {
             Self::Unit(u) => u.contains(&unit.typ()),
             Self::Movement(m) => m.contains(&unit.default_movement_type()),
             Self::Terrain(t) => t.contains(&map.get_terrain(unit_pos.0).unwrap().typ()),
+            Self::MovementPattern(m) => m.contains(&unit.movement_pattern()),
         }
     }
 }

@@ -130,36 +130,85 @@ impl Commander {
         power.effects.clone()
     }
 
-    /*pub fn unit_start_turn_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
-        self.environment.config.commander_unit_start_turn_effects(self, unit, game, pos)
-    }
+}
 
-    pub fn unit_end_turn_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
-        self.environment.config.commander_unit_end_turn_effects(self, unit, game, pos)
-    }
 
-    pub fn unit_death_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Vec<UnitScript> {
-        self.environment.config.commander_unit_death_effects(self, unit, game, pos)
-    }
+#[cfg(test)]
+mod tests {
 
-    pub fn unit_attack_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point, other_unit: &Unit<D>, other_pos: Point) -> Vec<AttackScript> {
-        self.environment.config.commander_unit_attack_effects(self, unit, game, pos, other_unit, other_pos)
-    }
+    use std::sync::Arc;
 
-    pub fn unit_kill_scripts<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point, other_unit: &Unit<D>, other_pos: Point) -> Vec<KillScript> {
-        self.environment.config.commander_unit_kill_effects(self, unit, game, pos, other_unit, other_pos)
-    }
+    use interfaces::game_interface::*;
+    use interfaces::map_interface::*;
+    use semver::Version;
+    use crate::commander::commander_type::CommanderType;
+    use crate::config::config::Config;
+    use crate::details::Detail;
+    use crate::game::commands::Command;
+    use crate::game::game::*;
+    use crate::game::fog::*;
+    use crate::map::direction::*;
+    use crate::map::map::Map;
+    use crate::map::point::Point;
+    use crate::map::point::Position;
+    use crate::map::point_map::PointMap;
+    use crate::map::wrapping_map::WMBuilder;
+    use crate::terrain::TerrainType;
+    use crate::units::combat::AttackVector;
+    use crate::units::commands::UnitAction;
+    use crate::units::commands::UnitCommand;
+    use crate::units::movement::Path;
+    use crate::units::unit_types::UnitType;
+    use crate::VERSION;
 
-    pub fn movement_bonus<D: Direction>(&self, unit: &Unit<D>, game: &Game<D>, pos: Point) -> Rational32 {
-        self.environment.config.commander_movement_bonus(self, unit, game, pos)
-    }
+    #[test]
+    fn zombie() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(5, 5, false);
+        let map = WMBuilder::<Direction6>::new(map);
+        let mut map = Map::new(map.build(), &config);
+        let environment = map.environment().clone();
+        map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::SmallTank.instance(&environment).set_owner_id(1).set_hp(1).build_with_defaults()));
 
-    pub fn attack_bonus<D: Direction>(&self, attacker: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool, other_unit: &Unit<D>, other_pos: Point) -> Rational32 {
-        self.environment.config.commander_attack_bonus(self, attacker, game, pos, is_counter, other_unit, other_pos)
-    }
+        map.set_unit(Point::new(4, 4), Some(UnitType::SmallTank.instance(&environment).set_owner_id(1).set_hp(1).build_with_defaults()));
 
-    pub fn defense_bonus<D: Direction>(&self, defender: &Unit<D>, game: &Game<D>, pos: Point, is_counter: bool, other_unit: &Unit<D>, other_pos: Point) -> Rational32 {
-        self.environment.config.commander_defense_bonus(self, defender, game, pos, is_counter, other_unit, other_pos)
-    }*/
-    
+        map.set_details(Point::new(0, 4), vec![Detail::Skull(0.into(), UnitType::SmallTank)]);
+
+        let settings = map.settings().unwrap();
+
+        let mut settings = settings.clone();
+        for player in &settings.players {
+            assert!(player.get_commander_options().contains(&CommanderType::Zombie));
+        }
+        settings.fog_mode = FogMode::Constant(FogSetting::None);
+        settings.players[0].set_commander(CommanderType::Zombie);
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
+        let unchanged = server.clone();
+        let environment: crate::config::environment::Environment = server.environment().clone();
+        // small power
+        server.handle_command(Command::CommanderPowerSimple(1), || 0.).unwrap();
+        assert_eq!(server.get_map().get_details(Point::new(0, 4)), Vec::new());
+        assert_eq!(server.get_map().get_unit(Point::new(0, 4)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).build_with_defaults()));
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(1, 1)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_map().get_details(Point::new(2, 1)), vec![Detail::Skull(0.into(), UnitType::SmallTank)]);
+        assert_eq!(server.get_map().get_unit(Point::new(2, 1)), None);
+        // big power
+        let mut server = unchanged.clone();
+        server.handle_command(Command::CommanderPowerSimple(2), || 0.).unwrap();
+        assert_eq!(server.get_map().get_details(Point::new(0, 4)), Vec::new());
+        assert_eq!(server.get_map().get_unit(Point::new(0, 4)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).build_with_defaults()));
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(1, 1)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_map().get_details(Point::new(2, 1)), Vec::new());
+        assert_eq!(server.get_map().get_unit(Point::new(2, 1)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).build_with_defaults()));
+    }
 }

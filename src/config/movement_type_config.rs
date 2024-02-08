@@ -16,7 +16,7 @@ pub struct MovementTypeConfig {
 }*/
 
 crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum MovementPattern {
         Standard,
         StandardLoopLess,

@@ -1,2 +1,5 @@
 Id;Name;UsableFromPowers;NextPower;RequiredCharge;Effects
 None;-;;;;
+Zombie;;;;;
+Zombie;Resurrection;0;0;4000;ZombieResurrection(50)
+Zombie;Plague;0;0;6000;ZombieResurrection(50)

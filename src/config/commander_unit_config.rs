@@ -103,9 +103,9 @@ impl CommanderPowerUnitConfig {
             build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new())?.into_iter().collect(),
             on_start_turn: parse_vec_def(data, H::OnStartTurn, Vec::new())?,
             on_end_turn: parse_vec_def(data, H::OnEndTurn, Vec::new())?,
-            on_kill: parse_vec_def(data, H::OnEndTurn, Vec::new())?,
-            on_attack: parse_vec_def(data, H::OnDeath, Vec::new())?,
-            on_death: parse_vec_def(data, H::OnStartTurn, Vec::new())?,
+            on_attack: parse_vec_def(data, H::OnAttack, Vec::new())?,
+            on_kill: parse_vec_def(data, H::OnKill, Vec::new())?,
+            on_death: parse_vec_def(data, H::OnDeath, Vec::new())?,
         };
         result.simple_validation()?;
         Ok(result)
@@ -157,6 +157,8 @@ crate::listable_enum! {
         BuildOverrides,
         OnStartTurn,
         OnEndTurn,
+        OnAttack,
+        OnKill,
         OnDeath,
     }
 }
@@ -177,7 +179,7 @@ impl FromStr for PowerRestriction {
             "None" | "" => Self::None,
             "Commander" | "Co" => {
                 let commander: CommanderType = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?.parse()?;
-                let power = if let Some(power) = it.next() {
+                let power = if let Some(power) = it.next().filter(|s| s.len() > 0) {
                     Some(power.parse().map_err(|_| ConfigParseError::InvalidInteger(s.to_string()))?)
                 } else {
                     None

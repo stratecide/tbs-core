@@ -9,10 +9,13 @@ use crate::player::Owner;
 use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::units::unit::Unit;
 
+use super::player::resurrect_zombie;
+
 #[derive(Debug, Clone)]
 pub enum KillScript {
     Unexhaust,
     DeadSkull,
+    ZombieResurrection(u8),
 }
 
 impl FromStr for KillScript {
@@ -23,6 +26,11 @@ impl FromStr for KillScript {
         Ok(match it.next().unwrap() {
             "Unexhaust" => Self::Unexhaust,
             "DeadSkull" => Self::DeadSkull,
+            "ZombieResurrection" => {
+                let hp = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
+                let hp = hp.parse().map_err(|_| ConfigParseError::InvalidInteger(hp.to_string()))?;
+                Self::ZombieResurrection(1.max(100.min(hp)))
+            }
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         })
     }
@@ -40,10 +48,14 @@ impl KillScript {
             },
             Self::DeadSkull => {
                 let details = handler.get_map().get_details(defender_pos);
-                if details.len() < MAX_STACK_SIZE as usize && defender.get_team() != attacker.get_team() && defender.has_attribute(AttributeKey::Zombified) {
+                if details.len() < MAX_STACK_SIZE as usize && defender.get_team() != attacker.get_team()
+                && handler.environment().unit_attributes(defender.typ(), attacker.get_owner_id()).any(|a| *a == AttributeKey::Zombified) {
                     handler.detail_add(defender_pos, Detail::Skull(Owner(attacker.get_owner_id()), defender.typ()));
                 }
             },
+            Self::ZombieResurrection(hp) => {
+                resurrect_zombie(handler, defender_pos, attacker.get_owner_id(), *hp);
+            }
         }
     }
 }

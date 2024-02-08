@@ -40,7 +40,7 @@ macro_rules! listable_enum {(
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s {
                     $(stringify!($member) => Ok(Self::$member),)*
-                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(s.to_string()))
+                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("{}::{}", stringify!($name), s)))
                 }
             }
         }
@@ -92,7 +92,7 @@ macro_rules! enum_with_custom {(
                 }
                 match s {
                     $(stringify!($member) => Ok(Self::$member),)*
-                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(s.to_string()))
+                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("{}::{}", stringify!($name), s)))
                 }
             }
         }

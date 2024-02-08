@@ -1,1 +1,2 @@
-
+Commander;Units;Zombified
+Zombie;MovementPattern(Standard);true
