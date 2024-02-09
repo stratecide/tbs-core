@@ -61,7 +61,7 @@ impl AttributeKey {
         match self {
             Self::Hp => A::Hp(100),
             Self::Hero => A::Hero(Hero::new(HeroType::None, None)),
-            Self::Owner => A::Owner(0),
+            Self::Owner => A::Owner(-1),
             Self::ActionStatus => A::ActionStatus(ActionStatus::Ready),
             Self::Amphibious => A::Amphibious(Amphibious::default()),
             Self::Direction => A::Direction(D::angle_0()),
