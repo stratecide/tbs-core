@@ -1,1 +1,4 @@
-
+Hero;Name;UsableFromPowers;NextPower;RequiredCharge;AuraRange;Script
+Crystal;;;;;2;
+Crystal;Obelisk;0;0;12;3;SummonCrystal(CrystalObelisk)
+CrystalObelisk;;;;;2;

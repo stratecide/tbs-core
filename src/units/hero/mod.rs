@@ -170,7 +170,7 @@ impl Hero {
         let mut result = vec![];
         for p in map.all_points() {
             if let Some(unit) = map.get_unit(p) {
-                if !unit.is_hero() || unit.get_owner_id() != owner_id {
+                if !unit.is_hero() || owner_id >= 0 && unit.get_owner_id() != owner_id {
                     continue;
                 }
                 let hero = unit.get_hero();
@@ -340,6 +340,7 @@ mod tests {
         }), || 0.).unwrap();
         let power_aura_damage = 100 - server.get_map().get_unit(Point::new(3, 1)).unwrap().get_hp();
 
+        // don't use power
         let mut server = unchanged.clone();
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
@@ -350,6 +351,9 @@ mod tests {
         server.handle_command(Command::EndTurn, || 0.).unwrap();
         server.handle_command(Command::EndTurn, || 0.).unwrap();
         assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 100);
+        assert_eq!(Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(0, 0), 0).len(), 1);
+        assert_eq!(Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(0, 0), 1).len(), 0);
+        assert_eq!(Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(0, 0), -1).len(), 1);
 
         assert!(aura_damage < power_aura_damage);
 
