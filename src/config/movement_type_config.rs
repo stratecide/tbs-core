@@ -1,11 +1,10 @@
 use crate::map::direction::Direction;
-use crate::map::map::{Map, NeighborMode};
+use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::ExtraMovementOptions;
 use crate::units::movement::{PathStep, PathStepTakes, PbEntry, TBallast};
-use crate::units::unit::Unit;
 
 /*#[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]

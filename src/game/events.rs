@@ -86,7 +86,7 @@ pub enum Event<D:Direction> {
     HeroSet(Point, Hero, Hero),
     HeroCharge(Point, HeroChargeChange),
     HeroChargeTransported(Point, UnloadIndex, HeroChargeChange),
-    HeroPower(Point),
+    HeroPower(Point, U<31>, U<31>),
     // terrain events
     TerrainChange(Point, Terrain, Terrain),
     TerrainAnger(Point, Anger, Anger),
@@ -249,9 +249,9 @@ impl<D: Direction> Event<D> {
                     }
                 }
             }
-            Self::HeroPower(p) => {
+            Self::HeroPower(p, _, index) => {
                 if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_power_active(!hero.is_power_active());
+                    hero.set_active_power(**index as usize);
                 }
             }
             Self::TerrainChange(pos, _, terrain) => {
@@ -393,9 +393,9 @@ impl<D: Direction> Event<D> {
                     }
                 }
             }
-            Self::HeroPower(p) => {
+            Self::HeroPower(p, index, _) => {
                 if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_power_active(!hero.is_power_active());
+                    hero.set_active_power(**index as usize);
                 }
             }
             Self::TerrainChange(pos, terrain, _) => {
@@ -596,7 +596,7 @@ impl<D: Direction> Event<D> {
                 }
             }
             Self::HeroCharge(p, _) |
-            Self::HeroPower(p) => {
+            Self::HeroPower(p, _, _) => {
                 if game.visible_unit_with_attribute(team, *p, AttributeKey::Hero) {
                     Some(self.clone())
                 } else {

@@ -211,8 +211,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
         // end merc powers
         for p in self.get_map().all_points() {
-            if let Some(_) = self.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id) {
-                self.hero_power_end(p);
+            if let Some(unit) = self.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id) {
+                let hero = unit.get_hero();
+                let next_power = hero.get_next_power(self.environment());
+                if hero.can_activate_power(self.environment(), next_power) {
+                    // TODO: this skips the custom-action. maybe execute the custom action if no user input is needed
+                    self.hero_charge_sub(p, None, hero.power_cost(self.environment(), next_power));
+                    self.hero_power(p, next_power);
+                }
             }
         }
 
@@ -359,18 +365,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn hero_power_start(&mut self, position: Point) {
-        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
+    pub fn hero_power(&mut self, position: Point, index: usize) {
+        let unit: Unit<D> = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         let hero = unit.get_hero();
-        if !hero.is_power_active() {
-            self.add_event(Event::HeroPower(position));
-        }
-    }
-    pub fn hero_power_end(&mut self, position: Point) {
-        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
-        let hero = unit.get_hero();
-        if hero.is_power_active() {
-            self.add_event(Event::HeroPower(position));
+        if hero.get_active_power() != index {
+            self.add_event(Event::HeroPower(position, hero.get_active_power().into(), index.into()));
         }
     }
 
@@ -460,7 +459,8 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             }
             self.add_event(Event::UnitAddBoarded(path_end, transformed_unit));
         } else {
-            if let Some(u) = self.get_map().get_unit(path_end) {
+            if let Some(_) = self.get_map().get_unit(path_end) {
+                // TODO: this shouldn't happen at all
                 self.unit_death(path_end);
             }
             if let Some((id, disto)) = self.observation_id(path.start, unload_index) {
@@ -752,7 +752,8 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
         let mut hero_auras: HashMap<Point, Vec<&(Unit<D>, Hero, Point, Option<usize>)>> = HashMap::new();
         for hero in &heroes {
-            for p in hero.1.aura(self.get_map(), hero.2) {
+            let transporter = hero.3.map(|i| (self.get_map().get_unit(hero.2).unwrap(), i));
+            for p in Hero::aura(Some(&self.game), self.get_map(), &hero.0, hero.2, transporter) {
                 if let Some(list) = hero_auras.get_mut(&p) {
                     list.push(hero);
                 } else {

@@ -1,21 +1,11 @@
 pub mod commander_type;
 
-use std::collections::HashSet;
 
 use commander_type::CommanderType;
-use num_rational::Rational32;
 use zipper::*;
 
 use crate::config::environment::Environment;
 use crate::script::player::PlayerScript;
-use crate::script::unit::UnitScript;
-use crate::script::attack::AttackScript;
-use crate::script::kill::KillScript;
-use crate::map::direction::Direction;
-use crate::map::point::Point;
-use crate::units::attributes::AttributeOverride;
-use crate::units::unit::Unit;
-use crate::game::game::Game;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Commander {
@@ -140,12 +130,10 @@ mod tests {
 
     use interfaces::game_interface::*;
     use interfaces::map_interface::*;
-    use semver::Version;
     use crate::commander::commander_type::CommanderType;
     use crate::config::config::Config;
     use crate::details::Detail;
     use crate::game::commands::Command;
-    use crate::game::game::*;
     use crate::game::fog::*;
     use crate::map::direction::*;
     use crate::map::map::Map;
@@ -153,13 +141,11 @@ mod tests {
     use crate::map::point::Position;
     use crate::map::point_map::PointMap;
     use crate::map::wrapping_map::WMBuilder;
-    use crate::terrain::TerrainType;
     use crate::units::combat::AttackVector;
     use crate::units::commands::UnitAction;
     use crate::units::commands::UnitCommand;
     use crate::units::movement::Path;
     use crate::units::unit_types::UnitType;
-    use crate::VERSION;
 
     #[test]
     fn zombie() {

@@ -1,5 +1,5 @@
 Power;Affects;Attack;CounterAttack;Defense;CounterDefense;Visibility;MovementType;WaterMovementType;MovementPoints;Vision;TrueVision;Stealthy;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;CanBuildUnits;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity;BuildOverrides;OnStartTurn;OnEndTurn;OnAttack;OnKill;OnDeath
 ;U(Pawn),T(ChessPawnTile);;;;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;
 Co(Zombie);MovementPattern(Standard);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;DeadSkull;
-Co(Zombie-1);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;
-Co(Zombie-2);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;ZombieResurrection(50);
+Co(Zombie,1);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Co(Zombie,2);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;ZombieResurrection(50);

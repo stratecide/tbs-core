@@ -24,7 +24,7 @@ impl CommanderTypeConfig {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: get(H::Id)?.parse()?,
+            id: parse(data, H::Id)?,
             name: get(H::Name)?.to_string(),
             transport_capacity: parse_def(data, H::TransportCapacity, 0)?,
             max_charge: parse(data, H::Charge)?,

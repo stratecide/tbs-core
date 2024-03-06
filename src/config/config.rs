@@ -26,6 +26,8 @@ use crate::units::unit_types::UnitType;
 use crate::units::attributes::*;
 use crate::units::hero::*;
 
+use super::custom_action_config::CustomActionConfig;
+use super::hero_power_config::HeroPowerConfig;
 use super::hero_type_config::HeroTypeConfig;
 use super::commander_power_config::CommanderPowerConfig;
 use super::commander_type_config::CommanderTypeConfig;
@@ -47,11 +49,13 @@ pub struct Config {
     pub(super) unit_attributes: HashMap<UnitType, Vec<AttributeKey>>,
     pub(super) unit_hidden_attributes: HashMap<UnitType, Vec<AttributeKey>>,
     pub(super) attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
+    pub(super) custom_actions: Vec<CustomActionConfig>,
     pub(super) max_transported: usize,
     // heroes
     pub(super) hero_types: Vec<HeroType>,
     pub(super) heroes: HashMap<HeroType, HeroTypeConfig>,
     pub(super) hero_units: HashMap<HeroType, HashSet<UnitType>>,
+    pub(super) hero_powers: HashMap<HeroType, Vec<HeroPowerConfig>>,
     //pub(super) hero_powered_units: HashMap<HeroType, HashMap<Option<bool>, Vec<CommanderPowerUnitConfig>>>,
     pub(super) max_hero_charge: u8,
     // terrain
@@ -212,7 +216,7 @@ impl Config {
         self.unit_hidden_attributes.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
     }
 
-    pub fn unit_specific_statuses(&self, typ: UnitType) -> &[ActionStatus] {
+    pub fn unit_specific_statuses(&self, _typ: UnitType) -> &[ActionStatus] {
         // TODO
         &[ActionStatus::Ready, ActionStatus::Exhausted, ActionStatus::Repairing, ActionStatus::Capturing]
     }
@@ -223,6 +227,10 @@ impl Config {
         } else {
             &[]
         }
+    }
+
+    pub fn custom_actions(&self) -> &[CustomActionConfig] {
+        &self.custom_actions
     }
 
     // hero
@@ -245,8 +253,7 @@ impl Config {
 
     pub fn hero_price(&self, typ: HeroType, unit: UnitType) -> Option<i32> {
         if self.hero_units.get(&typ)?.contains(&unit) {
-            Some(self.hero_config(typ).price as i32 + 
-            (Rational32::from_integer(self.base_cost(unit)) * self.hero_config(typ).relative_price).to_integer())
+            Some(self.hero_config(typ).price.update_value(self.base_cost(unit)))
         } else {
             None
         }
@@ -260,12 +267,42 @@ impl Config {
         self.hero_config(typ).charge
     }
 
-    pub fn hero_aura_range(&self, typ: HeroType) -> u8 {
-        self.hero_config(typ).aura_range
-    }
-
     pub fn hero_transport_capacity(&self, typ: HeroType) -> u8 {
         self.hero_config(typ).transport_capacity
+    }
+
+    pub fn hero_powers(&self, typ: HeroType) -> &[HeroPowerConfig] {
+        if let Some(powers) = self.hero_powers.get(&typ) {
+            powers
+        } else {
+            &[]
+        }
+    }
+
+    pub fn hero_aura_range<D: Direction>(
+        &self,
+        game: Option<&Game<D>>,
+        map: &Map<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        transporter: Option<(&Unit<D>, usize)>,
+    ) -> Option<u8> {
+        let hero = unit.get_hero();
+        let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range;
+        let iter = self.unit_power_configs(
+            game,
+            map,
+            unit,
+            (unit_pos, transporter.map(|u| u.1)),
+            transporter.map(|u| (u.0, unit_pos)),
+            None,
+            &[],
+            &[],
+        );
+        Some(NumberMod::update_value_repeatedly(
+            aura_range,
+            iter.map(|c| &c.aura_range)
+        ))
     }
 
     /*pub(super) fn hero_unit_configs<'a, D: Direction>(&'a self, game: &'a Game<D>, hero: HeroType, power: bool, unit: &'a Unit<D>, unit_pos: Point, hero_unit: &'a Unit<D>, hero_pos: Point, other_unit: Option<(&'a Unit<D>, Point)>) -> impl DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> {
@@ -795,8 +832,8 @@ impl Config {
         heroes: &[&(Unit<D>, Hero, Point, Option<usize>)],
         temporary_ballast: &[TBallast<D>],
         min_range: bool,
-        base_range: usize,
-    ) -> usize {
+        base_range: u8,
+    ) -> u8 {
         let iter = self.unit_power_configs(
             Some(game),
             game.get_map(),

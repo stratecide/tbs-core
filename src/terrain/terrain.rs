@@ -293,7 +293,7 @@ impl Terrain {
         if !self.can_build() {
             return Vec::new();
         }
-        let heroes = game.get_map().hero_influence_at(pos, self.get_owner_id());
+        let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
         let heroes: Vec<_> = heroes.iter().collect();
         self.buildable_units().iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, &heroes)

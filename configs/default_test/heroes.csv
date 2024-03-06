@@ -1,2 +1,4 @@
-Id;Name;Price;RelativePrice;AuraRange;Charge;Visibility;TransportCapacity;MovementPoints;PowerMovementPoints;Attack;PowerAttack;Defense;PowerDefense
-None;;;;;;;;;;;;;
+Id;Name;Price;Charge;TransportCapacity
+None;;;;
+Crystal;Crystal;*1/2+100;12;
+CrystalObelisk;Obelisk;;;

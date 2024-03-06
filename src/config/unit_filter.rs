@@ -1,16 +1,16 @@
 use std::collections::HashSet;
-use std::str::FromStr;
 
 use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::terrain::TerrainType;
-use crate::units::hero::Hero;
+use crate::units::hero::{Hero, HeroType};
 use crate::units::movement::{MovementType, TBallast};
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
 
 use super::movement_type_config::MovementPattern;
+use super::parse::{parse_inner_vec, string_base, FromConfig};
 use super::ConfigParseError;
 use super::config::Config;
 
@@ -22,34 +22,22 @@ pub(super) enum UnitTypeFilter {
     MovementPattern(HashSet<MovementPattern>),
 }
 
-impl FromStr for UnitTypeFilter {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let it = s.split(')').next().unwrap().trim();
-        let mut it = it.split(&['(', ' ']);
-        Ok(match it.next().unwrap() {
+impl FromConfig for UnitTypeFilter {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, mut remainder) = string_base(s);
+        Ok((match base {
             "U" | "Unit" => {
-                let mut set = HashSet::new();
-                for s in it {
-                    set.insert(s.parse()?);
-                }
-                if set.len() == 0 {
-                    return Err(ConfigParseError::EmptyList);
-                }
-                Self::Unit(set)
+                let (list, r) = parse_inner_vec::<UnitType>(remainder, true)?;
+                remainder = r;
+                Self::Unit(list.into_iter().collect())
             }
             "MP" | "MovementPattern" => {
-                let mut set = HashSet::new();
-                for s in it {
-                    set.insert(s.parse()?);
-                }
-                if set.len() == 0 {
-                    return Err(ConfigParseError::EmptyList);
-                }
-                Self::MovementPattern(set)
+                let (list, r) = parse_inner_vec::<MovementPattern>(remainder, true)?;
+                remainder = r;
+                Self::MovementPattern(list.into_iter().collect())
             }
             _ => return Err(ConfigParseError::UnknownEnumMember(s.to_string()))
-        })
+        }, remainder))
     }
 }
 
@@ -64,56 +52,66 @@ impl UnitTypeFilter {
 
 
 /**
- * UnitFilter is the first thing to replace with Rhai
+ * UnitFilter and custom actions are the first things to replace with Rhai
  */
 #[derive(Debug, Clone)]
-pub(super) enum UnitFilter {
+pub(crate) enum UnitFilter {
     Unit(HashSet<UnitType>),
     Movement(HashSet<MovementType>),
     Terrain(HashSet<TerrainType>),
     MovementPattern(HashSet<MovementPattern>),
+    Hero(HashSet<(HeroType, Option<u8>)>),
+    HeroGlobal(HashSet<(HeroType, Option<u8>)>),
+    IsHero(HashSet<(HeroType, Option<u8>)>),
+    Not(Vec<Self>),
 }
 
-impl FromStr for UnitFilter {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', ' ', ')'])
-        .map(str::trim)
-        .filter(|s| s.len() > 0);
-        Ok(match it.next().unwrap() {
+impl FromConfig for UnitFilter {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, mut remainder) = string_base(s);
+        Ok((match base {
             "Unit" | "U" => {
-                let mut set = HashSet::new();
-                for unit in it {
-                    set.insert(unit.parse()?);
-                }
-                Self::Unit(set)
+                let (list, r) = parse_inner_vec::<UnitType>(remainder, true)?;
+                remainder = r;
+                Self::Unit(list.into_iter().collect())
             }
             "Movement" | "M" => {
-                let mut set = HashSet::new();
-                for movement_type in it {
-                    set.insert(movement_type.parse()?);
-                }
-                Self::Movement(set)
+                let (list, r) = parse_inner_vec::<MovementType>(remainder, true)?;
+                remainder = r;
+                Self::Movement(list.into_iter().collect())
             }
             "Terrain" | "T" => {
-                let mut set = HashSet::new();
-                for terrain in it {
-                    set.insert(terrain.parse()?);
-                }
-                Self::Terrain(set)
+                let (list, r) = parse_inner_vec::<TerrainType>(remainder, true)?;
+                remainder = r;
+                Self::Terrain(list.into_iter().collect())
             }
             "MP" | "MovementPattern" => {
-                let mut set = HashSet::new();
-                for s in it {
-                    set.insert(s.parse()?);
-                }
-                if set.len() == 0 {
-                    return Err(ConfigParseError::EmptyList);
-                }
-                Self::MovementPattern(set)
+                let (list, r) = parse_inner_vec::<MovementPattern>(remainder, true)?;
+                remainder = r;
+                Self::MovementPattern(list.into_iter().collect())
+            }
+            "H" | "Hero" => {
+                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, true)?;
+                remainder = r;
+                Self::Hero(list.into_iter().collect())
+            }
+            "HG" | "HeroGlobal" => {
+                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, true)?;
+                remainder = r;
+                Self::HeroGlobal(list.into_iter().collect())
+            }
+            "IH" | "IsHero" => {
+                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, true)?;
+                remainder = r;
+                Self::IsHero(list.into_iter().collect())
+            }
+            "Not" => {
+                let (list, r) = parse_inner_vec::<Self>(remainder, true)?;
+                remainder = r;
+                Self::Not(list)
             }
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        })
+        }, remainder))
     }
 }
 
@@ -137,6 +135,42 @@ impl UnitFilter {
             Self::Movement(m) => m.contains(&unit.default_movement_type()),
             Self::Terrain(t) => t.contains(&map.get_terrain(unit_pos.0).unwrap().typ()),
             Self::MovementPattern(m) => m.contains(&unit.movement_pattern()),
+            Self::Hero(h) => {
+                for (_, hero, _, _) in heroes {
+                    let power = hero.get_active_power() as u8;
+                    if h.iter().any(|h| h.0 == hero.typ() && h.1.unwrap_or(power) == power) {
+                        return true;
+                    }
+                }
+                false
+            }
+            Self::HeroGlobal(h) => {
+                for p in map.all_points() {
+                    if let Some(u) = map.get_unit(p) {
+                        if u.get_owner_id() == unit.get_owner_id() && u.is_hero() {
+                            let hero = u.get_hero();
+                            let power = hero.get_active_power() as u8;
+                            let hero = hero.typ();
+                            if h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            Self::IsHero(h) => {
+                let hero = unit.get_hero();
+                let power = hero.get_active_power() as u8;
+                let hero = hero.typ();
+                h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
+            }
+            Self::Not(negated) => {
+                // returns true if at least one check returns false
+                // if you need all checks to return false, put them into separate Self::Not wrappers instead
+                negated.iter()
+                .any(|negated| !negated.check(map, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast))
+            }
         }
     }
 }

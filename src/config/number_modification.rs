@@ -1,71 +1,53 @@
 use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Sub};
-use std::str::FromStr;
 
+use num_rational::Rational32;
+
+use super::parse::FromConfig;
 use super::ConfigParseError;
 
+pub trait MulRational32: Debug + Clone + Add<Self, Output = Self> + Sub<Self, Output = Self> + Mul<Self, Output = Self> + Div<Self, Output = Self> {
+    fn mul_r32(self, other: Rational32) -> Self;
+}
+
 #[derive(Debug, Clone)]
-pub enum NumberMod<T: Debug + Clone + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output = T> + Div<T, Output = T> + FromStr> {
+pub enum NumberMod<T: MulRational32 + FromConfig> {
     Keep,
     Replace(T),
     Add(T),
     Sub(T),
-    Mul(T),
-    Div(T),
-    MulAdd(T, T),
-    MulSub(T, T),
-    DivAdd(T, T),
-    DivSub(T, T),
+    Mul(Rational32),
+    MulAdd(Rational32, T),
+    MulSub(Rational32, T),
 }
 
-impl<T: Debug + Clone + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output = T> + Div<T, Output = T> + FromStr> FromStr for NumberMod<T> {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl<T: MulRational32 + FromConfig> FromConfig for NumberMod<T> {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        if s.len() == 0 {
+            return Ok((Self::Keep, ""));
+        }
         match s.get(..1) {
-            None => Ok(Self::Keep),
-            Some("=") => Ok(Self::Replace(s.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?)),
-            Some("+") => Ok(Self::Add(s.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?)),
-            Some("-") => Ok(Self::Sub(s.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?)),
+            Some("=") => T::from_conf(&s[1..]).map(|(n, s)| (Self::Replace(n), s)),
+            Some("+") => T::from_conf(&s[1..]).map(|(n, s)| (Self::Add(n), s)),
+            Some("-") => T::from_conf(&s[1..]).map(|(n, s)| (Self::Sub(n), s)),
             Some("*") => {
-                let s = s.get(1..)
-                .ok_or(ConfigParseError::InvalidNumberModifier(s.to_string()))?;
-                if let Some(index) = s.rfind("-").filter(|i| *i > 0) {
-                    let (first, second) = s.split_at(index);
-                    let first = T::from_str(first).map_err(|_| ConfigParseError::InvalidNumber(s.to_string()))?;
-                    let second = second.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?;
-                    Ok(Self::MulSub(first, second))
-                } else if let Some(index) = s.rfind("+") {
-                    let (first, second) = s.split_at(index);
-                    let first = T::from_str(first).map_err(|_| ConfigParseError::InvalidNumber(s.to_string()))?;
-                    let second = second.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?;
-                    Ok(Self::MulAdd(first, second))
+                let (first, s) = Rational32::from_conf(&s[1..])?;
+                if s.starts_with('-') {
+                    let (second, s) = T::from_conf(&s[1..])?;
+                    Ok((Self::MulSub(first, second), s))
+                } else if s.starts_with('+') {
+                    let (second, s) = T::from_conf(&s[1..])?;
+                    Ok((Self::MulAdd(first, second), s))
                 } else {
-                    Ok(Self::Mul(s.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?))
+                    Ok((Self::Mul(first), s))
                 }
             }
-            Some("/") => {
-                let s = s.get(1..)
-                .ok_or(ConfigParseError::InvalidNumberModifier(s.to_string()))?;
-                if let Some(index) = s.rfind("-").filter(|i| *i > 0) {
-                    let (first, second) = s.split_at(index);
-                    let first = T::from_str(first).map_err(|_| ConfigParseError::InvalidNumber(s.to_string()))?;
-                    let second = second.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?;
-                    Ok(Self::DivSub(first, second))
-                } else if let Some(index) = s.rfind("+") {
-                    let (first, second) = s.split_at(index);
-                    let first = T::from_str(first).map_err(|_| ConfigParseError::InvalidNumber(s.to_string()))?;
-                    let second = second.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?;
-                    Ok(Self::DivAdd(first, second))
-                } else {
-                    Ok(Self::Div(s.get(1..).and_then(|s| T::from_str(s).ok()).ok_or(ConfigParseError::InvalidNumber(s.to_string()))?))
-                }
-            }
-            Some(invalid) => Err(ConfigParseError::InvalidNumberModifier(invalid.to_string()))
+            _ => return Err(ConfigParseError::InvalidNumberModifier(s.to_string()))
         }
     }
 }
 
-impl<T: Debug + Clone + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output = T> + Div<T, Output = T> + FromStr + 'static> NumberMod<T> {
+impl<T: MulRational32 + FromConfig + 'static> NumberMod<T> {
     pub fn ignores_previous_value(&self) -> bool {
         match self {
             Self::Replace(_) => true,
@@ -80,12 +62,9 @@ impl<T: Debug + Clone + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output 
             Self::Replace(v) => v,
             Self::Add(a) => value + a,
             Self::Sub(a) => value - a,
-            Self::Mul(a) => value * a,
-            Self::Div(a) => value / a,
-            Self::MulAdd(a, b) => value * a + b,
-            Self::MulSub(a, b) => value * a - b,
-            Self::DivAdd(a, b) => value / a + b,
-            Self::DivSub(a, b) => value / a - b,
+            Self::Mul(a) => value.mul_r32(a),
+            Self::MulAdd(a, b) => value.mul_r32(a) + b,
+            Self::MulSub(a, b) => value.mul_r32(a) - b,
         }
     }
 
@@ -101,5 +80,29 @@ impl<T: Debug + Clone + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output 
             value = v.update_value(value);
         }
         value
+    }
+}
+
+impl MulRational32 for Rational32 {
+    fn mul_r32(self, other: Rational32) -> Self {
+        self * other
+    }
+}
+
+impl MulRational32 for u8 {
+    fn mul_r32(self, other: Rational32) -> Self {
+        (Rational32::from_integer(self as i32) * other).round().to_integer() as Self
+    }
+}
+
+impl MulRational32 for u32 {
+    fn mul_r32(self, other: Rational32) -> Self {
+        (Rational32::from_integer(self as i32) * other).round().to_integer() as Self
+    }
+}
+
+impl MulRational32 for i32 {
+    fn mul_r32(self, other: Rational32) -> Self {
+        (Rational32::from_integer(self as i32) * other).round().to_integer() as Self
     }
 }

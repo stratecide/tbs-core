@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 use interfaces::game_interface::ClientPerspective;
 
+use crate::config::parse::{parse_tuple1, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::details::Detail;
 use crate::game::event_handler::EventHandler;
@@ -20,30 +20,28 @@ pub enum PlayerScript {
     ZombieResurrection(u8),
 }
 
-impl FromStr for PlayerScript {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', ' ', '-', ')'])
-        .map(str::trim);
-        Ok(match it.next().unwrap() {
+impl FromConfig for PlayerScript {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, mut s) = string_base(s);
+        Ok((match base {
             "Kraken" => Self::Kraken,
             "MassDamage" => {
-                let damage = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let damage = damage.parse().map_err(|_| ConfigParseError::InvalidInteger(damage.to_string()))?;
+                let (damage, r) = parse_tuple1(s)?;
+                s = r;
                 Self::MassDamage(1.max(damage))
             }
             "MassHeal" => {
-                let heal = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let heal = heal.parse().map_err(|_| ConfigParseError::InvalidInteger(heal.to_string()))?;
+                let (heal, r) = parse_tuple1(s)?;
+                s = r;
                 Self::MassHeal(1.max(heal))
             }
             "ZombieResurrection" => {
-                let hp = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let hp = hp.parse().map_err(|_| ConfigParseError::InvalidInteger(hp.to_string()))?;
+                let (hp, r) = parse_tuple1(s)?;
+                s = r;
                 Self::ZombieResurrection(1.max(100.min(hp)))
             }
-            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        })
+            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("PlayerScript::{}", invalid))),
+        }, s))
     }
 }
 

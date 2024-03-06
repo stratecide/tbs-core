@@ -25,8 +25,8 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) defense: NumberMod<Rational32>,
     pub(super) counter_attack: NumberMod<Rational32>,
     pub(super) counter_defense: NumberMod<Rational32>,
-    pub(super) min_range: NumberMod<usize>,
-    pub(super) max_range: NumberMod<usize>,
+    pub(super) min_range: NumberMod<u8>,
+    pub(super) max_range: NumberMod<u8>,
     pub(super) visibility: Option<UnitVisibility>,
     pub(super) movement_type: Option<MovementType>,
     pub(super) water_movement_type: Option<MovementType>,
@@ -46,6 +46,7 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) on_attack: Vec<AttackScript>,
     pub(super) on_kill: Vec<KillScript>,
     pub(super) on_death: Vec<UnitScript>,
+    pub(super) aura_range: NumberMod<u8>,
 }
 
 impl CommanderPowerUnitConfig {
@@ -64,32 +65,32 @@ impl CommanderPowerUnitConfig {
             min_range: parse_def(data, H::MinRange, NumberMod::Keep)?,
             max_range: parse_def(data, H::MaxRange, NumberMod::Keep)?,
             visibility: match data.get(&H::Visibility) {
-                Some(s) if s.len() > 0 => Some(s.parse()?),
+                Some(s) if s.len() > 0 => Some(UnitVisibility::from_conf(s)?.0),
                 _ => None,
             },
             movement_type: match data.get(&H::MovementType) {
-                Some(s) if s.len() > 0 => Some(s.parse()?),
+                Some(s) if s.len() > 0 => Some(MovementType::from_conf(s)?.0),
                 _ => None,
             },
             water_movement_type: match data.get(&H::WaterMovementType) {
-                Some(s) if s.len() > 0 => Some(s.parse()?),
+                Some(s) if s.len() > 0 => Some(MovementType::from_conf(s)?.0),
                 _ => None,
             },
             movement_points: parse_def(data, H::MovementPoints, NumberMod::Keep)?,
-            bonus_vision: parse_def(data, H::Vision, 0)?,
-            bonus_true_vision: parse_def(data, H::TrueVision, 0)?,
+            bonus_vision: parse_def(data, H::Vision, 0 as u8)? as usize,
+            bonus_true_vision: parse_def(data, H::TrueVision, 0 as u8)? as usize,
             stealthy: match data.get(&H::Stealthy) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
             },
             attack_targets: match data.get(&H::AttackTargets) {
-                Some(s) if s.len() > 0 => Some(s.parse()?),
+                Some(s) if s.len() > 0 => Some(AttackTargeting::from_conf(s)?.0),
                 _ => None,
             },
             splash_damage: parse_vec_def(data, H::SplashDamage, Vec::new())?,
             cost: parse_def(data, H::Cost, NumberMod::Keep)?,
             displacement: match data.get(&H::Displacement) {
-                Some(s) if s.len() > 0 => Some(s.parse()?),
+                Some(s) if s.len() > 0 => Some(Displacement::from_conf(s)?.0),
                 _ => None,
             },
             displacement_distance: match data.get(&H::DisplacementDistance) {
@@ -106,6 +107,7 @@ impl CommanderPowerUnitConfig {
             on_attack: parse_vec_def(data, H::OnAttack, Vec::new())?,
             on_kill: parse_vec_def(data, H::OnKill, Vec::new())?,
             on_death: parse_vec_def(data, H::OnDeath, Vec::new())?,
+            aura_range: parse_def(data, H::AuraRange, NumberMod::Keep)?,
         };
         result.simple_validation()?;
         Ok(result)
@@ -160,6 +162,7 @@ crate::listable_enum! {
         OnAttack,
         OnKill,
         OnDeath,
+        AuraRange,
     }
 }
 
@@ -173,18 +176,16 @@ pub(super) enum PowerRestriction {
 impl FromStr for PowerRestriction {
     type Err = ConfigParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', ' ', '-', ')'])
-        .map(str::trim);
-        Ok(match it.next().unwrap() {
+        let (base, s) = string_base(s);
+        Ok(match base {
             "None" | "" => Self::None,
             "Commander" | "Co" => {
-                let commander: CommanderType = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?.parse()?;
-                let power = if let Some(power) = it.next().filter(|s| s.len() > 0) {
-                    Some(power.parse().map_err(|_| ConfigParseError::InvalidInteger(s.to_string()))?)
+                if let Ok((commander, power, _)) = parse_tuple2(s) {
+                    Self::Commander(commander, Some(power))
                 } else {
-                    None
-                };
-                Self::Commander(commander, power)
+                    let (commander, _) = parse_tuple1(s)?;
+                    Self::Commander(commander, None)
+                }
             }
             /*"Hero" | "He" => {
                 let commander: HeroType = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?.parse()?;

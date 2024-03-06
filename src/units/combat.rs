@@ -1,9 +1,9 @@
 use std::collections::{HashSet, HashMap};
-use std::str::FromStr;
 use num_rational::Rational32;
 use zipper_derive::Zippable;
 use zipper::Exportable;
 
+use crate::config::parse::{parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::game::events::Effect;
 use crate::game::game::Game;
@@ -32,31 +32,27 @@ pub enum AttackType {
     Triangle(u8, u8),
 }
 
-impl FromStr for AttackType {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', ',', '-', ')'])
-        .map(str::trim);
-        Ok(match it.next().unwrap() {
+impl FromConfig for AttackType {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, mut remainder) = string_base(s);
+        Ok((match base {
             "None" => Self::None,
             "Adjacent" => Self::Adjacent,
             s @ "Ranged" | s @ "Straight" | s @ "Triangle" => {
-                let min = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let min = min.parse().map_err(|_| ConfigParseError::InvalidInteger(min.to_string()))?;
-                let max = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let max: u8 = max.parse().map_err(|_| ConfigParseError::InvalidInteger(max.to_string()))?;
-                if min > 50 || max > 50 || min + max > 50 {
+                let (min, additional, r) = parse_tuple2::<u8, u8>(remainder)?;
+                remainder = r;
+                if min > 50 || additional > 50 || min + additional > 50 {
                     return Err(ConfigParseError::NumberTooBig(s.to_string()));
                 }
                 match s {
-                    "Ranged" => Self::Ranged(min, min + max),
-                    "Straight" => Self::Straight(min, min + max),
-                    "Triangle" => Self::Triangle(min, min + max),
+                    "Ranged" => Self::Ranged(min, min + additional),
+                    "Straight" => Self::Straight(min, min + additional),
+                    "Triangle" => Self::Triangle(min, min + additional),
                     _ => panic!("impossible AttackType error")
                 }
             }
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        })
+        }, remainder))
     }
 }
 
@@ -299,13 +295,13 @@ impl<D: Direction> AttackVector<D> {
         // TODO: check if target is protected by terrain (e.g. tank can only attack stranded Submarines)
         let mut result = HashSet::new();
         //let splash_damage = attacker.get_splash_damage();
-        let heroes = game.get_map().hero_influence_at(pos, attacker.get_owner_id());
+        let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, attacker.get_owner_id());
         let heroes: Vec<_> = heroes.iter().collect();
         match attacker.attack_pattern() {
             AttackType::None => (),
             AttackType::Straight(min_range, max_range) => {
-                let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range as usize);
-                let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range as usize);
+                let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range) as usize;
+                let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range) as usize;
                 for d in D::list() {
                     if Self::straight_splash(attacker, game, pos, d, min_range, max_range, get_unit, &valid_target).iter()
                     .enumerate()
@@ -325,8 +321,8 @@ impl<D: Direction> AttackVector<D> {
                 }
             }
             AttackType::Ranged(min_range, max_range) => {
-                let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range as usize);
-                let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range as usize);
+                let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range) as usize;
+                let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range) as usize;
                 // each point in a layer is probably in it 2 times
                 let mut layers = game.get_map().range_in_layers(pos, max_range as usize);
                 for _ in min_range-1..max_range {
@@ -342,8 +338,8 @@ impl<D: Direction> AttackVector<D> {
                 if attacker.has_attribute(AttributeKey::Direction) {
                     let direction = attacker.get_direction();
                     if let Some((point, distortion)) = game.get_map().get_neighbor(pos, direction) {
-                        let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range as usize);
-                        let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range as usize);
+                        let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range) as usize;
+                        let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range) as usize;
                         let direction = distortion.update_direction(direction);
                         attack_area_cannon(game.get_map(), point, direction, min_range, max_range, |point, d, splash_index| {
                             if valid_target(point, splash_index, Some(d)) {
@@ -464,7 +460,7 @@ impl<D: Direction> AttackVector<D> {
         if attacker.displacement() == Displacement::AfterCounter {
             after_battle_displacements.push((self.clone(), attacker.clone(), attacker_pos));
         }
-        let attacker_heroes: Vec<_> = handler.get_map().hero_influence_at(attacker_pos, attacker.get_owner_id());
+        let attacker_heroes: Vec<_> = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), attacker_pos, attacker.get_owner_id());
         let attacker_hero_ids = attacker_heroes.iter()
         .map(|(_, _, p, unload_index)| handler.observe_unit(*p, *unload_index).0)
         .collect();
@@ -504,7 +500,7 @@ impl<D: Direction> AttackVector<D> {
                     if unit.displacement() == Displacement::AfterCounter {
                         after_battle_displacements.push((attack_vector.clone(), unit.clone(), unit_pos));
                     }
-                    let heroes: Vec<_> = handler.get_map().hero_influence_at(unit_pos, unit.get_owner_id());
+                    let heroes: Vec<_> = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), unit_pos, unit.get_owner_id());
                     let heroes: Vec<_> = heroes.iter().collect();
                     let (_, _, d2) = attack_vector.execute_attack(handler, &unit, unit_pos, None, &heroes, false, execute_scripts);
                     commander_charge.extend(d2.into_iter());
@@ -779,7 +775,7 @@ fn calculate_attack_damage<D: Direction>(game: &Game<D>, attacker: &Unit<D>, att
     /*for t in game.get_map().get_neighbors(defender_pos, crate::map::map::NeighborMode::Direct).into_iter().map(|p| game.get_map().get_terrain(p.point).unwrap()) {
         terrain_defense += t.adjacent_defense_bonus(defender);
     }*/
-    let defender_heroes = game.get_map().hero_influence_at(defender_pos, defender.get_owner_id());
+    let defender_heroes = Hero::hero_influence_at(Some(game), game.get_map(), defender_pos, defender.get_owner_id());
     let defender_heroes: Vec<_> = defender_heroes.iter().collect();
     let defense_bonus = game.environment().config.unit_defense(
         game,

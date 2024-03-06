@@ -35,12 +35,12 @@ macro_rules! listable_enum {(
             }
         }
 
-        impl std::str::FromStr for $name {
-            type Err = crate::config::ConfigParseError;
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                match s {
-                    $(stringify!($member) => Ok(Self::$member),)*
-                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("{}::{}", stringify!($name), s)))
+        impl crate::config::parse::FromConfig for $name {
+            fn from_conf(s: &str) -> Result<(Self, &str), crate::config::ConfigParseError> {
+                let (base, s) = crate::config::parse::string_base(s);
+                match base {
+                    $(stringify!($member) => Ok((Self::$member, s)),)*
+                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("{}::{base} - {s}", stringify!($name))))
                 }
             }
         }
@@ -84,15 +84,18 @@ macro_rules! enum_with_custom {(
             }*/
         }
 
-        impl std::str::FromStr for $name {
-            type Err = crate::config::ConfigParseError;
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                if let Ok(custom) = s.parse() {
-                    return Ok(Self::Custom(custom));
+        impl crate::config::parse::FromConfig for $name {
+            fn from_conf(s: &str) -> Result<(Self, &str), crate::config::ConfigParseError> {
+                if let Some(index) = s.find(|c| !char::is_numeric(c)).or(Some(s.len())).filter(|i| *i > 0) {
+                    let (number, remainder) = s.split_at(index);
+                    if let Ok(custom) = number.parse() {
+                        return Ok((Self::Custom(custom), remainder));
+                    }
                 }
-                match s {
-                    $(stringify!($member) => Ok(Self::$member),)*
-                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("{}::{}", stringify!($name), s)))
+                let (base, s) = crate::config::parse::string_base(s);
+                match base {
+                    $(stringify!($member) => Ok((Self::$member, s)),)*
+                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("{}::{base} - {s}", stringify!($name))))
                 }
             }
         }

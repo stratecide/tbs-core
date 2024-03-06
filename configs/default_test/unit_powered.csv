@@ -1,5 +1,9 @@
-Power;Affects;Attack;CounterAttack;Defense;CounterDefense;Visibility;MovementType;WaterMovementType;MovementPoints;Vision;TrueVision;Stealthy;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;CanBuildUnits;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity;BuildOverrides;OnStartTurn;OnEndTurn;OnAttack;OnKill;OnDeath
-;U(Pawn),T(ChessPawnTile);;;;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;
-Co(Zombie);MovementPattern(Standard);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;DeadSkull;
-Co(Zombie-1);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;
-Co(Zombie-2);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;ZombieResurrection(50);
+Power;Affects;Attack;CounterAttack;Defense;CounterDefense;Visibility;MovementType;WaterMovementType;MovementPoints;Vision;TrueVision;Stealthy;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;CanBuildUnits;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity;BuildOverrides;AuraRange;OnStartTurn;OnEndTurn;OnAttack;OnKill;OnDeath
+;U(Pawn),T(ChessPawnTile);;;;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;;
+Co(Zombie);MovementPattern(Standard);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;DeadSkull;
+Co(Zombie,1);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Co(Zombie,2);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;ZombieResurrection(50);
+;H(Crystal, CrystalObelisk);+2/10;+2/10;+2/10;+2/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;H(Crystal, CrystalObelisk), HG((Crystal, 1));+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;IH(CrystalObelisk), Not(HG(Crystal));;;;;;;;;;;;;;;;;;;;;;;;;;;;TakeDamage(20);;;;
+;IH(CrystalObelisk), HG((Crystal, 1));;;;;;;;;;;;;;;;;;;;;;;;;;;+1;;;;;

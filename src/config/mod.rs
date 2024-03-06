@@ -10,6 +10,8 @@ mod number_modification;
 pub mod config;
 pub mod parse;
 pub mod environment;
+mod custom_action_config;
+mod hero_power_config;
 
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -33,7 +35,7 @@ pub enum ConfigParseError {
     InvalidColumnValue(String, String),
     InvalidBool(String),
     InvalidInteger(String),
-    InvalidRatio(String),
+    DivisionByZero(i32),
     InvalidNumber(String),
     InvalidNumberModifier(String),
     MissingColumn(String),

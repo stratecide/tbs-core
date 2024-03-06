@@ -44,6 +44,7 @@ crate::enum_with_custom! {
         ShockTower,
         LifeCrystal,
         Tentacle,
+        HeroCrystal,
         // chess
         Pawn,
         Rook,

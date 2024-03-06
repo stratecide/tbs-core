@@ -1,5 +1,4 @@
-use std::str::FromStr;
-
+use crate::config::parse::{parse_tuple1, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::details::{MAX_STACK_SIZE, Detail};
 use crate::game::event_handler::EventHandler;
@@ -18,21 +17,19 @@ pub enum KillScript {
     ZombieResurrection(u8),
 }
 
-impl FromStr for KillScript {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', ' ', '-', ')'])
-        .map(str::trim);
-        Ok(match it.next().unwrap() {
+impl FromConfig for KillScript {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, mut s) = string_base(s);
+        Ok((match base {
             "Unexhaust" => Self::Unexhaust,
             "DeadSkull" => Self::DeadSkull,
             "ZombieResurrection" => {
-                let hp = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let hp = hp.parse().map_err(|_| ConfigParseError::InvalidInteger(hp.to_string()))?;
+                let (hp, r) = parse_tuple1(s)?;
+                s = r;
                 Self::ZombieResurrection(1.max(100.min(hp)))
             }
-            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        })
+            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("KillScript::{}", invalid))),
+        }, s))
     }
 }
 

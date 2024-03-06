@@ -6,7 +6,7 @@ use crate::terrain::terrain::TerrainBuilder;
 use crate::map::direction::Direction;
 use crate::units::attributes::{ActionStatus, AttributeKey};
 use crate::units::commands::UnitCommand;
-use crate::units::unit::UnitBuilder;
+use crate::units::hero::Hero;
 use crate::units::unit_types::UnitType;
 use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
@@ -151,7 +151,7 @@ impl<D: Direction> Command<D> {
                     return Err(CommandError::InvalidUnitType);
                 }
 
-                let heroes = handler.get_map().hero_influence_at(pos, player.get_owner_id());
+                let heroes = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), pos, player.get_owner_id());
                 let heroes: Vec<_> = heroes.iter().collect();
                 let (mut unit, cost) = terrain.unit_shop_option(handler.get_game(), pos, unit_type, &heroes);
                 if cost > *handler.get_game().current_player().funds {

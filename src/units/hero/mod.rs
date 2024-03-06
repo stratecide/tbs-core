@@ -8,17 +8,19 @@ use crate::map::direction::Direction;
 use crate::game::game::Game;
 use crate::map::map::Map;
 use crate::map::point::Point;
+use crate::script::custom_action::CustomActionTestResult;
 use super::attributes::*;
 use super::commands::UnitAction;
-use super::movement::Path;
+use super::movement::{Path, TBallast};
 use super::unit::Unit;
-
 
 crate::enum_with_custom! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum HeroType {
         None,
         EarlGrey,
+        Crystal,
+        CrystalObelisk,
     }
 }
 
@@ -44,7 +46,7 @@ impl HeroType {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Hero {
     typ: HeroType,
-    power: bool,
+    power: usize,
     charge: u8,
     origin: Option<Point>,
 }
@@ -63,7 +65,7 @@ impl Hero {
     pub fn new(typ: HeroType, origin: Option<Point>) -> Self {
         Self {
             typ,
-            power: false,
+            power: 0,
             charge: 0,
             origin,
         }
@@ -87,29 +89,76 @@ impl Hero {
         self.charge = charge.min(self.typ.max_charge(environment));
     }
 
-    pub fn is_power_active(&self) -> bool {
+    pub fn get_next_power(&self, environment: &Environment) -> usize {
+        let power = match environment.config.hero_powers(self.typ).get(self.power) {
+            Some(power) => power,
+            None => return 0,
+        };
+        power.next_power as usize
+    }
+
+    pub fn get_active_power(&self) -> usize {
         self.power
     }
-    pub fn set_power_active(&mut self, active: bool) {
-        self.power = active;
+    pub fn set_active_power(&mut self, index: usize) {
+        self.power = index;
     }
 
-    pub fn aura_range(&self, environment: &Environment) -> usize {
-        let mut range = environment.config.hero_aura_range(self.typ);
-        if self.is_power_active() || self.charge == self.max_charge(environment) {
-            range += 1;
+    pub fn can_activate_power(&self, environment: &Environment, index: usize) -> bool {
+        if self.power == index {
+            return false;
         }
-        range as usize
+        let power = match environment.config.hero_powers(self.typ).get(index) {
+            Some(power) => power,
+            None => return false,
+        };
+        power.usable_from_power.contains(&(self.power as u8))
+        && power.required_charge <= self.charge
     }
 
-    pub fn in_range<D: Direction>(&self, map: &Map<D>, position: Point, target: Point) -> bool {
-        self.aura(map, position).contains(&target)
+    pub fn power_cost(&self, environment: &Environment, index: usize) -> u8 {
+        let power = match environment.config.hero_powers(self.typ).get(index) {
+            Some(power) => power,
+            None => return 0,
+        };
+        power.required_charge
     }
 
-    pub fn aura<D: Direction>(&self, map: &Map<D>, position: Point) -> HashSet<Point> {
+    pub fn aura_range<D: Direction>(
+        game: Option<&Game<D>>,
+        map: &Map<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        transporter: Option<(&Unit<D>, usize)>,
+    ) -> Option<usize> {
+        map.environment().config.hero_aura_range(game, map, unit, unit_pos, transporter).map(|r| r as usize)
+    }
+
+    pub fn in_range<D: Direction>(
+        game: Option<&Game<D>>,
+        map: &Map<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        transporter: Option<(&Unit<D>, usize)>,
+        target: Point,
+    ) -> bool {
+        Self::aura(game, map, unit, unit_pos, transporter).contains(&target)
+    }
+
+    pub fn aura<D: Direction>(
+        game: Option<&Game<D>>,
+        map: &Map<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        transporter: Option<(&Unit<D>, usize)>,
+    ) -> HashSet<Point> {
         let mut result = HashSet::new();
-        result.insert(position.clone());
-        for layer in map.range_in_layers(position, self.aura_range(map.environment())) {
+        let aura_range = match Self::aura_range(game, map, unit, unit_pos, transporter) {
+            Some(aura_range) => aura_range,
+            _ => return result
+        };
+        result.insert(unit_pos);
+        for layer in map.range_in_layers(unit_pos, aura_range) {
             for p in layer {
                 result.insert(p);
             }
@@ -117,8 +166,51 @@ impl Hero {
         result
     }
 
-    pub fn add_options_after_path<D: Direction>(&self, list: &mut Vec<UnitAction<D>>, unit: &Unit<D>, game: &Game<D>, path: &Path<D>, destination: Point, get_fog: impl Fn(Point) -> FogIntensity) {
-        // TODO activate power
+    pub fn hero_influence_at<D: Direction>(game: Option<&Game<D>>, map: &Map<D>, point: Point, owner_id: i8) -> Vec<(Unit<D>, Self, Point, Option<usize>)> {
+        let mut result = vec![];
+        for p in map.all_points() {
+            if let Some(unit) = map.get_unit(p) {
+                if !unit.is_hero() || unit.get_owner_id() != owner_id {
+                    continue;
+                }
+                let hero = unit.get_hero();
+                if Self::in_range(game, map, unit, p, None, point) {
+                    result.push((unit.clone(), hero, p, None));
+                }
+                for (i, u) in unit.get_transported().iter().enumerate() {
+                    if u.is_hero() {
+                        let hero = u.get_hero();
+                        if Self::in_range(game, map, u, p, Some((unit, i)), point) {
+                            result.push((u.clone(), hero, p, Some(i)));
+                        }
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    pub fn add_options_after_path<D: Direction>(
+        &self,
+        list: &mut Vec<UnitAction<D>>,
+        unit: &Unit<D>,
+        game: &Game<D>,
+        funds: i32,
+        path: &Path<D>,
+        destination: Point,
+        transporter: Option<&Unit<D>>,
+        heroes: &[&(Unit<D>, Hero, Point, Option<usize>)],
+        ballast: &[TBallast<D>],
+        get_fog: &impl Fn(Point) -> FogIntensity
+    ) {
+        let data = Vec::new();
+        for (i, power) in game.environment().config.hero_powers(self.typ).iter().enumerate() {
+            if self.charge >= power.required_charge
+            && power.usable_from_power.contains(&(self.power as u8))
+            && power.script.next_condition(game, funds, unit, path, destination, transporter, heroes, ballast, &data, get_fog) != CustomActionTestResult::Failure {
+                list.push(UnitAction::HeroPower(i, Vec::new()));
+            }
+        }
     }
 }
 
@@ -130,8 +222,8 @@ impl SupportedZippable<&Environment> for Hero {
             return;
         }
         self.origin.export(zipper, environment);
-        zipper.write_bool(self.power);
-        if !self.power && self.typ.max_charge(&environment) > 0 {
+        zipper.write_u8(self.power as u8, bits_needed_for_max_value(environment.config.hero_powers(self.typ).len() as u32 - 1));
+        if self.typ.max_charge(&environment) > 0 {
             let bits = bits_needed_for_max_value(self.typ.max_charge(&environment) as u32);
             zipper.write_u8(self.charge, bits);
         }
@@ -147,8 +239,8 @@ impl SupportedZippable<&Environment> for Hero {
         };
         let mut result = Self::new(typ, origin);
         if typ != HeroType::None {
-            result.power = unzipper.read_bool()?;
-            if !result.power && typ.max_charge(environment) > 0 {
+            result.power = unzipper.read_u8(bits_needed_for_max_value(environment.config.hero_powers(typ).len() as u32 - 1))? as usize;
+            if typ.max_charge(environment) > 0 {
                 let bits = bits_needed_for_max_value(typ.max_charge(environment) as u32);
                 result.charge = typ.max_charge(environment).min(unzipper.read_u8(bits)?);
             }
@@ -174,5 +266,107 @@ impl SupportedZippable<&Environment> for HeroChargeChange {
 impl From<i8> for HeroChargeChange {
     fn from(value: i8) -> Self {
         Self(value)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use std::sync::Arc;
+
+    use interfaces::game_interface::*;
+    use interfaces::map_interface::*;
+    use crate::config::config::Config;
+    use crate::game::commands::Command;
+    use crate::game::fog::*;
+    use crate::map::direction::*;
+    use crate::map::map::Map;
+    use crate::map::point::Point;
+    use crate::map::point::Position;
+    use crate::map::point_map::PointMap;
+    use crate::map::wrapping_map::WMBuilder;
+    use crate::script::custom_action::CustomActionData;
+    use crate::units::combat::AttackVector;
+    use crate::units::commands::UnitAction;
+    use crate::units::commands::UnitCommand;
+    use crate::units::hero::Hero;
+    use crate::units::hero::HeroType;
+    use crate::units::movement::Path;
+    use crate::units::unit_types::UnitType;
+
+    #[test]
+    fn crystal() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(5, 5, false);
+        let map = WMBuilder::<Direction4>::new(map);
+        let mut map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        let mut crystal = Hero::new(HeroType::Crystal, None);
+        crystal.set_charge(&map_env, crystal.max_charge(&map_env));
+        //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(crystal).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+
+        map.set_unit(Point::new(4, 4), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+
+        let settings = map.settings().unwrap();
+        let mut settings = settings.clone();
+        settings.fog_mode = FogMode::Constant(FogSetting::None);
+
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+        let unchanged = server.clone();
+        let environment: crate::config::environment::Environment = server.environment().clone();
+        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
+        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
+        // use power
+        let path = Path::new(Point::new(1, 1));
+        let options = server.get_map().get_unit(Point::new(1, 1)).unwrap().options_after_path(&server, &path, None, &[]);
+        println!("options: {:?}", options);
+        assert!(options.contains(&UnitAction::HeroPower(1, Vec::new())));
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path,
+            action: UnitAction::HeroPower(1, vec![CustomActionData::Point(Point::new(0, 1))]),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_map().get_unit(Point::new(0, 1)), Some(&UnitType::HeroCrystal.instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
+        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(2, 1)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        }), || 0.).unwrap();
+        let power_aura_damage = 100 - server.get_map().get_unit(Point::new(3, 1)).unwrap().get_hp();
+
+        let mut server = unchanged.clone();
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(2, 1)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        }), || 0.).unwrap();
+        let aura_damage = 100 - server.get_map().get_unit(Point::new(3, 1)).unwrap().get_hp();
+        server.handle_command(Command::EndTurn, || 0.).unwrap();
+        server.handle_command(Command::EndTurn, || 0.).unwrap();
+        assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 100);
+
+        assert!(aura_damage < power_aura_damage);
+
+        // test crystal obelisk behavior when hero is missing
+        map.set_unit(Point::new(1, 1), None);
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+        assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 80);
+        server.handle_command(Command::EndTurn, || 0.).unwrap();
+        server.handle_command(Command::EndTurn, || 0.).unwrap();
+        assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 60);
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(2, 1)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        }), || 0.).unwrap();
+        let normal_damage = 100 - server.get_map().get_unit(Point::new(3, 1)).unwrap().get_hp();
+
+        assert!(normal_damage < aura_damage);
     }
 }

@@ -31,7 +31,7 @@ impl TerrainTypeConfig {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: get(H::Id)?.parse()?,
+            id: parse(data, H::Id)?,
             name: get(H::Name)?.to_string(),
             needs_owner: parse_def(data, H::NeedsOwner, false)?,
             capture_resistance: parse_def(data, H::CaptureResistance, 0)?,

@@ -1,7 +1,6 @@
-use std::str::FromStr;
-
 use num_rational::Rational32;
 
+use crate::config::parse::{string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
@@ -14,19 +13,17 @@ pub enum AttackScript {
     LifeSteal(Rational32),
 }
 
-impl FromStr for AttackScript {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', ' ', '-', ')'])
-        .map(str::trim);
-        Ok(match it.next().unwrap() {
+impl FromConfig for AttackScript {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, mut s) = string_base(s);
+        Ok((match base {
             "LifeSteal" => {
-                let lifesteal = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let lifesteal = lifesteal.parse().map_err(|_| ConfigParseError::InvalidInteger(lifesteal.to_string()))?;
+                let (lifesteal, r) = Rational32::from_conf(s)?;
+                s = r;
                 Self::LifeSteal(lifesteal)
             }
-            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        })
+            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("AttackScript::{}", invalid))),
+        }, s))
     }
 }
 

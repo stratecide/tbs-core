@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 
+use crate::config::parse::{parse_tuple1, parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
@@ -9,31 +9,32 @@ use crate::terrain::{KRAKEN_ATTACK_RANGE, KRAKEN_MAX_ANGER};
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::attributes::AttributeKey;
 use crate::units::combat::{AttackType, AttackVector};
-use crate::units::movement::Path;
 use crate::units::unit::Unit;
 
 #[derive(Debug, Clone)]
 pub enum UnitScript {
     Kraken,
     Attack(bool, bool),
+    TakeDamage(u8),
 }
 
-impl FromStr for UnitScript {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', ' ', '-', ')'])
-        .map(str::trim);
-        Ok(match it.next().unwrap() {
+impl FromConfig for UnitScript {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, mut s) = string_base(s);
+        Ok((match base {
             "Kraken" => Self::Kraken,
             "Attack" => {
-                let allow_counter = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let allow_counter: bool = allow_counter.starts_with('t');
-                let charge_powers = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let charge_powers: bool = charge_powers.starts_with('t');
+                let (allow_counter, charge_powers, r) = parse_tuple2(s)?;
+                s = r;
                 Self::Attack(allow_counter, charge_powers)
             }
-            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        })
+            "TakeDamage" => {
+                let (damage, r) = parse_tuple1(s)?;
+                s = r;
+                Self::TakeDamage(1.max(damage))
+            }
+            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("UnitScript::{}", invalid))),
+        }, s))
     }
 }
 
@@ -42,6 +43,7 @@ impl UnitScript {
         match self {
             Self::Kraken => anger_kraken(handler),
             Self::Attack(allow_counter, charge_powers) => attack(handler, position, unit, *allow_counter, *charge_powers),
+            Self::TakeDamage(damage) => take_damage(handler, position, *damage),
         }
     }
 }
@@ -130,4 +132,13 @@ fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &U
     };
     // TODO: allow_counter is currently ignored
     attack_vector.execute(handler, position, None, false, false, charge_powers);
+}
+
+pub(super) fn take_damage<D: Direction>(handler: &mut EventHandler<D>, position: Point, damage: u8) {
+    if handler.get_map().get_unit(position).is_some() {
+        handler.unit_damage(position, damage as u16);
+        if handler.get_map().get_unit(position).unwrap().get_hp() == 0 {
+            handler.unit_death(position);
+        }
+    }
 }

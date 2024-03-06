@@ -11,7 +11,6 @@ use zipper::*;
 use crate::commander::commander_type::CommanderType;
 use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
-use crate::details::Detail;
 use crate::game::fog::{FogIntensity, VisionMode, FogSetting};
 use crate::game::game::Game;
 use crate::game::settings::GameSettings;
@@ -856,20 +855,7 @@ impl<D: Direction> Unit<D> {
             fog.and_then(|f| f.get(&p)).cloned().unwrap_or(FogIntensity::TrueSight)
         };
         let mut result = Vec::new();
-        let path_points: HashSet<Point> = path.points(game.get_map()).unwrap().into_iter().collect();
-        let player = self.environment.settings.as_ref().unwrap().players.get(self.get_owner_id() as usize).unwrap();
-        let mut funds_after_path = *game.current_player().funds;
-        let income = player.get_income();
-        for p in path_points {
-            for detail in game.get_map().get_details(p) {
-                match detail.fog_replacement(get_fog(p)) {
-                    Some(Detail::Coins1) => funds_after_path += income / 2,
-                    Some(Detail::Coins2) => funds_after_path += income,
-                    Some(Detail::Coins4) => funds_after_path += income * 2,
-                    _ => {}
-                }
-            }
-        }
+        let funds_after_path = game.get_owning_player(self.get_owner_id()).unwrap().funds_after_path(game, path, &get_fog);
         // terrain has to exist since destination point was found from path
         let terrain = game.get_map().get_terrain(destination).unwrap();
         let blocking_unit = game.get_map().get_unit(destination).and_then(|u| u.fog_replacement(game, destination, get_fog(destination)));
@@ -890,10 +876,10 @@ impl<D: Direction> Unit<D> {
                 }
             }
         } else if blocking_unit.is_none() || path.start == destination && blocking_unit.as_ref() == Some(self) {
-            let heroes = game.get_map().hero_influence_at(destination, self.get_owner_id());
+            let heroes = Hero::hero_influence_at(Some(game), game.get_map(), destination, self.get_owner_id());
             let heroes: Vec<_> = heroes.iter().collect();
             // hero power
-            self.get_hero().add_options_after_path(&mut result, self, game, path, destination, get_fog);
+            self.get_hero().add_options_after_path(&mut result, self, game, funds_after_path, path, destination, transporter, &heroes, ballast, &get_fog);
             // build units
             if self.can_build_units() && self.transport_capacity() > 0 {
                 let mut free_space = self.remaining_transport_capacity();
@@ -983,7 +969,7 @@ impl<D: Direction> Unit<D> {
         if self.has_attribute(AttributeKey::Direction) {
             unit.set_direction(unit.get_direction().rotate_by(self.get_direction()));
         }
-        let heroes = game.get_map().hero_influence_at(pos, self.get_owner_id());
+        let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
         let heroes: Vec<_> = heroes.iter().collect();
         let cost = unit.full_price(game, pos, Some(self), &heroes);
         (unit, cost)
@@ -993,7 +979,7 @@ impl<D: Direction> Unit<D> {
         if !self.can_build_units() {
             return Vec::new();
         }
-        let heroes = game.get_map().hero_influence_at(pos, self.get_owner_id());
+        let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
         let heroes: Vec<_> = heroes.iter().collect();
         self.transportable_units().iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, transporter, &heroes, ballast)
@@ -1103,6 +1089,11 @@ impl<D: Direction> UnitBuilder<D> {
 
     pub fn set_hp(mut self, hp: u8) -> Self {
         self.unit.set_hp(hp);
+        self
+    }
+
+    pub fn set_hero(mut self, hero: Hero) -> Self {
+        self.unit.set_hero(hero);
         self
     }
 

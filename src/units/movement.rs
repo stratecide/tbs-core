@@ -15,10 +15,11 @@ use crate::game::game::Game;
 use crate::game::fog::FogIntensity;
 use crate::map::map::*;
 use crate::map::wrapping_map::Distortion;
-use crate::terrain::{AmphibiousTyping, ExtraMovementOptions};
+use crate::terrain::AmphibiousTyping;
 use crate::terrain::terrain::Terrain;
 
 use super::attributes::{Amphibious, AttributeKey};
+use super::hero::Hero;
 use super::unit::Unit;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -747,11 +748,11 @@ where
         };
         // TODO: if rounds > 0 this hero influence will be calculated a lot
         // in that case it would be more efficient to use the aura_range map method from event_handler.rs
-        let mut heroes = map.hero_influence_at(pos, unit.get_owner_id());
+        let mut heroes = Hero::hero_influence_at(game, map, pos, unit.get_owner_id());
         if round > 0 {
             for (_, hero, _, _) in &mut heroes {
                 // TODO: this isn't enough because a hero without active power might not have enough range to influence "unit" in the first place
-                hero.set_power_active(false);
+                //hero.set_power_active(false);
             }
         }
         let heroes: Vec<_> = heroes.iter().collect();

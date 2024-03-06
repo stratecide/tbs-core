@@ -6,6 +6,7 @@ use std::str::FromStr;
 use zipper::*;
 
 use crate::config::environment::Environment;
+use crate::config::parse::{string_base, FromConfig};
 use crate::config::ConfigParseError;
 
 use self::terrain::TerrainBuilder;
@@ -80,17 +81,15 @@ pub enum ExtraMovementOptions {
     //PawnStart,
 }
 
-impl FromStr for ExtraMovementOptions {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', ',', '-', ')'])
-        .map(str::trim);
-        Ok(match it.next().unwrap() {
+impl FromConfig for ExtraMovementOptions {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, remainder) = string_base(s);
+        Ok((match base {
             "None" => Self::None,
             "Jump" => Self::Jump,
             //"PawnStart" => Self::PawnStart,
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        })
+        }, remainder))
     }
 }
 

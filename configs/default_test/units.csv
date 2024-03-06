@@ -23,6 +23,7 @@ Blimp;Blimp;Normal;Standard;Plane;;6;Normal;4;1;true;;true;true;Rifle;true;Range
 Bomber;Bomber;Normal;Standard;Plane;;6;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;;2000;;;true;
 Fighter;Fighter;Normal;Standard;Plane;;7;Normal;3;1;true;;true;true;AntiAir;true;Adjacent;;;;1800;;;true;
 LightDrone;Drone;Normal;Standard;Heli;;5/2;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;;100;;;true;
+HeroCrystal;Obelisk;AlwaysVisible;None;None;;;Normal;1;;true;;;;;;;;;;0;;;true;
 Pyramid;Pyramid;AlwaysVisible;None;None;;;Normal;;;;;;;;;;;;;100;;;;
 MegaCannon;Mega-Cannon;AlwaysVisible;None;None;;;Normal;;;;;;;;;Triangle(1,0);;1,1,1,1,1;;800;;;;
 LaserCannon;Laser-Cannon;AlwaysVisible;None;None;;;Normal;;;;;;;;;Straight(1,0);;1,1,1,1,1,1,1,1,1,1;;800;;;;

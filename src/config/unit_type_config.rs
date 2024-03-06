@@ -39,7 +39,7 @@ pub struct UnitTypeConfig {
     //pub(super) splash_factor: Rational32,
     pub(super) splash_damage: Vec<Rational32>, // empty if no splash damage. contains factor per additional distance
     pub(super) can_build_units: bool,
-    pub(super) cost: usize,
+    pub(super) cost: i32,
     pub(super) displacement: Displacement, // implies that attack_pattern is Adjacent or Straight
     pub(super) displacement_distance: i8, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: bool,
@@ -54,25 +54,22 @@ impl UnitTypeConfig {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: get(H::Id)?.parse()?,
+            id: parse(data, H::Id)?,
             name: get(H::Name)?.to_string(),
             visibility: match data.get(&H::Visibility) {
-                Some(s) => s.parse()?,
+                Some(s) => UnitVisibility::from_conf(s)?.0,
                 None => UnitVisibility::Normal,
             },
-            movement_pattern: match data.get(&H::MovementPattern) {
-                Some(s) => s.parse()?,
-                None => MovementPattern::Standard,
-            },
-            movement_type: get(H::MovementType)?.parse()?,
+            movement_pattern: parse_def(data, H::MovementPattern, MovementPattern::Standard)?,
+            movement_type: parse(data, H::MovementType)?,
             water_movement_type: match data.get(&H::WaterMovementType) {
-                Some(s) if s.len() > 0 => Some(s.parse()?),
+                Some(s) if s.len() > 0 => Some(MovementType::from_conf(s)?.0),
                 _ => None,
             },
             movement_points: parse_def(data, H::MovementPoints, Rational32::from_integer(0))?,
             vision_mode: parse_def(data, H::VisionMode, VisionMode::Normal)?,
-            vision: parse_def(data, H::Vision, 0)?,
-            true_vision: parse_def(data, H::TrueVision, 0)?,
+            vision: parse_def(data, H::Vision, 0 as u8)? as usize,
+            true_vision: parse_def(data, H::TrueVision, 0 as u8)? as usize,
             needs_owner: parse_def(data, H::NeedsOwner, false)?,
             stealthy: parse_def(data, H::Stealthy, false)?,
             can_be_moved_through: parse_def(data, H::CanBeMovedThrough, false)?,
@@ -87,7 +84,7 @@ impl UnitTypeConfig {
             displacement: parse_def(data, H::Displacement, Displacement::None)?,
             displacement_distance: parse_def(data, H::DisplacementDistance, 0)?,
             can_be_displaced: parse_def(data, H::CanBeDisplaced, false)?,
-            transport_capacity: parse_def(data, H::TransportCapacity, 0)?,
+            transport_capacity: parse_def(data, H::TransportCapacity, 0 as u8)? as usize,
         };
         result.simple_validation()?;
         Ok(result)

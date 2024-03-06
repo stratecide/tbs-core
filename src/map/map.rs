@@ -20,7 +20,6 @@ use crate::map::point::*;
 use crate::{details::*, VERSION};
 use crate::details;
 use crate::terrain::terrain::Terrain;
-use crate::units::hero::Hero;
 use crate::units::unit::Unit;
 
 use super::point_map::MapSize;
@@ -384,30 +383,6 @@ where D: Direction
             result_layer.insert(p);
         }
         result.push(result_layer);
-        result
-    }
-
-    pub fn hero_influence_at(&self, point: Point, owner_id: i8) -> Vec<(Unit<D>, Hero, Point, Option<usize>)> {
-        let mut result = vec![];
-        for p in self.all_points() {
-            if let Some(unit) = self.get_unit(p) {
-                if !unit.is_hero() || unit.get_owner_id() != owner_id {
-                    continue;
-                }
-                let hero = unit.get_hero();
-                if hero.in_range(self, p, point) {
-                    result.push((unit.clone(), hero, p, None));
-                }
-                for (i, unit) in unit.get_transported().iter().enumerate() {
-                    if unit.is_hero() {
-                        let hero = unit.get_hero();
-                        if hero.in_range(self, p, point) {
-                            result.push((unit.clone(), hero, p, Some(i)));
-                        }
-                    }
-                }
-            }
-        }
         result
     }
 

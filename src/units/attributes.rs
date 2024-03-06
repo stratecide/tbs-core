@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Debug};
-use std::str::FromStr;
 
 use zipper::*;
 use zipper_derive::Zippable;
 
 use crate::config::environment::Environment;
+use crate::config::parse::{string_base, FromConfig};
 use crate::map::direction::{Direction, Direction4, Direction6};
 use crate::map::point::Point;
 use crate::player::Owner;
@@ -238,25 +238,23 @@ pub enum AttributeOverride {
     Zombified
 }
 
-impl FromStr for AttributeOverride {
-    type Err = ConfigParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.split(&['(', '-', ')'])
-        .map(str::trim);
-        Ok(match it.next().unwrap() {
+impl FromConfig for AttributeOverride {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (base, mut s) = string_base(s);
+        Ok((match base {
             "InWater" => Self::InWater,
             "OnLand" => Self::OnLand,
             "Zombified" => Self::Zombified,
             "Hp" => {
-                let hp = it.next().ok_or(ConfigParseError::NotEnoughValues(s.to_string()))?;
-                let hp: u8 = hp.parse().map_err(|_| ConfigParseError::InvalidInteger(hp.to_string()))?;
+                let (hp, r) = u8::from_conf(s)?;
                 if hp == 0 || hp > 100 {
                     return Err(ConfigParseError::InvalidInteger(hp.to_string()));
                 }
+                s = r;
                 Self::Hp(hp)
             }
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        })
+        }, s))
     }
 }
 
