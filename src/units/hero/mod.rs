@@ -295,6 +295,7 @@ mod tests {
     use crate::units::hero::Hero;
     use crate::units::hero::HeroType;
     use crate::units::movement::Path;
+    use crate::units::movement::PathStep;
     use crate::units::unit_types::UnitType;
 
     #[test]
@@ -407,5 +408,64 @@ mod tests {
         let normal_damage = 100 - server.get_map().get_unit(Point::new(3, 1)).unwrap().get_hp();
 
         assert!(normal_damage < aura_damage);
+    }
+
+    #[test]
+    fn earl_grey() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(5, 5, false);
+        let map = WMBuilder::<Direction4>::new(map);
+        let mut map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        let mut earl_grey = Hero::new(HeroType::EarlGrey, None);
+        earl_grey.set_charge(&map_env, earl_grey.max_charge(&map_env));
+        //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).set_hero(earl_grey).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(1).build_with_defaults()));
+
+        map.set_unit(Point::new(4, 4), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).build_with_defaults()));
+
+        let settings = map.settings().unwrap();
+        let mut settings = settings.clone();
+        settings.fog_mode = FogMode::Constant(FogSetting::None);
+
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+        let unchanged = server.clone();
+        let environment: crate::config::environment::Environment = server.environment().clone();
+        let influence1 = Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(2, 1), 0);
+        let influence1: Vec<_> = influence1.iter().collect();
+        let influence2 = Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(4, 4), 0);
+        let influence2: Vec<_> = influence2.iter().collect();
+        assert_eq!(
+            server.get_map().get_unit(Point::new(2, 1)).unwrap().movement_points(Some(&server), server.get_map(), Point::new(2, 1), None, &influence1),
+            server.get_map().get_unit(Point::new(4, 4)).unwrap().movement_points(Some(&server), server.get_map(), Point::new(4, 4), None, &influence2),
+        );
+        // hero power shouldn't be available if the hero moves
+        let mut path = Path::new(Point::new(1, 1));
+        path.steps.push(PathStep::Dir(Direction4::D90));
+        let options = server.get_map().get_unit(Point::new(1, 1)).unwrap().options_after_path(&server, &path, None, &[]);
+        println!("options: {:?}", options);
+        assert!(!options.contains(&UnitAction::HeroPower(1, Vec::new())));
+        // use power
+        let path = Path::new(Point::new(1, 1));
+        let options = server.get_map().get_unit(Point::new(1, 1)).unwrap().options_after_path(&server, &path, None, &[]);
+        println!("options: {:?}", options);
+        assert!(options.contains(&UnitAction::HeroPower(1, Vec::new())));
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path,
+            action: UnitAction::HeroPower(1, Vec::new()),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_map().get_unit(Point::new(2, 1)).unwrap().get_status(), ActionStatus::Ready);
+        let influence1 = Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(2, 1), 0);
+        let influence1: Vec<_> = influence1.iter().collect();
+        let influence2 = Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(4, 4), 0);
+        let influence2: Vec<_> = influence2.iter().collect();
+        assert!(
+            server.get_map().get_unit(Point::new(2, 1)).unwrap().movement_points(Some(&server), server.get_map(), Point::new(2, 1), None, &influence1)
+            >
+            server.get_map().get_unit(Point::new(4, 4)).unwrap().movement_points(Some(&server), server.get_map(), Point::new(4, 4), None, &influence2)
+        );
     }
 }

@@ -7,3 +7,5 @@ Co(Zombie,2);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;
 ;H(Crystal, CrystalObelisk), HG((Crystal, 1));+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;IH(CrystalObelisk), Not(HG(Crystal));;;;;;;;;;;;;;;;;;;;;;;;;;;;TakeDamage(20);;;;
 ;IH(CrystalObelisk), HG((Crystal, 1));;;;;;;;;;;;;;;;;;;;;;;;;;;+1;;;;;
+;H(EarlGrey);+3/10;+3/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;H(EarlGrey, 1);+2/10;+2/10;;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;;

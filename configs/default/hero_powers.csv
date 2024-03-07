@@ -2,3 +2,5 @@ Hero;Name;UsableFromPowers;NextPower;RequiredCharge;AuraRange;Script
 Crystal;;;;;2;
 Crystal;Obelisk;0;0;12;3;SummonCrystal(CrystalObelisk)
 CrystalObelisk;;;;;2;
+EarlGrey;;;;;1;
+EarlGrey;;0;0;8;1;UnexhaustWithoutMoving

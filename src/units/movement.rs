@@ -116,6 +116,10 @@ impl<D: Direction> Path<D> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.steps.len()
+    }
+
     pub fn end(&self, map: &Map<D>) -> Result<(Point, Distortion<D>), CommandError> {
         let mut current = self.start;
         let mut distortion = Distortion::neutral();

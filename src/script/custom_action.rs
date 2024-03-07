@@ -61,6 +61,7 @@ pub enum CustomActionTestResult<D: Direction> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum CustomAction {
     None, // not parsed, since this isn't valid for normal units. it's used as default for hero powers
+    UnexhaustWithoutMoving,
     SummonCrystal(HeroType),
     ActivateUnits,
     BuyUnit,
@@ -71,6 +72,7 @@ impl FromConfig for CustomAction {
     fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
         let (base, mut arguments) = string_base(s);
         Ok((match base {
+            "UnexhaustWithoutMoving" => Self::UnexhaustWithoutMoving,
             "SummonCrystal" => {
                 let (hero_type, remainder) = parse_tuple1(arguments)?;
                 arguments = remainder;
@@ -102,6 +104,13 @@ impl CustomAction {
         let transporter: Option<(&Unit<D>, Point)> = transporter.map(|u| (u, path.start));
         match self {
             Self::None => CustomActionTestResult::Success,
+            Self::UnexhaustWithoutMoving => {
+                if path.len() == 0 {
+                    CustomActionTestResult::Success
+                } else {
+                    CustomActionTestResult::Failure
+                }
+            }
             Self::SummonCrystal(_) => {
                 if data_so_far.len() == 0 {
                     let options = game.get_map().get_neighbors(destination, NeighborMode::FollowPipes).into_iter()
@@ -229,6 +238,9 @@ impl CustomAction {
     ) {
         match self {
             Self::None => (),
+            Self::UnexhaustWithoutMoving => {
+                handler.unit_status(destination, ActionStatus::Ready);
+            }
             Self::SummonCrystal(hero_type) => {
                 let crystal_pos = match data {
                     &[CustomActionData::Point(p)] => p,
