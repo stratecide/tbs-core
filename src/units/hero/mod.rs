@@ -287,13 +287,48 @@ mod tests {
     use crate::map::point_map::PointMap;
     use crate::map::wrapping_map::WMBuilder;
     use crate::script::custom_action::CustomActionData;
+    use crate::terrain::TerrainType;
     use crate::units::combat::AttackVector;
     use crate::units::commands::UnitAction;
     use crate::units::commands::UnitCommand;
+    use crate::units::hero::ActionStatus;
     use crate::units::hero::Hero;
     use crate::units::hero::HeroType;
     use crate::units::movement::Path;
     use crate::units::unit_types::UnitType;
+
+    #[test]
+    fn buy_hero() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(5, 5, false);
+        let map = WMBuilder::<Direction4>::new(map);
+        let mut map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        map.set_terrain(Point::new(1, 1), TerrainType::Memorial.instance(&map_env).set_owner_id(0).build_with_defaults());
+        map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(4, 4), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+
+        let settings = map.settings().unwrap();
+        let mut settings = settings.clone();
+        settings.fog_mode = FogMode::Constant(FogSetting::None);
+        settings.players[0].set_funds(999999);
+
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+        let environment: crate::config::environment::Environment = server.environment().clone();
+        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), None);
+        let path = Path::new(Point::new(1, 1));
+        let options = server.get_map().get_unit(Point::new(1, 1)).unwrap().options_after_path(&server, &path, None, &[]);
+        println!("options: {:?}", options);
+        assert!(options.contains(&UnitAction::BuyHero(HeroType::Crystal)));
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path,
+            action: UnitAction::BuyHero(HeroType::Crystal),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_map().get_unit(Point::new(1, 1)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::Crystal, Some(Point::new(1, 1)))).set_status(ActionStatus::Exhausted).build_with_defaults()));
+        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
+    }
+
 
     #[test]
     fn crystal() {

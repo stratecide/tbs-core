@@ -252,13 +252,16 @@ impl Terrain {
         }
     }
 
-    pub fn can_sell_hero<D: Direction>(&self, map: &Map<D>, pos: Point, player: &Player) -> bool {
+    pub fn can_sell_hero<D: Direction>(&self, map: &Map<D>, pos: Point, owner_id: i8) -> bool {
         if !self.could_sell_hero() {
+            return false;
+        }
+        if self.has_attribute(TerrainAttributeKey::Owner) && self.get_owner_id() != owner_id {
             return false;
         }
         for p in map.all_points() {
             if let Some(unit) = map.get_unit(p) {
-                if unit.get_owner_id() == player.get_owner_id() {
+                if unit.get_owner_id() == owner_id {
                     // check if unit is mercenary or transports a mercenary
                     if unit.get_hero().get_origin() == Some(pos) {
                         return false;

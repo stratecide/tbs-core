@@ -39,7 +39,7 @@ pub enum UnitAction<D: Direction> {
     Repair,
     Attack(AttackVector<D>),
     //Pull(D),
-    BuyMercenary(HeroType),
+    BuyHero(HeroType),
     HeroPower(usize, Vec<CustomActionData<D>>),
     //Castle,
     PawnUpgrade(UnitType),
@@ -59,7 +59,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Repair => write!(f, "Repair"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
             //Self::Pull(_) => write!(f, "Pull"),
-            Self::BuyMercenary(_) => write!(f, "Buy Mercenary"),
+            Self::BuyHero(_) => write!(f, "Buy Mercenary"),
             Self::HeroPower(index, _) => write!(f, "Hero Power {index}"),
             //Self::Castle => write!(f, "Castle"),
             Self::PawnUpgrade(u) => write!(f, "Upgrade unit to {u:?}"),
@@ -168,7 +168,7 @@ impl<D: Direction> UnitAction<D> {
                 attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true);
                 false
             }
-            Self::BuyMercenary(hero_type) => {
+            Self::BuyHero(hero_type) => {
                 let unit = handler.get_map().get_unit(end).unwrap();
                 let cost = hero_type.price(handler.environment(), &unit).unwrap();
                 handler.money_change(unit.get_owner_id(), cost);

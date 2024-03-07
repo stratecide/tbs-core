@@ -880,6 +880,16 @@ impl<D: Direction> Unit<D> {
             let heroes: Vec<_> = heroes.iter().collect();
             // hero power
             self.get_hero().add_options_after_path(&mut result, self, game, funds_after_path, path, destination, transporter, &heroes, ballast, &get_fog);
+            // buy hero
+            if !self.is_hero() && terrain.can_sell_hero(game.get_map(), destination, self.get_owner_id()) {
+                for hero in game.available_heroes(self.get_player(game).unwrap()) {
+                    if let Some(cost) = hero.price(game.environment(), self) {
+                        if cost <= funds_after_path {
+                            result.push(UnitAction::BuyHero(hero));
+                        }
+                    }
+                }
+            }
             // build units
             if self.can_build_units() && self.transport_capacity() > 0 {
                 let mut free_space = self.remaining_transport_capacity();
