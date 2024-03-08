@@ -95,7 +95,7 @@ impl CustomAction {
         path: &Path<D>,
         destination: Point,
         transporter: Option<&Unit<D>>,
-        heroes: &[&(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
         ballast: &[TBallast<D>],
         data_so_far: &[CustomActionData<D>],
         get_fog: &impl Fn(Point) -> FogIntensity,
@@ -204,7 +204,6 @@ impl CustomAction {
     ) -> bool {
         let funds = game.get_owning_player(unit.get_owner_id()).unwrap().funds_after_path(game, path, &get_fog);
         let heroes = Hero::hero_influence_at(Some(game), game.get_map(), destination, unit.get_owner_id());
-        let heroes: Vec<_> = heroes.iter().collect();
         for i in 0..data.len() {
             use CustomActionTestResult as R;
             match self.next_condition(game, funds, unit, path, destination, transporter, &heroes, ballast, &data[..i], get_fog) {
@@ -232,7 +231,7 @@ impl CustomAction {
         path: &Path<D>,
         destination: Point,
         transporter: Option<&Unit<D>>,
-        heroes: &[&(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
         ballast: &[TBallast<D>],
         data: &[CustomActionData<D>],
     ) {
@@ -263,10 +262,10 @@ impl CustomAction {
             Self::BuyUnit => {
                 match data {
                     &[CustomActionData::UnitType(unit_type)] => {
-                        UnitAction::buy_transported_unit(handler, path.start, destination, unit_type, ballast);
+                        UnitAction::buy_transported_unit(handler, path.start, destination, unit_type, ballast, false);
                     },
                     &[CustomActionData::UnitType(unit_type), CustomActionData::Direction(dir)] => {
-                        UnitAction::buy_unit(handler, path.start, destination, unit_type, dir, ballast);
+                        UnitAction::buy_unit(handler, path.start, destination, unit_type, dir, ballast, false);
                     },
                     _ => panic!("BuyUnit Action Data is wrong: {:?}", data),
                 };

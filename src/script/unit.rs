@@ -16,6 +16,7 @@ pub enum UnitScript {
     Kraken,
     Attack(bool, bool),
     TakeDamage(u8),
+    Heal(u8),
 }
 
 impl FromConfig for UnitScript {
@@ -33,6 +34,11 @@ impl FromConfig for UnitScript {
                 s = r;
                 Self::TakeDamage(1.max(damage))
             }
+            "Heal" => {
+                let (heal, r) = parse_tuple1(s)?;
+                s = r;
+                Self::Heal(1.max(heal).min(99))
+            }
             invalid => return Err(ConfigParseError::UnknownEnumMember(format!("UnitScript::{}", invalid))),
         }, s))
     }
@@ -44,6 +50,7 @@ impl UnitScript {
             Self::Kraken => anger_kraken(handler),
             Self::Attack(allow_counter, charge_powers) => attack(handler, position, unit, *allow_counter, *charge_powers),
             Self::TakeDamage(damage) => take_damage(handler, position, *damage),
+            Self::Heal(h) => heal(handler, position, *h),
         }
     }
 }
@@ -140,5 +147,11 @@ pub(super) fn take_damage<D: Direction>(handler: &mut EventHandler<D>, position:
         if handler.get_map().get_unit(position).unwrap().get_hp() == 0 {
             handler.unit_death(position);
         }
+    }
+}
+
+pub(super) fn heal<D: Direction>(handler: &mut EventHandler<D>, position: Point, heal: u8) {
+    if handler.get_map().get_unit(position).is_some() {
+        handler.unit_heal(position, heal);
     }
 }

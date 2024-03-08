@@ -145,7 +145,6 @@ impl<D: Direction> UnitAction<D> {
             Self::Repair => {
                 let unit = handler.get_map().get_unit(end).unwrap();
                 let heroes = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), end, unit.get_owner_id());
-                let heroes: Vec<_> = heroes.iter().collect();
                 let full_price = unit.full_price(handler.get_game(), end, None, &heroes).max(0) as u32;
                 let mut heal = UNIT_REPAIR
                     .min(100 - unit.get_hp() as u32);
@@ -184,7 +183,6 @@ impl<D: Direction> UnitAction<D> {
                 handler.hero_charge_sub(end, None, power.required_charge.into());
                 handler.hero_power(end, *index);
                 let heroes = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), end, unit.get_owner_id());
-                let heroes: Vec<_> = heroes.iter().collect();
                 handler.unit_status(end, ActionStatus::Exhausted);
                 let remove_fog = RefCell::new(HashSet::new());
                 let rm = remove_fog.clone();
@@ -192,6 +190,7 @@ impl<D: Direction> UnitAction<D> {
                     rm.clone().get_mut().insert(p);
                     FogIntensity::TrueSight
                 };
+                // TODO: allow partial success, maybe even a failure handler
                 if power.script.is_data_valid(handler.get_game(), &unit, path, end, transporter.as_ref(), ballast.get_entries(), data, &get_fog) {
                     power.script.execute(handler, &unit, path, end, transporter.as_ref(), &heroes, ballast.get_entries(), data);
                 } else {
@@ -212,11 +211,11 @@ impl<D: Direction> UnitAction<D> {
                 true
             }
             Self::BuyTransportedUnit(unit_type) => {
-                Self::buy_transported_unit(handler, path.start, end, *unit_type, ballast.get_entries());
+                Self::buy_transported_unit(handler, path.start, end, *unit_type, ballast.get_entries(), true);
                 true
             }
             Self::BuyUnit(unit_type, dir) => {
-                Self::buy_unit(handler, path.start, end, *unit_type, *dir, ballast.get_entries());
+                Self::buy_unit(handler, path.start, end, *unit_type, *dir, ballast.get_entries(), true);
                 true
             }
             Self::Custom(index, data) => {
@@ -225,7 +224,6 @@ impl<D: Direction> UnitAction<D> {
                 let config = handler.environment().config.clone();
                 let custom_action = &config.custom_actions()[*index];
                 let heroes = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), end, unit.get_owner_id());
-                let heroes: Vec<_> = heroes.iter().collect();
                 handler.unit_status(end, ActionStatus::Exhausted);
                 let remove_fog = RefCell::new(HashSet::new());
                 let rm = remove_fog.clone();
@@ -233,6 +231,7 @@ impl<D: Direction> UnitAction<D> {
                     rm.clone().get_mut().insert(p);
                     FogIntensity::TrueSight
                 };
+                // TODO: allow partial success, maybe even a failure handler
                 if custom_action.script.is_data_valid(handler.get_game(), &unit, path, end, transporter.as_ref(), ballast.get_entries(), data, &get_fog) {
                     custom_action.script.execute(handler, &unit, path, end, transporter.as_ref(), &heroes, ballast.get_entries(), data);
                 } else {
@@ -250,13 +249,14 @@ impl<D: Direction> UnitAction<D> {
         }
     }
 
-    pub fn buy_transported_unit(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, ballast: &[TBallast<D>]) {
+    pub fn buy_transported_unit(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, ballast: &[TBallast<D>], exhaust: bool) {
         let transporter = handler.get_map().get_unit(path_start).filter(|_| path_start != end);
         let factory_unit = handler.get_map().get_unit(end).unwrap();
         let heroes = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), end, factory_unit.get_owner_id());
-        let heroes: Vec<_> = heroes.iter().collect();
         let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, unit_type, transporter.map(|u| (u, path_start)), &heroes, ballast);
-        unit.set_status(ActionStatus::Exhausted);
+        if !exhaust {
+            unit.set_status(ActionStatus::Ready);
+        }
         if handler.environment().unit_attributes(unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
             unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
         }
@@ -265,17 +265,19 @@ impl<D: Direction> UnitAction<D> {
         handler.unit_add_transported(end, unit);
     }
 
-    pub fn buy_unit(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, dir: D, ballast: &[TBallast<D>]) {
+    pub fn buy_unit(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, dir: D, ballast: &[TBallast<D>], exhaust: bool) -> bool {
         let (destination, _) = handler.get_map().get_neighbor(end, dir).unwrap();
         if handler.get_map().get_unit(destination).is_some() {
             handler.effect_fog_surprise(destination);
+            false
         } else {
             let transporter = handler.get_map().get_unit(path_start).filter(|_| path_start != end);
             let factory_unit = handler.get_map().get_unit(end).unwrap();
             let heroes = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), end, factory_unit.get_owner_id());
-            let heroes: Vec<_> = heroes.iter().collect();
             let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, unit_type, transporter.map(|u| (u, path_start)), &heroes, ballast);
-            unit.set_status(ActionStatus::Exhausted);
+            if !exhaust {
+                unit.set_status(ActionStatus::Ready);
+            }
             unit.set_direction(unit.get_direction().rotate_by(dir));
             if handler.environment().unit_attributes(unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
                 unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
@@ -288,6 +290,7 @@ impl<D: Direction> UnitAction<D> {
             handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
             let unit = handler.animate_unit_path(&unit, &path, false);
             handler.unit_creation(destination, unit);
+            true
         }
     }
 }

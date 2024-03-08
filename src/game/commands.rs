@@ -152,7 +152,6 @@ impl<D: Direction> Command<D> {
                 }
 
                 let heroes = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), pos, player.get_owner_id());
-                let heroes: Vec<_> = heroes.iter().collect();
                 let (mut unit, cost) = terrain.unit_shop_option(handler.get_game(), pos, unit_type, &heroes);
                 if cost > *handler.get_game().current_player().funds {
                     return Err(CommandError::NotEnoughMoney)

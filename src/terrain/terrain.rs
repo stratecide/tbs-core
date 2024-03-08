@@ -277,7 +277,7 @@ impl Terrain {
         true
     }
 
-    pub(crate) fn unit_shop_option<D: Direction>(&self, game: &Game<D>, pos: Point, unit_type: UnitType, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)]) -> (Unit<D>, i32) {
+    pub(crate) fn unit_shop_option<D: Direction>(&self, game: &Game<D>, pos: Point, unit_type: UnitType, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> (Unit<D>, i32) {
         let builder: UnitBuilder<D> = unit_type.instance(&self.environment)
         .set_status(ActionStatus::Exhausted);
         // TODO: terrain build-overrides for commanders, heroes
@@ -297,7 +297,6 @@ impl Terrain {
             return Vec::new();
         }
         let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
-        let heroes: Vec<_> = heroes.iter().collect();
         self.buildable_units().iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, &heroes)
         }).collect()

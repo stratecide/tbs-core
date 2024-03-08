@@ -17,7 +17,7 @@ use crate::map::point::Point;
 use crate::map::point_map::MapSize;
 use crate::{player::*, VERSION};
 use crate::units::attributes::AttributeKey;
-use crate::units::hero::HeroType;
+use crate::units::hero::{Hero, HeroType};
 use crate::units::movement::Path;
 use crate::units::unit::*;
 use crate::units::unit_types::UnitType;
@@ -94,13 +94,15 @@ impl<D: Direction> Game<D> {
         if !self.is_foggy() {
             return fog;
         }
+        let heroes = Hero::map_influence(Some(self), self.get_map(), -1, None);
         for p in self.get_map().all_points() {
             for (p, v) in self.get_map().get_terrain(p).unwrap().get_vision(self, p, perspective) {
                 fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
             }
             if let Some(unit) = self.get_map().get_unit(p) {
                 if perspective!= ClientPerspective::Neutral && perspective == unit.get_team() {
-                    for (p, v) in unit.get_vision(self, p) {
+                    let heroes = heroes.get(&(p, unit.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
+                    for (p, v) in unit.get_vision(self, p, heroes) {
                         fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
                     }
                 }

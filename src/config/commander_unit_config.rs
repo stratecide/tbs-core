@@ -31,14 +31,14 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) movement_type: Option<MovementType>,
     pub(super) water_movement_type: Option<MovementType>,
     pub(super) movement_points: NumberMod<Rational32>,
-    pub(super) bonus_vision: usize,
-    pub(super) bonus_true_vision: usize,
+    pub(super) vision: NumberMod<u8>,
+    pub(super) true_vision: NumberMod<u8>,
     pub(super) stealthy: Option<bool>,
     pub(super) attack_targets: Option<AttackTargeting>,
     pub(super) splash_damage: Vec<Rational32>, // doesn't override if empty. contains factor per additional distance
     pub(super) cost: NumberMod<i32>,
     pub(super) displacement: Option<Displacement>, // implies that attack_pattern is Adjacent or Straight
-    pub(super) displacement_distance: Option<i8>, // can only be 0 if Displacement::None
+    pub(super) displacement_distance: NumberMod<i8>, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: Option<bool>,
     pub(super) build_overrides: HashSet<AttributeOverride>,
     pub(super) on_start_turn: Vec<UnitScript>,
@@ -46,7 +46,8 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) on_attack: Vec<AttackScript>,
     pub(super) on_kill: Vec<KillScript>,
     pub(super) on_death: Vec<UnitScript>,
-    pub(super) aura_range: NumberMod<u8>,
+    pub(super) aura_range: NumberMod<i8>,
+    pub(super) aura_range_transported: NumberMod<i8>,
 }
 
 impl CommanderPowerUnitConfig {
@@ -77,8 +78,8 @@ impl CommanderPowerUnitConfig {
                 _ => None,
             },
             movement_points: parse_def(data, H::MovementPoints, NumberMod::Keep)?,
-            bonus_vision: parse_def(data, H::Vision, 0 as u8)? as usize,
-            bonus_true_vision: parse_def(data, H::TrueVision, 0 as u8)? as usize,
+            vision: parse_def(data, H::Vision, NumberMod::Keep)?,
+            true_vision: parse_def(data, H::TrueVision, NumberMod::Keep)?,
             stealthy: match data.get(&H::Stealthy) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
@@ -93,10 +94,7 @@ impl CommanderPowerUnitConfig {
                 Some(s) if s.len() > 0 => Some(Displacement::from_conf(s)?.0),
                 _ => None,
             },
-            displacement_distance: match data.get(&H::DisplacementDistance) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidInteger(s.to_string()))?),
-                _ => None,
-            },
+            displacement_distance: parse_def(data, H::DisplacementDistance, NumberMod::Keep)?,
             can_be_displaced: match data.get(&H::CanBeDisplaced) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
@@ -108,6 +106,7 @@ impl CommanderPowerUnitConfig {
             on_kill: parse_vec_def(data, H::OnKill, Vec::new())?,
             on_death: parse_vec_def(data, H::OnDeath, Vec::new())?,
             aura_range: parse_def(data, H::AuraRange, NumberMod::Keep)?,
+            aura_range_transported: parse_def(data, H::AuraRangeTransported, NumberMod::Keep)?,
         };
         result.simple_validation()?;
         Ok(result)
@@ -163,6 +162,7 @@ crate::listable_enum! {
         OnKill,
         OnDeath,
         AuraRange,
+        AuraRangeTransported,
     }
 }
 

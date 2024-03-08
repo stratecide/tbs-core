@@ -126,7 +126,7 @@ impl UnitFilter {
         // the attacked unit, the unit this one was destroyed by, ...
         other_unit: Option<(&Unit<D>, Point)>,
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[&(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
         // empty if the unit hasn't moved
         temporary_ballast: &[TBallast<D>],
     ) -> bool {

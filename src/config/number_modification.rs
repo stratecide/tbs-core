@@ -91,13 +91,19 @@ impl MulRational32 for Rational32 {
 
 impl MulRational32 for u8 {
     fn mul_r32(self, other: Rational32) -> Self {
-        (Rational32::from_integer(self as i32) * other).round().to_integer() as Self
+        (Rational32::from_integer(self as i32) * other).round().to_integer().min(u8::MAX as i32).max(0) as Self
+    }
+}
+
+impl MulRational32 for i8 {
+    fn mul_r32(self, other: Rational32) -> Self {
+        (Rational32::from_integer(self as i32) * other).round().to_integer().min(i8::MAX as i32).max(i8::MIN as i32) as Self
     }
 }
 
 impl MulRational32 for u32 {
     fn mul_r32(self, other: Rational32) -> Self {
-        (Rational32::from_integer(self as i32) * other).round().to_integer() as Self
+        (Rational32::from_integer(self as i32) * other).round().to_integer().max(0) as Self
     }
 }
 

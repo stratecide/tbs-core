@@ -34,11 +34,18 @@ use super::attributes::*;
 use super::hero::*;
 
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq)]
 pub struct Unit<D: Direction> {
     environment: Environment,
     typ: UnitType,
     attributes: HashMap<AttributeKey, Attribute<D>>,
+}
+
+impl<D: Direction> PartialEq for Unit<D> {
+    fn eq(&self, other: &Self) -> bool {
+        self.typ == other.typ
+        && self.attributes == other.attributes
+    }
 }
 
 impl<D: Direction> Debug for Unit<D> {
@@ -173,8 +180,8 @@ impl<D: Direction> Unit<D> {
         self.environment.config.displacement(self.typ)
     }
 
-    pub fn displacement_distance(&self) -> i8 {
-        self.environment.config.displacement_distance(self.typ)
+    pub fn displacement_distance(&self, game: &Game<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> i8 {
+        self.environment.config.unit_displacement_distance(game, self, pos, transporter, heroes, temporary_ballast)
     }
 
     pub fn can_be_displaced(&self) -> bool {
@@ -185,8 +192,8 @@ impl<D: Direction> Unit<D> {
         self.environment.config.vision_mode(self.typ)
     }
 
-    pub fn vision_range(&self, game: &Game<D>, _pos: Point) -> usize {
-        let mut range = self.environment.config.vision_range(self.typ);
+    pub fn vision_range(&self, game: &Game<D>, pos: Point, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> usize {
+        let mut range = self.environment.config.unit_vision(game, self, pos, heroes);
         match game.get_fog_setting() {
             FogSetting::None => (),
             FogSetting::Light(bonus) |
@@ -198,21 +205,21 @@ impl<D: Direction> Unit<D> {
         range
     }
 
-    fn true_vision_range(&self, _game: &Game<D>, _pos: Point) -> usize {
-        1
+    fn true_vision_range(&self, game: &Game<D>, pos: Point, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> usize {
+        self.environment.config.unit_true_vision(game, self, pos, heroes)
     }
 
-    pub fn get_vision(&self, game: &Game<D>, pos: Point) -> HashMap<Point, FogIntensity> {
+    pub fn get_vision(&self, game: &Game<D>, pos: Point, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> HashMap<Point, FogIntensity> {
         let mut result = HashMap::new();
         result.insert(pos, FogIntensity::TrueSight);
-        let vision_range = self.vision_range(game, pos);
+        let vision_range = self.vision_range(game, pos, heroes);
         let normal_range = match game.get_fog_setting() {
             FogSetting::ExtraDark(_) => 0,
             FogSetting::Fade1(_) => 1.max(vision_range) - 1,
             FogSetting::Fade2(_) => 2.max(vision_range) - 2,
             _ => vision_range
         };
-        let true_vision_range = self.true_vision_range(game, pos);
+        let true_vision_range = self.true_vision_range(game, pos, heroes);
         match self.vision_mode() {
             VisionMode::Normal => {
                 let layers = game.get_map().range_in_layers(pos, vision_range);
@@ -485,7 +492,7 @@ impl<D: Direction> Unit<D> {
     // influenced by unit_power_config
 
     // ignores current hp
-    pub fn full_price(&self, game: &Game<D>, position: Point, factory: Option<&Unit<D>>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)]) -> i32 {
+    pub fn full_price(&self, game: &Game<D>, position: Point, factory: Option<&Unit<D>>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> i32 {
         self.environment.config.unit_cost(
             game,
             self,
@@ -500,7 +507,7 @@ impl<D: Direction> Unit<D> {
         self.full_price(game, position, None, &[]) * self.get_hp() as i32 / 100
     }
 
-    pub fn movement_points(&self, game: Option<&Game<D>>, map: &Map<D>, position: Point, transporter: Option<&Unit<D>>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)]) -> Rational32 {
+    pub fn movement_points(&self, game: Option<&Game<D>>, map: &Map<D>, position: Point, transporter: Option<&Unit<D>>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> Rational32 {
         self.environment.config.unit_movement_points(
             game,
             map,
@@ -511,7 +518,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn build_overrides(&self, game: &Game<D>, position: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> HashSet<AttributeOverride> {
+    pub fn build_overrides(&self, game: &Game<D>, position: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> HashSet<AttributeOverride> {
         let overrides = self.environment.config.unit_attribute_overrides(
             game,
             self,
@@ -525,7 +532,7 @@ impl<D: Direction> Unit<D> {
         .collect()
     }
 
-    pub fn on_start_turn(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<UnitScript> {
+    pub fn on_start_turn(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<UnitScript> {
         self.environment.config.unit_start_turn_effects(
             game,
             self,
@@ -535,7 +542,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_end_turn(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<UnitScript> {
+    pub fn on_end_turn(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<UnitScript> {
         self.environment.config.unit_end_turn_effects(
             game,
             self,
@@ -545,7 +552,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_attack(&self, game: &Game<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<AttackScript> {
+    pub fn on_attack(&self, game: &Game<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<AttackScript> {
         self.environment.config.unit_attack_effects(
             game,
             self,
@@ -558,7 +565,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_kill(&self, game: &Game<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<KillScript> {
+    pub fn on_kill(&self, game: &Game<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<KillScript> {
         self.environment.config.unit_kill_effects(
             game,
             self,
@@ -571,7 +578,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_death(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<(&Self, Point)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<UnitScript> {
+    pub fn on_death(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<(&Self, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<UnitScript> {
         self.environment.config.unit_death_effects(
             game,
             self,
@@ -877,7 +884,6 @@ impl<D: Direction> Unit<D> {
             }
         } else if blocking_unit.is_none() || path.start == destination && blocking_unit.as_ref() == Some(self) {
             let heroes = Hero::hero_influence_at(Some(game), game.get_map(), destination, self.get_owner_id());
-            let heroes: Vec<_> = heroes.iter().collect();
             // hero power
             self.get_hero().add_options_after_path(&mut result, self, game, funds_after_path, path, destination, transporter, &heroes, ballast, &get_fog);
             // buy hero
@@ -962,7 +968,7 @@ impl<D: Direction> Unit<D> {
         result
     }
 
-    pub(crate) fn unit_shop_option(&self, game: &Game<D>, pos: Point, unit_type: UnitType, transporter: Option<(&Unit<D>, Point)>, heroes: &[&(Unit<D>, Hero, Point, Option<usize>)], ballast: &[TBallast<D>]) -> (Unit<D>, i32) {
+    pub(crate) fn unit_shop_option(&self, game: &Game<D>, pos: Point, unit_type: UnitType, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], ballast: &[TBallast<D>]) -> (Unit<D>, i32) {
         let attr_overrides = self.build_overrides(game, pos, transporter, heroes, ballast);
         let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment)
         .set_status(ActionStatus::Exhausted);
@@ -980,7 +986,6 @@ impl<D: Direction> Unit<D> {
             unit.set_direction(unit.get_direction().rotate_by(self.get_direction()));
         }
         let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
-        let heroes: Vec<_> = heroes.iter().collect();
         let cost = unit.full_price(game, pos, Some(self), &heroes);
         (unit, cost)
     }
@@ -990,7 +995,6 @@ impl<D: Direction> Unit<D> {
             return Vec::new();
         }
         let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
-        let heroes: Vec<_> = heroes.iter().collect();
         self.transportable_units().iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, transporter, &heroes, ballast)
         }).collect()

@@ -422,7 +422,8 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn unit_creation(&mut self, position: Point, unit: Unit<D>) {
         if let ClientPerspective::Team(team) = unit.get_team() {
             if self.get_game().is_foggy() && self.get_game().is_team_alive(team) {
-                let changes = unit.get_vision(self.get_game(), position).into_iter()
+                let heroes = Hero::hero_influence_at(Some(self.get_game()), self.get_map(), position, unit.get_owner_id());
+                let changes = unit.get_vision(self.get_game(), position, &heroes).into_iter()
                 .filter(|(p, intensity)| *intensity < self.get_game().get_fog_at(ClientPerspective::Team(team), *p))
                 .collect();
                 self.change_fog(ClientPerspective::Team(team), changes);
@@ -479,8 +480,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 } else {
                     vec![path_end]
                 };
+                let owner_id = unit.get_owner_id();
+                let heroes = Hero::map_influence(Some(&self.game), self.get_map(), owner_id, Some((path.start, unload_index)));
                 for p in points {
-                    for (p, vision) in unit.get_vision(self.get_game(), p) {
+                    let heroes = heroes.get(&(p, owner_id)).map(|h| h.as_slice()).unwrap_or(&[]);
+                    for (p, vision) in unit.get_vision(self.get_game(), p, heroes) {
                         let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
                         if vision < self.get_game().get_fog_at(perspective, p) {
                             vision_changes.insert(p, vision);
@@ -733,44 +737,22 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn trigger_all_unit_scripts<S>(
         &mut self,
-        get_script: impl Fn(&Game<D>, &Unit<D>, Point, Option<(&Unit<D>, usize)>, &[&(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<S>,
+        get_script: impl Fn(&Game<D>, &Unit<D>, Point, Option<(&Unit<D>, usize)>, &[(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<S>,
         before_executing: impl FnOnce(&mut Self),
         execute_script: impl Fn(&mut Self, S, Point, &Unit<D>, usize),
     ) {
-        let mut heroes = Vec::new();
-        for p in self.get_map().all_points() {
-            if let Some(unit) = self.get_map().get_unit(p) {
-                if unit.is_hero() {
-                    heroes.push((unit.clone(), unit.get_hero(), p, None));
-                }
-                for (i, unit) in unit.get_transported().iter().enumerate() {
-                    if unit.is_hero() {
-                        heroes.push((unit.clone(), unit.get_hero(), p, Some(i)));
-                    }
-                }
-            }
-        }
-        let mut hero_auras: HashMap<Point, Vec<&(Unit<D>, Hero, Point, Option<usize>)>> = HashMap::new();
-        for hero in &heroes {
-            let transporter = hero.3.map(|i| (self.get_map().get_unit(hero.2).unwrap(), i));
-            for p in Hero::aura(Some(&self.game), self.get_map(), &hero.0, hero.2, transporter) {
-                if let Some(list) = hero_auras.get_mut(&p) {
-                    list.push(hero);
-                } else {
-                    hero_auras.insert(p, vec![hero]);
-                }
-            }
-        }
+        let hero_auras = Hero::map_influence(Some(&self.game), self.get_map(), -1, None);
         let mut scripts = Vec::new();
         for p in self.get_map().all_points() {
             if let Some(unit) = self.get_map().get_unit(p).cloned() {
-                let script = get_script(self.get_game(), &unit, p, None, hero_auras.get(&p).map(|h| h.as_slice()).unwrap_or(&[]));
+                let heroes = hero_auras.get(&(p, unit.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
+                let script = get_script(self.get_game(), &unit, p, None, heroes);
                 if script.len() > 0 {
                     let id = self.observe_unit(p, None).0;
                     scripts.push((script, unit.clone(), p, id));
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
-                    let script = get_script(self.get_game(), u, p, Some((&unit, i)), hero_auras.get(&p).map(|h| h.as_slice()).unwrap_or(&[]));
+                    let script = get_script(self.get_game(), u, p, Some((&unit, i)), heroes);
                     if script.len() > 0 {
                         let id = self.observe_unit(p, Some(i)).0;
                         scripts.push((script, u.clone(), p, id));

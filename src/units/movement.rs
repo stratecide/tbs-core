@@ -759,7 +759,6 @@ where
                 //hero.set_power_active(false);
             }
         }
-        let heroes: Vec<_> = heroes.iter().collect();
         let mp = unit.movement_points(game, map, pos, transporter, &heroes);
         temps.push(TBallast::MovementPoints(mp));
         /*match movement_pattern {
