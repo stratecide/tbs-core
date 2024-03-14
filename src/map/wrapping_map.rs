@@ -573,8 +573,8 @@ impl<D: Direction> WMBuilder<D> {
             let local_p = self.point_map_equivalent(*source).expect("only real points should have missing neighbors");
             for d in dirs {
                 let p = d.get_global_neighbor(*source, self.odd());
-                if let Some(destination) = self.localize_point(p) {
-                    wrapped_neighbors.insert((local_p, *d), destination);
+                if let Some((destination, distortion)) = self.localize_point(p) {
+                    wrapped_neighbors.insert((local_p, *d), (destination, -distortion));
                 }
             }
         }
@@ -658,6 +658,10 @@ where D: Direction {
         &self.seed_transformations
     }
 
+    /**
+     * the returned Distortion has to be applied to direction in order to
+     * keep moving in the same direction
+     */
     pub fn get_neighbor(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
         if !self.pointmap.is_point_valid(point) {
             None
@@ -702,8 +706,12 @@ impl<D: Direction> Zippable for WrappingMap<D> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use interfaces::map_interface::MapInterface;
+
     use super::*;
-    use crate::map::point_map::PointMap;
+    use crate::{config::config::Config, map::{map::{Map, NeighborMode}, point_map::PointMap}, terrain::TerrainType, units::{movement::Path, unit_types::UnitType}};
 
     #[test]
     fn distortions() {
@@ -800,7 +808,7 @@ mod tests {
         assert_eq!(builder.localize_point(GlobalPoint::new(11, 2)), None);
         let map = builder.build();
         assert_eq!(map.get_neighbor(Point::new(0, 0), Direction4::D90), None);
-        assert_eq!(map.get_neighbor(Point::new(1, 0), Direction4::D90), Some((Point::new(4, 3), Distortion::new(false, Direction4::D270))));
+        assert_eq!(map.get_neighbor(Point::new(1, 0), Direction4::D90), Some((Point::new(4, 3), Distortion::new(false, Direction4::D90))));
         Ok(())
     }
 
@@ -829,7 +837,7 @@ mod tests {
         assert_eq!(builder.localize_point(GlobalPoint::new(-4, 2)), Some((Point::new(3, 2), Distortion::new(true, Direction4::D0))));
         let map: WrappingMap<Direction4> = builder.build();
         assert_eq!(map.get_neighbor(Point::new(0, 0), Direction4::D90), None);
-        assert_eq!(map.get_neighbor(Point::new(1, 0), Direction4::D90), Some((Point::new(4, 3), Distortion::new(false, Direction4::D270))));
+        assert_eq!(map.get_neighbor(Point::new(1, 0), Direction4::D90), Some((Point::new(4, 3), Distortion::new(false, Direction4::D90))));
         let builder = WMBuilder::<Direction4>::with_transformations(PointMap::new(31, 25, false), vec![
             Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(28) + Direction4::D90.translation(3)),
             Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(-31)),
@@ -856,5 +864,40 @@ mod tests {
         builder.add_transformation(Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(5) + Direction4::D90.translation(2))).unwrap();
         assert_eq!(builder.add_transformation(Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(-5))), Err(TransformationError::CollidingTransformation));
         Ok(())
+    }
+
+    #[test]
+    fn straight_line() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(8, 5, false);
+        let map = WMBuilder::<Direction4>::with_transformations(map, vec![Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(6))]).unwrap();
+        let mut map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        for x in 0..8 {
+            for y in 0..5 {
+                map.set_terrain(Point::new(x, y), TerrainType::ChessTile.instance(&map_env).build_with_defaults());
+            }
+        }
+        map.set_unit(Point::new(3, 2), Some(UnitType::Rook.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(4, 0), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        assert_eq!(
+            map.wrapping_logic().get_neighbor(Point::new(3, 0), Direction4::D90),
+            Some((Point::new(7, 3), Distortion::new(false, Direction4::D90)))
+        );
+        assert_eq!(
+            map.get_line(Point::new(3, 2), Direction4::D90, 5, NeighborMode::FollowPipes),
+            vec![
+                OrientedPoint::new(Point::new(3, 2), false, Direction4::D90),
+                OrientedPoint::new(Point::new(3, 1), false, Direction4::D90),
+                OrientedPoint::new(Point::new(3, 0), false, Direction4::D90),
+                OrientedPoint::new(Point::new(7, 3), false, Direction4::D180),
+                OrientedPoint::new(Point::new(6, 3), false, Direction4::D180),
+            ]
+        );
+        let settings = map.settings().unwrap();
+        let (game, _) = map.game_server(&settings, || 0.);
+        let environment = game.environment();
+        let rook = UnitType::Rook.instance(&environment).set_owner_id(0).build_with_defaults();
+        rook.shortest_path_to(&game, &Path::new(Point::new(3, 2)), Point::new(0, 3)).unwrap();
     }
 }

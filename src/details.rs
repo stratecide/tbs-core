@@ -187,7 +187,16 @@ impl<D: Direction> Default for PipeState<D> {
 
 #[cfg(test)]
 mod tests {
-    use crate::map::{direction::Direction4, wrapping_map::Distortion};
+    use std::sync::Arc;
+
+    use crate::config::config::Config;
+    use crate::details::Detail;
+    use crate::map::direction::*;
+    use crate::map::map::*;
+    use crate::map::point::*;
+    use crate::map::point_map::PointMap;
+    use crate::map::wrapping_map::*;
+    use crate::terrain::TerrainType;
 
     use super::PipeState;
 
@@ -198,5 +207,47 @@ mod tests {
         assert_eq!(pipe.distortion(Direction4::D0), Some(Distortion::new(false, Direction4::D90)));
         assert_eq!(pipe.distortion(Direction4::D0).unwrap().update_direction(Direction4::D0), Direction4::D90);
         assert_eq!(pipe.distortion(Direction4::D270).unwrap().update_direction(Direction4::D270), Direction4::D180);
+    }
+
+    #[test]
+    fn straight_line() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(8, 5, false);
+        let map = WMBuilder::<Direction4>::with_transformations(map, vec![Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(6))]).unwrap();
+        let mut map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        for x in 0..8 {
+            for y in 0..5 {
+                map.set_terrain(Point::new(x, y), TerrainType::ChessTile.instance(&map_env).build_with_defaults());
+            }
+        }
+        map.add_detail(Point::new(7, 3), Detail::Pipe(PipeState::new(Direction4::D0, Direction4::D90).unwrap()));
+        map.add_detail(Point::new(2, 4), Detail::Pipe(PipeState::new(Direction4::D180, Direction4::D90).unwrap()));
+        assert_eq!(
+            map.get_neighbor(Point::new(3, 0), Direction4::D90),
+            Some((Point::new(7, 2), Distortion::new(false, Direction4::D0)))
+        );
+        assert_eq!(
+            map.get_line(Point::new(3, 1), Direction4::D90, 4, NeighborMode::FollowPipes),
+            vec![
+                OrientedPoint::new(Point::new(3, 1), false, Direction4::D90),
+                OrientedPoint::new(Point::new(3, 0), false, Direction4::D90),
+                OrientedPoint::new(Point::new(7, 2), false, Direction4::D90),
+                OrientedPoint::new(Point::new(7, 1), false, Direction4::D90),
+            ]
+        );
+        assert_eq!(
+            map.get_neighbor(Point::new(1, 4), Direction4::D0),
+            Some((Point::new(2, 3), Distortion::new(false, Direction4::D90)))
+        );
+        assert_eq!(
+            map.get_line(Point::new(2, 2), Direction4::D270, 4, NeighborMode::FollowPipes),
+            vec![
+                OrientedPoint::new(Point::new(2, 2), false, Direction4::D270),
+                OrientedPoint::new(Point::new(2, 3), false, Direction4::D270),
+                OrientedPoint::new(Point::new(1, 4), false, Direction4::D180),
+                OrientedPoint::new(Point::new(0, 4), false, Direction4::D180),
+            ]
+        );
     }
 }

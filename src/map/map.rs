@@ -150,6 +150,10 @@ where D: Direction
         None
     }
 
+    /**
+     * the returned Distortion has to be applied to 'd' in order to
+     * keep moving in the same direction
+     */
     pub fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
         if let Some((point, mut distortion)) = self.wrapping_logic.get_neighbor(p, d) {
             for det in self.get_details(point) {
@@ -158,9 +162,9 @@ where D: Direction
                         if !pipe_state.is_open(distortion.update_direction(d).opposite_direction()) {
                             continue;
                         }
-                        if let Some(disto) = pipe_state.distortion(distortion.update_direction(d)) {
+                        if let Some(_disto) = pipe_state.distortion(distortion.update_direction(d)) {
                         //if pipe_state.transform_direction(n.1.update_direction(d)).is_some() {
-                            distortion += disto;
+                            //distortion += disto;
                             let mut current = point;
                             while let Some((next, disto)) = self.next_pipe_tile(current, distortion.update_direction(d)) {
                                 current = next;
