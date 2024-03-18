@@ -14,6 +14,7 @@ mod tests {
     use crate::game::settings::{GameSettings, PlayerSettings};
     use crate::map::direction::*;
     use crate::map::map::Map;
+    use crate::map::map_view::MapView;
     use crate::map::point::*;
     use crate::map::point_map::PointMap;
     use crate::terrain::TerrainType;

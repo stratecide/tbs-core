@@ -12,9 +12,9 @@ use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::game::Game;
 use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
-use crate::map::map::Map;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
-use crate::player::{Player, Owner};
+use crate::player::Owner;
 use crate::units::attributes::ActionStatus;
 use crate::units::hero::Hero;
 use crate::units::movement::MovementType;
@@ -240,6 +240,9 @@ impl Terrain {
     }
 
     pub fn fog_replacement(&self, intensity: FogIntensity) -> Self {
+        if intensity != FogIntensity::Dark {
+            return self.clone();
+        }
         let hidden_attributes = self.environment.config.terrain_specific_hidden_attributes(self.typ);
         let attributes = self.attributes.iter()
         .filter(|(key, _)| !hidden_attributes.contains(key))
@@ -252,7 +255,7 @@ impl Terrain {
         }
     }
 
-    pub fn can_sell_hero<D: Direction>(&self, map: &Map<D>, pos: Point, owner_id: i8) -> bool {
+    pub fn can_sell_hero<D: Direction>(&self, map: &impl MapView<D>, pos: Point, owner_id: i8) -> bool {
         if !self.could_sell_hero() {
             return false;
         }
@@ -296,7 +299,7 @@ impl Terrain {
         if !self.can_build() {
             return Vec::new();
         }
-        let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
+        let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         self.buildable_units().iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, &heroes)
         }).collect()

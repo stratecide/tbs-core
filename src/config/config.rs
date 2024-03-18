@@ -4,12 +4,10 @@ use std::collections::HashSet;
 use interfaces::ConfigInterface;
 use num_rational::Rational32;
 
-use crate::commander::Commander;
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
-use crate::game::game::Game;
+use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
-use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::script::attack::AttackScript;
 use crate::script::kill::KillScript;
@@ -292,15 +290,13 @@ impl Config {
 
     pub fn hero_aura_range<D: Direction>(
         &self,
-        game: Option<&Game<D>>,
-        map: &Map<D>,
+        map: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
     ) -> Option<usize> {
         let hero = unit.get_hero();
         let iter = self.unit_power_configs(
-            game,
             map,
             unit,
             (unit_pos, transporter.map(|u| u.1)),
@@ -510,8 +506,7 @@ impl Config {
      */
     pub(super) fn unit_power_configs<'a, D: Direction>(
         &'a self,
-        game: Option<&'a Game<D>>,
-        map: &'a Map<D>,
+        map: &'a impl GameView<D>,
         unit: &'a Unit<D>,
         unit_pos: (Point, Option<usize>),
         // when moving out of a transporter, or start_turn for transported units
@@ -523,10 +518,7 @@ impl Config {
         // empty if the unit hasn't moved
         temporary_ballast: &'a [TBallast<D>],
     ) -> impl DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> {
-        let commander = match game {
-            Some(game) => unit.get_commander(game),
-            None => Commander::new(map.environment(), CommanderType::None)
-        };
+        let commander = unit.get_commander(map);
         let mut slices = vec![&self.default_unit_overrides];
         // should always be true
         if let Some(configs) = self.commander_units.get(&commander.typ()) {
@@ -546,13 +538,13 @@ impl Config {
 
     pub fn unit_cost<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         factory_unit: Option<&Unit<D>>, // if built by a unit
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
     ) -> i32 {
-        let iter = self.unit_power_configs(Some(game), game.get_map(), unit, (unit_pos, None), factory_unit.map(|u| (u, unit_pos)), None, heroes, &[]);
+        let iter = self.unit_power_configs(game, unit, (unit_pos, None), factory_unit.map(|u| (u, unit_pos)), None, heroes, &[]);
         NumberMod::update_value_repeatedly(
             self.base_cost(unit.typ()),
             iter.map(|c| &c.cost)
@@ -561,14 +553,14 @@ impl Config {
 
     pub fn unit_visibility<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         //transporter: Option<(&Unit<D>, Point)>,
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
     ) -> UnitVisibility {
         let mut result = self.unit_config(unit.typ()).visibility;
-        for config in self.unit_power_configs(Some(game), game.get_map(), unit, (unit_pos, None), None, None, heroes, &[]) {
+        for config in self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[]) {
             if let Some(visibility) = config.visibility {
                 result = visibility;
             }
@@ -578,12 +570,12 @@ impl Config {
 
     pub fn unit_vision<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
     ) -> usize {
-        let iter = self.unit_power_configs(Some(game), game.get_map(), unit, (unit_pos, None), None, None, heroes, &[])
+        let iter = self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[])
         .map(|c| &c.vision);
         NumberMod::update_value_repeatedly(
             self.base_vision_range(unit.typ()) as u8,
@@ -593,12 +585,12 @@ impl Config {
 
     pub fn unit_true_vision<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
     ) -> usize {
-        let iter = self.unit_power_configs(Some(game), game.get_map(), unit, (unit_pos, None), None, None, heroes, &[])
+        let iter = self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[])
         .map(|c| &c.true_vision);
         NumberMod::update_value_repeatedly(
             self.base_true_vision_range(unit.typ()) as u8,
@@ -608,7 +600,7 @@ impl Config {
 
     pub fn unit_attribute_overrides<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, Point)>, // move out of this transporter and then build something
@@ -616,7 +608,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
     ) -> HashMap<AttributeKey, AttributeOverride> {
         let mut result = HashMap::new();
-        for config in self.unit_power_configs(Some(game), game.get_map(), unit, (unit_pos, None), transporter, None, heroes, temporary_ballast) {
+        for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, None, heroes, temporary_ballast) {
             for ov in &config.build_overrides {
                 result.insert(ov.key(), ov.clone());
             }
@@ -626,14 +618,14 @@ impl Config {
 
     pub fn unit_start_turn_effects<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
     ) -> Vec<UnitScript> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(Some(game), game.get_map(), unit, unit_pos, transporter, None, heroes, &[]) {
+        for config in self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[]) {
             result.extend(config.on_start_turn.iter().cloned())
         }
         result
@@ -641,14 +633,14 @@ impl Config {
 
     pub fn unit_end_turn_effects<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
     ) -> Vec<UnitScript> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(Some(game), game.get_map(), unit, unit_pos, transporter, None, heroes, &[]) {
+        for config in self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[]) {
             result.extend(config.on_end_turn.iter().cloned())
         }
         result
@@ -656,7 +648,7 @@ impl Config {
 
     pub fn unit_attack_effects<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         defender: &Unit<D>,
@@ -666,7 +658,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<AttackScript> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(Some(game), game.get_map(), unit, (unit_pos, None), transporter, Some((defender, defender_pos)), heroes, temporary_ballast) {
+        for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, Some((defender, defender_pos)), heroes, temporary_ballast) {
             result.extend(config.on_attack.iter().cloned())
         }
         result
@@ -674,7 +666,7 @@ impl Config {
 
     pub fn unit_kill_effects<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         defender: &Unit<D>,
@@ -684,7 +676,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<KillScript> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(Some(game), game.get_map(), unit, (unit_pos, None), transporter, Some((defender, defender_pos)), heroes, temporary_ballast) {
+        for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, Some((defender, defender_pos)), heroes, temporary_ballast) {
             result.extend(config.on_kill.iter().cloned())
         }
         result
@@ -692,7 +684,7 @@ impl Config {
 
     pub fn unit_death_effects<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
@@ -701,7 +693,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<UnitScript> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(Some(game), game.get_map(), unit, unit_pos, transporter, attacker, heroes, temporary_ballast) {
+        for config in self.unit_power_configs(game, unit, unit_pos, transporter, attacker, heroes, temporary_ballast) {
             result.extend(config.on_death.iter().cloned())
         }
         result
@@ -709,14 +701,13 @@ impl Config {
 
     pub fn unit_movement_points<D: Direction>(
         &self,
-        game: Option<&Game<D>>,
-        map: &Map<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
     ) -> Rational32 {
-        let iter = self.unit_power_configs(game, map, unit, unit_pos, transporter, None, heroes, &[])
+        let iter = self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[])
         .map(|c| &c.movement_points);
         NumberMod::update_value_repeatedly(
             self.base_movement_points(unit.typ()),
@@ -726,7 +717,7 @@ impl Config {
 
     pub fn unit_attack<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         defender: &Unit<D>,
@@ -736,8 +727,7 @@ impl Config {
         is_counter: bool,
     ) -> Rational32 {
         let iter = self.unit_power_configs(
-            Some(game),
-            game.get_map(),
+            game,
             unit,
             (unit_pos, None),
             None,
@@ -760,7 +750,7 @@ impl Config {
 
     pub fn unit_defense<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         attacker: &Unit<D>,
@@ -769,8 +759,7 @@ impl Config {
         is_counter: bool,
     ) -> Rational32 {
         let iter = self.unit_power_configs(
-            Some(game),
-            game.get_map(),
+            game,
             unit,
             (unit_pos, None),
             None,
@@ -793,7 +782,7 @@ impl Config {
 
     pub fn unit_range<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, Point)>,
@@ -803,8 +792,7 @@ impl Config {
         base_range: u8,
     ) -> u8 {
         let iter = self.unit_power_configs(
-            Some(game),
-            game.get_map(),
+            game,
             unit,
             (unit_pos, None),
             transporter,
@@ -827,7 +815,7 @@ impl Config {
 
     pub fn unit_displacement_distance<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, Point)>,
@@ -835,8 +823,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
     ) -> i8 {
         let iter = self.unit_power_configs(
-            Some(game),
-            game.get_map(),
+            game,
             unit,
             (unit_pos, None),
             transporter,

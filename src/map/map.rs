@@ -2,13 +2,14 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use interfaces::game_interface::Events;
+use interfaces::game_interface::{ClientPerspective, Events};
 use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;
+use crate::game::game_view::GameView;
 use crate::game::settings::{self, GameSettings};
 use crate::game::game::*;
 use crate::game::fog::*;
@@ -17,11 +18,13 @@ use crate::game::settings::PlayerSettings;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
+use crate::player::Player;
 use crate::{details::*, VERSION};
 use crate::details;
 use crate::terrain::terrain::Terrain;
 use crate::units::unit::Unit;
 
+use super::map_view::MapView;
 use super::point_map::MapSize;
 
 #[derive(Clone, PartialEq)]
@@ -56,9 +59,7 @@ impl<D: Direction> Debug for Map<D> {
     }
 }
 
-impl<D> Map<D>
-where D: Direction
-{
+impl<D: Direction> Map<D> {
     pub fn new(wrapping_logic: WrappingMap<D>, config: &Arc<Config>) -> Self {
         let environment = Environment {
             config: config.clone(),
@@ -92,17 +93,9 @@ where D: Direction
         }
     }
 
-    pub fn environment(&self) -> &Environment {
-        &self.environment
-    }
-
     /*pub fn odd_if_hex(&self) -> bool {
         self.wrapping_logic.pointmap().odd_if_hex()
     }*/
-
-    pub fn wrapping_logic(&self) -> &WrappingMap<D> {
-        &self.wrapping_logic
-    }
 
     pub fn width(&self) -> u8 {
         self.wrapping_logic.pointmap().width()
@@ -110,10 +103,6 @@ where D: Direction
 
     pub fn height(&self) -> u8 {
         self.wrapping_logic.pointmap().height()
-    }
-
-    pub fn all_points(&self) -> Vec<Point> {
-        self.wrapping_logic.pointmap().get_valid_points()
     }
 
     pub fn is_point_valid(&self, point: Point) -> bool {
@@ -131,125 +120,6 @@ where D: Direction
         None
     }
 
-    /**
-     * checks the pipe at dp.point for whether it can be entered by dp.direction and if true, returns the position of the next pipe tile
-     * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
-     */
-    fn next_pipe_tile(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
-        for det in self.details.get(&point)? {
-            match det {
-                Detail::Pipe(pipe_state) => {
-                    if let Some(disto) = pipe_state.distortion(direction) {
-                        return self.wrapping_logic.get_neighbor(point, disto.update_direction(direction))
-                        .and_then(|(p, d)| Some((p, disto + d)))
-                    }
-                }
-                _ => (),
-            }
-        }
-        None
-    }
-
-    /**
-     * the returned Distortion has to be applied to 'd' in order to
-     * keep moving in the same direction
-     */
-    pub fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
-        if let Some((point, mut distortion)) = self.wrapping_logic.get_neighbor(p, d) {
-            for det in self.get_details(point) {
-                match det {
-                    Detail::Pipe(pipe_state) => {
-                        if !pipe_state.is_open(distortion.update_direction(d).opposite_direction()) {
-                            continue;
-                        }
-                        if let Some(_disto) = pipe_state.distortion(distortion.update_direction(d)) {
-                        //if pipe_state.transform_direction(n.1.update_direction(d)).is_some() {
-                            //distortion += disto;
-                            let mut current = point;
-                            while let Some((next, disto)) = self.next_pipe_tile(current, distortion.update_direction(d)) {
-                                current = next;
-                                distortion += disto;
-                                if current == point {
-                                    // infinite loop, abort
-                                    return None;
-                                }
-                            }
-                            return Some((current, distortion));
-                        }
-                    }
-                    _ => (),
-                }
-            }
-            Some((point, distortion))
-        } else {
-            None
-        }
-    }
-
-    pub fn get_neighbors(&self, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
-        let mut result = vec![];
-        for d in D::list() {
-            match mode {
-                NeighborMode::Direct => {
-                    if let Some((p, distortion)) = self.wrapping_logic.get_neighbor(p, d) {
-                        result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
-                    }
-                }
-                NeighborMode::FollowPipes => {
-                    if let Some((p, distortion)) = self.get_neighbor(p, d) {
-                        result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
-                    }
-                }
-            }
-        }
-        result
-    }
-
-    // the result includes start, the OrientedPoints point towards the next point
-    // the result may be shorter than the requested length if not enough points could be found
-    pub fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
-        let mut result = vec![OrientedPoint::new(start, false, d)];
-        let mut distortion = Distortion::neutral();
-        while result.len() < length {
-            let current = result.get(result.len() - 1).unwrap();
-            let next = match mode {
-                NeighborMode::Direct => self.wrapping_logic.get_neighbor(current.point, distortion.update_direction(d)),
-                NeighborMode::FollowPipes => self.get_neighbor(current.point, distortion.update_direction(d)),
-            };
-            if let Some((p, disto)) = next {
-                distortion += disto;
-                result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
-            } else {
-                break;
-            }
-        }
-        result
-    }
-    
-    pub fn width_search<F: FnMut(Point) -> bool>(&self, start: Point, mut f: F) -> HashSet<Point> {
-        let mut result = HashSet::new();
-        let mut to_check = HashSet::new();
-        to_check.insert(start);
-        while to_check.len() > 0 {
-            let mut next = HashSet::new();
-            for p in to_check {
-                if f(p) {
-                    result.insert(p);
-                    for p in self.get_neighbors(p, NeighborMode::Direct) {
-                        if !result.contains(&p.point) {
-                            next.insert(p.point);
-                        }
-                    }
-                }
-            }
-            to_check = next;
-        }
-        result
-    }
-
-    pub fn get_terrain(&self, p: Point) -> Option<&Terrain> {
-        self.terrain.get(&p)
-    }
     pub fn get_terrain_mut(&mut self, p: Point) -> Option<&mut Terrain> {
         self.terrain.get_mut(&p)
     }
@@ -259,9 +129,6 @@ where D: Direction
         }
     }
 
-    pub fn get_unit(&self, p: Point) -> Option<&Unit<D>> {
-        self.units.get(&p)
-    }
     pub fn get_unit_mut(&mut self, p: Point) -> Option<&mut Unit<D>> {
         self.units.get_mut(&p)
     }
@@ -277,9 +144,6 @@ where D: Direction
         }
     }
 
-    pub fn get_details(&self, p: Point) -> Vec<Detail<D>> {
-        self.details.get(&p).and_then(|v| Some(v.to_vec())).unwrap_or(Vec::new())
-    }
     pub fn set_details(&mut self, p: Point, value: Vec<Detail<D>>) {
         if self.is_point_valid(p) {
             let value = Detail::correct_stack(value, &self.environment);
@@ -291,12 +155,12 @@ where D: Direction
         }
     }
     pub fn add_detail(&mut self, p: Point, value: Detail<D>) {
-        let mut list = self.get_details(p);
+        let mut list = self.get_details(p).to_vec();
         list.push(value);
         self.set_details(p, list);
     }
     pub fn insert_detail(&mut self, p: Point, index: usize, value: Detail<D>) {
-        let mut list = self.get_details(p);
+        let mut list = self.get_details(p).to_vec();
         if index <= list.len() {
             list.insert(index, value);
             self.set_details(p, list);
@@ -406,7 +270,7 @@ where D: Direction
     pub fn fix_errors_details(&self) -> HashMap<Point, Vec<Detail<D>>> {
         let mut corrected = HashMap::new();
         for p in self.all_points() {
-            let stack = Detail::correct_stack(self.get_details(p), &self.environment);
+            let stack = Detail::correct_stack(self.get_details(p).to_vec(), &self.environment);
             if *self.details.get(&p).unwrap_or(&stack) != stack {
                 corrected.insert(p, stack);
             }
@@ -414,7 +278,7 @@ where D: Direction
         // fix_self can depend on surrounding details
         // so Detail::correct_stack which can remove details has to be in a separate loop before this one
         for p in self.all_points() {
-            let stack = corrected.remove(&p).unwrap_or(self.get_details(p))
+            let stack = corrected.remove(&p).unwrap_or(self.get_details(p).to_vec())
             .into_iter()
             .map(|mut det| {
                 det.fix_self(self, p);
@@ -511,7 +375,50 @@ where D: Direction
             }
         }
     }
+}
 
+impl<D: Direction> MapView<D> for Map<D> {
+    fn environment(&self) -> &Environment {
+        &self.environment
+    }
+
+    fn wrapping_logic(&self) -> &WrappingMap<D> {
+        &self.wrapping_logic
+    }
+
+    fn all_points(&self) -> Vec<Point> {
+        self.wrapping_logic.pointmap().get_valid_points()
+    }
+
+    fn get_terrain(&self, p: Point) -> Option<&Terrain> {
+        self.terrain.get(&p)
+    }
+
+    fn get_details(&self, p: Point) -> &[Detail<D>] {
+        self.details.get(&p).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+
+    fn get_unit(&self, p: Point) -> Option<&Unit<D>> {
+        self.units.get(&p)
+    }
+}
+
+impl<D: Direction> GameView<D> for Map<D> {
+    fn get_owning_player(&self, _owner: i8) -> Option<&Player> {
+        None
+    }
+
+    fn is_foggy(&self) -> bool {
+        false
+    }
+
+    fn get_fog_at(&self, _team: ClientPerspective, _position: Point) -> FogIntensity {
+        FogIntensity::TrueSight
+    }
+
+    fn get_visible_unit(&self, _team: ClientPerspective, p: Point) -> Option<Unit<D>> {
+        self.get_unit(p).cloned()
+    }
 }
 
 pub enum MapType {

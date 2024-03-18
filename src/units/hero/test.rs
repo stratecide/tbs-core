@@ -9,8 +9,10 @@ mod tests {
     use crate::config::config::Config;
     use crate::game::commands::Command;
     use crate::game::fog::*;
+    use crate::game::game_view::GameView;
     use crate::map::direction::*;
     use crate::map::map::Map;
+    use crate::map::map_view::MapView;
     use crate::map::point::Point;
     use crate::map::point::Position;
     use crate::map::point_map::PointMap;
@@ -45,7 +47,7 @@ mod tests {
 
         let (mut server, _) = map.clone().game_server(&settings, || 0.);
         let environment: crate::config::environment::Environment = server.environment().clone();
-        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), None);
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), None);
         let path = Path::new(Point::new(1, 1));
         let options = server.get_map().get_unit(Point::new(1, 1)).unwrap().options_after_path(&server, &path, None, &[]);
         println!("options: {:?}", options);
@@ -56,7 +58,7 @@ mod tests {
             action: UnitAction::BuyHero(HeroType::Crystal),
         }), || 0.).unwrap();
         assert_eq!(server.get_map().get_unit(Point::new(1, 1)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::Crystal, Some(Point::new(1, 1)))).set_status(ActionStatus::Exhausted).build_with_defaults()));
-        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
     }
 
 
@@ -83,8 +85,8 @@ mod tests {
         let (mut server, _) = map.clone().game_server(&settings, || 0.);
         let unchanged = server.clone();
         let environment: crate::config::environment::Environment = server.environment().clone();
-        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
-        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
         // use power
         let path = Path::new(Point::new(1, 1));
         let options = server.get_map().get_unit(Point::new(1, 1)).unwrap().options_after_path(&server, &path, None, &[]);
@@ -96,8 +98,8 @@ mod tests {
             action: UnitAction::HeroPower(1, vec![CustomActionData::Point(Point::new(0, 1))]),
         }), || 0.).unwrap();
         assert_eq!(server.get_map().get_unit(Point::new(0, 1)), Some(&UnitType::HeroCrystal.instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
-        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
-        assert_eq!(Hero::aura_range(Some(&server), server.get_map(), server.get_map().get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(2, 1)),
@@ -116,9 +118,9 @@ mod tests {
         server.handle_command(Command::EndTurn, || 0.).unwrap();
         server.handle_command(Command::EndTurn, || 0.).unwrap();
         assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 100);
-        assert_eq!(Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(0, 0), 0).len(), 1);
-        assert_eq!(Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(0, 0), 1).len(), 0);
-        assert_eq!(Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(0, 0), -1).len(), 1);
+        assert_eq!(Hero::hero_influence_at(&server, Point::new(0, 0), 0).len(), 1);
+        assert_eq!(Hero::hero_influence_at(&server, Point::new(0, 0), 1).len(), 0);
+        assert_eq!(Hero::hero_influence_at(&server, Point::new(0, 0), -1).len(), 1);
 
         assert!(aura_damage < power_aura_damage);
 
@@ -160,11 +162,11 @@ mod tests {
         settings.fog_mode = FogMode::Constant(FogSetting::None);
 
         let (mut server, _) = map.clone().game_server(&settings, || 0.);
-        let influence1 = Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(2, 1), 0);
-        let influence2 = Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(4, 4), 0);
+        let influence1 = Hero::hero_influence_at(&server, Point::new(2, 1), 0);
+        let influence2 = Hero::hero_influence_at(&server, Point::new(4, 4), 0);
         assert_eq!(
-            server.get_map().get_unit(Point::new(2, 1)).unwrap().movement_points(Some(&server), server.get_map(), Point::new(2, 1), None, &influence1),
-            server.get_map().get_unit(Point::new(4, 4)).unwrap().movement_points(Some(&server), server.get_map(), Point::new(4, 4), None, &influence2),
+            server.get_map().get_unit(Point::new(2, 1)).unwrap().movement_points(&server, Point::new(2, 1), None, &influence1),
+            server.get_map().get_unit(Point::new(4, 4)).unwrap().movement_points(&server, Point::new(4, 4), None, &influence2),
         );
         // hero power shouldn't be available if the hero moves
         let mut path = Path::new(Point::new(1, 1));
@@ -183,12 +185,12 @@ mod tests {
             action: UnitAction::HeroPower(1, Vec::new()),
         }), || 0.).unwrap();
         assert_eq!(server.get_map().get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Ready);
-        let influence1 = Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(2, 1), 0);
-        let influence2 = Hero::hero_influence_at(Some(&server), server.get_map(), Point::new(4, 4), 0);
+        let influence1 = Hero::hero_influence_at(&server, Point::new(2, 1), 0);
+        let influence2 = Hero::hero_influence_at(&server, Point::new(4, 4), 0);
         assert!(
-            server.get_map().get_unit(Point::new(2, 1)).unwrap().movement_points(Some(&server), server.get_map(), Point::new(2, 1), None, &influence1)
+            server.get_map().get_unit(Point::new(2, 1)).unwrap().movement_points(&server, Point::new(2, 1), None, &influence1)
             >
-            server.get_map().get_unit(Point::new(4, 4)).unwrap().movement_points(Some(&server), server.get_map(), Point::new(4, 4), None, &influence2)
+            server.get_map().get_unit(Point::new(4, 4)).unwrap().movement_points(&server, Point::new(4, 4), None, &influence2)
         );
     }
 

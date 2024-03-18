@@ -1,5 +1,6 @@
 use interfaces::game_interface::{CommandInterface, GameInterface};
 
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::details::Detail;
 use crate::terrain::terrain::TerrainBuilder;
@@ -10,6 +11,7 @@ use crate::units::hero::Hero;
 use crate::units::unit_types::UnitType;
 use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
+use super::game_view::GameView;
 
 #[derive(Debug)]
 pub enum Command<D: Direction> {
@@ -132,7 +134,7 @@ impl<D: Direction> Command<D> {
                     match det {
                         Detail::Bubble(owner, terrain_type) => {
                             bubble_index = Some(index);
-                            terrain = TerrainBuilder::new(handler.environment(), terrain_type)
+                            terrain = TerrainBuilder::new(handler.environment(), *terrain_type)
                             .set_owner_id(owner.0)
                             .build_with_defaults();
                             break;
@@ -151,7 +153,7 @@ impl<D: Direction> Command<D> {
                     return Err(CommandError::InvalidUnitType);
                 }
 
-                let heroes = Hero::hero_influence_at(Some(handler.get_game()), handler.get_map(), pos, player.get_owner_id());
+                let heroes = Hero::hero_influence_at(handler.get_game(), pos, player.get_owner_id());
                 let (mut unit, cost) = terrain.unit_shop_option(handler.get_game(), pos, unit_type, &heroes);
                 if cost > *handler.get_game().current_player().funds {
                     return Err(CommandError::NotEnoughMoney)

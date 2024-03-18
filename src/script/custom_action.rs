@@ -3,13 +3,12 @@ use std::collections::HashSet;
 use crate::config::parse::{parse_tuple1, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
-use crate::game::fog::FogIntensity;
-use crate::game::game::Game;
+use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::map::NeighborMode;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::units::attributes::{ActionStatus, AttributeKey};
-use crate::units::combat::AttackVector;
 use crate::units::commands::UnitAction;
 use crate::units::hero::{Hero, HeroType};
 use crate::units::movement::{Path, TBallast};
@@ -89,19 +88,17 @@ impl FromConfig for CustomAction {
 impl CustomAction {
     pub fn next_condition<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         funds: i32,
         unit: &Unit<D>,
         path: &Path<D>,
         destination: Point,
-        transporter: Option<&Unit<D>>,
+        transporter: Option<(&Unit<D>, usize)>,
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
         ballast: &[TBallast<D>],
         data_so_far: &[CustomActionData<D>],
-        get_fog: &impl Fn(Point) -> FogIntensity,
     ) -> CustomActionTestResult<D> {
-        let get_unit = AttackVector::get_unit(game, unit, path.start, destination, get_fog, transporter);
-        let transporter: Option<(&Unit<D>, Point)> = transporter.map(|u| (u, path.start));
+        let transporter: Option<(&Unit<D>, Point)> = transporter.map(|(u, _)| (u, path.start));
         match self {
             Self::None => CustomActionTestResult::Success,
             Self::UnexhaustWithoutMoving => {
@@ -113,10 +110,10 @@ impl CustomAction {
             }
             Self::SummonCrystal(_) => {
                 if data_so_far.len() == 0 {
-                    let options = game.get_map().get_neighbors(destination, NeighborMode::FollowPipes).into_iter()
+                    let options = game.get_neighbors(destination, NeighborMode::FollowPipes).into_iter()
                     .map(|op| op.point)
                     .filter(|p| {
-                        get_unit(*p).is_none()
+                        game.get_unit(*p).is_none()
                     }).collect();
                     CustomActionTestResult::Next(CustomActionDataOptions::Point(options))
                 } else {
@@ -147,10 +144,10 @@ impl CustomAction {
                         _ => return CustomActionTestResult::Failure,
                     };
                     if !build_inside {
-                        let options = game.get_map().get_neighbors(destination, NeighborMode::FollowPipes).into_iter()
+                        let options = game.get_neighbors(destination, NeighborMode::FollowPipes).into_iter()
                         .filter(|p| {
-                            game.get_map().get_terrain(p.point).unwrap().movement_cost(unit.default_movement_type()).is_some()
-                            && get_unit(p.point).is_none()
+                            game.get_terrain(p.point).unwrap().movement_cost(unit.default_movement_type()).is_some()
+                            && game.get_unit(p.point).is_none()
                         })
                         .map(|op| op.direction)
                         .collect();
@@ -164,10 +161,10 @@ impl CustomAction {
             }
             Self::SwapUnitPositions => {
                 if data_so_far.len() == 0 {
-                    let options = game.get_map().get_neighbors(destination, NeighborMode::FollowPipes).into_iter()
+                    let options = game.get_neighbors(destination, NeighborMode::FollowPipes).into_iter()
                     .map(|op| op.point)
                     .filter(|p| {
-                        *p != destination && get_unit(*p).is_some()
+                        *p != destination && game.get_unit(*p).is_some()
                     }).collect();
                     CustomActionTestResult::Next(CustomActionDataOptions::Point(options))
                 } else if data_so_far.len() == 1 {
@@ -176,9 +173,9 @@ impl CustomAction {
                         _ => return CustomActionTestResult::Failure,
                     };
                     let mut options = HashSet::new();
-                    for layer in game.get_map().range_in_layers(destination, 5) {
+                    for layer in game.range_in_layers(destination, 5) {
                         for p in layer {
-                            if p != first_point && p != destination && get_unit(p).is_some() {
+                            if p != first_point && p != destination && game.get_unit(p).is_some() {
                                 options.insert(p);
                             }
                         }
@@ -193,20 +190,19 @@ impl CustomAction {
 
     pub fn is_data_valid<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         path: &Path<D>,
         destination: Point,
-        transporter: Option<&Unit<D>>,
+        transporter: Option<(&Unit<D>, usize)>,
         ballast: &[TBallast<D>],
         data: &[CustomActionData<D>],
-        get_fog: &impl Fn(Point) -> FogIntensity,
     ) -> bool {
-        let funds = game.get_owning_player(unit.get_owner_id()).unwrap().funds_after_path(game, path, &get_fog);
-        let heroes = Hero::hero_influence_at(Some(game), game.get_map(), destination, unit.get_owner_id());
+        let funds = game.get_owning_player(unit.get_owner_id()).unwrap().funds_after_path(game, path);
+        let heroes = Hero::hero_influence_at(game, destination, unit.get_owner_id());
         for i in 0..data.len() {
             use CustomActionTestResult as R;
-            match self.next_condition(game, funds, unit, path, destination, transporter, &heroes, ballast, &data[..i], get_fog) {
+            match self.next_condition(game, funds, unit, path, destination, transporter, &heroes, ballast, &data[..i]) {
                 R::Failure => return false,
                 R::Success => return i == data.len(),
                 R::Next(options) => {
@@ -230,8 +226,8 @@ impl CustomAction {
         unit: &Unit<D>,
         path: &Path<D>,
         destination: Point,
-        transporter: Option<&Unit<D>>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        _transporter: Option<(&Unit<D>, usize)>,
+        _heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
         ballast: &[TBallast<D>],
         data: &[CustomActionData<D>],
     ) {

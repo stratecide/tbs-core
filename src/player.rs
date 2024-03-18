@@ -7,8 +7,7 @@ use crate::commander::Commander;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::details::Detail;
-use crate::game::fog::FogIntensity;
-use crate::game::game::Game;
+use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::units::movement::Path;
@@ -113,13 +112,13 @@ impl Player {
         self.commander.environment().get_income(self.get_owner_id())
     }
     
-    pub fn funds_after_path<D: Direction>(&self, game: &Game<D>, path: &Path<D>, get_fog: &impl Fn(Point) -> FogIntensity) -> i32 {
+    pub fn funds_after_path<D: Direction>(&self, game: &impl GameView<D>, path: &Path<D>) -> i32 {
         let mut funds_after_path = *self.funds;
         let income = self.get_income();
-        let path_points: HashSet<Point> = path.points(game.get_map()).unwrap().into_iter().collect();
+        let path_points: HashSet<Point> = path.points(game).unwrap().into_iter().collect();
         for p in path_points {
-            for detail in game.get_map().get_details(p) {
-                match detail.fog_replacement(get_fog(p)) {
+            for detail in game.get_details(p) {
+                match detail.fog_replacement(game.get_fog_at(ClientPerspective::Team(self.owner_id), p)) {
                     Some(Detail::Coins1) => funds_after_path += income / 2,
                     Some(Detail::Coins2) => funds_after_path += income,
                     Some(Detail::Coins4) => funds_after_path += income * 2,

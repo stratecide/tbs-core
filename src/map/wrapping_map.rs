@@ -711,7 +711,7 @@ mod tests {
     use interfaces::map_interface::MapInterface;
 
     use super::*;
-    use crate::{config::config::Config, map::{map::{Map, NeighborMode}, point_map::PointMap}, terrain::TerrainType, units::{movement::Path, unit_types::UnitType}};
+    use crate::{config::config::Config, map::{map::{Map, NeighborMode}, map_view::MapView, point_map::PointMap}, terrain::TerrainType, units::{movement::Path, unit_types::UnitType}};
 
     #[test]
     fn distortions() {
@@ -898,6 +898,6 @@ mod tests {
         let (game, _) = map.game_server(&settings, || 0.);
         let environment = game.environment();
         let rook = UnitType::Rook.instance(&environment).set_owner_id(0).build_with_defaults();
-        rook.shortest_path_to(&game, &Path::new(Point::new(3, 2)), Point::new(0, 3)).unwrap();
+        rook.shortest_path_to(&game, &Path::new(Point::new(3, 2)), None, Point::new(0, 3)).unwrap();
     }
 }

@@ -4,6 +4,7 @@ use interfaces::game_interface::{Events, Perspective as IPerspective, ClientPers
 
 use crate::config::environment::Environment;
 use crate::map::map::Map;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::terrain::attributes::CaptureProgress;
@@ -22,6 +23,7 @@ use crate::units::movement::Path;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use super::events::{Event, Effect, UnitStep};
+use super::game_view::GameView;
 
 pub struct EventHandler<'a, D: Direction> {
     game: &'a mut Game<D>,
@@ -301,9 +303,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn detail_add(&mut self, position: Point, detail: Detail<D>) {
         let old_details = self.get_map().get_details(position);
-        let mut details = old_details.clone();
+        let mut details = old_details.to_vec();
         details.push(detail);
-        self.add_event(Event::ReplaceDetail(position, old_details.try_into().unwrap(), Detail::correct_stack(details, self.environment()).try_into().unwrap()));
+        self.add_event(Event::ReplaceDetail(position, old_details.to_vec().try_into().unwrap(), Detail::correct_stack(details, self.environment()).try_into().unwrap()));
     }
 
     pub fn detail_remove(&mut self, position: Point, index: usize) {
@@ -422,7 +424,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn unit_creation(&mut self, position: Point, unit: Unit<D>) {
         if let ClientPerspective::Team(team) = unit.get_team() {
             if self.get_game().is_foggy() && self.get_game().is_team_alive(team) {
-                let heroes = Hero::hero_influence_at(Some(self.get_game()), self.get_map(), position, unit.get_owner_id());
+                let heroes = Hero::hero_influence_at(self.get_game(), position, unit.get_owner_id());
                 let changes = unit.get_vision(self.get_game(), position, &heroes).into_iter()
                 .filter(|(p, intensity)| *intensity < self.get_game().get_fog_at(ClientPerspective::Team(team), *p))
                 .collect();
@@ -469,36 +471,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             }
             self.add_event(Event::UnitAdd(path_end, transformed_unit));
         }
-        // update vision
-        let player_team = self.get_game().current_player().get_team();
-        if self.get_game().is_foggy() {
-            if player_team == unit_team {
-                let perspective = player_team;
-                let mut vision_changes = HashMap::new();
-                let points = if unit.vision_mode().see_while_moving() {
-                    path.points(self.get_map()).unwrap().into_iter().skip(1).collect()
-                } else {
-                    vec![path_end]
-                };
-                let owner_id = unit.get_owner_id();
-                let heroes = Hero::map_influence(Some(&self.game), self.get_map(), owner_id, Some((path.start, unload_index)));
-                for p in points {
-                    let heroes = heroes.get(&(p, owner_id)).map(|h| h.as_slice()).unwrap_or(&[]);
-                    for (p, vision) in unit.get_vision(self.get_game(), p, heroes) {
-                        let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
-                        if vision < self.get_game().get_fog_at(perspective, p) {
-                            vision_changes.insert(p, vision);
-                        }
-                    }
-                }
-                self.change_fog(player_team, vision_changes);
-            } else if let ClientPerspective::Team(team) = unit_team {
-                self.recalculate_fog_for(ClientPerspective::Team(team));
-            }
-        }
+        // TODO: update fog in case unit influences other units' vision range
         // remove details that were destroyed by the unit moving over them
         for p in path.points(self.get_map()).unwrap() {
-            let old_details = self.get_map().get_details(p);
+            let old_details = self.get_map().get_details(p).to_vec();
             let details: Vec<Detail<D>> = old_details.clone().into_iter().filter(|detail| {
                 match detail {
                     Detail::Pipe(_) => true,
@@ -535,11 +511,28 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn animate_unit_path(&mut self, unit: &Unit<D>, path: &Path<D>, involuntarily: bool) -> Unit<D> {
+        let unit_team = unit.get_team();
+        let owner_id = unit.get_owner_id();
+        let heroes = Hero::map_influence(self.get_game(), owner_id);
         let mut current = path.start;
         let mut previous = None;
         let mut transformed_unit = unit.clone();
+        transformed_unit.set_en_passant(None);
         let mut steps = Vec::new();
-        for step in &path.steps {
+        let mut vision_changes = HashMap::new();
+        for (i, step) in path.steps.iter().enumerate() {
+            if self.get_game().is_foggy() && !involuntarily && (i == 0 || unit.vision_mode().see_while_moving()) {
+                let mut heroes = heroes.get(&(current, owner_id)).map(|h| h.clone()).unwrap_or(Vec::new());
+                if transformed_unit.is_hero() && Hero::aura_range(self.get_game(), &transformed_unit, current, None).is_some() {
+                    heroes.push((transformed_unit.clone(), transformed_unit.get_hero(), current, None));
+                }
+                for (p, vision) in unit.get_vision(self.get_game(), current, &heroes) {
+                    let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
+                    if vision < self.get_game().get_fog_at(unit_team, p) {
+                        vision_changes.insert(p, vision);
+                    }
+                }
+            }
             let (next, distortion) = step.progress(self.get_map(), current).unwrap();
             if !involuntarily && transformed_unit.transformed_by_movement(self.get_map(), current, next, distortion) {
                 steps.push(UnitStep::Transform(current, *step, Some(transformed_unit.clone())));
@@ -549,13 +542,28 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             previous = Some(current);
             current = next;
         }
-        self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
-        if transformed_unit.has_attribute(AttributeKey::EnPassant) {
-            if path.steps.len() < 2 {
-                // resets en passant opportunity on short paths
-                previous = None;
+        if self.get_game().is_foggy() {
+            let mut heroes = heroes.get(&(current, owner_id)).map(|h| h.clone()).unwrap_or(Vec::new());
+            if transformed_unit.is_hero() && Hero::aura_range(self.get_game(), &transformed_unit, current, None).is_some() {
+                heroes.push((transformed_unit.clone(), transformed_unit.get_hero(), current, None));
             }
+            for (p, vision) in unit.get_vision(self.get_game(), current, &heroes) {
+                let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
+                if vision < self.get_game().get_fog_at(unit_team, p) {
+                    vision_changes.insert(p, vision);
+                }
+            }
+        }
+        self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
+        if transformed_unit.has_attribute(AttributeKey::EnPassant) && path.steps.len() >= 2 {
             transformed_unit.set_en_passant(previous);
+        }
+        if self.get_game().is_foggy() {
+            if unit_team != self.game.current_player().get_team() {
+                self.recalculate_fog_for(unit_team);
+            } else {
+                self.change_fog(unit_team, vision_changes);
+            }
         }
         transformed_unit
     }
@@ -741,7 +749,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         before_executing: impl FnOnce(&mut Self),
         execute_script: impl Fn(&mut Self, S, Point, &Unit<D>, usize),
     ) {
-        let hero_auras = Hero::map_influence(Some(&self.game), self.get_map(), -1, None);
+        let hero_auras = Hero::map_influence(self.get_game(), -1);
         let mut scripts = Vec::new();
         for p in self.get_map().all_points() {
             if let Some(unit) = self.get_map().get_unit(p).cloned() {

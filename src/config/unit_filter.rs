@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::map::map::Map;
+use crate::game::game_view::GameView;
 use crate::map::point::Point;
 use crate::terrain::TerrainType;
 use crate::units::hero::{Hero, HeroType};
@@ -118,7 +118,7 @@ impl FromConfig for UnitFilter {
 impl UnitFilter {
     pub fn check<D: Direction>(
         &self,
-        map: &Map<D>,
+        map: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         // when moving out of a transporter, or start_turn for transported units

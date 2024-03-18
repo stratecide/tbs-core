@@ -35,6 +35,10 @@ impl CustomActionConfig {
         }
         Ok(())
     }
+
+    pub fn get_script(&self) -> &CustomAction {
+        &self.script
+    }
 }
 
 crate::listable_enum! {

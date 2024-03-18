@@ -13,17 +13,18 @@ use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
 use crate::game::fog::{FogIntensity, VisionMode, FogSetting};
 use crate::game::game::Game;
+use crate::game::game_view::GameView;
+use crate::game::modified_view::*;
 use crate::game::settings::GameSettings;
 use crate::commander::Commander;
 use crate::map::direction::Direction;
-use crate::map::map::Map;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Player, Owner};
 use crate::script::attack::AttackScript;
 use crate::script::kill::KillScript;
 use crate::script::unit::UnitScript;
-use crate::terrain::AmphibiousTyping;
 use crate::terrain::attributes::TerrainAttributeKey;
 
 use super::combat::*;
@@ -127,7 +128,7 @@ impl<D: Direction> Unit<D> {
         self.environment.config.has_stealth(self.typ)
     }
 
-    pub fn has_stealth_movement(&self, game: &Game<D>) -> bool {
+    pub fn has_stealth_movement(&self, game: &impl GameView<D>) -> bool {
         self.has_stealth() && !game.is_foggy()
     }
 
@@ -180,7 +181,7 @@ impl<D: Direction> Unit<D> {
         self.environment.config.displacement(self.typ)
     }
 
-    pub fn displacement_distance(&self, game: &Game<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> i8 {
+    pub fn displacement_distance(&self, game: &impl GameView<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> i8 {
         self.environment.config.unit_displacement_distance(game, self, pos, transporter, heroes, temporary_ballast)
     }
 
@@ -237,8 +238,8 @@ impl<D: Direction> Unit<D> {
                 }
             }
             VisionMode::Movement => {
-                movement_search_game(game, self, &Path::new(pos), 1,
-                    |_| None,
+                let game = IgnoreUnits::new(game);
+                movement_search_game(&game, self, &Path::new(pos), 1, None,
                     |_, path, destination, can_continue, can_stop_here, _| {
                     let vision = if path.steps.len() <= true_vision_range {
                         FogIntensity::TrueSight
@@ -310,11 +311,11 @@ impl<D: Direction> Unit<D> {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_player<'a>(&self, game: &'a Game<D>) -> Option<&'a Player> {
+    pub fn get_player<'a>(&self, game: &'a impl GameView<D>) -> Option<&'a Player> {
         game.get_owning_player(self.get_owner_id())
     }
 
-    pub fn get_commander(&self, game: &Game<D>) -> Commander {
+    pub fn get_commander(&self, game: &impl GameView<D>) -> Commander {
         self.get_player(game)
         .and_then(|player| Some(player.commander.clone()))
         .unwrap_or(Commander::new(&self.environment, CommanderType::None))
@@ -492,7 +493,7 @@ impl<D: Direction> Unit<D> {
     // influenced by unit_power_config
 
     // ignores current hp
-    pub fn full_price(&self, game: &Game<D>, position: Point, factory: Option<&Unit<D>>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> i32 {
+    pub fn full_price(&self, game: &impl GameView<D>, position: Point, factory: Option<&Unit<D>>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> i32 {
         self.environment.config.unit_cost(
             game,
             self,
@@ -507,10 +508,9 @@ impl<D: Direction> Unit<D> {
         self.full_price(game, position, None, &[]) * self.get_hp() as i32 / 100
     }
 
-    pub fn movement_points(&self, game: Option<&Game<D>>, map: &Map<D>, position: Point, transporter: Option<&Unit<D>>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> Rational32 {
+    pub fn movement_points(&self, game: &impl GameView<D>, position: Point, transporter: Option<&Unit<D>>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> Rational32 {
         self.environment.config.unit_movement_points(
             game,
-            map,
             self,
             (position, None),
             transporter.map(|u| (u, position)),
@@ -518,7 +518,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn build_overrides(&self, game: &Game<D>, position: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> HashSet<AttributeOverride> {
+    pub fn build_overrides(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> HashSet<AttributeOverride> {
         let overrides = self.environment.config.unit_attribute_overrides(
             game,
             self,
@@ -663,7 +663,7 @@ impl<D: Direction> Unit<D> {
         })
     }
 
-    pub fn fog_replacement(&self, game: &Game<D>, pos: Point, intensity: FogIntensity) -> Option<Self> {
+    pub fn fog_replacement(&self, game: &impl GameView<D>, pos: Point, intensity: FogIntensity) -> Option<Self> {
         // for now, heroes don't affect unit visibility.
         // when they do in the future, the heroes should be given to this method instead of calculating here
         // it could also be necessary to add this unit's hero to the heroes list here manually (if it isn't already in there)
@@ -673,6 +673,8 @@ impl<D: Direction> Unit<D> {
             FogIntensity::NormalVision => {
                 if visibility == UnitVisibility::Stealth {
                     return None
+                } else {
+                    return Some(self.clone());
                 }
             }
             FogIntensity::Light => {
@@ -703,22 +705,21 @@ impl<D: Direction> Unit<D> {
         Some(builder.build_with_defaults())
     }
 
-    pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>) -> HashSet<Point> {
-        movement_area_game(game, self, path_so_far, 1)
+    pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>) -> HashSet<Point> {
+        movement_area_game(game, self, path_so_far, 1, transporter)
         .keys()
         .cloned()
         .collect()
     }
 
-    pub fn attackable_positions(&self, game: &Game<D>, path: &Path<D>, get_fog: impl Fn(Point) -> FogIntensity, transporter: Option<&Unit<D>>, ballast: &[TBallast<D>]) -> HashSet<Point> {
+    pub fn attackable_positions(&self, game: &Game<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> HashSet<Point> {
         let mut result = HashSet::new();
-        if let Ok((destination, _)) = path.end(game.get_map()) {
-            let mut this = self.clone();
-            this.transformed_by_path(game.get_map(), path);
-            if this.can_attack_after_moving() || path.steps.len() == 0 {
-                let get_unit = AttackVector::get_unit(game, self, path.start, destination, &get_fog, transporter);
-                for attack_vector in AttackVector::search(&this, game, path.start, destination, None, &get_fog, transporter, ballast) {
-                    for (point, _, _) in attack_vector.get_splash(&this, game, destination, &get_unit) {
+        let mut game = UnitMovementView::new(game);
+        if let Some((destination, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
+            if (this.can_attack_after_moving() || path.steps.len() == 0) && game.get_unit(destination).is_none() {
+                game.put_unit(destination, this.clone());
+                for attack_vector in AttackVector::search(&this, &game, destination, None, transporter.map(|(u, _)| (u, path.start)), ballast) {
+                    for (point, _, _) in attack_vector.get_splash(&this, &game, destination) {
                         result.insert(point);
                     }
                 }
@@ -727,8 +728,8 @@ impl<D: Direction> Unit<D> {
         result
     }
 
-    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point) -> Option<(Path<D>, TemporaryBallast<D>)> {
-        search_path(game, self, path_so_far, None, |_path, p, can_stop_here, _| {
+    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, goal: Point) -> Option<(Path<D>, TemporaryBallast<D>)> {
+        search_path(game, self, path_so_far, transporter, |_path, p, can_stop_here, _| {
             if goal == p {
                 PathSearchFeedback::Found
             } else if can_stop_here {
@@ -739,14 +740,11 @@ impl<D: Direction> Unit<D> {
         })
     }
 
-    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, goal: Point, transporter: Option<&Unit<D>>) -> Option<(Path<D>, TemporaryBallast<D>)> {
+    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, goal: Point) -> Option<(Path<D>, TemporaryBallast<D>)> {
         if AttackType::None == self.attack_pattern() {
             return None;
         }
-        let get_fog = |p| {
-            FogIntensity::TrueSight
-        };
-        search_path(game, self, path_so_far, None, |path, p, can_stop_here, ballast| {
+        search_path(game, self, path_so_far, transporter, |path, p, can_stop_here, ballast| {
             let mut takes = PathStepTakes::Allow;
             for ballast in ballast.get_entries() {
                 match ballast {
@@ -755,59 +753,43 @@ impl<D: Direction> Unit<D> {
                 }
             }
             if !can_stop_here {
-                PathSearchFeedback::ContinueWithoutStopping
+                return PathSearchFeedback::ContinueWithoutStopping
             } else if goal == p && can_stop_here && takes != PathStepTakes::Deny {
-                PathSearchFeedback::Found
-            } else if (path.steps.len() == 0 || self.can_attack_after_moving()) && AttackVector::search(self, game, path_so_far.start, p, Some(goal), get_fog, transporter, ballast.get_entries()).len() > 0 {
-                PathSearchFeedback::Found
-            } else {
-                PathSearchFeedback::Continue
+                return PathSearchFeedback::Found
+            } else if path.steps.len() == 0 || self.can_attack_after_moving() {
+                let mut game = UnitMovementView::new(game);
+                if let Some((destination, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
+                    if (this.can_attack_after_moving() || path.steps.len() == 0) && game.get_unit(destination).is_none() {
+                        game.put_unit(destination, this.clone());
+                        if AttackVector::search(&this, &game, destination, Some(goal), transporter.map(|(u, _)| (u, path.start)), ballast.get_entries()).len() > 0 {
+                            return PathSearchFeedback::Found
+                        }
+                    }
+                }
             }
+            PathSearchFeedback::Continue
         })
     }
 
-    pub fn transformed_by_movement(&mut self, map: &Map<D>, from: Point, to: Point, distortion: Distortion<D>) -> bool {
+    pub fn transformed_by_movement(&mut self, map: &impl MapView<D>, from: Point, to: Point, distortion: Distortion<D>) -> bool {
         let prev_terrain = map.get_terrain(from).unwrap();
-        let mut changed = HashMap::new();
-        if let Some(Attribute::Amphibious(amphibious)) = self.attributes.get(&AttributeKey::Amphibious) {
-            let new_amph = match map.get_terrain(to).unwrap().get_amphibious() {
-                None => None,
-                Some(AmphibiousTyping::Beach) |
-                Some(AmphibiousTyping::Land) => Some(Amphibious::OnLand),
-                Some(AmphibiousTyping::Sea) => Some(Amphibious::InWater),
-            };
-            if new_amph.is_some() && new_amph != Some(*amphibious) {
-                changed.insert(AttributeKey::Amphibious, Attribute::Amphibious(new_amph.unwrap()));
-            }
-        }
-        if let Some(Attribute::Direction(dir)) = self.attributes.get(&AttributeKey::Direction) {
-            let new_dir = distortion.update_direction(*dir);
-            if new_dir != *dir {
-                changed.insert(AttributeKey::Direction, Attribute::Direction(new_dir));
-            }
-        }
-        if changed.len() > 0 {
-            for (k, v) in changed {
-                self.attributes.insert(k, v);
-            }
-            true
-        } else {
-            false
-        }
+        let terrain = map.get_terrain(to).unwrap();
+        let permanent = PermanentBallast::from_unit(self, prev_terrain);
+        let changed = permanent.step(distortion, terrain);
+        changed.update_unit(self);
+        changed != permanent
     }
 
-    pub fn transformed_by_path(&mut self, map: &Map<D>, path: &Path<D>) -> bool {
+    pub fn transformed_by_path(&mut self, map: &impl MapView<D>, path: &Path<D>) {
         let mut current = path.start;
-        let mut changed = false;
         for step in &path.steps {
             let (next, distortion) = match step.progress(map, current) {
                 Ok(n) => n,
-                _ => return changed,
+                _ => return,
             };
-            changed = self.transformed_by_movement(map, current, next, distortion) || changed;
+            self.transformed_by_movement(map, current, next, distortion);
             current = next;
         }
-        changed
     }
 
     pub fn could_attack(&self, defender: &Self, allow_friendly_fire: bool) -> bool {
@@ -846,26 +828,22 @@ impl<D: Direction> Unit<D> {
         self.could_attack(defender, false) && defender.get_team() != self.get_team()
     }
 
-    pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>, transporter: Option<&Unit<D>>, ballast: &[TBallast<D>]) -> Vec<UnitAction<D>> {
-        let mut this = self.clone();
-        this.transformed_by_path(game.get_map(), path);
-        if let Ok((end, _)) = path.end(game.get_map()) {
-            this._options_after_path_transformed(game, path, end, transporter, ballast)
+    pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Vec<UnitAction<D>> {
+        let mut game = UnitMovementView::new(game);
+        if let Some((end, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
+            this._options_after_path_transformed(&game, path, end, transporter, ballast)
         } else {
             Vec::new()
         }
     }
 
-    fn _options_after_path_transformed(&self, game: &Game<D>, path: &Path<D>, destination: Point, transporter: Option<&Unit<D>>, ballast: &[TBallast<D>]) -> Vec<UnitAction<D>> {
-        let fog = game.get_fog().get(&self.get_team());
-        let get_fog = |p| {
-            fog.and_then(|f| f.get(&p)).cloned().unwrap_or(FogIntensity::TrueSight)
-        };
+    fn _options_after_path_transformed(&self, game: &impl GameView<D>, path: &Path<D>, destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Vec<UnitAction<D>> {
         let mut result = Vec::new();
-        let funds_after_path = game.get_owning_player(self.get_owner_id()).unwrap().funds_after_path(game, path, &get_fog);
+        let funds_after_path = game.get_owning_player(self.get_owner_id()).unwrap().funds_after_path(game, path);
         // terrain has to exist since destination point was found from path
-        let terrain = game.get_map().get_terrain(destination).unwrap();
-        let blocking_unit = game.get_map().get_unit(destination).and_then(|u| u.fog_replacement(game, destination, get_fog(destination)));
+        let terrain = game.get_terrain(destination).unwrap();
+        let team = self.get_team();
+        let blocking_unit = game.get_visible_unit(team, destination);
         let mut takes = PathStepTakes::Allow;
         for ballast in ballast {
             match ballast {
@@ -877,17 +855,20 @@ impl<D: Direction> Unit<D> {
             if self.could_take(blocking_unit.as_ref().unwrap(), takes) {
                 result.push(UnitAction::Take);
             }
-            if let Some(transporter) = game.get_map().get_unit(destination) {
+            if let Some(transporter) = game.get_visible_unit(team, destination) {
                 if transporter.can_transport(self) {
                     result.push(UnitAction::Enter);
                 }
             }
-        } else if blocking_unit.is_none() || path.start == destination && blocking_unit.as_ref() == Some(self) {
-            let heroes = Hero::hero_influence_at(Some(game), game.get_map(), destination, self.get_owner_id());
+        } else if blocking_unit.is_none() {
+            let mut game = UnitMovementView::new(game);
+            game.put_unit(destination, self.clone());
+            let game = &game;
+            let heroes = Hero::hero_influence_at(game, destination, self.get_owner_id());
             // hero power
-            self.get_hero().add_options_after_path(&mut result, self, game, funds_after_path, path, destination, transporter, &heroes, ballast, &get_fog);
+            self.get_hero().add_options_after_path(&mut result, self, game, funds_after_path, path, destination, transporter, &heroes, ballast);
             // buy hero
-            if !self.is_hero() && terrain.can_sell_hero(game.get_map(), destination, self.get_owner_id()) {
+            if !self.is_hero() && terrain.can_sell_hero(game, destination, self.get_owner_id()) {
                 for hero in game.available_heroes(self.get_player(game).unwrap()) {
                     if let Some(cost) = hero.price(game.environment(), self) {
                         if cost <= funds_after_path {
@@ -901,8 +882,8 @@ impl<D: Direction> Unit<D> {
                 let mut free_space = self.remaining_transport_capacity();
                 if let Some(drone_id) = self.get_drone_station_id() {
                     let mut outside = 0;
-                    for p in game.get_map().all_points() {
-                        if let Some(u) = game.get_map().get_unit(p) {
+                    for p in game.all_points() {
+                        if let Some(u) = game.get_visible_unit(team, p) {
                             if u.get_drone_id() == Some(drone_id) {
                                 outside += 1;
                             }
@@ -911,7 +892,7 @@ impl<D: Direction> Unit<D> {
                     free_space = free_space.max(outside) - outside;
                 }
                 if free_space > 0 {
-                    let transporter = transporter.map(|u| (u, path.start));
+                    let transporter = transporter.map(|(u, _)| (u, path.start));
                     for (unit, cost) in self.unit_shop(game, destination, transporter, ballast) {
                         if cost <= funds_after_path {
                             result.push(UnitAction::BuyTransportedUnit(unit.typ()));
@@ -919,12 +900,12 @@ impl<D: Direction> Unit<D> {
                     }
                 }
             } else if self.can_build_units() && self.transport_capacity() == 0 {
-                let transporter = transporter.map(|u| (u, path.start));
+                let transporter = transporter.map(|(u, _)| (u, path.start));
                 for (unit, cost) in self.unit_shop(game, destination, transporter, ballast) {
                     if cost <= funds_after_path {
                         for d in D::list() {
-                            if game.get_map().get_neighbor(destination, d)
-                            .and_then(|(p, _)| game.get_map().get_terrain(p).unwrap().movement_cost(unit.default_movement_type()))
+                            if game.get_neighbor(destination, d)
+                            .and_then(|(p, _)| game.get_terrain(p).unwrap().movement_cost(unit.default_movement_type()))
                             .is_some() {
                                 result.push(UnitAction::BuyUnit(unit.typ(), d));
                             }
@@ -934,8 +915,8 @@ impl<D: Direction> Unit<D> {
             }
             // attack
             if self.can_attack_after_moving() || path.steps.len() == 0 {
-                let get_unit = AttackVector::get_unit(game, self, path.start, destination, &get_fog, transporter);
-                for attack_vector in AttackVector::find(self, game, path.start, destination, None, get_fog, transporter, ballast) {
+                let transporter = transporter.map(|(u, _)| (u, path.start));
+                for attack_vector in AttackVector::find(self, game, destination, None, transporter, ballast) {
                     result.push(UnitAction::Attack(attack_vector));
                 }
             }
@@ -949,8 +930,8 @@ impl<D: Direction> Unit<D> {
             }
             let mut take_instead_of_wait = false;
             if takes != PathStepTakes::Deny && self.has_attribute(AttributeKey::EnPassant) {
-                for dp in game.get_map().all_points() {
-                    if let Some(u) = game.get_map().get_unit(dp) {
+                for dp in game.all_points() {
+                    if let Some(u) = game.get_visible_unit(team, dp) {
                         if self.could_take(&u, takes) && u.get_en_passant() == Some(destination) {
                             take_instead_of_wait = true;
                             break;
@@ -968,7 +949,7 @@ impl<D: Direction> Unit<D> {
         result
     }
 
-    pub(crate) fn unit_shop_option(&self, game: &Game<D>, pos: Point, unit_type: UnitType, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], ballast: &[TBallast<D>]) -> (Unit<D>, i32) {
+    pub(crate) fn unit_shop_option(&self, game: &impl GameView<D>, pos: Point, unit_type: UnitType, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], ballast: &[TBallast<D>]) -> (Unit<D>, i32) {
         let attr_overrides = self.build_overrides(game, pos, transporter, heroes, ballast);
         let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment)
         .set_status(ActionStatus::Exhausted);
@@ -985,23 +966,23 @@ impl<D: Direction> Unit<D> {
         if self.has_attribute(AttributeKey::Direction) {
             unit.set_direction(unit.get_direction().rotate_by(self.get_direction()));
         }
-        let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
+        let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         let cost = unit.full_price(game, pos, Some(self), &heroes);
         (unit, cost)
     }
 
-    pub fn unit_shop(&self, game: &Game<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, ballast: &[TBallast<D>]) -> Vec<(Unit<D>, i32)> {
+    pub fn unit_shop(&self, game: &impl GameView<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, ballast: &[TBallast<D>]) -> Vec<(Unit<D>, i32)> {
         if !self.can_build_units() {
             return Vec::new();
         }
-        let heroes = Hero::hero_influence_at(Some(game), game.get_map(), pos, self.get_owner_id());
+        let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         self.transportable_units().iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, transporter, &heroes, ballast)
         }).collect()
     }}
 
 impl<D: Direction> SupportedZippable<&Environment> for Unit<D> {
-    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+    fn export(&self, zipper: &mut Zipper, _support: &Environment) {
         self.zip(zipper, None);
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
@@ -1054,7 +1035,7 @@ pub struct UnitBuilder<D: Direction> {
 
 impl<D: Direction> UnitBuilder<D> {
     pub fn new(environment: &Environment, typ: UnitType) -> Self {
-        let mut unit = Unit::new(environment.clone(), typ);
+        let unit = Unit::new(environment.clone(), typ);
         Self {
             unit,
         }

@@ -3,6 +3,7 @@ pub mod point_map;
 pub mod direction;
 pub mod wrapping_map;
 pub mod map;
+pub mod map_view;
 
 #[cfg(test)]
 mod tests {

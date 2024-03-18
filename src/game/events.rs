@@ -5,6 +5,7 @@ use zipper::zipper_derive::*;
 
 use crate::commander::commander_type::CommanderChargeChange;
 use crate::map::map::FieldData;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::point_map;
 use crate::terrain::attributes::{CaptureProgress, Anger, BuiltThisTurn};
@@ -21,6 +22,8 @@ use crate::game::game::*;
 use crate::game::fog::*;
 use crate::units::movement::PathStep;
 use crate::config::environment::Environment;
+
+use super::game_view::GameView;
 
 impl SupportedZippable<&Environment> for (Point, FogIntensity, FogIntensity) {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {

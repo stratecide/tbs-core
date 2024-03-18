@@ -10,6 +10,7 @@ use crate::map::direction::{Direction, Direction4, Direction6};
 use crate::map::point::Point;
 use crate::player::Owner;
 use crate::config::ConfigParseError;
+use crate::terrain::AmphibiousTyping;
 
 use super::unit_types::UnitType;
 use super::unit::*;
@@ -379,6 +380,16 @@ attribute!(Amphibious, Amphibious);
 impl Default for Amphibious {
     fn default() -> Self {
         Self::OnLand
+    }
+}
+
+impl From<&AmphibiousTyping> for Amphibious {
+    fn from(value: &AmphibiousTyping) -> Self {
+        match value {
+            AmphibiousTyping::Beach => Amphibious::InWater,
+            AmphibiousTyping::Land => Amphibious::OnLand,
+            AmphibiousTyping::Sea => Amphibious::InWater,
+        }
     }
 }
 

@@ -7,8 +7,10 @@ use zipper::Exportable;
 use crate::config::environment::Environment;
 use crate::game::fog::FogIntensity;
 use crate::game::game::Game;
+use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::Owner;
@@ -193,6 +195,7 @@ mod tests {
     use crate::details::Detail;
     use crate::map::direction::*;
     use crate::map::map::*;
+    use crate::map::map_view::MapView;
     use crate::map::point::*;
     use crate::map::point_map::PointMap;
     use crate::map::wrapping_map::*;

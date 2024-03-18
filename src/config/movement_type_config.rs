@@ -1,5 +1,5 @@
 use crate::map::direction::Direction;
-use crate::map::map::Map;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::terrain::terrain::Terrain;
@@ -68,7 +68,7 @@ impl MovementPattern {
         }
     }
 
-    pub fn find_steps<D: Direction>(&self, map: &Map<D>, point: Point, step_id: usize, _permanent_ballast: &[PbEntry<D>], temporary_ballast: &[TBallast<D>], extra_movement_options: ExtraMovementOptions) -> Vec<PathStep<D>> {
+    pub fn find_steps<D: Direction>(&self, _map: &impl MapView<D>, _point: Point, step_id: usize, _permanent_ballast: &[PbEntry<D>], temporary_ballast: &[TBallast<D>], extra_movement_options: ExtraMovementOptions) -> Vec<PathStep<D>> {
         let mut result = Vec::new();
         let add_dir = |result: &mut Vec<_>, d: D| {
             result.push(PathStep::Dir(d));

@@ -3,6 +3,7 @@ use crate::config::ConfigParseError;
 use crate::details::{MAX_STACK_SIZE, Detail};
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::player::Owner;
 use crate::units::attributes::{AttributeKey, ActionStatus};

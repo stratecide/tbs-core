@@ -4,6 +4,8 @@ pub mod events;
 pub mod event_handler;
 pub mod commands;
 pub mod fog;
+pub mod game_view;
+pub mod modified_view;
 
 use std::sync::Arc;
 
@@ -51,6 +53,7 @@ mod tests {
     use crate::game::fog::*;
     use crate::map::direction::*;
     use crate::map::map::Map;
+    use crate::map::map_view::MapView;
     use crate::map::point::Point;
     use crate::map::point::Position;
     use crate::map::point_map::PointMap;

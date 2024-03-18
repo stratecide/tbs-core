@@ -8,21 +8,26 @@ use semver::Version;
 
 use crate::config::environment::Environment;
 use crate::config::config::Config;
+use crate::details::Detail;
 use crate::map::map::*;
 use crate::map::direction::*;
 use crate::game::settings;
 use crate::game::events;
 use crate::game::fog::*;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
+use crate::map::wrapping_map::WrappingMap;
+use crate::terrain::terrain::Terrain;
 use crate::{player::*, VERSION};
 use crate::units::attributes::AttributeKey;
-use crate::units::hero::{Hero, HeroType};
+use crate::units::hero::*;
 use crate::units::movement::Path;
 use crate::units::unit::*;
 use crate::units::unit_types::UnitType;
 
 use super::events::Event;
+use super::game_view::GameView;
 use super::settings::GameSettings;
 use super::{event_handler, commands};
 
@@ -94,7 +99,7 @@ impl<D: Direction> Game<D> {
         if !self.is_foggy() {
             return fog;
         }
-        let heroes = Hero::map_influence(Some(self), self.get_map(), -1, None);
+        let heroes = Hero::map_influence(self, -1);
         for p in self.get_map().all_points() {
             for (p, v) in self.get_map().get_terrain(p).unwrap().get_vision(self, p, perspective) {
                 fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
@@ -116,10 +121,6 @@ impl<D: Direction> Game<D> {
         fog
     }
     
-    pub fn environment(&self) -> &Environment {
-        &self.environment
-    }
-
     pub fn get_map(&self) -> &Map<D> {
         &self.map
     }
@@ -167,10 +168,6 @@ impl<D: Direction> Game<D> {
         self.ended
     }
 
-    pub fn get_owning_player(&self, owner: i8) -> Option<&Player> {
-        self.players.iter().find(|player| player.get_owner_id() == owner)
-    }
-
     pub fn get_owning_player_mut(&mut self, owner: i8) -> Option<&mut Player> {
         self.players.iter_mut().find(|player| player.get_owner_id() == owner)
     }
@@ -179,20 +176,12 @@ impl<D: Direction> Game<D> {
         owner.and_then(|o| self.get_owning_player(o)).and_then(|p| Some(p.get_team())).unwrap_or(ClientPerspective::Neutral)
     }
 
-    pub fn is_foggy(&self) -> bool {
-        self.fog_mode.is_foggy(self.current_turn as usize, self.players.len())
-    }
-
     pub fn will_be_foggy(&self, turns_later: usize) -> bool {
         self.fog_mode.is_foggy(self.current_turn as usize + turns_later, self.players.len())
     }
 
     pub fn get_fog(&self) -> &HashMap<ClientPerspective, HashMap<Point, FogIntensity>> {
         &self.fog
-    }
-
-    pub fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
-        self.fog.get(&team).and_then(|fog| fog.get(&position)).cloned().unwrap_or(FogIntensity::TrueSight)
     }
 
     pub fn can_see_unit_at(&self, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {
@@ -211,23 +200,6 @@ impl<D: Direction> Game<D> {
         }
     }
     
-    pub fn available_heroes(&self, player: &Player) -> Vec<HeroType> {
-        let mut used = HashSet::new();
-        used.insert(HeroType::None);
-        for p in self.map.all_points() {
-            if let Some(unit) = self.map.get_unit(p) {
-                if unit.get_owner_id() == player.get_owner_id() {
-                    used.insert(unit.get_hero().typ());
-                }
-            }
-        }
-        self.environment.config.hero_types()
-        .into_iter()
-        .filter(|m| !used.contains(m))
-        .cloned()
-        .collect()
-    }
-    
     pub fn undo(&mut self, events: &[events::Event<D>]) {
         for event in events.iter().rev() {
             event.undo(self);
@@ -238,7 +210,7 @@ impl<D: Direction> Game<D> {
         let mut result = HashSet::new();
         for p in self.map.all_points() {
             if let Some(unit) = self.map.get_unit(p) {
-                if self.can_see_unit_at(team, p, unit, false) && unit.threatens(threatened) && unit.shortest_path_to_attack(self, &Path::new(p), pos, None).is_some() {
+                if self.can_see_unit_at(team, p, unit, false) && unit.threatens(threatened) && unit.shortest_path_to_attack(self, &Path::new(p), None, pos).is_some() {
                     result.insert(p);
                 }
                 // TODO: also check transported units
@@ -266,6 +238,56 @@ impl<D: Direction> Game<D> {
         }
     }
 
+}
+
+impl<D: Direction> MapView<D> for Game<D> {
+    fn environment(&self) -> &Environment {
+        &self.environment
+    }
+
+    fn wrapping_logic(&self) -> &WrappingMap<D> {
+        self.map.wrapping_logic()
+    }
+
+    fn all_points(&self) -> Vec<Point> {
+        self.map.all_points()
+    }
+
+    fn get_terrain(&self, p: Point) -> Option<&Terrain> {
+        self.map.get_terrain(p)
+    }
+
+    fn get_details(&self, p: Point) -> &[Detail<D>] {
+        self.map.get_details(p)
+    }
+
+    fn get_unit(&self, p: Point) -> Option<&Unit<D>> {
+        self.map.get_unit(p)
+    }
+}
+
+impl<D: Direction> GameView<D> for Game<D> {
+    fn get_owning_player(&self, owner: i8) -> Option<&Player> {
+        self.players.iter().find(|player| player.get_owner_id() == owner)
+    }
+
+    fn is_foggy(&self) -> bool {
+        self.fog_mode.is_foggy(self.current_turn as usize, self.players.len())
+    }
+
+    fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
+        self.fog.get(&team).and_then(|fog| fog.get(&position)).cloned().unwrap_or(FogIntensity::TrueSight)
+    }
+
+    fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>> {
+        self.get_unit(p)
+        .and_then(|u| {
+            // use base's fog instead of self.get_fog_at
+            // when the server verifies a unit's available actions, units invisible to the player shouldn't have an influence
+            // but maybe it should be possible to predict the fog
+            u.fog_replacement(self, p, self.get_fog_at(team, p))
+        })
+    }
 }
 
 fn export_fog(zipper: &mut Zipper, points: &Vec<Point>, fog: &HashMap<Point, FogIntensity>) {

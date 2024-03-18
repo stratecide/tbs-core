@@ -4,6 +4,7 @@ use crate::config::parse::{parse_tuple1, parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
+use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::terrain::{KRAKEN_ATTACK_RANGE, KRAKEN_MAX_ANGER};
 use crate::terrain::attributes::TerrainAttributeKey;
