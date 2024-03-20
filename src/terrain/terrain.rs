@@ -93,6 +93,9 @@ impl Terrain {
     }
 
     pub fn vision_range<D: Direction>(&self, game: &Game<D>) -> Option<usize> {
+        if self.has_attribute(TerrainAttributeKey::Owner) && self.get_owner_id() < 0 {
+            return None;
+        }
         let mut range = self.environment.config.terrain_vision_range(self.typ)? as usize;
         match game.get_fog_setting() {
             FogSetting::None => (),
