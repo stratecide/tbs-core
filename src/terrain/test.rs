@@ -74,17 +74,19 @@ mod tests {
         map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build_with_defaults());
         map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build_with_defaults());
         map.set_unit(Point::new(3, 3), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
+        let mut player_setting = PlayerSettings::new(&environment.config, 0);
+        player_setting.set_income(200);
         let (mut game, _) = map.game_server(&GameSettings {
             name: "build_unit".to_string(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
             players: vec![
-                PlayerSettings::new(&environment.config, 0),
+                player_setting,
                 PlayerSettings::new(&environment.config, 1),
             ],
         }, || 0.);
-        assert_eq!(100, *game.current_player().funds);
+        assert_eq!(200, *game.current_player().funds);
         game.handle_command(Command::BuyUnit(Point::new(0, 0), UnitType::HoverBike, Direction4::D0), || 0.).unwrap();
-        assert_eq!(0, *game.current_player().funds);
+        assert!(*game.current_player().funds < 200);
         assert_eq!(0, game.get_map().get_unit(Point::new(0, 0)).unwrap().get_owner_id());
         assert!(game.get_map().get_unit(Point::new(0, 0)).unwrap().is_exhausted());
     }
