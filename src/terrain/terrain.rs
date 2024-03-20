@@ -93,7 +93,7 @@ impl Terrain {
     }
 
     pub fn vision_range<D: Direction>(&self, game: &Game<D>) -> Option<usize> {
-        if self.has_attribute(TerrainAttributeKey::Owner) && self.get_owner_id() < 0 {
+        if self.has_attribute(TerrainAttributeKey::Owner) && self.get_team() == ClientPerspective::Neutral {
             return None;
         }
         let mut range = self.environment.config.terrain_vision_range(self.typ)? as usize;
@@ -212,7 +212,7 @@ impl Terrain {
     // methods that go beyond getter / setter functionality
 
     pub fn get_vision<D: Direction>(&self, game: &Game<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
-        if self.get_team() != team {
+        if self.get_team() != team && self.get_team() != ClientPerspective::Neutral {
             return HashMap::new();
         }
         let vision_range = if let Some(v) = self.vision_range(game) {
