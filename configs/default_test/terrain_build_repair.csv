@@ -6,4 +6,5 @@ Hq;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;tr
 OilPlatform;;;;;;;;;;;true;true;true;true;true;true;true;;;;;;;;;;;;;;;;;;;;;
 Port;;;;;;;;;;;true;true;true;true;true;true;true;;;;;;;;;;;;;;;;;;;;;
 ConstructionSite;;;;;;;;;;;;;;;;;;;;;;;;;;true;true;true;true;;;;;;;;;
-Memorial;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;true;;true;true;true;true;true;;;;;;;;;;;;;;;
+StatueLand;true;true;true;true;true;true;true;true;true;true;;;;;;;;;true;true;true;true;true;;;;;;;;;;;;;;;
+StatueSea;true;;;;;;;;;;true;true;true;true;true;true;true;;true;true;true;true;true;;;;;;;;;;;;;;;

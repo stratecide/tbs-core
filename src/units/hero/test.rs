@@ -36,7 +36,7 @@ mod tests {
         let map = WMBuilder::<Direction4>::new(map);
         let mut map = Map::new(map.build(), &config);
         let map_env = map.environment().clone();
-        map.set_terrain(Point::new(1, 1), TerrainType::Memorial.instance(&map_env).set_owner_id(0).build_with_defaults());
+        map.set_terrain(Point::new(1, 1), TerrainType::StatueLand.instance(&map_env).set_owner_id(0).build_with_defaults());
         map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(4, 4), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
 

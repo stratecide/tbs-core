@@ -23,6 +23,7 @@ Ruins;Ruins;;;Land;;;;;;;;;
 Sea;Sea;;;Sea;;;;;;;;;
 ShallowSea;Shallows;;;Sea;;;;;;;;;
 Street;Street;;;Land;;;;;;;;;
-Memorial;Memorial;;;Beach;;;;;;;true;;
+StatueLand;Statue of Mars;;;Land;;;;;;;true;;
 TentacleDepths;Tentacle Depths;;;Sea;;;;;;;;;
 Port;Port;;10;Sea;4;;0;;true;true;;;
+StatueSea;Statue of Poseidon;;;Sea;;;;;;;true;;
