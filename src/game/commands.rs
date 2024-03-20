@@ -172,8 +172,8 @@ impl<D: Direction> Command<D> {
                     return Err(CommandError::NotEnoughMoney)
                 }
                 handler.money_buy(owner_id, cost.max(0) as u32);
-                if bubble_index == None {
-                    unit.set_status(ActionStatus::Exhausted);
+                if bubble_index != None {
+                    unit.set_status(ActionStatus::Ready);
                 }
                 unit.set_direction(d);
                 if handler.environment().unit_attributes(unit_type, player.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
