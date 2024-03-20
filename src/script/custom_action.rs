@@ -57,7 +57,7 @@ pub enum CustomActionTestResult<D: Direction> {
     NextOrSuccess(CustomActionDataOptions<D>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustomAction {
     None, // not parsed, since this isn't valid for normal units. it's used as default for hero powers
     UnexhaustWithoutMoving,
@@ -273,10 +273,8 @@ impl CustomAction {
                 };
                 let unit1 = handler.get_map().get_unit(p1).cloned().unwrap();
                 let unit2 = handler.get_map().get_unit(p2).cloned().unwrap();
-                handler.unit_death(p1);
-                handler.unit_death(p2);
-                handler.unit_creation(p1, unit2);
-                handler.unit_creation(p2, unit1);
+                handler.unit_replace(p1, unit2);
+                handler.unit_replace(p2, unit1);
             }
         }
     }
