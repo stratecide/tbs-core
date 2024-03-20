@@ -393,16 +393,28 @@ impl From<&AmphibiousTyping> for Amphibious {
     }
 }
 
-//crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zippable)]
-    #[zippable(bits = 3)]
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum ActionStatus {
         Ready,
         Exhausted,
         Capturing,
         Repairing,
     }
-//}
+}
+
+impl SupportedZippable<&Environment> for ActionStatus {
+    fn export(&self, zipper: &mut Zipper, _support: &Environment) {
+        let list = Self::list();
+        let index = list.iter().position(|s| s == self).unwrap() as u8;
+        zipper.write_u8(index, bits_needed_for_max_value(list.len() as u32));
+    }
+    fn import(unzipper: &mut Unzipper, _support: &Environment) -> Result<Self, ZipperError> {
+        let list = Self::list();
+        let index = unzipper.read_u8(bits_needed_for_max_value(list.len() as u32))?;
+        Ok(list[index as usize])
+    }
+}
 
 impl Display for ActionStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

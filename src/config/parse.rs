@@ -36,6 +36,7 @@ const UNIT_CONFIG: &'static str = "units.csv";
 const UNIT_ATTRIBUTES: &'static str = "unit_attributes.csv";
 const UNIT_TRANSPORT: &'static str = "unit_transport.csv";
 const UNIT_DAMAGE: &'static str = "unit_damage.csv";
+const UNIT_STATUS: &'static str = "unit_status.csv";
 const CUSTOM_ACTIONS: &'static str = "custom_actions.csv";
 const HERO_CONFIG: &'static str = "heroes.csv";
 const HERO_POWERS: &'static str = "hero_powers.csv";
@@ -64,6 +65,7 @@ impl Config {
             unit_transports: HashMap::new(),
             unit_attributes: HashMap::new(),
             unit_hidden_attributes: HashMap::new(),
+            unit_status: HashMap::new(),
             attack_damage: HashMap::new(),
             custom_actions: Vec::new(),
             max_transported: 0,
@@ -187,6 +189,37 @@ impl Config {
             }
             result.unit_attributes.insert(typ, values);
             result.unit_hidden_attributes.insert(typ, hidden);
+        }
+
+        // unit status
+        let data = load_config(UNIT_STATUS)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut headers: Vec<ActionStatus> = Vec::new();
+        for h in reader.headers()?.into_iter().skip(1) {
+            let header = ActionStatus::from_conf(h)?.0;
+            if headers.contains(&header) || header == ActionStatus::Ready {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            headers.push(header);
+        }
+        for (l, line) in reader.records().enumerate() {
+            let line = line?;
+            let mut line = line.iter();
+            let typ: UnitType = match line.next() {
+                Some(t) => UnitType::from_conf(t)?.0,
+                _ => continue,
+            };
+            let mut values: Vec<ActionStatus> = vec![ActionStatus::Ready];
+            for (i, val) in line.enumerate() {
+                match val {
+                    "true" => values.push(headers[i]),
+                    "" => (),
+                    e => return Err(Box::new(ConfigParseError::InvalidCellData("unit_attribute_config", l, i, e.to_string()))),
+                }
+            }
+            if values.len() > 1 {
+                result.unit_status.insert(typ, values);
+            }
         }
 
         // attack damage

@@ -928,21 +928,23 @@ impl<D: Direction> Unit<D> {
             && funds_after_path * 100 >= self.full_price(game, destination, None, heroes.as_slice()) {
                 result.push(UnitAction::Repair);
             }
-            let mut take_instead_of_wait = false;
-            if takes != PathStepTakes::Deny && self.has_attribute(AttributeKey::EnPassant) {
-                for dp in game.all_points() {
-                    if let Some(u) = game.get_visible_unit(team, dp) {
-                        if self.could_take(&u, takes) && u.get_en_passant() == Some(destination) {
-                            take_instead_of_wait = true;
-                            break;
+            if self.can_have_status(ActionStatus::Exhausted) {
+                let mut take_instead_of_wait = false;
+                if takes != PathStepTakes::Deny && self.has_attribute(AttributeKey::EnPassant) {
+                    for dp in game.all_points() {
+                        if let Some(u) = game.get_visible_unit(team, dp) {
+                            if self.could_take(&u, takes) && u.get_en_passant() == Some(destination) {
+                                take_instead_of_wait = true;
+                                break;
+                            }
                         }
                     }
                 }
-            }
-            if take_instead_of_wait {
-                result.push(UnitAction::Take);
-            } else {
-                result.push(UnitAction::Wait);
+                if take_instead_of_wait {
+                    result.push(UnitAction::Take);
+                } else {
+                    result.push(UnitAction::Wait);
+                }
             }
         }
         println!("unit actions: {result:?}");

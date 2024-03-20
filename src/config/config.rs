@@ -46,6 +46,7 @@ pub struct Config {
     pub(super) unit_transports: HashMap<UnitType, Vec<UnitType>>,
     pub(super) unit_attributes: HashMap<UnitType, Vec<AttributeKey>>,
     pub(super) unit_hidden_attributes: HashMap<UnitType, Vec<AttributeKey>>,
+    pub(super) unit_status: HashMap<UnitType, Vec<ActionStatus>>,
     pub(super) attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
     pub(super) custom_actions: Vec<CustomActionConfig>,
     pub(super) max_transported: usize,
@@ -218,9 +219,9 @@ impl Config {
         self.unit_hidden_attributes.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
     }
 
-    pub fn unit_specific_statuses(&self, _typ: UnitType) -> &[ActionStatus] {
+    pub fn unit_specific_statuses(&self, typ: UnitType) -> &[ActionStatus] {
         // TODO
-        &[ActionStatus::Ready, ActionStatus::Exhausted, ActionStatus::Repairing, ActionStatus::Capturing]
+        self.unit_status.get(&typ).map(|v| v.as_slice()).unwrap_or(&[ActionStatus::Ready])
     }
 
     pub fn unit_transportable(&self, typ: UnitType) -> &[UnitType] {
