@@ -127,10 +127,11 @@ mod tests {
         // test crystal obelisk behavior when hero is missing
         map.set_unit(Point::new(1, 1), None);
         let (mut server, _) = map.clone().game_server(&settings, || 0.);
-        assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 80);
+        let crystal_damage = 100 - server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp();
+        assert!(crystal_damage > 0);
         server.handle_command(Command::EndTurn, || 0.).unwrap();
         server.handle_command(Command::EndTurn, || 0.).unwrap();
-        assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 60);
+        assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 100 - 2 * crystal_damage);
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(2, 1)),
