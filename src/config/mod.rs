@@ -27,6 +27,7 @@ use crate::units::unit_types::UnitType;
 pub enum ConfigParseError {
     CommanderMaxChargeExceeded(u32),
     DuplicateHeader(String),
+    MissingUnit(String),
     EmptyList,
     FileMissing(String),
     FolderMissing(PathBuf),

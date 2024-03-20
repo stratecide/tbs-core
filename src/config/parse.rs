@@ -131,6 +131,9 @@ impl Config {
             if transported.contains(&header) {
                 return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
             }
+            if !result.units.contains_key(&header) {
+                return Err(Box::new(ConfigParseError::MissingUnit(h.to_string())))
+            }
             transported.push(header);
         }
         for line in reader.records() {
