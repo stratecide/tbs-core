@@ -211,19 +211,6 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             }
         );
 
-        // end merc powers
-        for p in self.get_map().all_points() {
-            if let Some(unit) = self.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id) {
-                let hero = unit.get_hero();
-                let next_power = hero.get_next_power(self.environment());
-                if hero.can_activate_power(self.environment(), next_power) {
-                    // TODO: this skips the custom-action. maybe execute the custom action if no user input is needed
-                    self.hero_charge_sub(p, None, hero.power_cost(self.environment(), next_power));
-                    self.hero_power(p, next_power);
-                }
-            }
-        }
-
         // structures may have destroyed some units, vision may be reduced due to merc powers ending
         self.recalculate_fog();
         let team = self.game.current_player().get_team();

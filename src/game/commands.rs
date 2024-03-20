@@ -111,8 +111,21 @@ impl<D: Direction> Command<D> {
                 }
 
                 let next_power = handler.get_game().current_player().commander.get_next_power();
-                if handler.get_game().current_player().commander.can_activate_power(next_power) {
+                if handler.get_game().current_player().commander.can_activate_power(next_power, true) {
                     Self::activate_power(handler, next_power);
+                }
+
+                // end merc powers
+                for p in handler.get_map().all_points() {
+                    if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id) {
+                        let hero = unit.get_hero();
+                        let next_power = hero.get_next_power(handler.environment());
+                        if hero.can_activate_power(handler.environment(), next_power, true) {
+                            // TODO: this skips the custom-action. maybe execute the custom action if no user input is needed
+                            handler.hero_charge_sub(p, None, hero.power_cost(handler.environment(), next_power));
+                            handler.hero_power(p, next_power);
+                        }
+                    }
                 }
 
                 handler.start_turn(fog_before);
@@ -173,7 +186,7 @@ impl<D: Direction> Command<D> {
                 Ok(())
             }
             Self::CommanderPowerSimple(index) => {
-                if !handler.get_game().current_player().commander.can_activate_power(index) {
+                if !handler.get_game().current_player().commander.can_activate_power(index, false) {
                     return Err(CommandError::PowerNotUsable);
                 }
                 Self::activate_power(handler, index);

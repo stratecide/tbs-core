@@ -110,7 +110,7 @@ impl Hero {
         self.power = index;
     }
 
-    pub fn can_activate_power(&self, environment: &Environment, index: usize) -> bool {
+    pub fn can_activate_power(&self, environment: &Environment, index: usize, automatic: bool) -> bool {
         if self.power == index {
             return false;
         }
@@ -118,8 +118,12 @@ impl Hero {
             Some(power) => power,
             None => return false,
         };
-        power.usable_from_power.contains(&(self.power as u8))
-        && power.required_charge <= self.charge
+        power.required_charge <= self.charge
+        && if automatic {
+            index == self.get_next_power(environment)
+        } else {
+            power.usable_from_power.contains(&(self.power as u8))
+        }
     }
 
     pub fn power_cost(&self, environment: &Environment, index: usize) -> u8 {
@@ -247,8 +251,7 @@ impl Hero {
     ) {
         let data = Vec::new();
         for (i, power) in game.environment().config.hero_powers(self.typ).iter().enumerate() {
-            if self.charge >= power.required_charge
-            && power.usable_from_power.contains(&(self.power as u8))
+            if self.can_activate_power(game.environment(), i, false)
             && power.script.next_condition(game, funds, unit, path, destination, transporter, heroes, ballast, &data) != CustomActionTestResult::Failure {
                 list.push(UnitAction::HeroPower(i, Vec::new()));
             }

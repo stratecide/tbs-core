@@ -92,7 +92,7 @@ impl Commander {
         self.power = index;
     }
 
-    pub fn can_activate_power(&self, index: usize) -> bool {
+    pub fn can_activate_power(&self, index: usize, automatic: bool) -> bool {
         if self.power == index {
             return false;
         }
@@ -100,8 +100,12 @@ impl Commander {
             Some(power) => power,
             None => return false,
         };
-        power.usable_from_power.contains(&(self.power as u8))
-        && power.required_charge <= self.charge
+        power.required_charge <= self.charge
+        && if automatic {
+            index == self.get_next_power()
+        } else {
+            power.usable_from_power.contains(&(self.power as u8))
+        }
     }
 
     pub fn power_cost(&self, index: usize) -> u32 {

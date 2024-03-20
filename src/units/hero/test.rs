@@ -106,6 +106,12 @@ mod tests {
             action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
         }), || 0.).unwrap();
         let power_aura_damage = 100 - server.get_map().get_unit(Point::new(3, 1)).unwrap().get_hp();
+        server.handle_command(Command::EndTurn, || 0.).unwrap();
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
+        server.handle_command(Command::EndTurn, || 0.).unwrap();
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
+        assert_eq!(Hero::aura_range(&server, server.get_map().get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
 
         // don't use power
         let mut server = unchanged.clone();
