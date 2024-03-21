@@ -353,12 +353,6 @@ impl<D: Direction> Unit<D> {
         self.fix_transported()
     }
 
-    // returns a list of damage factors
-    // the first element is the selected target, the second element for points next to the target and so on
-    pub fn get_splash_damage(&self) -> &[Rational32] {
-        self.environment.config.splash_damage(self.typ)
-    }
-
     pub fn get_charge(&self) -> u8 {
         self.get::<Hero>().get_charge()
     }
@@ -530,6 +524,12 @@ impl<D: Direction> Unit<D> {
         overrides.values()
         .cloned()
         .collect()
+    }
+
+    // returns a list of damage factors
+    // the first element is the selected target, the second element for points next to the target and so on
+    pub fn get_splash_damage(&self, game: &impl GameView<D>, unit_pos: Point, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<Rational32> {
+        self.environment.config.unit_splash_damage(game, self, unit_pos, heroes, temporary_ballast)
     }
 
     pub fn on_start_turn(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<UnitScript> {
@@ -718,8 +718,9 @@ impl<D: Direction> Unit<D> {
         if let Some((destination, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
             if (this.can_attack_after_moving() || path.steps.len() == 0) && game.get_unit(destination).is_none() {
                 game.put_unit(destination, this.clone());
+                let heroes = Hero::hero_influence_at(&game, destination, self.get_owner_id());
                 for attack_vector in AttackVector::search(&this, &game, destination, None, transporter.map(|(u, _)| (u, path.start)), ballast) {
-                    for (point, _, _) in attack_vector.get_splash(&this, &game, destination) {
+                    for (point, _, _) in attack_vector.get_splash(&this, &game, destination, &heroes, ballast) {
                         result.insert(point);
                     }
                 }

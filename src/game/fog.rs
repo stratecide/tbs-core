@@ -3,13 +3,28 @@ use std::fmt::Display;
 use zipper::*;
 use zipper::zipper_derive::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable, PartialOrd, Ord)]
+use crate::config::parse::FromConfig;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable, PartialOrd, Ord, Hash)]
 #[zippable(bits = 2)]
 pub enum FogIntensity {
     TrueSight, // even stealthed units are visible
     NormalVision, // stealth is hidden, some terrain may hide units, rest is visible
     Light, // terrain is grey, for non-structures unit types and owners are hidden
     Dark, // you see structures, other units are hidden
+}
+
+impl FromConfig for FogIntensity {
+    fn from_conf(s: &str) -> Result<(Self, &str), crate::config::ConfigParseError> {
+        let (base, s) = crate::config::parse::string_base(s);
+        match base {
+            "TrueSight" => Ok((Self::TrueSight, s)),
+            "NormalVision" => Ok((Self::NormalVision, s)),
+            "Light" => Ok((Self::Light, s)),
+            "Dark" => Ok((Self::Dark, s)),
+            _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("FogIntensity::{base} - {s}")))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

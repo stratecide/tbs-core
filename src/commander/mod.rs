@@ -65,6 +65,9 @@ impl Commander {
     pub fn add_charge(&mut self, delta: i32) {
         self.charge = (self.charge as i32 + delta).max(0) as u32;
     }
+    pub fn can_gain_charge(&self) -> bool {
+        self.environment.config.commander_can_gain_charge(self.typ, self.power)
+    }
 
     pub fn power_count(&self) -> usize {
         self.environment.config.commander_powers(self.typ).len()
@@ -146,6 +149,7 @@ mod tests {
     use crate::map::point::Position;
     use crate::map::point_map::PointMap;
     use crate::map::wrapping_map::WMBuilder;
+    use crate::terrain::TerrainType;
     use crate::units::combat::AttackVector;
     use crate::units::commands::UnitAction;
     use crate::units::commands::UnitCommand;
@@ -177,7 +181,7 @@ mod tests {
         let (mut server, _) = map.clone().game_server(&settings, || 0.);
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
         let unchanged = server.clone();
-        let environment: crate::config::environment::Environment = server.environment().clone();
+        let environment = server.environment().clone();
         // small power
         server.handle_command(Command::CommanderPowerSimple(1), || 0.).unwrap();
         assert_eq!(server.get_map().get_details(Point::new(0, 4)), Vec::new());
@@ -201,5 +205,175 @@ mod tests {
         }), || 0.).unwrap();
         assert_eq!(server.get_map().get_details(Point::new(2, 1)), Vec::new());
         assert_eq!(server.get_map().get_unit(Point::new(2, 1)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).build_with_defaults()));
+    }
+
+    #[test]
+    fn simo() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(6, 5, false);
+        let map = WMBuilder::<Direction4>::new(map);
+        let mut map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        let arty_pos = Point::new(0, 1);
+        map.set_unit(arty_pos, Some(UnitType::Artillery.instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
+
+        let target_close = Point::new(3, 1);
+        map.set_unit(target_close, Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        let target_far = Point::new(4, 1);
+        map.set_unit(target_far, Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        let target_farthest = Point::new(5, 1);
+        map.set_unit(target_farthest, Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+
+        let settings = map.settings().unwrap();
+
+        let mut settings = settings.clone();
+        for player in &settings.players {
+            assert!(player.get_commander_options().contains(&CommanderType::Simo));
+        }
+        settings.fog_mode = FogMode::Constant(FogSetting::None);
+        settings.players[0].set_commander(CommanderType::Simo);
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
+        let unchanged = server.clone();
+
+        // before chaos/order
+        let arty = server.get_unit(arty_pos).unwrap();
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_close).is_some());
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_far).is_none());
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(arty_pos),
+            action: UnitAction::Attack(AttackVector::Point(target_close)),
+        }), || 0.).unwrap();
+        assert!(server.get_unit(target_close).unwrap().get_hp() < 100);
+        assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 100);
+
+        // embrace chaos
+        let mut server = unchanged.clone();
+        server.handle_command(Command::CommanderPowerSimple(1), || 0.).unwrap();
+        server.handle_command(Command::CommanderPowerSimple(4), || 0.).err().unwrap();
+        server.handle_command(Command::CommanderPowerSimple(5), || 0.).err().unwrap();
+        let arty = server.get_unit(arty_pos).unwrap();
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_close).is_some());
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_far).is_none());
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(arty_pos),
+            action: UnitAction::Attack(AttackVector::Point(target_close)),
+        }), || 0.).unwrap();
+        let hp_close = server.get_unit(target_close).unwrap().get_hp();
+        let hp_far = server.get_unit(target_far).unwrap().get_hp();
+        assert!(hp_far < 100);
+        assert!(hp_close < hp_far);
+
+        // chaos power
+        let mut server = unchanged.clone();
+        server.handle_command(Command::CommanderPowerSimple(1), || 0.).unwrap();
+        server.handle_command(Command::CommanderPowerSimple(3), || 0.).unwrap();
+        //let arty = server.get_unit(arty_pos).unwrap();
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(arty_pos),
+            action: UnitAction::Attack(AttackVector::Point(target_far)),
+        }), || 0.).err().expect("range shouldn't be increased");
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(arty_pos),
+            action: UnitAction::Attack(AttackVector::Point(target_close)),
+        }), || 0.).unwrap();
+        assert!(server.get_unit(target_close).unwrap().get_hp() < hp_close);
+        assert!(server.get_unit(target_far).unwrap().get_hp() < hp_far);
+        assert_eq!(server.get_unit(target_farthest).unwrap().get_hp(), 100);
+
+        // order power (small)
+        let mut server = unchanged.clone();
+        server.handle_command(Command::CommanderPowerSimple(2), || 0.).unwrap();
+        server.handle_command(Command::CommanderPowerSimple(3), || 0.).err().unwrap();
+        server.handle_command(Command::CommanderPowerSimple(4), || 0.).unwrap();
+        let arty = server.get_unit(arty_pos).unwrap();
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_far).is_some());
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_farthest).is_none());
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(arty_pos),
+            action: UnitAction::Attack(AttackVector::Point(target_far)),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_unit(target_close).unwrap().get_hp(), 100);
+        assert!(server.get_unit(target_far).unwrap().get_hp() < 100);
+
+        // order power (big)
+        let mut server = unchanged.clone();
+        server.handle_command(Command::CommanderPowerSimple(2), || 0.).unwrap();
+        server.handle_command(Command::CommanderPowerSimple(5), || 0.).unwrap();
+        let arty = server.get_unit(arty_pos).unwrap();
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_close).is_some());
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_far).is_some());
+        assert!(arty.shortest_path_to_attack(&server, &Path::new(arty_pos), None, target_farthest).is_some());
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(arty_pos),
+            action: UnitAction::Attack(AttackVector::Point(target_farthest)),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 100);
+        assert!(server.get_unit(target_farthest).unwrap().get_hp() < 100);
+    }
+
+    #[test]
+    fn vlad() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(6, 5, false);
+        let map = WMBuilder::<Direction4>::new(map);
+        let mut map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        let arty_pos = Point::new(0, 1);
+        map.set_unit(arty_pos, Some(UnitType::Artillery.instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
+
+        let target_close = Point::new(3, 1);
+        map.set_unit(target_close, Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(50).build_with_defaults()));
+        map.set_terrain(target_close, TerrainType::Flame.instance(&map_env).build_with_defaults());
+        let target_far = Point::new(5, 4);
+        map.set_unit(target_far, Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(50).build_with_defaults()));
+
+        let mut settings = map.settings().unwrap();
+        for player in &settings.players {
+            assert!(player.get_commander_options().contains(&CommanderType::Vlad));
+        }
+        settings.fog_mode = FogMode::Constant(FogSetting::None);
+        settings.players[0].set_commander(CommanderType::Vlad);
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+
+        // d2d daylight
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(arty_pos),
+            action: UnitAction::Attack(AttackVector::Point(target_close)),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_unit(arty_pos).unwrap().get_hp(), 50);
+
+        // d2d night
+        settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
+        let unchanged = server.clone();
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(arty_pos),
+            action: UnitAction::Attack(AttackVector::Point(target_close)),
+        }), || 0.).unwrap();
+        assert!(server.get_unit(arty_pos).unwrap().get_hp() > 50);
+
+        // small power
+        let mut server = unchanged.clone();
+        server.handle_command(Command::CommanderPowerSimple(1), || 0.).unwrap();
+        assert_eq!(server.get_unit(arty_pos).unwrap().get_hp(), 50);
+        assert!(server.get_unit(target_close).unwrap().get_hp() < 50);
+        assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 50);
+
+        // big power
+        let mut server = unchanged.clone();
+        server.handle_command(Command::CommanderPowerSimple(2), || 0.).unwrap();
+        assert!(server.get_unit(arty_pos).unwrap().get_hp() > 50);
+        assert!(server.get_unit(target_close).unwrap().get_hp() < 50);
+        assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 50);
     }
 }

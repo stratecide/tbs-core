@@ -1,5 +1,14 @@
-Id;Name;UsableFromPowers;NextPower;RequiredCharge;Effects
-None;-;;;;
-Zombie;;;;;
-Zombie;Resurrection;0;0;4000;ZombieResurrection(50)
-Zombie;Plague;0;0;6000;ZombieResurrection(50)
+Id;Name;UsableFromPowers;NextPower;RequiredCharge;PreventsCharging;Effects
+None;-;;;;;
+Zombie;;;;;;
+Zombie;Resurrection;0;0;4000;true;ZombieResurrection(50)
+Zombie;Plague;0;0;6000;true;ZombieResurrection(50)
+Simo;;;;;;
+Simo;Chaos;0;1;0;;
+Simo;Order;0;2;0;;
+Simo;Shrapnel Charges;1;1;6000;true;
+Simo;Hyperfocus;2;2;3000;true;
+Simo;Perfect Shot;2;2;6000;true;
+Vlad;;;;;;
+Vlad;Red Dance;0;0;4000;true;MassDamageAura(4, 10)
+Vlad;Crimson Rain;0;0;8000;true;MassDamageAura(4, 20), MassHeal(10)

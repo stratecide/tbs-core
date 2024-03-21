@@ -14,6 +14,7 @@ pub struct CommanderPowerConfig {
     pub(crate) next_power: u8, // at the start of the player's turn, this index is automatically switched to if possible (e.g. player has enough charge)
     pub(crate) required_charge: u32,
     pub(crate) effects: Vec<PlayerScript>,
+    pub(super) prevents_charging: bool,
 }
 
 impl CommanderPowerConfig {
@@ -30,6 +31,7 @@ impl CommanderPowerConfig {
             next_power: parse_def(data, H::NextPower, 0)?,
             required_charge: parse_def(data, H::RequiredCharge, 0)?,
             effects: parse_vec_def(data, H::Effects, Vec::new())?,
+            prevents_charging: parse_def(data, H::PreventsCharging, false)?,
         };
         result.simple_validation()?;
         Ok(result)
@@ -52,5 +54,6 @@ crate::listable_enum! {
         NextPower,
         RequiredCharge,
         Effects,
+        PreventsCharging,
     }
 }

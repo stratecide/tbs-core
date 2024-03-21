@@ -7,8 +7,9 @@ crate::enum_with_custom! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum CommanderType {
         None,
-        Vampire,
+        Vlad,
         Zombie,
+        Simo,
     }
 }
 

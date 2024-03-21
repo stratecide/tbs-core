@@ -264,6 +264,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn commander_charge_add(&mut self, owner: i8, change: u32) {
         if let Some(player) = self.get_game().get_owning_player(owner) {
+            if !player.commander.can_gain_charge() {
+                return;
+            }
             let change = change.min(player.commander.get_max_charge() - player.commander.get_charge()) as i32;
             if change > 0 {
                 self.add_event(Event::CommanderCharge(owner.into(), change.into()));

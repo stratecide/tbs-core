@@ -271,8 +271,8 @@ impl<D: Direction> GameView<D> for Game<D> {
         self.players.iter().find(|player| player.get_owner_id() == owner)
     }
 
-    fn is_foggy(&self) -> bool {
-        self.fog_mode.is_foggy(self.current_turn as usize, self.players.len())
+    fn fog_intensity(&self) -> FogIntensity {
+        self.fog_mode.fog_setting(self.current_turn as usize, self.players.len()).intensity()
     }
 
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {

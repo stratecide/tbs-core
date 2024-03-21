@@ -1,8 +1,10 @@
 use std::collections::HashSet;
 
+use crate::game::fog::FogIntensity;
 use crate::game::game_view::GameView;
 use crate::map::point::Point;
 use crate::terrain::TerrainType;
+use crate::units::combat::{AttackType, AttackTypeKey};
 use crate::units::hero::{Hero, HeroType};
 use crate::units::movement::{MovementType, TBallast};
 use crate::units::unit::Unit;
@@ -10,7 +12,7 @@ use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
 
 use super::movement_type_config::MovementPattern;
-use super::parse::{parse_inner_vec, string_base, FromConfig};
+use super::parse::{parse_inner_vec, parse_tuple1, string_base, FromConfig};
 use super::ConfigParseError;
 use super::config::Config;
 
@@ -63,6 +65,9 @@ pub(crate) enum UnitFilter {
     Hero(HashSet<(HeroType, Option<u8>)>),
     HeroGlobal(HashSet<(HeroType, Option<u8>)>),
     IsHero(HashSet<(HeroType, Option<u8>)>),
+    AttackType(HashSet<AttackTypeKey>),
+    CommanderCharge(u32),
+    Fog(HashSet<FogIntensity>),
     Not(Vec<Self>),
 }
 
@@ -101,9 +106,24 @@ impl FromConfig for UnitFilter {
                 Self::HeroGlobal(list.into_iter().collect())
             }
             "IH" | "IsHero" => {
-                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, false)?;
                 remainder = r;
                 Self::IsHero(list.into_iter().collect())
+            }
+            "A" | "AttackType" => {
+                let (list, r) = parse_inner_vec::<AttackTypeKey>(remainder, true)?;
+                remainder = r;
+                Self::AttackType(list.into_iter().collect())
+            }
+            "CC" | "CommanderCharge" => {
+                let (charge, r) = parse_tuple1(remainder)?;
+                remainder = r;
+                Self::CommanderCharge(charge)
+            }
+            "Fog" => {
+                let (list, r) = parse_inner_vec::<FogIntensity>(remainder, true)?;
+                remainder = r;
+                Self::Fog(list.into_iter().collect())
             }
             "Not" => {
                 let (list, r) = parse_inner_vec::<Self>(remainder, true)?;
@@ -163,7 +183,19 @@ impl UnitFilter {
                 let hero = unit.get_hero();
                 let power = hero.get_active_power() as u8;
                 let hero = hero.typ();
-                h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
+                h.len() == 0 && hero != HeroType::None
+                || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
+            }
+            Self::AttackType(a) => {
+                let attack_type = unit.attack_pattern().key();
+                a.iter().any(|a| *a == attack_type)
+            }
+            Self::CommanderCharge(charge) => {
+                unit.get_commander(map).get_charge() >= *charge
+            }
+            Self::Fog(f) => {
+                let fog = map.fog_intensity();
+                f.iter().any(|f| *f == fog)
             }
             Self::Not(negated) => {
                 // returns true if at least one check returns false

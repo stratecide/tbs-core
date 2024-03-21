@@ -408,8 +408,8 @@ impl<D: Direction> GameView<D> for Map<D> {
         None
     }
 
-    fn is_foggy(&self) -> bool {
-        false
+    fn fog_intensity(&self) -> FogIntensity {
+        FogIntensity::TrueSight
     }
 
     fn get_fog_at(&self, _team: ClientPerspective, _position: Point) -> FogIntensity {

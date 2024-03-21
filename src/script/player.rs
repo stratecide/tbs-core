@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use interfaces::game_interface::ClientPerspective;
 
-use crate::config::parse::{parse_tuple1, string_base, FromConfig};
+use crate::config::parse::{parse_tuple1, parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::details::Detail;
 use crate::game::event_handler::EventHandler;
@@ -17,6 +17,7 @@ use super::unit::anger_kraken;
 pub enum PlayerScript {
     Kraken,
     MassDamage(u8),
+    MassDamageAura(u8, u8),
     MassHeal(u8),
     ZombieResurrection(u8),
 }
@@ -30,6 +31,11 @@ impl FromConfig for PlayerScript {
                 let (damage, r) = parse_tuple1(s)?;
                 s = r;
                 Self::MassDamage(1.max(damage))
+            }
+            "MassDamageAura" => {
+                let (range, damage, r) = parse_tuple2(s)?;
+                s = r;
+                Self::MassDamageAura(range, 1.max(damage))
             }
             "MassHeal" => {
                 let (heal, r) = parse_tuple1(s)?;
@@ -51,6 +57,7 @@ impl PlayerScript {
         match self {
             Self::Kraken => anger_kraken(handler),
             Self::MassDamage(damage) => mass_damage(handler, handler.environment().get_team(owner_id), *damage),
+            Self::MassDamageAura(range, damage) => mass_damage_aura(handler, owner_id, *range, *damage),
             Self::MassHeal(heal) => mass_heal(handler, owner_id, *heal),
             Self::ZombieResurrection(hp) => zombie_resurrection(handler, owner_id as u8, *hp),
         }
@@ -58,9 +65,31 @@ impl PlayerScript {
 }
 
 pub(super) fn mass_damage<D: Direction>(handler: &mut EventHandler<D>, team: ClientPerspective, damage: u8) {
+    let points = handler.get_map().all_points();
+    deal_damage(handler, points.into_iter(), team, damage);
+}
+
+pub(super) fn mass_damage_aura<D: Direction>(handler: &mut EventHandler<D>, owner_id: i8, range: u8, damage: u8) {
+    let team = handler.environment().get_team(owner_id);
+    let mut aura = HashSet::new();
+    for p in handler.get_map().all_points() {
+        if let Some(unit) = handler.get_map().get_unit(p) {
+            if unit.get_owner_id() == owner_id {
+                for layer in handler.get_map().range_in_layers(p, range as usize) {
+                    for p in layer {
+                        aura.insert(p);
+                    }
+                }
+            }
+        }
+    }
+    deal_damage(handler, aura.into_iter(), team, damage);
+}
+
+pub(super) fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, points: impl Iterator<Item = Point>, team: ClientPerspective, damage: u8) {
     let mut damage_map = HashMap::new();
     let mut dead = HashSet::new();
-    for p in handler.get_map().all_points() {
+    for p in points {
         if let Some(unit) = handler.get_map().get_unit(p) {
             if unit.get_owner_id() > 0 && unit.get_team() != team && unit.has_attribute(AttributeKey::Hp) {
                 damage_map.insert(p, damage as u16);

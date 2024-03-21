@@ -14,7 +14,10 @@ use super::Direction;
 
 pub trait GameView<D: Direction>: MapView<D> {
     fn get_owning_player(&self, owner: i8) -> Option<&Player>;
-    fn is_foggy(&self) -> bool;
+    fn is_foggy(&self) -> bool {
+        self.fog_intensity() != FogIntensity::TrueSight
+    }
+    fn fog_intensity(&self) -> FogIntensity;
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity;
     //fn get_fog(&self, position: Point) -> FogIntensity;
 
@@ -49,8 +52,8 @@ impl<'a, D: Direction, G: GameView<D>> GameView<D> for Box<&'a G> {
         (**self).get_owning_player(owner)
     }
 
-    fn is_foggy(&self) -> bool {
-        (**self).is_foggy()
+    fn fog_intensity(&self) -> FogIntensity {
+        (**self).fog_intensity()
     }
 
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {

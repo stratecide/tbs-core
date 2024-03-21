@@ -1,3 +1,5 @@
 Id;Name;TransportCapacity;Charge
 None;None;;0
 Zombie;Zombie;;6000
+Simo;Simo;;6000
+Vlad;Vlad;;8000

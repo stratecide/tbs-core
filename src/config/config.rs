@@ -6,6 +6,7 @@ use num_rational::Rational32;
 
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
+use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -169,14 +170,6 @@ impl Config {
 
     pub fn base_damage(&self, attacker: UnitType, defender: UnitType) -> Option<u16> {
         self.attack_damage.get(&attacker)?.get(&defender).cloned()
-    }
-
-    pub fn splash_damage(&self, typ: UnitType) -> &[Rational32] {
-        if self.unit_config(typ).splash_damage.len() == 0 {
-            &DEFAULT_SPLASH
-        } else {
-            &self.unit_config(typ).splash_damage
-        }
     }
 
     pub fn can_build_units(&self, typ: UnitType) -> bool {
@@ -494,6 +487,13 @@ impl Config {
         } else {
             &[]
         }
+    }
+
+    pub fn commander_can_gain_charge(&self, typ: CommanderType, power: usize) -> bool {
+        self.commander_powers.get(&typ)
+        .and_then(|powers| powers.get(power))
+        .map(|power| !power.prevents_charging)
+        .unwrap_or(false)
     }
 
     // commander unit
@@ -845,4 +845,36 @@ impl Config {
             iter.map(|c| &c.displacement_distance)
         ) * sign
     }
+
+    pub fn unit_splash_damage<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        temporary_ballast: &[TBallast<D>],
+    ) -> Vec<Rational32> {
+        let mut result: &[Rational32] = &[];
+        for config in self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            None,
+            None,
+            heroes,
+            temporary_ballast
+        ) {
+            if config.splash_damage.len() > 0 {
+                result = config.splash_damage.as_slice();
+            }
+        }
+        if result.len() == 0 {
+            result = &self.unit_config(unit.typ()).splash_damage;
+        }
+        if result.len() == 0 {
+            result = &DEFAULT_SPLASH
+        }
+        result.to_vec()
+    }
+
 }

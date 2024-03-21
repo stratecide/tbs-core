@@ -1,6 +1,6 @@
 use num_rational::Rational32;
 
-use crate::config::parse::{string_base, FromConfig};
+use crate::config::parse::{parse_tuple1, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
@@ -19,7 +19,7 @@ impl FromConfig for AttackScript {
         let (base, mut s) = string_base(s);
         Ok((match base {
             "LifeSteal" => {
-                let (lifesteal, r) = Rational32::from_conf(s)?;
+                let (lifesteal, r) = parse_tuple1(s)?;
                 s = r;
                 Self::LifeSteal(lifesteal)
             }

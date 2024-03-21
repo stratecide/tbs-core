@@ -56,8 +56,8 @@ impl<'a, D: Direction> GameView<D> for IgnoreUnits<'a, D> {
         self.0.get_owning_player(owner)
     }
 
-    fn is_foggy(&self) -> bool {
-        self.0.is_foggy()
+    fn fog_intensity(&self) -> FogIntensity {
+        self.0.fog_intensity()
     }
 
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
@@ -167,8 +167,8 @@ impl<'a, D: Direction> GameView<D> for UnitMovementView<'a, D> {
         self.players.get(&owner).or(self.base.get_owning_player(owner))
     }
 
-    fn is_foggy(&self) -> bool {
-        self.base.is_foggy()
+    fn fog_intensity(&self) -> FogIntensity {
+        self.base.fog_intensity()
     }
 
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
@@ -272,8 +272,8 @@ impl<'a, D: Direction> GameView<D> for MovingHeroView<'a, D> {
         self.map.get_owning_player(owner)
     }
 
-    fn is_foggy(&self) -> bool {
-        self.map.is_foggy()
+    fn fog_intensity(&self) -> FogIntensity {
+        self.map.fog_intensity()
     }
 
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
