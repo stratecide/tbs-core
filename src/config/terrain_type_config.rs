@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::config::parse::*;
 use crate::terrain::*;
+use crate::units::attributes::AttributeOverride;
 
 use super::ConfigParseError;
 
@@ -10,17 +11,19 @@ pub struct TerrainTypeConfig {
     pub(super) id: TerrainType,
     pub(super) name: String,
     pub(super) needs_owner: bool,
-    pub(super) capture_resistance: u8,
     pub(super) update_amphibious: Option<AmphibiousTyping>,
-    pub(super) max_builds_per_turn: u8,
     pub(super) max_anger: u8,
-    pub(super) vision_range: Option<u8>,
+    pub(super) chess: bool,
+    // can be modified by commander / hero aura
+    pub(super) capture_resistance: u8,
+    pub(super) max_builds_per_turn: u8,
     pub(super) income_factor: i16,
+    pub(super) vision_range: Option<u8>,
     pub(super) can_repair: bool,
     pub(super) can_build: bool,
     pub(super) can_sell_hero: bool,
-    pub(super) chess: bool,
     pub(super) extra_movement_options: ExtraMovementOptions,
+    pub(super) build_overrides: HashSet<AttributeOverride>,
 }
 
 impl TerrainTypeConfig {
@@ -51,6 +54,7 @@ impl TerrainTypeConfig {
             can_sell_hero: parse_def(data, H::SellsHero, false)?,
             chess: parse_def(data, H::Chess, false)?,
             extra_movement_options: parse_def(data, H::MovementOptions, ExtraMovementOptions::None)?,
+            build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new())?.into_iter().collect(),
         };
         result.simple_validation()?;
         Ok(result)
@@ -87,5 +91,6 @@ crate::listable_enum! {
         SellsHero,
         Chess,
         MovementOptions,
+        BuildOverrides,
     }
 }

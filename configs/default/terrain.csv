@@ -1,29 +1,29 @@
-Id;Name;NeedsOwner;CaptureResistance;UpdateAmphibious;MaxBuildsPerTurn;MaxAnger;VisionRange;IncomeFactor;Repair;Build;SellsHero;Chess;MovementOptions
-Airport;Airport;;10;Land;4;;0;;true;true;;;
-Beach;Beach;;;Beach;;;;;;;;;
-Bridge;Bridge;;;;;;;;;;;;
-ChessPawnTile;Special Checkerboard;;;Land;;;;;;;;true;
-ChessTile;Checkerboard;;;Land;;;;;;;;true;
-City;City;;10;Land;;;0;1;true;;;;
-ConstructionSite;Construction Site;;10;Land;4;;0;;true;true;;;
-Factory;Factory;;10;Land;4;;0;;true;true;;;
-Flame;Flame;;;;;;2;;;;;;
-Forest;Forest;;;Land;;;;;;;;;
-Fountain;Fountain;;;Sea;;;;;;;;;Jump
-Grass;Grass;;;Land;;;;;;;;;
-Hill;Hill;;;Land;;;;;;;;;
-Hq;Headquarters;;15;Beach;;;0;;true;;;;
-Icebergs;Icebergs;;;Sea;;;;;;;;;
-Kraken;Kraken;;;Sea;;;;;;;;;
-Lillypads;Lillypads;;;;;;;;;;;;
-Mountain;Mountain;;;Land;;;;;;;;;
-OilPlatform;Oil Rig;;10;Sea;;;0;1;true;;;;
-Reef;Reef;;;Sea;;;;;;;;;
-Ruins;Ruins;;;Land;;;;;;;;;
-Sea;Sea;;;Sea;;;;;;;;;
-ShallowSea;Shallows;;;Sea;;;;;;;;;
-Street;Street;;;Land;;;;;;;;;
-StatueLand;Statue of Mars;;;Land;;;;;;;true;;
-TentacleDepths;Tentacle Depths;;;Sea;;;;;;;;;
-Port;Port;;10;Sea;4;;0;;true;true;;;
-StatueSea;Statue of Poseidon;;;Sea;;;;;;;true;;
+Id;Name;NeedsOwner;CaptureResistance;UpdateAmphibious;MaxBuildsPerTurn;MaxAnger;VisionRange;IncomeFactor;Repair;Build;SellsHero;Chess;MovementOptions;BuildOverrides
+Airport;Airport;;10;Land;4;;0;;true;true;;;;
+Beach;Beach;;;Beach;;;;;;;;;;
+Bridge;Bridge;;;;;;;;;;;;;
+ChessPawnTile;Special Checkerboard;;;Land;;;;;;;;true;;
+ChessTile;Checkerboard;;;Land;;;;;;;;true;;
+City;City;;10;Land;;;0;1;true;;;;;
+ConstructionSite;Construction Site;;10;Land;4;;0;;true;true;;;;
+Factory;Factory;;10;Land;4;;0;;true;true;;;;
+Flame;Flame;;;;;;2;;;;;;;
+Forest;Forest;;;Land;;;;;;;;;;
+Fountain;Fountain;;;Sea;;;;;;;;;Jump;
+Grass;Grass;;;Land;;;;;;;;;;
+Hill;Hill;;;Land;;;;;;;;;;
+Hq;Headquarters;;15;Beach;;;0;;true;;;;;
+Icebergs;Icebergs;;;Sea;;;;;;;;;;
+Kraken;Kraken;;;Sea;;;;;;;;;;
+Lillypads;Lillypads;;;;;;;;;;;;;
+Mountain;Mountain;;;Land;;;;;;;;;;
+OilPlatform;Oil Rig;;10;Sea;;;0;1;true;;;;;
+Reef;Reef;;;Sea;;;;;;;;;;
+Ruins;Ruins;;;Land;;;;;;;;;;
+Sea;Sea;;;Sea;;;;;;;;;;
+ShallowSea;Shallows;;;Sea;;;;;;;;;;
+Street;Street;;;Land;;;;;;;;;;
+StatueLand;Statue of Mars;;;Land;;;;;;;true;;;
+TentacleDepths;Tentacle Depths;;;Sea;;;;;;;;;;
+Port;Port;;10;Sea;4;;0;;true;true;;;;InWater
+StatueSea;Statue of Poseidon;;;Sea;;;;;;;true;;;

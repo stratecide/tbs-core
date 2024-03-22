@@ -158,11 +158,11 @@ mod tests {
         let mut earl_grey = Hero::new(HeroType::EarlGrey, None);
         earl_grey.set_charge(&map_env, earl_grey.max_charge(&map_env));
         //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).set_hero(earl_grey).set_hp(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hero(earl_grey).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults()));
 
-        map.set_unit(Point::new(4, 4), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(4, 4), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).build_with_defaults()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -211,11 +211,11 @@ mod tests {
         let mut blue_berry = Hero::new(HeroType::BlueBerry, None);
         blue_berry.set_charge(&map_env, blue_berry.max_charge(&map_env));
         //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).set_hero(blue_berry).set_hp(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).set_hp(50).set_status(ActionStatus::Exhausted).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hero(blue_berry).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hp(50).set_status(ActionStatus::Exhausted).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults()));
 
-        map.set_unit(Point::new(4, 4), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).set_hp(50).set_status(ActionStatus::Exhausted).build_with_defaults()));
+        map.set_unit(Point::new(4, 4), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hp(50).set_status(ActionStatus::Exhausted).build_with_defaults()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -248,8 +248,8 @@ mod tests {
         let mut tess = Hero::new(HeroType::Tess, None);
         tess.set_charge(&map_env, tess.max_charge(&map_env));
         //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).set_hero(tess).set_hp(1).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hero(tess).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -280,8 +280,8 @@ mod tests {
         let map_env = map.environment().clone();
         let mut edwin = Hero::new(HeroType::Edwin, None);
         edwin.set_charge(&map_env, edwin.max_charge(&map_env));
-        map.set_unit(Point::new(1, 1), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(0).set_hero(edwin).build_with_defaults()));
-        let enemy = UnitType::HoverBike.instance(&map_env).set_owner_id(1).build_with_defaults();
+        map.set_unit(Point::new(1, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hero(edwin).build_with_defaults()));
+        let enemy = UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults();
         map.set_unit(Point::new(2, 1), Some(enemy.clone()));
         let friend = UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults();
         map.set_unit(Point::new(0, 4), Some(friend.clone()));

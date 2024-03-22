@@ -6,13 +6,13 @@ use num_rational::Rational32;
 
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
-use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::attack::AttackScript;
 use crate::script::kill::KillScript;
 use crate::script::unit::UnitScript;
+use crate::terrain::terrain::Terrain;
 use crate::terrain::AmphibiousTyping;
 use crate::terrain::ExtraMovementOptions;
 use crate::terrain::TerrainType;
@@ -431,6 +431,20 @@ impl Config {
 
     pub(crate) fn terrain_specific_hidden_attributes(&self, typ: TerrainType) -> &[TerrainAttributeKey] {
         self.terrain_hidden_attributes.get(&typ).expect(&format!("Environment doesn't contain terrain type {typ:?}"))
+    }
+
+    pub fn terrain_unit_attribute_overrides<D: Direction>(
+        &self,
+        _game: &impl GameView<D>,
+        terrain: &Terrain,
+        _pos: Point,
+        _heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> HashMap<AttributeKey, AttributeOverride> {
+        let mut result = HashMap::new();
+        for ov in &self.terrain_config(terrain.typ()).build_overrides {
+            result.insert(ov.key(), ov.clone());
+        }
+        result
     }
 
     // commanders

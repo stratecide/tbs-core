@@ -85,7 +85,7 @@ mod tests {
             ],
         }, || 0.);
         assert_eq!(200, *game.current_player().funds);
-        game.handle_command(Command::BuyUnit(Point::new(0, 0), UnitType::HoverBike, Direction4::D0), || 0.).unwrap();
+        game.handle_command(Command::BuyUnit(Point::new(0, 0), UnitType::Marine, Direction4::D0), || 0.).unwrap();
         assert!(*game.current_player().funds < 200);
         assert_eq!(0, game.get_map().get_unit(Point::new(0, 0)).unwrap().get_owner_id());
         assert!(game.get_map().get_unit(Point::new(0, 0)).unwrap().is_exhausted());

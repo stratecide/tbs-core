@@ -879,7 +879,7 @@ mod tests {
             }
         }
         map.set_unit(Point::new(3, 2), Some(UnitType::Rook.instance(&map_env).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(4, 0), Some(UnitType::HoverBike.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(4, 0), Some(UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults()));
         assert_eq!(
             map.wrapping_logic().get_neighbor(Point::new(3, 0), Direction4::D90),
             Some((Point::new(7, 3), Distortion::new(false, Direction4::D90)))

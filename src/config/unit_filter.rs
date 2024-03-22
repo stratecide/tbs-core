@@ -68,6 +68,7 @@ pub(crate) enum UnitFilter {
     AttackType(HashSet<AttackTypeKey>),
     CommanderCharge(u32),
     Fog(HashSet<FogIntensity>),
+    Moved,
     Not(Vec<Self>),
 }
 
@@ -125,6 +126,7 @@ impl FromConfig for UnitFilter {
                 remainder = r;
                 Self::Fog(list.into_iter().collect())
             }
+            "Moved" => Self::Moved,
             "Not" => {
                 let (list, r) = parse_inner_vec::<Self>(remainder, true)?;
                 remainder = r;
@@ -196,6 +198,9 @@ impl UnitFilter {
             Self::Fog(f) => {
                 let fog = map.fog_intensity();
                 f.iter().any(|f| *f == fog)
+            }
+            Self::Moved => {
+                temporary_ballast.len() > 0
             }
             Self::Not(negated) => {
                 // returns true if at least one check returns false

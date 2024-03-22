@@ -7,7 +7,7 @@ use super::unit::UnitBuilder;
 crate::enum_with_custom! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum UnitType {
-        HoverBike,
+        Marine,
         // ground units
         Sniper,
         Bazooka,
@@ -24,8 +24,10 @@ crate::enum_with_custom! {
         DroneBoat,
         WaveBreaker,
         Submarine,
-        Cruiser,
-        Carrier,
+        AntiAirBoat,
+        Destroyer,
+        BattleShip,
+        WarShip,
         SwimmingFactory,
         // air units
         TransportHeli,

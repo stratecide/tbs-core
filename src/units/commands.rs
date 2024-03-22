@@ -74,8 +74,8 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
 }
 
 impl<D: Direction> UnitAction<D> {
-    pub fn is_valid_option(&self, game: &Game<D>, unit: &Unit<D>, path: &Path<D>, destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &TemporaryBallast<D>) -> bool {
-        let options = unit.options_after_path(game, path, transporter, ballast.get_entries());
+    pub fn is_valid_option(&self, game: &Game<D>, unit: &Unit<D>, path: &Path<D>, destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> bool {
+        let options = unit.options_after_path(game, path, transporter, ballast);
         match self {
             Self::HeroPower(index, data) => {
                 if !options.contains(&Self::HeroPower(*index, Vec::new())) {
@@ -83,20 +83,20 @@ impl<D: Direction> UnitAction<D> {
                 }
                 let hero = unit.get_hero();
                 let power = &game.environment().config.hero_powers(hero.typ())[*index];
-                power.script.is_data_valid(game, unit, path, destination, transporter, ballast.get_entries(), data)
+                power.script.is_data_valid(game, unit, path, destination, transporter, ballast, data)
             }
             Self::Custom(index, data) => {
                 if !options.contains(&Self::Custom(*index, Vec::new())) {
                     return false;
                 }
                 let custom_action = &game.environment().config.custom_actions()[*index];
-                custom_action.script.is_data_valid(game, unit, path, destination, transporter, ballast.get_entries(), data)
+                custom_action.script.is_data_valid(game, unit, path, destination, transporter, ballast, data)
             }
             _ => options.contains(self)
         }
     }
 
-    pub fn execute(&self, handler: &mut EventHandler<D>, end: Point, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &TemporaryBallast<D>) {
+    pub fn execute(&self, handler: &mut EventHandler<D>, end: Point, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) {
         let needs_to_exhaust = match self {
             Self::Wait => true,
             Self::Take => {
@@ -186,8 +186,8 @@ impl<D: Direction> UnitAction<D> {
                 let heroes = Hero::hero_influence_at(handler.get_game(), end, unit.get_owner_id());
                 handler.unit_status(end, ActionStatus::Exhausted);
                 // TODO: allow partial success, maybe even a failure handler
-                if power.script.is_data_valid(handler.get_game(), &unit, path, end, transporter, ballast.get_entries(), data) {
-                    power.script.execute(handler, &unit, path, end, transporter, &heroes, ballast.get_entries(), data);
+                if power.script.is_data_valid(handler.get_game(), &unit, path, end, transporter, ballast, data) {
+                    power.script.execute(handler, &unit, path, end, transporter, &heroes, ballast, data);
                 } else {
                     /*let changes = remove_fog.into_inner()
                     .into_iter()
@@ -206,11 +206,11 @@ impl<D: Direction> UnitAction<D> {
                 true
             }
             Self::BuyTransportedUnit(unit_type) => {
-                Self::buy_transported_unit(handler, path.start, end, *unit_type, ballast.get_entries(), true);
+                Self::buy_transported_unit(handler, path.start, end, *unit_type, ballast, true);
                 true
             }
             Self::BuyUnit(unit_type, dir) => {
-                Self::buy_unit(handler, path.start, end, *unit_type, *dir, ballast.get_entries(), true);
+                Self::buy_unit(handler, path.start, end, *unit_type, *dir, ballast, true);
                 true
             }
             Self::Custom(index, data) => {
@@ -220,8 +220,8 @@ impl<D: Direction> UnitAction<D> {
                 let heroes = Hero::hero_influence_at(handler.get_game(), end, unit.get_owner_id());
                 handler.unit_status(end, ActionStatus::Exhausted);
                 // TODO: allow partial success, maybe even a failure handler
-                if custom_action.script.is_data_valid(handler.get_game(), &unit, path, end, transporter, ballast.get_entries(), data) {
-                    custom_action.script.execute(handler, &unit, path, end, transporter, &heroes, ballast.get_entries(), data);
+                if custom_action.script.is_data_valid(handler.get_game(), &unit, path, end, transporter, ballast, data) {
+                    custom_action.script.execute(handler, &unit, path, end, transporter, &heroes, ballast, data);
                 } else {
                     /*let changes = remove_fog.into_inner()
                     .into_iter()
@@ -342,7 +342,12 @@ impl<D: Direction> UnitCommand<D> {
                 PathSearchFeedback::Rejected
             }).ok_or(CommandError::InvalidPath)?.1;
             let destination = self.path.end(client.get_map()).unwrap().0;
-            if !self.action.is_valid_option(client, &unit, &self.path, destination, transporter, &ballast) {
+            let ballast = if self.path.len() == 0 {
+                &[]
+            } else {
+                ballast.get_entries()
+            };
+            if !self.action.is_valid_option(client, &unit, &self.path, destination, transporter, ballast) {
                 return Err(CommandError::InvalidAction);
             }
         }
@@ -397,13 +402,16 @@ impl<D: Direction> UnitCommand<D> {
                 handler.unit_status(path_taken.end(handler.get_map())?.0, ActionStatus::Exhausted);
             }
         } else {
-            if path_taken.steps.len() > 0 {
+            let ballast = if path_taken.steps.len() > 0 {
                 handler.unit_path(self.unload_index, &path_taken, board_at_the_end, false);
-            }
+                ballast.get_entries()
+            } else {
+                &[]
+            };
             let end = path_taken.end(handler.get_map()).unwrap().0;
             // TODO: need to check whether action can really be executed
             // so far the code only checks whether it looks correct from the user perspective
-            self.action.execute(handler, end, &path_taken, transporter, &ballast);
+            self.action.execute(handler, end, &path_taken, transporter, ballast);
         }
         exhaust_all_on_chess_board(handler, path_taken.start);
         Ok(())

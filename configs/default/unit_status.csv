@@ -1,5 +1,5 @@
 ;Exhausted;Repairing;Capturing
-HoverBike;true;true;true
+Marine;true;true;true
 Sniper;true;true;true
 Bazooka;true;true;true
 Magnet;true;true;
@@ -9,13 +9,15 @@ SmallTank;true;true;
 BigTank;true;true;
 AntiAir;true;true;
 RocketLauncher;true;true;
-LaserShark;true;true;
+LaserShark;true;true;true
 TransportBoat;true;true;
 DroneBoat;true;true;
 WaveBreaker;true;true;
 Submarine;true;true;
-Cruiser;true;true;
-Carrier;true;true;
+AntiAirBoat;true;true;
+Destroyer;true;true;
+BattleShip;true;true;
+WarShip;true;true;
 SwimmingFactory;true;true;
 TransportHeli;true;true;
 AttackHeli;true;true;

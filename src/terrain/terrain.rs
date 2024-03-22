@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -10,12 +10,13 @@ use zipper::*;
 use crate::config::environment::Environment;
 use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::game::Game;
+use crate::game::game_view::GameView;
 use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::player::Owner;
-use crate::units::attributes::ActionStatus;
+use crate::units::attributes::{ActionStatus, AttributeOverride};
 use crate::units::hero::Hero;
 use crate::units::movement::MovementType;
 use crate::units::unit::{Unit, UnitBuilder};
@@ -283,13 +284,25 @@ impl Terrain {
         true
     }
 
+    pub fn unit_build_overrides<D: Direction>(&self, game: &impl GameView<D>, position: Point, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> HashSet<AttributeOverride> {
+        self.environment.config.terrain_unit_attribute_overrides(
+            game,
+            self,
+            position,
+            heroes,
+        )
+        .values()
+        .cloned()
+        .collect()
+    }
+
     pub(crate) fn unit_shop_option<D: Direction>(&self, game: &Game<D>, pos: Point, unit_type: UnitType, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> (Unit<D>, i32) {
-        let builder: UnitBuilder<D> = unit_type.instance(&self.environment)
+        let attr_overrides = self.unit_build_overrides(game, pos, heroes);
+        let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment)
         .set_status(ActionStatus::Exhausted);
-        // TODO: terrain build-overrides for commanders, heroes
-        /*for attr in terrain.build_overrides(&heroes) {
+        for attr in &attr_overrides {
             builder = builder.set_attribute(&attr.into());
-        }*/
+        }
         let unit = builder
         .set_owner_id(self.get_owner_id())
         .build_with_defaults();
