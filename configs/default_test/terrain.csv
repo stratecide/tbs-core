@@ -14,7 +14,7 @@ Grass;Grass;;;Land;;;;;;;;;;
 Hill;Hill;;;Land;;;;;;;;;;
 Hq;Headquarters;;15;Beach;;;0;;true;;;;;
 Icebergs;Icebergs;;;Sea;;;;;;;;;;
-Kraken;Kraken;;;Sea;;;;;;;;;;
+Kraken;Kraken;;;Sea;;8;;;;;;;;
 Lillypads;Lillypads;;;;;;;;;;;;;
 Mountain;Mountain;;;Land;;;;;;;;;;
 OilPlatform;Oil Rig;;10;Sea;;;0;1;true;;;;;
