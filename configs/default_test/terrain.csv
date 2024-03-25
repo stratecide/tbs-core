@@ -17,7 +17,7 @@ Icebergs;Icebergs;;;Sea;;;;;;;;;;
 Kraken;Kraken;;;Sea;;8;;;;;;;;
 Lillypads;Lillypads;;;;;;;;;;;;;
 Mountain;Mountain;;;Land;;;;;;;;;;
-OilPlatform;Oil Rig;;10;Sea;;;0;1;true;;;;;
+OilPlatform;Oil Rig;;10;Beach;;;0;1;true;;;;;
 Reef;Reef;;;Sea;;;;;;;;;;
 Ruins;Ruins;;;Land;;;;;;;;;;
 Sea;Sea;;;Sea;;;;;;;;;;
@@ -25,5 +25,5 @@ ShallowSea;Shallows;;;Sea;;;;;;;;;;
 Street;Street;;;Land;;;;;;;;;;
 StatueLand;Statue of Mars;;;Land;;;;;;;true;;;
 TentacleDepths;Tentacle Depths;;;Sea;;;;;;;;;;
-Port;Port;;10;Sea;4;;0;;true;true;;;;InWater
+Port;Port;;10;Beach;4;;0;;true;true;;;;InWater
 StatueSea;Statue of Poseidon;;;Sea;;;;;;;true;;;

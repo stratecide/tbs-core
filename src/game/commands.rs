@@ -102,6 +102,8 @@ impl<D: Direction> Command<D> {
                                         handler.terrain_replace(p, terrain);
                                     }
                                     handler.unit_status(p, ActionStatus::Ready);
+                                } else if unit.get_status() == ActionStatus::Repairing {
+                                    handler.unit_status(p, ActionStatus::Ready);
                                 }
                             } else {
                                 handler.terrain_capture_progress(p, None);

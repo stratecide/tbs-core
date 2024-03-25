@@ -763,6 +763,10 @@ fn displace<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, att
     }
     for (pos, dir, _) in targets.iter_mut().rev() {
         if let Some(d) = dir {
+            if !handler.get_map().get_unit(*pos).unwrap().can_be_displaced() {
+                *dir = None;
+                continue;
+            }
             let d = if distance < 0 {
                 d.opposite_direction()
             } else {
@@ -961,6 +965,7 @@ mod tests {
         map.set_unit(Point::new(1, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(2, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(1).build_with_defaults()));
         map.set_unit(Point::new(3, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 2), Some(UnitType::WarShip.instance(&environment).set_owner_id(1).build_with_defaults()));
         let (mut game, _) = map.game_server(&GameSettings {
             name: "displacement".to_string(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
@@ -969,6 +974,8 @@ mod tests {
                 PlayerSettings::new(&environment.config, 1),
             ],
         }, || 0.);
+        let unchanged = game.clone();
+
         game.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(1, 0)),
@@ -987,5 +994,14 @@ mod tests {
             assert_eq!(None, game.get_map().get_unit(Point::new(x, 1)));
         }
         assert_eq!(94, game.get_map().get_unit(Point::new(4, 1)).unwrap().get_hp());
+
+        // WarShip can't be displaced
+        let mut game = unchanged.clone();
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(1, 1)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        }), || 0.).unwrap();
+        assert!(game.get_map().get_unit(Point::new(1, 2)).unwrap().get_hp() < 100);
     }
 }

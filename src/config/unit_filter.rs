@@ -4,6 +4,7 @@ use crate::game::fog::FogIntensity;
 use crate::game::game_view::GameView;
 use crate::map::point::Point;
 use crate::terrain::TerrainType;
+use crate::units::attributes::ActionStatus;
 use crate::units::combat::{AttackType, AttackTypeKey};
 use crate::units::hero::{Hero, HeroType};
 use crate::units::movement::{MovementType, TBallast};
@@ -69,6 +70,7 @@ pub(crate) enum UnitFilter {
     CommanderCharge(u32),
     Fog(HashSet<FogIntensity>),
     Moved,
+    Status(HashSet<ActionStatus>),
     Not(Vec<Self>),
 }
 
@@ -127,6 +129,11 @@ impl FromConfig for UnitFilter {
                 Self::Fog(list.into_iter().collect())
             }
             "Moved" => Self::Moved,
+            "S" | "Status" => {
+                let (list, r) = parse_inner_vec::<ActionStatus>(remainder, true)?;
+                remainder = r;
+                Self::Status(list.into_iter().collect())
+            }
             "Not" => {
                 let (list, r) = parse_inner_vec::<Self>(remainder, true)?;
                 remainder = r;
@@ -201,6 +208,10 @@ impl UnitFilter {
             }
             Self::Moved => {
                 temporary_ballast.len() > 0
+            }
+            Self::Status(status) => {
+                let s = unit.get_status();
+                status.iter().any(|a| *a == s)
             }
             Self::Not(negated) => {
                 // returns true if at least one check returns false
