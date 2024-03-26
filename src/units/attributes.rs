@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fmt::{Display, Debug};
 
 use zipper::*;
-use zipper_derive::Zippable;
 
+use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::config::parse::{string_base, FromConfig};
 use crate::map::direction::{Direction, Direction4, Direction6};
@@ -74,6 +74,15 @@ impl AttributeKey {
             Self::EnPassant => A::EnPassant(None),
         }
     }
+
+    pub fn is_skull_data(&self, _config: &Config) -> bool {
+        match self {
+            Self::Amphibious => true,
+            Self::Direction => true,
+            Self::DroneStationId => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,7 +120,7 @@ impl<D: Direction> Attribute<D> {
         }
     }
 
-    pub(super) fn export(&self, environment: &Environment, zipper: &mut Zipper, typ: UnitType, transported: bool, owner: i8, hero: HeroType) {
+    pub(crate) fn export(&self, environment: &Environment, zipper: &mut Zipper, typ: UnitType, transported: bool, owner: i8, hero: HeroType) {
         match self {
             Self::Hp(hp) => U::<100>::from(*hp).zip(zipper),
             Self::Hero(hero) => hero.export(zipper, environment),
@@ -151,7 +160,7 @@ impl<D: Direction> Attribute<D> {
         }
     }
 
-    pub(super) fn import(unzipper: &mut Unzipper, environment: &Environment, key: AttributeKey, typ: UnitType, transported: bool, owner: i8, hero: HeroType) -> Result<Self, ZipperError> {
+    pub(crate) fn import(unzipper: &mut Unzipper, environment: &Environment, key: AttributeKey, typ: UnitType, transported: bool, owner: i8, hero: HeroType) -> Result<Self, ZipperError> {
         use AttributeKey as A;
         Ok(match key {
             A::Hp => Self::Hp(*(U::<100>::unzip(unzipper)?) as u8),

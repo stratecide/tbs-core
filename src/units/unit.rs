@@ -85,6 +85,13 @@ impl<D: Direction> Unit<D> {
     }
 
     // getters that aren't influenced by attributes
+    pub(crate) fn environment(&self) -> &Environment {
+        &self.environment
+    }
+
+    pub(crate) fn get_attributes(&self) -> &HashMap<AttributeKey, Attribute<D>> {
+        &self.attributes
+    }
 
     pub fn typ(&self) -> UnitType {
         self.typ

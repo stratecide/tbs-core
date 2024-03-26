@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use interfaces::game_interface::ClientPerspective;
 use zipper_derive::Zippable;
-use zipper::Exportable;
+use zipper::{Exportable, SupportedZippable};
 
 use crate::config::environment::Environment;
 use crate::game::fog::FogIntensity;
@@ -15,11 +15,14 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::Owner;
 use crate::terrain::TerrainType;
+use crate::units::attributes::Attribute;
+use crate::units::hero::HeroType;
+use crate::units::unit::{Unit, UnitBuilder};
 use crate::units::unit_types::UnitType;
 
 pub const MAX_STACK_SIZE: u32 = 4;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Zippable)]
+#[derive(Debug, Clone, PartialEq, Eq, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
 pub enum Detail<D: Direction> {
     Pipe(PipeState<D>),
@@ -27,7 +30,7 @@ pub enum Detail<D: Direction> {
     Coins2,
     Coins4,
     Bubble(Owner, TerrainType),
-    Skull(Owner, UnitType),
+    Skull(SkullData<D>),
 }
 impl<D: Direction> Detail<D> {
     pub fn get_vision(&self, game: &Game<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
@@ -67,7 +70,7 @@ impl<D: Direction> Detail<D> {
         let mut coin = false;
         let mut skull = false;
         let mut pipe_directions = HashSet::new();
-        let mut details: Vec<Self> = details.into_iter().rev().filter(|detail| {
+        let details: Vec<Self> = details.into_iter().rev().filter(|detail| {
             let remove;
             match detail {
                 Self::Pipe(connection) => {
@@ -92,7 +95,7 @@ impl<D: Direction> Detail<D> {
                         coin = true;
                     }
                 }
-                Self::Skull(_, _) => {
+                Self::Skull(_) => {
                     remove = skull || pipe_directions.len() > 0;
                     if !remove {
                         skull = true;
@@ -101,7 +104,6 @@ impl<D: Direction> Detail<D> {
             }
             !remove
         }).take(MAX_STACK_SIZE as usize).collect();
-        //details.sort();
         details
     }
 
@@ -127,6 +129,71 @@ impl<D: Direction> Detail<D> {
             }
             _ => ()
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkullData<D: Direction> {
+    owner: Owner,
+    unit_type: UnitType,
+    attributes: Vec<Attribute<D>>,
+}
+
+impl<D: Direction> SupportedZippable<&Environment> for SkullData<D> {
+    fn export(&self, zipper: &mut zipper::Zipper, support: &Environment) {
+        self.owner.export(zipper, support);
+        self.unit_type.export(zipper, support);
+        for attr in &self.attributes {
+            attr.export(support, zipper, self.unit_type, false, self.owner.0, HeroType::None);
+        }
+    }
+
+    fn import(unzipper: &mut zipper::Unzipper, support: &Environment) -> Result<Self, zipper::ZipperError> {
+        let owner = Owner::import(unzipper, support)?;
+        let unit_type = UnitType::import(unzipper, support)?;
+        let mut attributes = Vec::new();
+        for key in support.unit_attributes(unit_type, owner.0) {
+            if key.is_skull_data(&support.config) {
+                attributes.push(Attribute::import(unzipper, support, *key, unit_type, false, owner.0, HeroType::None)?);
+            }
+        }
+        Ok(Self {
+            owner,
+            unit_type,
+            attributes,
+        })
+    }
+}
+
+impl<D: Direction> SkullData<D> {
+    pub fn new(unit: &Unit<D>, owner: i8) -> Self {
+        let unit_type = unit.typ();
+        let mut attributes = Vec::new();
+        for key in unit.environment().unit_attributes(unit_type, owner) {
+            if key.is_skull_data(&unit.environment().config) {
+                attributes.push(unit.get_attributes().get(key).cloned().unwrap_or(key.default()));
+            }
+        }
+        Self {
+            owner: Owner(owner),
+            unit_type,
+            attributes,
+        }
+    }
+
+    pub fn get_owner_id(&self) -> i8 {
+        self.owner.0
+    }
+
+    pub fn unit(&self, environment: &Environment, hp: u8) -> Unit<D> {
+        let mut builder = UnitBuilder::new(environment, self.unit_type)
+        .set_owner_id(self.owner.0)
+        .set_hp(hp)
+        .set_zombified(true);
+        for attr in &self.attributes {
+            builder = builder.set_attribute(attr);
+        }
+        builder.build_with_defaults()
     }
 }
 

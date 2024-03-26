@@ -140,6 +140,7 @@ mod tests {
     use crate::commander::commander_type::CommanderType;
     use crate::config::config::Config;
     use crate::details::Detail;
+    use crate::details::SkullData;
     use crate::game::commands::Command;
     use crate::game::fog::*;
     use crate::map::direction::*;
@@ -150,6 +151,7 @@ mod tests {
     use crate::map::point_map::PointMap;
     use crate::map::wrapping_map::WMBuilder;
     use crate::terrain::TerrainType;
+    use crate::units::attributes::Amphibious;
     use crate::units::combat::AttackVector;
     use crate::units::commands::UnitAction;
     use crate::units::commands::UnitCommand;
@@ -162,13 +164,16 @@ mod tests {
         let map = PointMap::new(5, 5, false);
         let map = WMBuilder::<Direction6>::new(map);
         let mut map = Map::new(map.build(), &config);
-        let environment = map.environment().clone();
-        map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::SmallTank.instance(&environment).set_owner_id(1).set_hp(1).build_with_defaults()));
+        let map_env = map.environment().clone();
+        map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
 
-        map.set_unit(Point::new(4, 4), Some(UnitType::SmallTank.instance(&environment).set_owner_id(1).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(4, 4), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
 
-        map.set_details(Point::new(0, 4), vec![Detail::Skull(0.into(), UnitType::SmallTank)]);
+        let skull = SkullData::new(&UnitType::Marine.instance(&map_env).set_owner_id(1).set_amphibious(Amphibious::InWater).build_with_defaults(), 0);
+        map.set_details(Point::new(0, 4), vec![Detail::Skull(skull.clone())]);
+        let skull2 = SkullData::new(&UnitType::Marine.instance(&map_env).set_owner_id(1).set_amphibious(Amphibious::OnLand).build_with_defaults(), 0);
+        map.set_details(Point::new(1, 4), vec![Detail::Skull(skull2.clone())]);
 
         let settings = map.settings().unwrap();
 
@@ -185,19 +190,20 @@ mod tests {
         // small power
         server.handle_command(Command::CommanderPowerSimple(1), || 0.).unwrap();
         assert_eq!(server.get_map().get_details(Point::new(0, 4)), Vec::new());
-        assert_eq!(server.get_map().get_unit(Point::new(0, 4)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).build_with_defaults()));
+        assert_eq!(server.get_map().get_unit(Point::new(0, 4)), Some(&UnitType::Marine.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).set_amphibious(Amphibious::InWater).build_with_defaults()));
+        assert_eq!(server.get_map().get_unit(Point::new(1, 4)), Some(&UnitType::Marine.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).set_amphibious(Amphibious::OnLand).build_with_defaults()));
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(1, 1)),
             action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
         }), || 0.).unwrap();
-        assert_eq!(server.get_map().get_details(Point::new(2, 1)), vec![Detail::Skull(0.into(), UnitType::SmallTank)]);
+        assert_eq!(server.get_map().get_details(Point::new(2, 1)), vec![Detail::Skull(SkullData::new(&UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults(), 0))]);
         assert_eq!(server.get_map().get_unit(Point::new(2, 1)), None);
         // big power
         let mut server = unchanged.clone();
         server.handle_command(Command::CommanderPowerSimple(2), || 0.).unwrap();
         assert_eq!(server.get_map().get_details(Point::new(0, 4)), Vec::new());
-        assert_eq!(server.get_map().get_unit(Point::new(0, 4)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).build_with_defaults()));
+        assert_eq!(server.get_map().get_unit(Point::new(0, 4)), Some(&UnitType::Marine.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).set_amphibious(Amphibious::InWater).build_with_defaults()));
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(1, 1)),

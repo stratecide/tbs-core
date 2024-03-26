@@ -9,7 +9,6 @@ use crate::map::direction::Direction;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::units::attributes::AttributeKey;
-use crate::units::unit::UnitBuilder;
 
 use super::unit::anger_kraken;
 
@@ -137,16 +136,12 @@ pub(super) fn resurrect_zombie<D: Direction>(handler: &mut EventHandler<D>, p: P
     if handler.get_map().get_unit(p).is_some() {
         return;
     }
-    for (index, detail) in handler.get_map().get_details(p).to_vec().into_iter().enumerate() {
+    for (index, detail) in handler.get_map().get_details(p).iter().enumerate() {
         match detail {
-            Detail::Skull(o, unit_type) => {
-                if o.0 == owner_id {
+            Detail::Skull(skull) => {
+                if skull.get_owner_id() == owner_id {
+                    let unit = skull.unit(handler.environment(), hp);
                     handler.detail_remove(p, index.into());
-                    let unit = UnitBuilder::new(handler.environment(), unit_type)
-                    .set_owner_id(owner_id)
-                    .set_hp(hp)
-                    .set_zombified(true)
-                    .build_with_defaults();
                     handler.unit_creation(p, unit);
                 }
                 break;

@@ -489,8 +489,8 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                     Detail::Bubble(owner, _) => {
                         owner.0 == unit.get_owner_id()
                     }
-                    Detail::Skull(owner, _) => {
-                        owner.0 == unit.get_owner_id()
+                    Detail::Skull(skull) => {
+                        skull.get_owner_id() == unit.get_owner_id()
                     }
                 }
             }).collect();
