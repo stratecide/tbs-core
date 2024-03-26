@@ -3,6 +3,7 @@ use interfaces::game_interface::{CommandInterface, GameInterface};
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::details::Detail;
+use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::TerrainBuilder;
 use crate::map::direction::Direction;
 use crate::units::attributes::{ActionStatus, AttributeKey};
@@ -168,11 +169,15 @@ impl<D: Direction> Command<D> {
                     return Err(CommandError::CannotBuildHere);
                 }
                 if terrain.get_owner_id() != player.get_owner_id() {
-                    return Err(CommandError::NorYourProperty);
+                    return Err(CommandError::NotYourProperty);
                 }
                 // TODO: when checking the config, make sure that terrain-buildable units don't have a drone id
                 if !terrain.buildable_units().contains(&unit_type) {
                     return Err(CommandError::InvalidUnitType);
+                }
+                let built_this_turn = terrain.get_built_this_turn();
+                if terrain.has_attribute(TerrainAttributeKey::BuiltThisTurn) && built_this_turn >= terrain.max_built_this_turn() {
+                    return Err(CommandError::BuildLimitReached);
                 }
 
                 let heroes = Hero::hero_influence_at(handler.get_game(), pos, player.get_owner_id());
@@ -191,6 +196,8 @@ impl<D: Direction> Command<D> {
                 handler.unit_creation(pos, unit);
                 if let Some(bubble_index) = bubble_index {
                     handler.detail_remove(pos, bubble_index);
+                } else if terrain.has_attribute(TerrainAttributeKey::BuiltThisTurn) {
+                    handler.terrain_built_this_turn(pos, built_this_turn + 1);
                 }
                 Ok(())
             }
@@ -233,7 +240,8 @@ pub enum CommandError {
     PowerNotUsable,
     Blocked(Point),
     NotEnoughMoney,
-    NorYourProperty,
+    NotYourProperty,
+    BuildLimitReached,
     CannotCaptureHere,
     NotYourBubble,
     InvalidCommanderPower,

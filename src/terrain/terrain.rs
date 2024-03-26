@@ -172,7 +172,7 @@ impl Terrain {
     }
     pub fn set_owner_id(&mut self, id: i8) {
         if id >= 0 || !self.environment.config.terrain_needs_owner(self.typ) {
-            let owner_before = self.get_owner_id();
+            let _owner_before = self.get_owner_id();
             self.set(Owner(id.max(-1).min(self.environment.config.max_player_count() - 1)));
             /*let co_before = self.environment.config.commander_attributes(self.typ, owner_before);
             let co_after = self.environment.config.commander_attributes(self.typ, self.get_owner_id());
@@ -208,6 +208,9 @@ impl Terrain {
     }
     pub fn set_built_this_turn(&mut self, built_this_turn: u8) {
         self.set(BuiltThisTurn(built_this_turn));
+    }
+    pub fn max_built_this_turn(&self) -> u8 {
+        self.environment.config.terrain_max_builds_per_turn(self.typ)
     }
 
     // methods that go beyond getter / setter functionality
