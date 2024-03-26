@@ -26,7 +26,6 @@ use super::movement::PathStep;
 use super::movement::search_path;
 use super::movement::PathStepTakes;
 use super::movement::TBallast;
-use super::movement::TemporaryBallast;
 use super::unit::Unit;
 use super::unit_types::UnitType;
 
@@ -172,7 +171,7 @@ impl<D: Direction> UnitAction<D> {
             Self::BuyHero(hero_type) => {
                 let unit = handler.get_map().get_unit(end).unwrap();
                 let cost = hero_type.price(handler.environment(), &unit).unwrap();
-                handler.money_change(unit.get_owner_id(), cost);
+                handler.money_change(unit.get_owner_id(), -cost);
                 handler.unit_set_hero(end, Hero::new(*hero_type, Some(end)));
                 true
             }
