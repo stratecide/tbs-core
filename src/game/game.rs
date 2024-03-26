@@ -220,7 +220,8 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn visible_unit_with_attribute(&self, team: ClientPerspective, pos: Point, attribute: AttributeKey) -> bool {
-        self.get_map().get_unit(pos).unwrap().fog_replacement(self, pos, self.get_fog_at(team, pos))
+        self.get_map().get_unit(pos).unwrap()
+        .fog_replacement(self, pos, self.get_fog_at(team, pos))
         .and_then(|u| Some(u.has_attribute(attribute))).unwrap_or(false)
     }
 

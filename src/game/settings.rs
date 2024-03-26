@@ -16,11 +16,18 @@ use interfaces::game_interface;
 use zipper_derive::Zippable;
 
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 pub struct GameSettings {
-    pub name: String,
+    pub name: String, // should name even be part of the settings?
     pub fog_mode: FogMode,
     pub players: Vec<PlayerSettings>,
+}
+
+impl PartialEq for GameSettings {
+    fn eq(&self, other: &Self) -> bool {
+        self.fog_mode == other.fog_mode &&
+        self.players == other.players
+    }
 }
 
 impl GameSettings {
