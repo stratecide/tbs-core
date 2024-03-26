@@ -8,6 +8,7 @@ mod tests {
     use crate::config::config::Config;
     use crate::game::commands::Command;
     use crate::game::fog::*;
+    use crate::game::game_view::GameView;
     use crate::map::direction::*;
     use crate::map::map::Map;
     use crate::map::map_view::MapView;
@@ -71,5 +72,37 @@ mod tests {
             client.get_unit(Point::new(3, 4)).unwrap().get_transported().len(),
             1
         );
+    }
+
+    #[test]
+    fn repair_unit() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(5, 7, false);
+        let map = WMBuilder::<Direction6>::new(map);
+        let mut map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        for x in 0..5 {
+            for y in 0..7 {
+                map.set_terrain(Point::new(x, y), TerrainType::Grass.instance(&map_env).build_with_defaults());
+            }
+        }
+        map.set_terrain(Point::new(3, 4), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
+        map.set_unit(Point::new(3, 4), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 6), Some(UnitType::WarShip.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        let mut settings = map.settings().unwrap();
+        settings.fog_mode = FogMode::Constant(FogSetting::None);
+        settings.players[0].set_funds(1000);
+        let (mut server, _) = map.clone().game_server(&settings, || 0.);
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(3, 4)),
+            action: UnitAction::Repair,
+        }), || 0.).unwrap();
+        assert!(*server.get_owning_player(0).unwrap().funds < 1000);
+        assert!(server.get_unit(Point::new(3, 4)).unwrap().get_hp() > 1);
+        assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_status(), ActionStatus::Repairing);
+        server.handle_command(Command::EndTurn, || 0.).unwrap();
+        server.handle_command(Command::EndTurn, || 0.).unwrap();
+        assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_status(), ActionStatus::Ready);
     }
 }

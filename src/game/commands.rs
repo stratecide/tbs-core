@@ -79,9 +79,18 @@ impl<D: Direction> Command<D> {
                 };
 
                 handler.next_turn();
+                let owner_id = handler.get_game().current_player().get_owner_id();
+
+                // reset status for repairing units
+                for p in handler.get_map().all_points() {
+                    if let Some(unit) = handler.get_map().get_unit(p) {
+                        if unit.get_owner_id() == owner_id && unit.get_status() == ActionStatus::Repairing {
+                            handler.unit_status(p, ActionStatus::Ready);
+                        }
+                    }
+                }
 
                 // reset capture-progress / finish capturing
-                let owner_id = handler.get_game().current_player().get_owner_id();
                 for p in handler.get_map().all_points() {
                     let terrain = handler.get_map().get_terrain(p).unwrap();
                     if let Some((new_owner, progress)) = terrain.get_capture_progress() {
@@ -101,8 +110,6 @@ impl<D: Direction> Command<D> {
                                         .build_with_defaults();
                                         handler.terrain_replace(p, terrain);
                                     }
-                                    handler.unit_status(p, ActionStatus::Ready);
-                                } else if unit.get_status() == ActionStatus::Repairing {
                                     handler.unit_status(p, ActionStatus::Ready);
                                 }
                             } else {
