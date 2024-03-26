@@ -1117,10 +1117,9 @@ impl<D: Direction> UnitBuilder<D> {
     }
 
     pub fn set_transported(mut self, transported: Vec<Unit<D>>) -> Self {
-        if let Some(mut transported_mut) = self.unit.get_transported_mut() {
-            for unit in transported {
-                transported_mut.push(unit);
-            }
+        if self.unit.has_attribute(AttributeKey::Transported) {
+            self.unit.attributes.insert(AttributeKey::Transported, Attribute::Transported(transported));
+            self.unit.fix_transported();
         }
         self
     }

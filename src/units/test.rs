@@ -20,8 +20,20 @@ mod tests {
     use crate::units::attributes::ActionStatus;
     use crate::units::commands::*;
     use crate::units::movement::Path;
+    use crate::units::unit::Unit;
     use crate::units::unit_types::UnitType;
 
+    #[test]
+    fn unit_builder_transported() {
+        let config = Arc::new(Config::test_config());
+        let map = WMBuilder::<Direction4>::new(PointMap::new(5, 5, false));
+        let map = Map::new(map.build(), &config);
+        let map_env = map.environment().clone();
+        let unit: Unit<Direction4> = UnitType::TransportHeli.instance(&map_env).set_owner_id(0).set_transported(vec![
+            UnitType::Marine.instance(&map_env).set_hp(34).build_with_defaults(),
+        ]).build_with_defaults();
+        assert_eq!(unit.get_transported().len(), 1);
+    }
 
     #[test]
     fn fog_replacement() {
