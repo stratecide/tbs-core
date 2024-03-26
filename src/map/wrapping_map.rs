@@ -294,9 +294,9 @@ impl<D: Direction> WMBuilder<D> {
     }
 
     pub fn localize_point(&self, global_p: GlobalPoint) -> Option<(Point, Distortion<D>)> {
-        let mut tr = D::T::between(&self.map_center, &global_p, self.odd());
+        let mut tr = D::T::between(&self.map_center, &global_p, self.map.odd_if_hex());
         wrap_point::<D>(&mut tr, &self.wrapping_vectors);
-        let global_p = tr.translate_point(&self.map_center, self.odd());
+        let global_p = tr.translate_point(&self.map_center, self.map.odd_if_hex());
         let mut x_translation = vec![D::angle_0().translation(0)];
         if self.wrapping_vectors.len() > 0 {
             x_translation.push(self.wrapping_vectors[0]);
@@ -572,7 +572,7 @@ impl<D: Direction> WMBuilder<D> {
         for (source, dirs) in &self.missing_neighbors {
             let local_p = self.point_map_equivalent(*source).expect("only real points should have missing neighbors");
             for d in dirs {
-                let p = d.get_global_neighbor(*source, self.odd());
+                let p = d.get_global_neighbor(*source, self.map.odd_if_hex());
                 if let Some((destination, distortion)) = self.localize_point(p) {
                     wrapped_neighbors.insert((local_p, *d), (destination, -distortion));
                 }
@@ -770,19 +770,59 @@ mod tests {
     fn no_wrapping() {
         let builder = WMBuilder::<Direction4>::new(PointMap::new(4, 8, false));
         builder.build();
-        let builder = WMBuilder::<Direction6>::new(PointMap::new(4, 8, false));
-        builder.build();
+        let builder = WMBuilder::<Direction6>::new(PointMap::new(15, 11, false));
+        let map = builder.build();
+        let p = Point::new(0, 0);
+        let neighbors: Vec<Option<Point>> = Direction6::list().into_iter()
+        .map(|d|
+            map.get_neighbor(p, d).map(|(p, _)| p)
+        ).collect();
+        assert_eq!(
+            neighbors,
+            vec![Some(Point::new(1, 0)), None, None, None, None, Some(Point::new(0, 1))],
+        );
+        let p = Point::new(14, 1);
+        let neighbors: Vec<Option<Point>> = Direction6::list().into_iter()
+        .map(|d|
+            map.get_neighbor(p, d).map(|(p, _)| p)
+        ).collect();
+        assert_eq!(
+            neighbors,
+            vec![None, None, Some(Point::new(14, 0)), Some(Point::new(13, 1)), Some(Point::new(14, 2)), None],
+        );
     }
 
     #[test]
-    fn simple_wrapping() -> Result<(), TransformationError<Direction4>> {
+    fn simple_wrapping() {
         let builder = WMBuilder::<Direction4>::with_transformations(PointMap::new(5, 4, false), vec![
             Transformation::new(Distortion::new(false, Direction4::D0), Direction4::D0.translation(-5))
-        ])?;
+        ]).unwrap();
         assert_eq!(builder.localize_point(GlobalPoint::new(1, 2)), Some((Point::new(1, 2), Distortion::neutral())));
         assert_eq!(builder.localize_point(GlobalPoint::new(6, 2)), Some((Point::new(1, 2), Distortion::neutral())));
         assert_eq!(builder.localize_point(GlobalPoint::new(1, 5)), None);
-        Ok(())
+
+        let builder = WMBuilder::<Direction6>::with_transformations(PointMap::new(15, 11, false), vec![
+            Transformation::new(Distortion::new(false, Direction6::D0), Direction6::D0.translation(13) + Direction6::D60.translation(5)),
+        ]).unwrap();
+        let map = builder.build();
+        let p = Point::new(0, 0);
+        let neighbors: Vec<Option<Point>> = Direction6::list().into_iter()
+        .map(|d|
+            map.get_neighbor(p, d).map(|(p, _)| p)
+        ).collect();
+        assert_eq!(
+            neighbors,
+            vec![Some(Point::new(1, 0)), None, None, None, None, Some(Point::new(0, 1))],
+        );
+        let p = Point::new(14, 1);
+        let neighbors: Vec<Option<Point>> = Direction6::list().into_iter()
+        .map(|d|
+            map.get_neighbor(p, d).map(|(p, _)| p)
+        ).collect();
+        assert_eq!(
+            neighbors,
+            vec![Some(Point::new(0, 6)), None, Some(Point::new(14, 0)), Some(Point::new(13, 1)), Some(Point::new(14, 2)), None],
+        );
     }
 
     #[test]
