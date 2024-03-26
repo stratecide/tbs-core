@@ -1,1 +1,2 @@
-
+Name;UnitFilter;Script
+Build Unit;Unit(DroneBoat, BattleShip, SwimmingFactory, DroneTower);BuyUnit

@@ -180,10 +180,6 @@ impl<D: Direction> Unit<D> {
         self.environment.config.base_damage(self.typ, defender)
     }
 
-    pub fn can_build_units(&self) -> bool {
-        self.environment.config.can_build_units(self.typ)
-    }
-
     pub fn displacement(&self) -> Displacement {
         self.environment.config.displacement(self.typ)
     }
@@ -885,8 +881,14 @@ impl<D: Direction> Unit<D> {
                     }
                 }
             }
+            // custom actions
+            for (i, custom_action) in self.environment.config.custom_actions().iter().enumerate() {
+                if custom_action.add_as_option(game, self, path, destination, funds_after_path, transporter, None, &heroes, ballast) {
+                    result.push(UnitAction::Custom(i, Vec::new()));
+                }
+            }
             // build units
-            if self.can_build_units() && self.transport_capacity() > 0 {
+            /*if self.can_build_units() && self.transport_capacity() > 0 {
                 let mut free_space = self.remaining_transport_capacity();
                 if let Some(drone_id) = self.get_drone_station_id() {
                     let mut outside = 0;
@@ -920,7 +922,7 @@ impl<D: Direction> Unit<D> {
                         }
                     }
                 }
-            }
+            }*/
             // attack
             if self.can_attack_after_moving() || path.steps.len() == 0 {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
@@ -982,9 +984,6 @@ impl<D: Direction> Unit<D> {
     }
 
     pub fn unit_shop(&self, game: &impl GameView<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, ballast: &[TBallast<D>]) -> Vec<(Unit<D>, i32)> {
-        if !self.can_build_units() {
-            return Vec::new();
-        }
         let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         self.transportable_units().iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, transporter, &heroes, ballast)

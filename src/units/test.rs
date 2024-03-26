@@ -15,6 +15,7 @@ mod tests {
     use crate::map::point::*;
     use crate::map::point_map::PointMap;
     use crate::map::wrapping_map::*;
+    use crate::script::custom_action::CustomActionData;
     use crate::terrain::TerrainType;
     use crate::units::attributes::ActionStatus;
     use crate::units::commands::*;
@@ -59,7 +60,7 @@ mod tests {
         let events = server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(3, 4)),
-            action: UnitAction::BuyTransportedUnit(UnitType::LightDrone),
+            action: UnitAction::Custom(0, vec![CustomActionData::UnitType(UnitType::LightDrone)]),
         }), || 0.).unwrap();
         for ev in events.get(&Perspective::Team(0)).unwrap().0 {
             client.handle_event(ev);

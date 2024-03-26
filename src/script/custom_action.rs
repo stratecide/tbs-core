@@ -9,9 +9,8 @@ use crate::map::map::NeighborMode;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::units::attributes::{ActionStatus, AttributeKey};
-use crate::units::commands::UnitAction;
 use crate::units::hero::{Hero, HeroType};
-use crate::units::movement::{Path, TBallast};
+use crate::units::movement::{Path, PathStep, TBallast};
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 
@@ -123,9 +122,24 @@ impl CustomAction {
             Self::ActivateUnits => CustomActionTestResult::Success,
             Self::BuyUnit => {
                 let build_inside = unit.has_attribute(AttributeKey::Transported);
+                let team = unit.get_team();
                 if data_so_far.len() == 0 {
-                    if build_inside && unit.remaining_transport_capacity() == 0 {
-                        return CustomActionTestResult::Failure;
+                    if build_inside {
+                        let mut free_space = unit.remaining_transport_capacity();
+                        if let Some(drone_id) = unit.get_drone_station_id() {
+                            let mut outside = 0;
+                            for p in game.all_points() {
+                                if let Some(u) = game.get_visible_unit(team, p) {
+                                    if u.get_drone_id() == Some(drone_id) {
+                                        outside += 1;
+                                    }
+                                }
+                            }
+                            free_space = free_space.max(outside) - outside;
+                        }
+                        if free_space <= 0 {
+                            return CustomActionTestResult::Failure
+                        }
                     }
                     let mut options = Vec::new();
                     for unit_type in unit.transportable_units() {
@@ -144,12 +158,16 @@ impl CustomAction {
                         _ => return CustomActionTestResult::Failure,
                     };
                     if !build_inside {
-                        let options = game.get_neighbors(destination, NeighborMode::FollowPipes).into_iter()
-                        .filter(|p| {
-                            game.get_terrain(p.point).unwrap().movement_cost(unit.default_movement_type()).is_some()
-                            && game.get_unit(p.point).is_none()
+                        let options = D::list().into_iter()
+                        .filter(|d| {
+                            match game.get_neighbor(destination, *d) {
+                                Some((p, _)) => {
+                                    game.get_terrain(p).unwrap().movement_cost(unit.default_movement_type()).is_some()
+                                    && game.get_visible_unit(team, p).is_none()
+                                }
+                                _ => false
+                            }
                         })
-                        .map(|op| op.direction)
                         .collect();
                         CustomActionTestResult::Next(CustomActionDataOptions::Direction(destination, options))
                     } else {
@@ -258,10 +276,10 @@ impl CustomAction {
             Self::BuyUnit => {
                 match data {
                     &[CustomActionData::UnitType(unit_type)] => {
-                        UnitAction::buy_transported_unit(handler, path.start, destination, unit_type, ballast, false);
+                        buy_transported_unit(handler, path.start, destination, unit_type, ballast, false);
                     },
                     &[CustomActionData::UnitType(unit_type), CustomActionData::Direction(dir)] => {
-                        UnitAction::buy_unit(handler, path.start, destination, unit_type, dir, ballast, false);
+                        buy_unit(handler, path.start, destination, unit_type, dir, ballast, false);
                     },
                     _ => panic!("BuyUnit Action Data is wrong: {:?}", data),
                 };
@@ -277,5 +295,50 @@ impl CustomAction {
                 handler.unit_replace(p2, unit1);
             }
         }
+    }
+}
+
+pub fn buy_transported_unit<D: Direction>(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, ballast: &[TBallast<D>], exhaust: bool) {
+    let transporter = handler.get_map().get_unit(path_start).filter(|_| path_start != end);
+    let factory_unit = handler.get_map().get_unit(end).unwrap();
+    let heroes = Hero::hero_influence_at(handler.get_game(), end, factory_unit.get_owner_id());
+    let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, unit_type, transporter.map(|u| (u, path_start)), &heroes, ballast);
+    if !exhaust {
+        unit.set_status(ActionStatus::Ready);
+    }
+    if handler.environment().unit_attributes(unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
+        unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
+    }
+    // TODO: don't cast the i32 to u32
+    handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
+    handler.unit_add_transported(end, unit);
+}
+
+pub fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, dir: D, ballast: &[TBallast<D>], exhaust: bool) -> bool {
+    let (destination, _) = handler.get_map().get_neighbor(end, dir).unwrap();
+    if handler.get_map().get_unit(destination).is_some() {
+        handler.effect_fog_surprise(destination);
+        false
+    } else {
+        let transporter = handler.get_map().get_unit(path_start).filter(|_| path_start != end);
+        let factory_unit = handler.get_map().get_unit(end).unwrap();
+        let heroes = Hero::hero_influence_at(handler.get_game(), end, factory_unit.get_owner_id());
+        let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, unit_type, transporter.map(|u| (u, path_start)), &heroes, ballast);
+        if !exhaust {
+            unit.set_status(ActionStatus::Ready);
+        }
+        unit.set_direction(unit.get_direction().rotate_by(dir));
+        if handler.environment().unit_attributes(unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
+            unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
+        }
+        let path = Path {
+            start: end,
+            steps: vec![PathStep::Dir(dir)],
+        };
+        // TODO: don't cast the i32 to u32
+        handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
+        let unit = handler.animate_unit_path(&unit, &path, false);
+        handler.unit_creation(destination, unit);
+        true
     }
 }

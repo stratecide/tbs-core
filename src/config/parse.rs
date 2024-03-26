@@ -257,7 +257,7 @@ impl Config {
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         // TODO: ensure uniqueness of column and row IDs
         let mut headers: Vec<CustomActionConfigHeader> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
+        for h in reader.headers()?.into_iter() {
             let header = CustomActionConfigHeader::from_conf(h)?.0;
             if headers.contains(&header) {
                 return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))

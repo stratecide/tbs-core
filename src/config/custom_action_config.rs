@@ -1,7 +1,13 @@
 use std::collections::HashMap;
 
 use crate::config::parse::*;
-use crate::script::custom_action::CustomAction;
+use crate::game::game_view::GameView;
+use crate::map::direction::Direction;
+use crate::map::point::Point;
+use crate::script::custom_action::{CustomAction, CustomActionTestResult};
+use crate::units::hero::Hero;
+use crate::units::movement::{Path, TBallast};
+use crate::units::unit::Unit;
 
 use super::unit_filter::UnitFilter;
 use super::ConfigParseError;
@@ -18,7 +24,7 @@ impl CustomActionConfig {
         use CustomActionConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
+            data.get(&key).ok_or(E::MissingColumn(format!("CustomActionConfig::{key:?}")))
         };
         let result = Self {
             name: get(H::Name)?.to_string(),
@@ -36,8 +42,38 @@ impl CustomActionConfig {
         Ok(())
     }
 
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
     pub fn get_script(&self) -> &CustomAction {
         &self.script
+    }
+
+    pub fn add_as_option<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        path: &Path<D>,
+        destination: Point,
+        funds: i32,
+        // when moving out of a transporter, or start_turn for transported units
+        transporter: Option<(&Unit<D>, usize)>,
+        // the attacked unit, the unit this one was destroyed by, ...
+        other_unit: Option<(&Unit<D>, Point)>,
+        // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        // empty if the unit hasn't moved
+        temporary_ballast: &[TBallast<D>],
+    ) -> bool {
+        if self.unit_filter.iter().all(|f| {
+            f.check(game, unit, (destination, None), transporter.map(|(u, _)| (u, path.start)), other_unit, heroes, temporary_ballast)
+        }) {
+            self.script.next_condition(game, funds, unit, path, destination, transporter, heroes, temporary_ballast, &[])
+            != CustomActionTestResult::Failure
+        } else {
+            false
+        }
     }
 }
 

@@ -48,6 +48,10 @@ impl HeroPowerConfig {
         Ok(())
     }
     
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
     pub fn get_script(&self) -> &CustomAction {
         &self.script
     }

@@ -172,10 +172,6 @@ impl Config {
         self.attack_damage.get(&attacker)?.get(&defender).cloned()
     }
 
-    pub fn can_build_units(&self, typ: UnitType) -> bool {
-        self.unit_config(typ).can_build_units
-    }
-
     pub fn base_cost(&self, typ: UnitType) -> i32 {
         self.unit_config(typ).cost as i32
     }

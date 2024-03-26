@@ -38,7 +38,6 @@ pub struct UnitTypeConfig {
     //pub(super) splash_range: usize,
     //pub(super) splash_factor: Rational32,
     pub(super) splash_damage: Vec<Rational32>, // empty if no splash damage. contains factor per additional distance
-    pub(super) can_build_units: bool,
     pub(super) cost: i32,
     pub(super) displacement: Displacement, // implies that attack_pattern is Adjacent or Straight
     pub(super) displacement_distance: i8, // can only be 0 if Displacement::None
@@ -79,7 +78,6 @@ impl UnitTypeConfig {
             attack_pattern: parse_def(data, H::AttackPattern, AttackType::None)?,
             attack_targets: parse_def(data, H::AttackTargets, AttackTargeting::Enemy)?,
             splash_damage: parse_vec_def(data, H::SplashDamage, vec![Rational32::from_integer(1)])?,
-            can_build_units: parse_def(data, H::CanBuildUnits, false)?,
             cost: parse(data, H::Cost)?,
             displacement: parse_def(data, H::Displacement, Displacement::None)?,
             displacement_distance: parse_def(data, H::DisplacementDistance, 0)?,
@@ -123,7 +121,6 @@ crate::listable_enum! {
         AttackPattern,
         AttackTargets,
         SplashDamage,
-        CanBuildUnits,
         Cost,
         Displacement,
         DisplacementDistance,

@@ -17,12 +17,10 @@ use crate::script::custom_action::CustomActionData;
 use crate::VERSION;
 use super::attributes::ActionStatus;
 
-use super::attributes::AttributeKey;
 use super::combat::AttackVector;
 use super::hero::*;
 use super::movement::Path;
 use super::movement::PathSearchFeedback;
-use super::movement::PathStep;
 use super::movement::search_path;
 use super::movement::PathStepTakes;
 use super::movement::TBallast;
@@ -39,14 +37,9 @@ pub enum UnitAction<D: Direction> {
     Capture,
     Repair,
     Attack(AttackVector<D>),
-    //Pull(D),
     BuyHero(HeroType),
     HeroPower(usize, Vec<CustomActionData<D>>),
-    //Castle,
     PawnUpgrade(UnitType),
-    //BuildDrone(TransportableDrones),
-    BuyTransportedUnit(UnitType),
-    BuyUnit(UnitType, D),
     Custom(usize, Vec<CustomActionData<D>>),
 }
 
@@ -59,14 +52,9 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Capture => write!(f, "Capture"),
             Self::Repair => write!(f, "Repair"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
-            //Self::Pull(_) => write!(f, "Pull"),
             Self::BuyHero(_) => write!(f, "Buy Mercenary"),
             Self::HeroPower(index, _) => write!(f, "Hero Power {index}"),
-            //Self::Castle => write!(f, "Castle"),
             Self::PawnUpgrade(u) => write!(f, "Upgrade unit to {u:?}"),
-            //Self::BuildDrone(o) => write!(f, "Build {}", o.to_normal(Some(0.into())).name()),
-            Self::BuyTransportedUnit(unit) => write!(f, "Build {unit:?}"),
-            Self::BuyUnit(unit, dir) => write!(f, "Build {unit:?} and place it towards the {dir}"),
             Self::Custom(index, _) => write!(f, "Custom {index}"),
         }
     }
@@ -204,14 +192,6 @@ impl<D: Direction> UnitAction<D> {
                 handler.unit_replace(end, new_unit);
                 true
             }
-            Self::BuyTransportedUnit(unit_type) => {
-                Self::buy_transported_unit(handler, path.start, end, *unit_type, ballast, true);
-                true
-            }
-            Self::BuyUnit(unit_type, dir) => {
-                Self::buy_unit(handler, path.start, end, *unit_type, *dir, ballast, true);
-                true
-            }
             Self::Custom(index, data) => {
                 let unit = handler.get_map().get_unit(end).unwrap().clone();
                 let config = handler.environment().config.clone();
@@ -233,51 +213,6 @@ impl<D: Direction> UnitAction<D> {
         };
         if needs_to_exhaust {
             handler.unit_status(end, ActionStatus::Exhausted);
-        }
-    }
-
-    pub fn buy_transported_unit(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, ballast: &[TBallast<D>], exhaust: bool) {
-        let transporter = handler.get_map().get_unit(path_start).filter(|_| path_start != end);
-        let factory_unit = handler.get_map().get_unit(end).unwrap();
-        let heroes = Hero::hero_influence_at(handler.get_game(), end, factory_unit.get_owner_id());
-        let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, unit_type, transporter.map(|u| (u, path_start)), &heroes, ballast);
-        if !exhaust {
-            unit.set_status(ActionStatus::Ready);
-        }
-        if handler.environment().unit_attributes(unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
-            unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
-        }
-        // TODO: don't cast the i32 to u32
-        handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
-        handler.unit_add_transported(end, unit);
-    }
-
-    pub fn buy_unit(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, dir: D, ballast: &[TBallast<D>], exhaust: bool) -> bool {
-        let (destination, _) = handler.get_map().get_neighbor(end, dir).unwrap();
-        if handler.get_map().get_unit(destination).is_some() {
-            handler.effect_fog_surprise(destination);
-            false
-        } else {
-            let transporter = handler.get_map().get_unit(path_start).filter(|_| path_start != end);
-            let factory_unit = handler.get_map().get_unit(end).unwrap();
-            let heroes = Hero::hero_influence_at(handler.get_game(), end, factory_unit.get_owner_id());
-            let (mut unit, cost) = factory_unit.unit_shop_option(handler.get_game(), end, unit_type, transporter.map(|u| (u, path_start)), &heroes, ballast);
-            if !exhaust {
-                unit.set_status(ActionStatus::Ready);
-            }
-            unit.set_direction(unit.get_direction().rotate_by(dir));
-            if handler.environment().unit_attributes(unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
-                unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
-            }
-            let path = Path {
-                start: end,
-                steps: vec![PathStep::Dir(dir)],
-            };
-            // TODO: don't cast the i32 to u32
-            handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
-            let unit = handler.animate_unit_path(&unit, &path, false);
-            handler.unit_creation(destination, unit);
-            true
         }
     }
 }
