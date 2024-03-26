@@ -66,7 +66,7 @@ pub(super) fn anger_kraken<D: Direction>(handler: &mut EventHandler<D>) {
                 let mut damage_map = HashMap::new();
                 for p in handler.get_map().range_in_layers(p, KRAKEN_ATTACK_RANGE).into_iter().flatten() {
                     if let Some(unit) = handler.get_map().get_unit(p) {
-                        if unit.get_owner_id() > 0 {
+                        if unit.get_owner_id() >= 0 {
                             let damage = damage_map.remove(&p).unwrap_or(0) + 40;
                             damage_map.insert(p, damage);
                         }

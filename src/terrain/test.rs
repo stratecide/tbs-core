@@ -19,6 +19,7 @@ mod tests {
     use crate::map::point_map::PointMap;
     use crate::terrain::TerrainType;
     use crate::map::wrapping_map::*;
+    use crate::units::combat::AttackVector;
     use crate::units::commands::{UnitCommand, UnitAction};
     use crate::units::movement::{Path, PathStep};
     use crate::units::unit_types::UnitType;
@@ -89,5 +90,46 @@ mod tests {
         assert!(*game.current_player().funds < 200);
         assert_eq!(0, game.get_map().get_unit(Point::new(0, 0)).unwrap().get_owner_id());
         assert!(game.get_map().get_unit(Point::new(0, 0)).unwrap().is_exhausted());
+    }
+
+    #[test]
+    fn kraken() {
+        let map = PointMap::new(5, 5, false);
+        let map_env = Environment {
+            config: Arc::new(Config::test_config()),
+            map_size: map.size(),
+            settings: None,
+        };
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+        let mut map = Map::new2(wmap, &map_env);
+        for x in 0..map.width() {
+            for y in 0..map.height() {
+                map.set_terrain(Point::new(x, y), TerrainType::TentacleDepths.instance(&map_env).build_with_defaults());
+            }
+        }
+        map.set_terrain(Point::new(2, 2), TerrainType::Kraken.instance(&map_env).set_anger(7).build_with_defaults());
+        map.set_unit(Point::new(2, 1), Some(UnitType::WarShip.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 2), Some(UnitType::WarShip.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 2), Some(UnitType::WarShip.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        let settings = map.settings().unwrap();
+        let (mut game, _) = map.game_server(&settings, || 0.);
+        let environment = game.environment();
+        assert_eq!(game.get_unit(Point::new(0, 0)), Some(&UnitType::Tentacle.instance(&environment).build_with_defaults()));
+        assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_anger(), 7);
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(3, 2)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        }), || 0.).unwrap();
+        assert_eq!(game.get_unit(Point::new(4, 2)), None);
+        assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_anger(), 8);
+        assert_eq!(game.get_unit(Point::new(3, 2)).unwrap().get_hp(), 100);
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(1, 2)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D180)),
+        }), || 0.).unwrap();
+        assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_anger(), 0);
+        assert!(game.get_unit(Point::new(3, 2)).unwrap().get_hp() < 100);
     }
 }

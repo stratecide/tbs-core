@@ -390,6 +390,11 @@ impl TerrainBuilder {
         self
     }
 
+    pub fn set_anger(mut self, anger: u8) -> Self {
+        self.terrain.set_anger(anger);
+        self
+    }
+
     pub fn build(&self) -> Option<Terrain> {
         for key in self.terrain.environment.config.terrain_specific_attributes(self.terrain.typ()) {
             if !self.terrain.attributes.contains_key(key) {
