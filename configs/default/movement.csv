@@ -1,6 +1,6 @@
 ;Foot;Bike;Wheel;Treads;Hovercraft;Boat;Ship;Heli;Plane;Chess;Chess2
 Airport;1;1;1;1;;;;1;1;1;1
-Beach;1;1;1;1;1;1;1;1;1;1;1
+Beach;1;1;1;1;1;1;;1;1;;
 Bridge;1;1;1;1;1;1;1;1;1;;
 ChessPawnTile;1;1;1;1;;;;1;1;0;1
 ChessTile;1;1;1;1;;;;1;1;0;1
