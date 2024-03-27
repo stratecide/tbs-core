@@ -164,8 +164,8 @@ impl<D: Direction> Game<D> {
         self.get_living_teams().contains(&team)
     }
 
-    pub fn has_ended(&self) -> bool {
-        self.ended
+    pub fn set_ended(&mut self, ended: bool) {
+        self.ended = ended;
     }
 
     pub fn get_owning_player_mut(&mut self, owner: i8) -> Option<&mut Player> {
@@ -550,6 +550,10 @@ impl<D: Direction> game_interface::GameInterface for Game<D> {
 
     fn get_version() -> Version {
         Version::parse(VERSION).expect(&format!("Cargo version has invalid format: {}", VERSION))
+    }
+
+    fn has_ended(&self) -> bool {
+        self.ended
     }
 }
 

@@ -30,116 +30,9 @@ impl<D: Direction> CommandInterface for Command<D> {
 
 impl<D: Direction> Command<D> {
     pub fn execute(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
-        let owner_id = handler.get_game().current_player().get_owner_id();
         match self {
             Self::EndTurn => {
-                // un-exhaust units
-                for p in handler.get_map().all_points() {
-                    if let Some(unit) = handler.get_map().get_unit(p).cloned() {
-                        if unit.get_owner_id() == owner_id {
-                            match unit.get_status() {
-                                ActionStatus::Exhausted => handler.unit_status(p, ActionStatus::Ready),
-                                _ => (),
-                            }
-                            for (index, u) in unit.get_transported().iter().enumerate() {
-                                if u.is_exhausted() {
-                                    handler.unit_status_boarded(p, index, ActionStatus::Ready);
-                                }
-                                //if unit.heal_transported() > 0 {
-                                //    handler.unit_heal_boarded(p, index, unit.heal_transported() as u8);
-                                //} else if unit.heal_transported() < 0 {
-                                //    handler.unit_damage_boarded(position, index, -unit.heal_transported() as u8);
-                                //    kill units with 0 HP
-                                //}
-                            }
-                        }
-                    }
-                }
-
-                // unit end turn event
-                handler.trigger_all_unit_scripts(
-                    |game, unit, unit_pos, transporter, heroes| {
-                        unit.on_end_turn(game, unit_pos, transporter, heroes)
-                    },
-                    |_observation_id| {},
-                    |this, script, unit_pos, unit, _observation_id| {
-                        script.trigger(this, unit_pos, unit);
-                    }
-                );
-
-                // reset built_this_turn-counter for realties
-                for p in handler.get_map().all_points() {
-                    handler.terrain_built_this_turn(p, 0);
-                }
-
-                let fog_before = if handler.get_game().is_foggy() {
-                    let next_player = handler.get_game().players.get((handler.get_game().current_turn() + 1) % handler.get_game().players.len()).unwrap();
-                    Some(handler.get_game().recalculate_fog(next_player.get_team()))
-                } else {
-                    None
-                };
-
-                handler.next_turn();
-                let owner_id = handler.get_game().current_player().get_owner_id();
-
-                // reset status for repairing units
-                for p in handler.get_map().all_points() {
-                    if let Some(unit) = handler.get_map().get_unit(p) {
-                        if unit.get_owner_id() == owner_id && unit.get_status() == ActionStatus::Repairing {
-                            handler.unit_status(p, ActionStatus::Ready);
-                        }
-                    }
-                }
-
-                // reset capture-progress / finish capturing
-                for p in handler.get_map().all_points() {
-                    let terrain = handler.get_map().get_terrain(p).unwrap();
-                    if let Some((new_owner, progress)) = terrain.get_capture_progress() {
-                        if new_owner.0 == owner_id {
-                            if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id && u.can_capture()) {
-                                if unit.get_status() == ActionStatus::Capturing {
-                                    let max_progress = terrain.get_capture_resistance();
-                                    let progress = progress as u16 + (unit.get_hp() as f32 / 10.).ceil() as u16;
-                                    if progress < max_progress as u16 {
-                                        handler.terrain_capture_progress(p, Some((new_owner, (progress as u8).into())));
-                                    } else {
-                                        // captured
-                                        let terrain = TerrainBuilder::new(handler.environment(), terrain.typ())
-                                        .copy_from(terrain)
-                                        .set_capture_progress(None)
-                                        .set_owner_id(new_owner.0)
-                                        .build_with_defaults();
-                                        handler.terrain_replace(p, terrain);
-                                    }
-                                    handler.unit_status(p, ActionStatus::Ready);
-                                }
-                            } else {
-                                handler.terrain_capture_progress(p, None);
-                            }
-                        }
-                    }
-                }
-
-                let next_power = handler.get_game().current_player().commander.get_next_power();
-                if handler.get_game().current_player().commander.can_activate_power(next_power, true) {
-                    Self::activate_power(handler, next_power);
-                }
-
-                // end merc powers
-                for p in handler.get_map().all_points() {
-                    if let Some(unit) = handler.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id) {
-                        let hero = unit.get_hero();
-                        let next_power = hero.get_next_power(handler.environment());
-                        if hero.can_activate_power(handler.environment(), next_power, true) {
-                            // TODO: this skips the custom-action. maybe execute the custom action if no user input is needed
-                            handler.hero_charge_sub(p, None, hero.power_cost(handler.environment(), next_power));
-                            handler.hero_power(p, next_power);
-                        }
-                    }
-                }
-
-                handler.start_turn(fog_before);
-
+                handler.end_turn();
                 Ok(())
             }
             Self::UnitCommand(command) => command.execute(handler),
@@ -185,6 +78,7 @@ impl<D: Direction> Command<D> {
                 if cost > *handler.get_game().current_player().funds {
                     return Err(CommandError::NotEnoughMoney)
                 }
+                let owner_id = handler.get_game().current_player().get_owner_id();
                 handler.money_buy(owner_id, cost.max(0) as u32);
                 if bubble_index != None {
                     unit.set_status(ActionStatus::Ready);
@@ -208,10 +102,21 @@ impl<D: Direction> Command<D> {
                 Self::activate_power(handler, index);
                 Ok(())
             }
+        }?;
+        let viable_player_ids = handler.get_map().get_viable_player_ids();
+        let players: Vec<u8> = handler.get_game().players.iter()
+        .filter(|p| !p.dead)
+        .map(|p| p.get_owner_id() as u8)
+        .collect();
+        for owner_id in players {
+            if !viable_player_ids.contains(&owner_id) {
+                handler.player_dies(owner_id as i8);
+            }
         }
+        Ok(())
     }
 
-    fn activate_power(handler: &mut EventHandler<D>, index: usize) {
+    pub(crate) fn activate_power(handler: &mut EventHandler<D>, index: usize) {
         let owner_id = handler.get_game().current_player().get_owner_id();
         handler.commander_charge_sub(owner_id, handler.get_game().current_player().commander.power_cost(index));
         handler.commander_power(owner_id, index);

@@ -64,6 +64,8 @@ impl<D: Direction> SupportedZippable<&Environment> for (Point, FogIntensity, Fie
 pub enum Event<D:Direction> {
     NextTurn,
     MoneyChange(Owner, Funds),
+    PlayerDies(Owner),
+    GameEnds,
     Effect(Effect<D>),
     UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
     // fog events
@@ -189,6 +191,12 @@ impl<D: Direction> Event<D> {
                 if let Some(player) = game.get_owning_player_mut(owner.0) {
                     player.funds += **change;
                 }
+            }
+            Self::PlayerDies(owner) => {
+                game.get_owning_player_mut(owner.0).unwrap().dead = true;
+            }
+            Self::GameEnds => {
+                game.set_ended(true);
             }
             Self::PureHideFunds(_) => {}
             Self::HideFunds(owner, _) => {
@@ -333,6 +341,12 @@ impl<D: Direction> Event<D> {
                 if let Some(player) = game.get_owning_player_mut(owner.0) {
                     player.funds -= **change;
                 }
+            }
+            Self::PlayerDies(owner) => {
+                game.get_owning_player_mut(owner.0).unwrap().dead = false;
+            }
+            Self::GameEnds => {
+                game.set_ended(false);
             }
             Self::PureHideFunds(_) => {}
             Self::HideFunds(owner, value) => {
@@ -479,6 +493,8 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
+            Self::PlayerDies(_) |
+            Self::GameEnds => Some(self.clone()),
             Self::PureHideFunds(owner) => {
                 if team != game.get_team(Some(owner.0)) {
                     Some(Self::HideFunds(owner.clone(), game.get_owning_player(owner.0).unwrap().funds))

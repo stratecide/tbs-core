@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use interfaces::game_interface::GameInterface;
 use interfaces::game_interface::{Events, Perspective as IPerspective, ClientPerspective};
 
 use crate::config::environment::Environment;
@@ -22,6 +23,7 @@ use crate::units::hero::Hero;
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
+use super::commands::Command;
 use super::events::{Event, Effect, UnitStep};
 use super::game_view::GameView;
 
@@ -96,6 +98,116 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 self.observed_units.remove(&id);
             }
         }
+    }
+    
+    pub fn end_turn(&mut self) {
+        let owner_id = self.get_game().current_player().get_owner_id();
+        // un-exhaust units
+        for p in self.get_map().all_points() {
+            if let Some(unit) = self.get_map().get_unit(p).cloned() {
+                if unit.get_owner_id() == owner_id {
+                    match unit.get_status() {
+                        ActionStatus::Exhausted => self.unit_status(p, ActionStatus::Ready),
+                        _ => (),
+                    }
+                    for (index, u) in unit.get_transported().iter().enumerate() {
+                        if u.is_exhausted() {
+                            self.unit_status_boarded(p, index, ActionStatus::Ready);
+                        }
+                        //if unit.heal_transported() > 0 {
+                        //    self.unit_heal_boarded(p, index, unit.heal_transported() as u8);
+                        //} else if unit.heal_transported() < 0 {
+                        //    self.unit_damage_boarded(position, index, -unit.heal_transported() as u8);
+                        //    kill units with 0 HP
+                        //}
+                    }
+                }
+            }
+        }
+
+        // unit end turn event
+        self.trigger_all_unit_scripts(
+            |game, unit, unit_pos, transporter, heroes| {
+                unit.on_end_turn(game, unit_pos, transporter, heroes)
+            },
+            |_observation_id| {},
+            |this, script, unit_pos, unit, _observation_id| {
+                script.trigger(this, unit_pos, unit);
+            }
+        );
+
+        // reset built_this_turn-counter for realties
+        for p in self.get_map().all_points() {
+            self.terrain_built_this_turn(p, 0);
+        }
+
+        let fog_before = if self.get_game().is_foggy() {
+            let next_player = self.get_game().players.get((self.get_game().current_turn() + 1) % self.get_game().players.len()).unwrap();
+            Some(self.get_game().recalculate_fog(next_player.get_team()))
+        } else {
+            None
+        };
+
+        self.next_turn();
+        let owner_id = self.get_game().current_player().get_owner_id();
+
+        // reset status for repairing units
+        for p in self.get_map().all_points() {
+            if let Some(unit) = self.get_map().get_unit(p) {
+                if unit.get_owner_id() == owner_id && unit.get_status() == ActionStatus::Repairing {
+                    self.unit_status(p, ActionStatus::Ready);
+                }
+            }
+        }
+
+        // reset capture-progress / finish capturing
+        for p in self.get_map().all_points() {
+            let terrain = self.get_map().get_terrain(p).unwrap();
+            if let Some((new_owner, progress)) = terrain.get_capture_progress() {
+                if new_owner.0 == owner_id {
+                    if let Some(unit) = self.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id && u.can_capture()) {
+                        if unit.get_status() == ActionStatus::Capturing {
+                            let max_progress = terrain.get_capture_resistance();
+                            let progress = progress as u16 + (unit.get_hp() as f32 / 10.).ceil() as u16;
+                            if progress < max_progress as u16 {
+                                self.terrain_capture_progress(p, Some((new_owner, (progress as u8).into())));
+                            } else {
+                                // captured
+                                let terrain = TerrainBuilder::new(self.environment(), terrain.typ())
+                                .copy_from(terrain)
+                                .set_capture_progress(None)
+                                .set_owner_id(new_owner.0)
+                                .build_with_defaults();
+                                self.terrain_replace(p, terrain);
+                            }
+                            self.unit_status(p, ActionStatus::Ready);
+                        }
+                    } else {
+                        self.terrain_capture_progress(p, None);
+                    }
+                }
+            }
+        }
+
+        let next_power = self.get_game().current_player().commander.get_next_power();
+        if self.get_game().current_player().commander.can_activate_power(next_power, true) {
+            Command::activate_power(self, next_power);
+        }
+
+        // end merc powers
+        for p in self.get_map().all_points() {
+            if let Some(unit) = self.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id) {
+                let hero = unit.get_hero();
+                let next_power = hero.get_next_power(self.environment());
+                if hero.can_activate_power(self.environment(), next_power, true) {
+                    // TODO: this skips the custom-action. maybe execute the custom action if no user input is needed
+                    self.hero_charge_sub(p, None, hero.power_cost(self.environment(), next_power));
+                    self.hero_power(p, next_power);
+                }
+            }
+        }
+
+        self.start_turn(fog_before);
     }
 
     pub fn next_turn(&mut self) {
@@ -382,6 +494,19 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn money_buy(&mut self, owner: i8, cost: u32) {
         if cost > 0 {
             self.add_event(Event::MoneyChange(owner.into(), (-(cost as i32)).into()));
+        }
+    }
+
+    pub fn player_dies(&mut self, owner_id: i8) {
+        if self.game.get_owning_player(owner_id).map(|player| !player.dead).unwrap_or(false) {
+            self.add_event(Event::PlayerDies(owner_id.into()));
+            // TODO: trigger scripts?
+            if self.game.get_living_teams().len() < 2 {
+                self.add_event(Event::GameEnds);
+            }
+            if !self.game.has_ended() && self.game.current_player().dead {
+                self.end_turn();
+            }
         }
     }
 

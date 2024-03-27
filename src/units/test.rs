@@ -18,6 +18,7 @@ mod tests {
     use crate::script::custom_action::CustomActionData;
     use crate::terrain::TerrainType;
     use crate::units::attributes::ActionStatus;
+    use crate::units::combat::AttackVector;
     use crate::units::commands::*;
     use crate::units::movement::Path;
     use crate::units::unit::Unit;
@@ -117,5 +118,27 @@ mod tests {
         server.handle_command(Command::EndTurn, || 0.).unwrap();
         server.handle_command(Command::EndTurn, || 0.).unwrap();
         assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_status(), ActionStatus::Ready);
+    }
+
+
+    #[test]
+    fn end_game() {
+        let map = PointMap::new(4, 4, false);
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+        let mut map = Map::new(wmap, &Arc::new(Config::test_config()));
+        let map_env = map.environment().clone();
+        map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+        let settings = map.settings().unwrap();
+        let (mut game, _) = map.game_server(&settings, || 0.);
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(0, 0)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        }), || 0.).unwrap();
+        assert!(game.has_ended());
+        for (i, player) in game.players.iter().enumerate() {
+            assert_eq!(player.dead, i != 0);
+        }
     }
 }
