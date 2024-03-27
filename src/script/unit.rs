@@ -18,6 +18,7 @@ pub enum UnitScript {
     Attack(bool, bool),
     TakeDamage(u8),
     Heal(u8),
+    LoseGame,
 }
 
 impl FromConfig for UnitScript {
@@ -40,6 +41,7 @@ impl FromConfig for UnitScript {
                 s = r;
                 Self::Heal(1.max(heal).min(99))
             }
+            "LoseGame" => Self::LoseGame,
             invalid => return Err(ConfigParseError::UnknownEnumMember(format!("UnitScript::{}", invalid))),
         }, s))
     }
@@ -52,6 +54,11 @@ impl UnitScript {
             Self::Attack(allow_counter, charge_powers) => attack(handler, position, unit, *allow_counter, *charge_powers),
             Self::TakeDamage(damage) => take_damage(handler, position, *damage),
             Self::Heal(h) => heal(handler, position, *h),
+            Self::LoseGame => {
+                if unit.get_owner_id() >= 0 {
+                    handler.player_dies(unit.get_owner_id());
+                }
+            }
         }
     }
 }

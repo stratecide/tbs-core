@@ -2,6 +2,7 @@ Power;Affects;Attack;CounterAttack;Defense;CounterDefense;MinRange;MaxRange;Visi
 ;U(Pawn),T(ChessPawnTile);;;;;;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;;
 ;U(Submarine), Fog(TrueSight);;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;U(Tentacle);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Kraken
+;U(King, LifeCrystal);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;LoseGame
 Co(Zombie);MovementPattern(Standard);-1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;DeadSkull;
 Co(Zombie,1);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Co(Zombie,2);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;ZombieResurrection(50);
