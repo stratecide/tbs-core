@@ -426,8 +426,12 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn effect_fog_surprise(&mut self, _position: Point) {
-        // TODO: add effect
+    pub fn effect_fog_surprise(&mut self, position: Point) {
+        let team = match self.game.current_player().get_team() {
+            ClientPerspective::Team(team) => team,
+            ClientPerspective::Neutral => return, // shouldn't happen
+        };
+        self.add_event(Event::Effect(Effect::Surprise(position, team.into())));
     }
 
     fn effect_heal(&mut self, _position: Point) {
@@ -444,7 +448,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn effect_chess(&mut self, _position: Point) {
-        // TODO: add effect
+        // TODO: add effect for taking units
     }
 
     pub fn unit_set_hero(&mut self, position: Point, hero: Hero) {

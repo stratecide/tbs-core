@@ -713,6 +713,7 @@ pub enum Effect<D: Direction> {
     Repair(Point),
     Explode(Point),
     KrakenRage(Point),
+    Surprise(Point, Team),
 }
 impl<D: Direction> Effect<D> {
     pub fn fog_replacement(&self, game: &Game<D>, team: ClientPerspective) -> Option<Self> {
@@ -732,6 +733,13 @@ impl<D: Direction> Effect<D> {
             Self::KrakenRage(_) => Some(self.clone()),
             Self::Lightning(_) |
             Self::Laser(_, _) => Some(self.clone()),
+            Self::Surprise(_, t) => {
+                if team == ClientPerspective::Team(t.0) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
         }
     }
 }
