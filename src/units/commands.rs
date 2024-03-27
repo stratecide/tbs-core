@@ -143,7 +143,7 @@ impl<D: Direction> UnitAction<D> {
                 }
                 if heal > 0 {
                     let cost = full_price * heal / 100;
-                    handler.money_buy(unit.get_owner_id(), cost);
+                    handler.money_buy(unit.get_owner_id(), cost as i32);
                     handler.unit_repair(end, heal as u8);
                     handler.unit_status(end, ActionStatus::Repairing);
                     false
@@ -344,7 +344,7 @@ impl<D: Direction> UnitCommand<D> {
             };
             let end = path_taken.end(handler.get_map()).unwrap().0;
             // TODO: need to check whether action can really be executed
-            // so far the code only checks whether it looks correct from the user perspective
+            // so far the code mainly checks whether it looks correct from the user perspective
             self.action.execute(handler, end, &path_taken, transporter, ballast);
         }
         exhaust_all_on_chess_board(handler, path_taken.start);

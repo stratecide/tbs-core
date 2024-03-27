@@ -763,21 +763,6 @@ fn movement_search_map<D: Direction>(
     let base_movement = |pos: Point, permanent: &PermanentBallast<D>, round: usize| {
         let terrain = map.get_terrain(pos).unwrap();
         let mut temps = Vec::new();
-        /*let transporter = if round == 0 {
-            transporter
-        } else {
-            None
-        };
-        // TODO: if rounds > 0 this hero influence will be calculated a lot
-        // in that case it would be more efficient to use the aura_range map method from event_handler.rs
-        let mut heroes = Hero::hero_influence_at(game, map, pos, unit.get_owner_id());
-        if round > 0 {
-            for (_, hero, _, _) in &mut heroes {
-                // TODO: this isn't enough because a hero without active power might not have enough range to influence "unit" in the first place
-                //hero.set_power_active(false);
-            }
-        }
-        let mp = unit.movement_points(game, map, pos, transporter, &heroes);*/
         let mp = movement_points(pos, permanent, round);
         temps.push(TBallast::MovementPoints(mp));
         movement_pattern.add_temporary_ballast(terrain, &permanent.entries, &mut temps);

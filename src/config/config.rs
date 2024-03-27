@@ -209,7 +209,6 @@ impl Config {
     }
 
     pub fn unit_specific_statuses(&self, typ: UnitType) -> &[ActionStatus] {
-        // TODO
         self.unit_status.get(&typ).map(|v| v.as_slice()).unwrap_or(&[ActionStatus::Ready])
     }
 

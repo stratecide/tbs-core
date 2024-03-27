@@ -853,7 +853,7 @@ impl WeaponType {
             Self::MachineGun => Effect::GunFire(p),
             Self::Rifle => Effect::GunFire(p),
             Self::Shells => Effect::ShellFire(p),
-            _ => Effect::ShellFire(p), // TODO
+            _ => Effect::ShellFire(p),
         }
     }
 }

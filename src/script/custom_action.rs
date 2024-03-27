@@ -309,8 +309,7 @@ pub fn buy_transported_unit<D: Direction>(handler: &mut EventHandler<D>, path_st
     if handler.environment().unit_attributes(unit_type, factory_unit.get_owner_id()).any(|a| *a == AttributeKey::DroneStationId) {
         unit.set_drone_station_id(handler.get_map().new_drone_id(handler.rng()));
     }
-    // TODO: don't cast the i32 to u32
-    handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
+    handler.money_buy(handler.get_game().current_player().get_owner_id(), cost);
     handler.unit_add_transported(end, unit);
 }
 
@@ -335,8 +334,7 @@ pub fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, path_start: Point, 
             start: end,
             steps: vec![PathStep::Dir(dir)],
         };
-        // TODO: don't cast the i32 to u32
-        handler.money_buy(handler.get_game().current_player().get_owner_id(), cost as u32);
+        handler.money_buy(handler.get_game().current_player().get_owner_id(), cost);
         let unit = handler.animate_unit_path(&unit, &path, false);
         handler.unit_creation(destination, unit);
         true

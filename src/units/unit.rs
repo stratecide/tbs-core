@@ -1055,7 +1055,6 @@ impl<D: Direction> UnitBuilder<D> {
             panic!("Can't copy from unit from different environment");
         }
         for (key, value) in &other.attributes {
-            // TODO: consider all attributes, not just unit-specific ones
             if self.unit.has_attribute(*key) {
                 self.unit.attributes.insert(*key, value.clone());
             }

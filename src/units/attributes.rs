@@ -236,7 +236,7 @@ pub struct AttributeError {
     pub received: Option<AttributeKey>,
 }
 
-pub(crate) trait TrAttribute<D: Direction>: TryFrom<Attribute<D>, Error = AttributeError> + Into<Attribute<D>> {
+pub trait TrAttribute<D: Direction>: TryFrom<Attribute<D>, Error = AttributeError> + Into<Attribute<D>> {
     fn key() -> AttributeKey;
 }
 

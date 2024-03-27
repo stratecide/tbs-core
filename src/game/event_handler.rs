@@ -329,16 +329,19 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
         // structures may have destroyed some units, vision may be reduced due to merc powers ending
         self.recalculate_fog();
-        let team = self.game.current_player().get_team();
-        let fog = self.game.recalculate_fog(team).into_iter()
-        .map(|(p, intensity)| (p, intensity.min(fog_before.as_ref().and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight))))
-        .collect();
-        self.change_fog(team, fog);
     }
 
     pub fn recalculate_fog(&mut self) {
+        let current_team = self.game.current_player().get_team();
+        // only remove fog for the current team
+        let mut fog = self.game.recalculate_fog(current_team);
+        for (p, intensity) in fog.iter_mut() {
+            *intensity = self.game.get_fog_at(current_team, *p).min(*intensity);
+        }
+        self.change_fog(current_team, fog);
+        // reset fog for other teams
         let mut perspectives: HashSet<ClientPerspective> = self.game.get_teams().into_iter()
-        .filter(|team| ClientPerspective::Team(*team) != self.game.current_player().get_team())
+        .filter(|team| ClientPerspective::Team(*team) != current_team)
         .map(|team| ClientPerspective::Team(team))
         .collect();
         perspectives.insert(ClientPerspective::Neutral);
@@ -495,9 +498,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn money_buy(&mut self, owner: i8, cost: u32) {
+    pub fn money_buy(&mut self, owner: i8, cost: i32) {
         if cost > 0 {
-            self.add_event(Event::MoneyChange(owner.into(), (-(cost as i32)).into()));
+            self.add_event(Event::MoneyChange(owner.into(), (-cost).into()));
         }
     }
 
@@ -562,7 +565,6 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             return;
         }
         let mut unit = self.get_map().get_unit(path.start).expect(&format!("Missing unit at {:?}", path.start)).clone();
-        let unit_team = unit.get_team();
         if let Some(unload_index) = unload_index {
             if let Some(u) = unit.get_transported().get(unload_index) {
                 self.add_event(Event::UnitRemoveBoarded(path.start, unload_index.into(), u.clone()));
@@ -583,14 +585,15 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         } else {
             if let Some(_) = self.get_map().get_unit(path_end) {
                 // TODO: this shouldn't happen at all
-                self.unit_death(path_end);
+                panic!("Path would overwrite unit at {path_end:?}");
             }
             if let Some((id, disto)) = self.observation_id(path.start, unload_index) {
                 self.observed_units.insert(id, (path_end, None, disto + distortion));
             }
             self.add_event(Event::UnitAdd(path_end, transformed_unit));
         }
-        // TODO: update fog in case unit influences other units' vision range
+        // update fog in case unit influences other units' vision range
+        self.recalculate_fog();
         // remove details that were destroyed by the unit moving over them
         for p in path.points(self.get_map()).unwrap() {
             let old_details = self.get_map().get_details(p).to_vec();

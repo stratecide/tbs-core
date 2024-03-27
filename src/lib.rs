@@ -14,7 +14,7 @@ pub use interfaces;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// TODO: create derive macro for FromStr instead of adding it to listable_enum and enum_with_custom
+// TODO: create derive macro for FromConfig instead of adding it to listable_enum and enum_with_custom
 
 macro_rules! listable_enum {(
     $(#[$meta:meta])*

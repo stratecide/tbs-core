@@ -64,11 +64,9 @@ impl TerrainTypeConfig {
         if self.name.trim().len() == 0 {
             return Err(ConfigParseError::NameTooShort);
         }
-        if self.capture_resistance > 0 && self.needs_owner {
-            // TODO
-        }
+        // TODO: error if build_overrides overrides its own values
         if self.max_builds_per_turn == 0 && self.can_build {
-            // TODO
+            // TODO: could remove can_build column
         }
         Ok(())
     }

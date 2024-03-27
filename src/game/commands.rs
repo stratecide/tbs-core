@@ -79,7 +79,7 @@ impl<D: Direction> Command<D> {
                     return Err(CommandError::NotEnoughMoney)
                 }
                 let owner_id = handler.get_game().current_player().get_owner_id();
-                handler.money_buy(owner_id, cost.max(0) as u32);
+                handler.money_buy(owner_id, cost);
                 if bubble_index != None {
                     unit.set_status(ActionStatus::Ready);
                 }

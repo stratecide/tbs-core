@@ -127,7 +127,6 @@ impl<'a, D: Direction> UnitMovementView<'a, D> {
             }
             let (end, _) = path.end(self).unwrap();
             unit.transformed_by_path(self, path);
-            //self.put_unit(end, unit);
             Some((end, unit))
         } else {
             None

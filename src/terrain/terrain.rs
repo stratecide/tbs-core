@@ -145,7 +145,6 @@ impl Terrain {
     // getters + setters that relate to attributes
 
     pub fn has_attribute(&self, key: TerrainAttributeKey) -> bool {
-        // TODO: consider all attributes, not just terrain-specific ones
         self.environment.config.terrain_specific_attributes(self.typ).contains(&key)
     }
 

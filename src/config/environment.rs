@@ -78,7 +78,6 @@ impl Environment {
     }
 
     pub fn unit_valid_action_status(&self, typ: UnitType, _owner: i8) -> &[ActionStatus] {
-        // TODO
         self.config.unit_specific_statuses(typ)
     }
 
@@ -93,7 +92,7 @@ impl Environment {
     pub fn default_terrain(&self) -> Terrain {
         TerrainBuilder::new(self, crate::terrain::TerrainType::Grass)
         .build()
-        // TODO: when validating the config, make sure this unwrap doesn't panic
+        // TODO: when validating the config, make sure this unwrap won't panic
         .unwrap()
     }
 }
