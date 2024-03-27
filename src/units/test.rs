@@ -123,9 +123,10 @@ mod tests {
 
     #[test]
     fn end_game() {
+        let config = Arc::new(Config::test_config());
         let map = PointMap::new(4, 4, false);
         let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
-        let mut map = Map::new(wmap, &Arc::new(Config::test_config()));
+        let mut map = Map::new(wmap, &config);
         let map_env = map.environment().clone();
         map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
@@ -140,5 +141,33 @@ mod tests {
         for (i, player) in game.players.iter().enumerate() {
             assert_eq!(player.dead, i != 0);
         }
+    }
+
+    #[test]
+    fn defeat_player_of_3() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(4, 4, false);
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+        let mut map = Map::new(wmap, &config);
+        let map_env = map.environment().clone();
+        map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(2).build_with_defaults()));
+        let settings = map.settings().unwrap();
+        let (mut game, _) = map.game_server(&settings, || 0.);
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(0, 0)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        }), || 0.).unwrap();
+        assert!(!game.has_ended());
+        for (i, player) in game.players.iter().enumerate() {
+            assert_eq!(player.dead, i == 0);
+        }
+        assert_eq!(game.current_player().get_owner_id(), 1);
+        game.handle_command(Command::EndTurn, || 0.).unwrap();
+        assert_eq!(game.current_player().get_owner_id(), 2);
+        game.handle_command(Command::EndTurn, || 0.).unwrap();
+        assert_eq!(game.current_player().get_owner_id(), 1);
     }
 }

@@ -208,6 +208,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
 
         self.start_turn(fog_before);
+
+        if !self.get_game().has_ended() && self.game.current_player().dead {
+            self.end_turn();
+        }
     }
 
     pub fn next_turn(&mut self) {
