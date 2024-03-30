@@ -45,8 +45,10 @@ crate::enum_with_custom! {
         DroneTower,
         ShockTower,
         LifeCrystal,
-        Tentacle,
         HeroCrystal,
+        // neutral units
+        Tentacle,
+        PufferFish,
         // chess
         Pawn,
         Rook,
@@ -54,7 +56,7 @@ crate::enum_with_custom! {
         Knight,
         Queen,
         King,
-            // question mark
+        // question mark
         Unknown,
     }
 }

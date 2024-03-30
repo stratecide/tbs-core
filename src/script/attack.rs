@@ -6,7 +6,6 @@ use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
-use crate::units::attributes::ActionStatus;
 use crate::units::unit::Unit;
 
 #[derive(Debug, Clone)]
@@ -29,7 +28,7 @@ impl FromConfig for AttackScript {
 }
 
 impl AttackScript {
-    pub fn trigger<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Option<(Point, Option<usize>)>, attacker: &Unit<D>, defender_pos: Point, defender: &Unit<D>, current_defender_pos: Option<(Point, Option<usize>)>, damage: u8) {
+    pub fn trigger<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Option<(Point, Option<usize>)>, _attacker: &Unit<D>, _defender_pos: Point, _defender: &Unit<D>, _current_defender_pos: Option<(Point, Option<usize>)>, damage: u8) {
         match self {
             Self::LifeSteal(factor) => {
                 if let Some((pos, unload_index)) = attacker_pos {
@@ -58,12 +57,7 @@ impl AttackScript {
                         }
                     }
                 }
-                match attacker_pos {
-                    Some((p, None)) => handler.unit_status(p, ActionStatus::Ready),
-                    Some((p, Some(index))) => handler.unit_status_boarded(p, index, ActionStatus::Ready),
-                    None => (),
-                }
-            },
+            }
         }
     }
 }

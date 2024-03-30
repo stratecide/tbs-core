@@ -23,6 +23,7 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Player, Owner};
 use crate::script::attack::AttackScript;
+use crate::script::defend::DefendScript;
 use crate::script::kill::KillScript;
 use crate::script::unit::UnitScript;
 use crate::terrain::attributes::TerrainAttributeKey;
@@ -562,6 +563,19 @@ impl<D: Direction> Unit<D> {
             position,
             defender,
             defender_pos,
+            transporter,
+            heroes,
+            temporary_ballast,
+        )
+    }
+
+    pub fn on_defend(&self, game: &Game<D>, position: Point, attacker: &Self, attacker_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<DefendScript> {
+        self.environment.config.unit_defend_effects(
+            game,
+            self,
+            position,
+            attacker,
+            attacker_pos,
             transporter,
             heroes,
             temporary_ballast,

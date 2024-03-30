@@ -33,6 +33,7 @@ DroneTower;true;;true;true;;;true;;true;;;
 ShockTower;true;;true;true;;;;;;;;
 LifeCrystal;true;;true;;;;;;;;;
 Tentacle;true;;;;;;;;;;;
+PufferFish;;;;;;;;;;;;
 Pawn;true;;true;true;;true;;;;;;true
 Rook;true;;true;true;;;;;;;true;
 Bishop;true;;true;true;;;;;;;;

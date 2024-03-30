@@ -7,6 +7,7 @@ use num_rational::Rational32;
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
 use crate::script::attack::AttackScript;
+use crate::script::defend::DefendScript;
 use crate::script::kill::KillScript;
 use crate::script::unit::UnitScript;
 use crate::units::attributes::*;
@@ -44,6 +45,7 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) on_start_turn: Vec<UnitScript>,
     pub(super) on_end_turn: Vec<UnitScript>,
     pub(super) on_attack: Vec<AttackScript>,
+    pub(super) on_defend: Vec<DefendScript>,
     pub(super) on_kill: Vec<KillScript>,
     pub(super) on_death: Vec<UnitScript>,
     pub(super) aura_range: NumberMod<i8>,
@@ -103,6 +105,7 @@ impl CommanderPowerUnitConfig {
             on_start_turn: parse_vec_def(data, H::OnStartTurn, Vec::new())?,
             on_end_turn: parse_vec_def(data, H::OnEndTurn, Vec::new())?,
             on_attack: parse_vec_def(data, H::OnAttack, Vec::new())?,
+            on_defend: parse_vec_def(data, H::OnDefend, Vec::new())?,
             on_kill: parse_vec_def(data, H::OnKill, Vec::new())?,
             on_death: parse_vec_def(data, H::OnDeath, Vec::new())?,
             aura_range: parse_def(data, H::AuraRange, NumberMod::Keep)?,
@@ -159,6 +162,7 @@ crate::listable_enum! {
         OnStartTurn,
         OnEndTurn,
         OnAttack,
+        OnDefend,
         OnKill,
         OnDeath,
         AuraRange,

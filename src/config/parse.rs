@@ -816,6 +816,7 @@ macro_rules! sint_from_config {
 }
 
 uint_from_config!(u8);
+uint_from_config!(u16);
 uint_from_config!(u32);
 sint_from_config!(i8);
 sint_from_config!(i16);

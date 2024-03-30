@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use interfaces::game_interface::GameInterface;
+use num_rational::Rational32;
 use semver::Version;
 use zipper::*;
 
@@ -153,7 +154,7 @@ impl<D: Direction> UnitAction<D> {
             }
             Self::Attack(attack_vector) => {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
-                attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true);
+                attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true, Rational32::from_integer(1));
                 false
             }
             Self::BuyHero(hero_type) => {

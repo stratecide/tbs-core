@@ -33,6 +33,7 @@ DroneTower;Drone-Tower;AlwaysVisible;None;None;;;Normal;1;1;;;;;;;;;;800;;;;3
 ShockTower;Shock-Tower;AlwaysVisible;None;None;;;Normal;;;;;;;;;;;;800;;;;
 LifeCrystal;Life-Crystal;AlwaysVisible;None;None;;;Normal;;;true;;;;;;;;;0;;;;
 Tentacle;Tentacle;AlwaysVisible;None;None;;;;;;;;;true;;;;;;0;;;;
+PufferFish;PufferFish;AlwaysVisible;None;Ship;;;;;;;;;;Bonk;;Ranged(0,0);;0, 1;0;;;true;
 Pawn;Pawn;Normal;Pawn;Chess2;;1;Movement;;;true;;;true;;;;;;300;;;true;
 Rook;Rook;Normal;Straight;Chess;;8;Movement;;;true;;;true;;true;Adjacent;OwnedBothUnmoved;;800;InsteadOfAttack;-2;true;
 Bishop;Bishop;Normal;Diagonal;Chess;;8;Movement;;;true;;;true;;;;;;800;;;true;

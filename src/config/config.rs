@@ -10,6 +10,7 @@ use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::attack::AttackScript;
+use crate::script::defend::DefendScript;
 use crate::script::kill::KillScript;
 use crate::script::unit::UnitScript;
 use crate::terrain::terrain::Terrain;
@@ -670,6 +671,25 @@ impl Config {
         let mut result = Vec::new();
         for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, Some((defender, defender_pos)), heroes, temporary_ballast) {
             result.extend(config.on_attack.iter().cloned())
+        }
+        result
+    }
+
+    pub fn unit_defend_effects<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        attacker: &Unit<D>,
+        attacker_pos: Point,
+        transporter: Option<(&Unit<D>, Point)>, // if the defender moved out of a transporter to attack + defend
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        temporary_ballast: &[TBallast<D>],
+    ) -> Vec<DefendScript> {
+        let is_counter = temporary_ballast.len() > 0;
+        let mut result = Vec::new();
+        for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, Some((attacker, attacker_pos)), heroes, temporary_ballast) {
+            result.extend(config.on_defend.iter().cloned())
         }
         result
     }

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use num_rational::Rational32;
+
 use crate::config::parse::{parse_tuple1, parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
@@ -51,7 +53,7 @@ impl UnitScript {
     pub fn trigger<D: Direction>(&self, handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>) {
         match self {
             Self::Kraken => anger_kraken(handler),
-            Self::Attack(allow_counter, charge_powers) => attack(handler, position, unit, *allow_counter, *charge_powers),
+            Self::Attack(allow_counter, charge_powers) => attack(handler, position, unit, *allow_counter, *charge_powers, Rational32::from_integer(1)),
             Self::TakeDamage(damage) => take_damage(handler, position, *damage),
             Self::Heal(h) => heal(handler, position, *h),
             Self::LoseGame => {
@@ -92,7 +94,7 @@ pub(super) fn anger_kraken<D: Direction>(handler: &mut EventHandler<D>) {
     }
 }
 
-fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>, allow_counter: bool, charge_powers: bool) {
+pub(super) fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>, allow_counter: bool, charge_powers: bool, input_factor: Rational32) {
     let attack_vector = match unit.attack_pattern() {
         AttackType::None => return,
         AttackType::Adjacent |
@@ -112,41 +114,15 @@ fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &U
                 return;
             }
         }
-        AttackType::Ranged(_, _) => {
-            /*let splash_damage = unit.get_splash_damage();
-            let mut targets = Vec::new();
-            for (i, layer) in handler.get_map().range_in_layers(position, min as usize + splash_damage.len() - 1).into_iter().enumerate() {
-                if i + 1 < min as usize {
-                    continue;
-                }
-                for p in layer {
-                    targets.push((p, None, splash_damage[i - 1 - min as usize]));
-                }
+        AttackType::Ranged(min, _) => {
+            if min > 0 {
+                return;
             }
-            let path = None;
-            let (
-                mut hero_charge,
-                _,
-                mut defenders,
-            ) = attack_targets(handler, unit, position, path, targets);
-            let defenders = if !charge_powers {
-                hero_charge = 0;
-                Vec::new()
-            } else {
-                attacked_units.into_iter().
-                for (defender_id, defender_pos, defender, damage) in attacked_units {
-                    for script in &attack_scripts {
-                        script.trigger(handler, handler.get_observed_unit(unit_id).cloned(), unit, defender_pos, &defender, handler.get_observed_unit(defender_id).cloned(), damage);
-                    }
-                    defenders.push((unit.get_owner_id(), defender, damage));
-                }
-            }
-            after_attacking(handler, unit, position, hero_charge, defenders);*/
-            return;
+            AttackVector::Point(position)
         }
     };
     // TODO: allow_counter is currently ignored
-    attack_vector.execute(handler, position, None, false, false, charge_powers);
+    attack_vector.execute(handler, position, None, false, false, charge_powers, input_factor);
 }
 
 pub(super) fn take_damage<D: Direction>(handler: &mut EventHandler<D>, position: Point, damage: u8) {
