@@ -11,13 +11,13 @@ use crate::map::point::Point;
 use crate::terrain::{KRAKEN_ATTACK_RANGE, KRAKEN_MAX_ANGER};
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::attributes::AttributeKey;
-use crate::units::combat::{AttackType, AttackVector};
+use crate::units::combat::{AttackCounter, AttackType, AttackVector};
 use crate::units::unit::Unit;
 
 #[derive(Debug, Clone)]
 pub enum UnitScript {
     Kraken,
-    Attack(bool, bool),
+    Attack(AttackCounter, bool),
     TakeDamage(u8),
     Heal(u8),
     LoseGame,
@@ -94,7 +94,7 @@ pub(super) fn anger_kraken<D: Direction>(handler: &mut EventHandler<D>) {
     }
 }
 
-pub(super) fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>, allow_counter: bool, charge_powers: bool, input_factor: Rational32) {
+pub(super) fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>, counter: AttackCounter, charge_powers: bool, input_factor: Rational32) {
     let attack_vector = match unit.attack_pattern() {
         AttackType::None => return,
         AttackType::Adjacent |
@@ -121,8 +121,7 @@ pub(super) fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Poin
             AttackVector::Point(position)
         }
     };
-    // TODO: allow_counter is currently ignored
-    attack_vector.execute(handler, position, None, false, false, charge_powers, input_factor);
+    attack_vector.execute(handler, position, None, false, false, charge_powers, input_factor, counter);
 }
 
 pub(super) fn take_damage<D: Direction>(handler: &mut EventHandler<D>, position: Point, damage: u8) {

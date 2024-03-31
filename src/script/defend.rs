@@ -1,11 +1,12 @@
 use num_rational::Rational32;
 
-use crate::config::parse::{parse_tuple1, parse_tuple2, string_base, FromConfig};
+use crate::config::parse::*;
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
+use crate::units::combat::AttackCounter;
 use crate::units::movement::{Path, PathStep};
 use crate::units::unit::Unit;
 
@@ -15,7 +16,7 @@ use super::unit::*;
 pub enum DefendScript {
     UnitScript(UnitScript),
     Ricochet(u16),
-    Attack(bool, bool),
+    Attack(AttackCounter, bool, bool),
 }
 
 impl FromConfig for DefendScript {
@@ -31,9 +32,13 @@ impl FromConfig for DefendScript {
                 Self::Ricochet(fizzle)
             }
             "Attack" => {
-                let (times_damage_taken, charge_powers, r) = parse_tuple2(remainder)?;
+                let (counter, charge_powers, times_damage_taken, r) = parse_tuple3::<AttackCounter, bool, bool>(remainder)?;
+                if counter.allows_counter() {
+                    // might run into infinite recursion
+                    return Err(ConfigParseError::UnknownEnumMember(format!("{counter:?} for DefendScript")));
+                }
                 remainder = r;
-                Self::Attack(times_damage_taken, charge_powers)
+                Self::Attack(counter, charge_powers, times_damage_taken)
             }
             invalid => {
                 if let Ok((us, r)) = UnitScript::from_conf(s) {
@@ -78,14 +83,14 @@ impl DefendScript {
                     }
                 }
             }
-            Self::Attack(times_damage_taken, charge_powers) => {
+            Self::Attack(counter, charge_powers, times_damage_taken) => {
                 if unload_index.is_none() {
                     let input_factor = if *times_damage_taken {
                         Rational32::new(*damage as i32, 100)
                     } else {
                         Rational32::from_integer(1)
                     };
-                    attack(handler, defender_pos, defender, false, *charge_powers, input_factor);
+                    attack(handler, defender_pos, defender, *counter, *charge_powers, input_factor);
                 }
             }
         }

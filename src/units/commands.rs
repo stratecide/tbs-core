@@ -18,13 +18,9 @@ use crate::script::custom_action::CustomActionData;
 use crate::VERSION;
 use super::attributes::ActionStatus;
 
-use super::combat::AttackVector;
+use super::combat::*;
 use super::hero::*;
-use super::movement::Path;
-use super::movement::PathSearchFeedback;
-use super::movement::search_path;
-use super::movement::PathStepTakes;
-use super::movement::TBallast;
+use super::movement::*;
 use super::unit::Unit;
 use super::unit_types::UnitType;
 
@@ -154,7 +150,7 @@ impl<D: Direction> UnitAction<D> {
             }
             Self::Attack(attack_vector) => {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
-                attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true, Rational32::from_integer(1));
+                attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true, Rational32::from_integer(1), AttackCounter::AllowCounter);
                 false
             }
             Self::BuyHero(hero_type) => {
