@@ -59,22 +59,12 @@ impl<D: Direction> SupportedZippable<&Environment> for (Point, FogIntensity, Fie
     }
 }
 
+/**
+ * first event has to take up more than 7 bits or it may be read from Unzipper padding by accident
+ */
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 6, support_ref = Environment)]
 pub enum Event<D:Direction> {
-    NextTurn,
-    MoneyChange(Owner, Funds),
-    PlayerDies(Owner),
-    GameEnds,
-    Effect(Effect<D>),
-    UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
-    // fog events
-    PureFogChange(Perspective, LVec<(Point, FogIntensity, FogIntensity), {point_map::MAX_AREA}>),
-    FogChange(Perspective, LVec<(Point, FogIntensity, FieldData<D>, FogIntensity, FieldData<D>), {point_map::MAX_AREA}>),
-    PureHideFunds(Owner),
-    HideFunds(Owner, Funds),
-    PureRevealFunds(Owner),
-    RevealFunds(Owner, Funds),
     // unit events
     UnitAdd(Point, Unit<D>),
     UnitRemove(Point, Unit<D>),
@@ -87,6 +77,21 @@ pub enum Event<D:Direction> {
     UnitMovedThisGame(Point),
     EnPassantOpportunity(Point, Option<Point>, Option<Point>),
     UnitDirection(Point, D, D),
+    // global
+    NextTurn,
+    MoneyChange(Owner, Funds),
+    PlayerDies(Owner),
+    GameEnds,
+    // visual
+    Effect(Effect<D>),
+    UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
+    // fog events
+    PureFogChange(Perspective, LVec<(Point, FogIntensity, FogIntensity), {point_map::MAX_AREA}>),
+    FogChange(Perspective, LVec<(Point, FogIntensity, FieldData<D>, FogIntensity, FieldData<D>), {point_map::MAX_AREA}>),
+    PureHideFunds(Owner),
+    HideFunds(Owner, Funds),
+    PureRevealFunds(Owner),
+    RevealFunds(Owner, Funds),
     // hero events
     HeroSet(Point, Hero, Hero),
     HeroCharge(Point, HeroChargeChange),
