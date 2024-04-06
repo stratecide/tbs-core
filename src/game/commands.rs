@@ -15,7 +15,7 @@ use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
 use super::game_view::GameView;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand<D>),
