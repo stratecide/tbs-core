@@ -28,7 +28,7 @@ pub enum Detail<D: Direction> {
     Pipe(PipeState<D>),
     Coins1,
     Coins2,
-    Coins4,
+    Coins3,
     Bubble(Owner, TerrainType),
     Skull(SkullData<D>),
 }
@@ -89,7 +89,7 @@ impl<D: Direction> Detail<D> {
                         bubble = true;
                     }
                 }
-                Self::Coins1 | Self::Coins2 | Self::Coins4 => {
+                Self::Coins1 | Self::Coins2 | Self::Coins3 => {
                     remove = coin || pipe_directions.len() > 0;
                     if !remove {
                         coin = true;

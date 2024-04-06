@@ -616,9 +616,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                         }
                         false
                     }
-                    Detail::Coins4 => {
+                    Detail::Coins3 => {
                         if let Some(player) = unit.get_player(self.get_game()) {
-                            self.money_change(unit.get_owner_id(), player.get_income() * 2);
+                            self.money_change(unit.get_owner_id(), player.get_income() * 3 / 2);
                         }
                         false
                     }

@@ -121,7 +121,7 @@ impl Player {
                 match detail.fog_replacement(game.get_fog_at(ClientPerspective::Team(self.owner_id), p)) {
                     Some(Detail::Coins1) => funds_after_path += income / 2,
                     Some(Detail::Coins2) => funds_after_path += income,
-                    Some(Detail::Coins4) => funds_after_path += income * 2,
+                    Some(Detail::Coins3) => funds_after_path += income * 3 / 2,
                     _ => {}
                 }
             }
