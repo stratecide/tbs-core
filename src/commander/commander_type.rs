@@ -10,6 +10,8 @@ crate::enum_with_custom! {
         Vlad,
         Zombie,
         Simo,
+        Tapio,
+        Lageos,
     }
 }
 

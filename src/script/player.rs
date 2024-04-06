@@ -12,7 +12,7 @@ use crate::units::attributes::AttributeKey;
 
 use super::unit::anger_kraken;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlayerScript {
     Kraken,
     MassDamage(u8),
@@ -90,7 +90,7 @@ pub(super) fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, points: i
     let mut dead = HashSet::new();
     for p in points {
         if let Some(unit) = handler.get_map().get_unit(p) {
-            if unit.get_owner_id() > 0 && unit.get_team() != team && unit.has_attribute(AttributeKey::Hp) {
+            if unit.get_owner_id() > 0 && (team == ClientPerspective::Neutral || unit.get_team() != team) && unit.has_attribute(AttributeKey::Hp) {
                 damage_map.insert(p, damage as u16);
                 if unit.get_hp() <= damage {
                     dead.insert(p);

@@ -1,8 +1,8 @@
-Id;Name;UsableFromPowers;NextPower;RequiredCharge;PreventsCharging;Effects
+Id;Name;UsableFromPowers;NextPower;RequiredCharge;PreventsCharging;Script
 None;-;;;;;
 Zombie;;;;;;
-Zombie;Resurrection;0;0;4000;true;ZombieResurrection(50)
-Zombie;Plague;0;0;6000;true;ZombieResurrection(50)
+Zombie;Resurrection;0;0;4000;true;L(ZombieResurrection(50))
+Zombie;Plague;0;0;6000;true;L(ZombieResurrection(50))
 Simo;;;;;;
 Simo;Chaos;0;1;0;;
 Simo;Order;0;2;0;;
@@ -10,5 +10,12 @@ Simo;Shrapnel Charges;1;1;6000;true;
 Simo;Hyperfocus;2;2;3000;true;
 Simo;Perfect Shot;2;2;6000;true;
 Vlad;;;;;;
-Vlad;Red Dance;0;0;4000;true;MassDamageAura(4, 10)
-Vlad;Crimson Rain;0;0;8000;true;MassDamageAura(4, 20), MassHeal(10)
+Vlad;Red Dance;0;0;4000;true;L(MassDamageAura(4, 10))
+Vlad;Crimson Rain;0;0;8000;true;L(MassDamageAura(4, 20), MassHeal(10))
+Tapio;;;;;;
+Tapio;Spirit Seed;0, 1;0;1000;;TapioSpiritSeed
+Tapio;Fairy Fury;0, 1;0;5000;true;TapioFairyFury(2, 20)
+Tapio;Living Trees;0, 1;0;8000;true;
+Lageos;;;;;;
+Lageos;Solar Storm;0;0;6000;true;LageosStunRockets(1, 1, 30)
+Lageos;Satellite Strike;0;0;9000;true;LageosRockets(3, 1, 30)

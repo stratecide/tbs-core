@@ -101,11 +101,17 @@ impl<D: Direction> Game<D> {
         }
         let heroes = Hero::map_influence(self, -1);
         for p in self.get_map().all_points() {
-            for (p, v) in self.get_map().get_terrain(p).unwrap().get_vision(self, p, perspective) {
+            let terrain = self.get_map().get_terrain(p).unwrap();
+            let terrain_heroes = if terrain.get_team() != ClientPerspective::Neutral {
+                heroes.get(&(p, terrain.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[])
+            } else {
+                &[]
+            };
+            for (p, v) in terrain.get_vision(self, p, terrain_heroes, perspective) {
                 fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
             }
             if let Some(unit) = self.get_map().get_unit(p) {
-                if perspective!= ClientPerspective::Neutral && perspective == unit.get_team() {
+                if perspective != ClientPerspective::Neutral && perspective == unit.get_team() {
                     let heroes = heroes.get(&(p, unit.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
                     for (p, v) in unit.get_vision(self, p, heroes) {
                         fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));

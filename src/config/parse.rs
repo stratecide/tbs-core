@@ -17,20 +17,18 @@ use crate::units::unit_types::UnitType;
 use crate::units::attributes::*;
 use crate::units::hero::*;
 
-use super::custom_action_config::CustomActionConfig;
-use super::custom_action_config::CustomActionConfigHeader;
+use super::custom_action_config::*;
 use super::hero_power_config::*;
+use super::terrain_powered::*;
 use super::ConfigParseError;
 use super::commander_power_config::*;
 use super::commander_type_config::*;
 use super::commander_unit_config::*;
 use super::hero_type_config::*;
-use super::terrain_type_config::TerrainTypeConfig;
-use super::terrain_type_config::TerrainTypeConfigHeader;
+use super::terrain_type_config::*;
 use super::unit_filter::*;
-use super::unit_type_config::UnitTypeConfig;
+use super::unit_type_config::*;
 use super::config::Config;
-use super::unit_type_config::UnitTypeConfigHeader;
 
 const UNIT_CONFIG: &'static str = "units.csv";
 const UNIT_ATTRIBUTES: &'static str = "unit_attributes.csv";
@@ -51,6 +49,7 @@ const COMMANDER_CONFIG: &'static str = "commanders.csv";
 const COMMANDER_POWERS: &'static str = "commander_powers.csv";
 const COMMANDER_ATTRIBUTES: &'static str = "commander_attributes.csv";
 const POWERED_UNITS: &'static str = "unit_powered.csv";
+const POWERED_TERRAIN: &'static str = "terrain_powered.csv";
 
 impl Config {
     pub fn parse(
@@ -92,6 +91,8 @@ impl Config {
             commander_types: Vec::new(),
             commanders: HashMap::new(),
             commander_powers: HashMap::new(),
+            default_terrain_overrides: Vec::new(),
+            commander_terrain: HashMap::new(),
             default_unit_overrides: Vec::new(),
             commander_units: HashMap::new(),
             commander_unit_attributes: HashMap::new(),
@@ -582,6 +583,7 @@ impl Config {
             result.commander_types.push(conf.id);
             result.commander_powers.insert(conf.id, Vec::new());
             result.commander_units.insert(conf.id, HashMap::new());
+            result.commander_terrain.insert(conf.id, HashMap::new());
             result.commander_unit_attributes.insert(conf.id, Vec::new());
             result.max_commander_charge = result.max_commander_charge.max(conf.max_charge);
             bonus_transported = bonus_transported.max(conf.transport_capacity as usize);
@@ -701,6 +703,46 @@ impl Config {
                     .ok_or(ConfigParseError::MissingHeroForPower(*hero_type))?
                     .get_mut(power).unwrap().push(conf);
                 }*/
+            }
+        }
+
+        // terrain overrides, has to be after commander and hero parsing
+        for (key, map) in result.commander_terrain.iter_mut() {
+            map.insert(None, Vec::new());
+            let power_count = result.commander_powers.get(key).unwrap().len();
+            if power_count > u8::MAX as usize {
+                return Err(Box::new(ConfigParseError::TooManyPowers(*key, power_count)));
+            }
+            for i in 0..power_count {
+                map.insert(Some(i as u8), Vec::new());
+            }
+        }
+        let data = load_config(POWERED_TERRAIN)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut headers: Vec<TerrainPoweredConfigHeader> = Vec::new();
+        for h in reader.headers()? {
+            let header = TerrainPoweredConfigHeader::from_conf(h)?.0;
+            if headers.contains(&header) {
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            }
+            headers.push(header);
+        }
+        for line in reader.records() {
+            let mut map = HashMap::new();
+            let line = line?;
+            for (i, s) in line.iter().enumerate().take(headers.len()) {
+                map.insert(headers[i], s);
+            }
+            let conf = TerrainPoweredConfig::parse(&map)?;
+            match &conf.power {
+                PowerRestriction::None => result.default_terrain_overrides.push(conf),
+                PowerRestriction::Commander(commander_type, power) => {
+                    if let Some(list) = result.commander_terrain.get_mut(commander_type)
+                    .ok_or(ConfigParseError::MissingCommanderForPower(*commander_type))?
+                    .get_mut(power){
+                        list.push(conf);
+                    }
+                }
             }
         }
         Ok(result)

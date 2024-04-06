@@ -1,0 +1,2 @@
+Power;Affects;Vision;Income;Repair;Build;SellsHero;BuildOverrides;OnStartTurn;OnEndTurn;OnBuild
+Co(Tapio, 3);T(FairyForest);;;;true;;;;;Replace(Grass)

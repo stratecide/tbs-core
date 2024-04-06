@@ -191,7 +191,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
         let next_power = self.get_game().current_player().commander.get_next_power();
         if self.get_game().current_player().commander.can_activate_power(next_power, true) {
-            Command::activate_power(self, next_power);
+            Command::activate_power(self, next_power, &[]);
         }
 
         // end merc powers

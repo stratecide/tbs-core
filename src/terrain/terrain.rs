@@ -7,6 +7,8 @@ use num_rational::Rational32;
 use rustc_hash::FxHashMap;
 use zipper::*;
 
+use crate::commander::commander_type::CommanderType;
+use crate::commander::Commander;
 use crate::config::environment::Environment;
 use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::game::Game;
@@ -15,7 +17,8 @@ use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
-use crate::player::Owner;
+use crate::player::{Owner, Player};
+use crate::script::terrain::TerrainScript;
 use crate::units::attributes::{ActionStatus, AttributeOverride};
 use crate::units::hero::Hero;
 use crate::units::movement::MovementType;
@@ -93,11 +96,21 @@ impl Terrain {
         self.environment.config.terrain_income_factor(self.typ) as i32
     }
 
-    pub fn vision_range<D: Direction>(&self, game: &Game<D>) -> Option<usize> {
+    pub fn vision_range<D: Direction>(
+        &self,
+        game: &Game<D>,
+        pos: Point,
+        // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> Option<usize> {
         if self.has_attribute(TerrainAttributeKey::Owner) && self.get_team() == ClientPerspective::Neutral {
             return None;
         }
-        let mut range = self.environment.config.terrain_vision_range(self.typ)? as usize;
+        let mut range = self.environment.config.terrain_vision_range(game, pos, self, heroes)?;
+        // TODO: add config column for whether fog_setting should increase vision range instead of this check
+        if range == 0 {
+            return Some(range);
+        }
         match game.get_fog_setting() {
             FogSetting::None => (),
             FogSetting::Light(bonus) |
@@ -109,12 +122,25 @@ impl Terrain {
         Some(range)
     }
 
-    pub fn can_build(&self) -> bool {
-        self.environment.config.terrain_can_build(self.typ)
+    pub fn can_build<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        pos: Point,
+        // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> bool {
+        self.environment.config.terrain_can_build(game, pos, self, heroes)
     }
 
-    pub fn buildable_units(&self) -> &[UnitType] {
-        if self.can_build() {
+    pub fn buildable_units<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        pos: Point,
+        is_bubble: bool,
+        // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> &[UnitType] {
+        if self.can_build(game, pos, heroes) {
             self.environment.config.terrain_build_or_repair(self.typ)
         } else {
             &[]
@@ -188,6 +214,16 @@ impl Terrain {
         self.environment.get_team(self.get_owner_id())
     }
 
+    pub fn get_player<'a, D: Direction>(&self, game: &'a impl GameView<D>) -> Option<&'a Player> {
+        game.get_owning_player(self.get_owner_id())
+    }
+
+    pub fn get_commander<D: Direction>(&self, game: &impl GameView<D>) -> Commander {
+        self.get_player(game)
+        .and_then(|player| Some(player.commander.clone()))
+        .unwrap_or(Commander::new(&self.environment, CommanderType::None))
+    }
+
     pub fn get_capture_progress(&self) -> CaptureProgress {
         self.get()
     }
@@ -214,11 +250,18 @@ impl Terrain {
 
     // methods that go beyond getter / setter functionality
 
-    pub fn get_vision<D: Direction>(&self, game: &Game<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
+    pub fn get_vision<D: Direction>(
+        &self,
+        game: &Game<D>,
+        pos: Point,
+        // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        team: ClientPerspective
+    ) -> HashMap<Point, FogIntensity> {
         if self.get_team() != team && self.get_team() != ClientPerspective::Neutral {
             return HashMap::new();
         }
-        let vision_range = if let Some(v) = self.vision_range(game) {
+        let vision_range = if let Some(v) = self.vision_range(game, pos, heroes) {
             v
         } else {
             return HashMap::new();
@@ -313,14 +356,25 @@ impl Terrain {
         (unit, cost)
     }
 
-    pub fn unit_shop<D: Direction>(&self, game: &Game<D>, pos: Point) -> Vec<(Unit<D>, i32)> {
-        if !self.can_build() {
+    pub fn unit_shop<D: Direction>(&self, game: &Game<D>, pos: Point, is_bubble: bool) -> Vec<(Unit<D>, i32)> {
+        let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
+        if !self.can_build(game, pos, &heroes) {
             return Vec::new();
         }
-        let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
-        self.buildable_units().iter().map(|unit_type| {
+        self.buildable_units(game, pos, is_bubble, &heroes).iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, &heroes)
         }).collect()
+    }
+
+    pub fn on_build<D: Direction>(&self, game: &Game<D>, pos: Point, is_bubble: bool) -> Vec<TerrainScript> {
+        let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
+        self.environment.config.terrain_on_build(
+            game,
+            pos,
+            self,
+            is_bubble,
+            &heroes,
+        )
     }
 }
 

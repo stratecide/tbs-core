@@ -49,6 +49,8 @@ crate::enum_with_custom! {
         //Crater,
         TentacleDepths,
         Port,
+        // CO-specific terrain
+        FairyForest,
     }
 }
 

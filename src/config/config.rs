@@ -12,6 +12,7 @@ use crate::map::point::Point;
 use crate::script::attack::AttackScript;
 use crate::script::defend::DefendScript;
 use crate::script::kill::KillScript;
+use crate::script::terrain::TerrainScript;
 use crate::script::unit::UnitScript;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::AmphibiousTyping;
@@ -34,6 +35,7 @@ use super::commander_type_config::CommanderTypeConfig;
 use super::commander_unit_config::CommanderPowerUnitConfig;
 use super::movement_type_config::MovementPattern;
 use super::number_modification::NumberMod;
+use super::terrain_powered::TerrainPoweredConfig;
 use super::terrain_type_config::TerrainTypeConfig;
 use super::unit_filter::*;
 use super::unit_type_config::UnitTypeConfig;
@@ -75,6 +77,8 @@ pub struct Config {
     pub(super) commander_types: Vec<CommanderType>,
     pub(super) commanders: HashMap<CommanderType, CommanderTypeConfig>,
     pub(super) commander_powers: HashMap<CommanderType, Vec<CommanderPowerConfig>>,
+    pub(super) default_terrain_overrides: Vec<TerrainPoweredConfig>,
+    pub(super) commander_terrain: HashMap<CommanderType, HashMap<Option<u8>, Vec<TerrainPoweredConfig>>>,
     pub(super) default_unit_overrides: Vec<CommanderPowerUnitConfig>,
     pub(super) commander_units: HashMap<CommanderType, HashMap<Option<u8>, Vec<CommanderPowerUnitConfig>>>,
     pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
@@ -369,6 +373,38 @@ impl Config {
         self.terrain_config(typ).max_anger
     }
 
+    /**
+     * this function could indirectly call itself!
+     * checking another terrain's config from game may cause infinite recursion!
+     * -> get_terrain has to replace the returned terrain with a "dummy" terrain that doesn't have access to any configs
+     */
+    pub(super) fn terrain_power_configs<'a, D: Direction>(
+        &'a self,
+        map: &'a impl GameView<D>,
+        pos: Point,
+        terrain: &'a Terrain,
+        is_bubble: bool,
+        // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
+        heroes: &'a [(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> impl DoubleEndedIterator<Item = &'a TerrainPoweredConfig> {
+        let commander = terrain.get_commander(map);
+        let mut slices = vec![&self.default_terrain_overrides];
+        // should always be true
+        if let Some(configs) = self.commander_terrain.get(&commander.typ()) {
+            if let Some(neutral) = configs.get(&None) {
+                slices.push(neutral);
+            }
+            if let Some(power) = configs.get(&Some(commander.get_active_power() as u8)) {
+                slices.push(power);
+            }
+        }
+        slices.into_iter()
+        .flatten()
+        .filter(move |config| {
+            config.affects.iter().all(|filter| filter.check(map, pos, terrain, is_bubble, heroes))
+        })
+    }
+
     pub fn terrain_path_extra(&self, typ: TerrainType) -> ExtraMovementOptions {
         self.terrain_config(typ).extra_movement_options
     }
@@ -393,16 +429,52 @@ impl Config {
         .unwrap_or(Rational32::from_integer(0))
     }
 
-    pub fn terrain_vision_range(&self, typ: TerrainType) -> Option<u8> {
-        self.terrain_config(typ).vision_range
+    pub fn terrain_vision_range<D: Direction>(
+        &self,
+        map: &impl GameView<D>,
+        pos: Point,
+        terrain: &Terrain,
+        // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> Option<usize> {
+        let iter = self.terrain_power_configs(map, pos, terrain, false, heroes)
+        .map(|c| &c.vision);
+        let mut result = NumberMod::update_value_repeatedly(
+            self.terrain_config(terrain.typ()).vision_range,
+            iter,
+        ) as i8;
+        if result < 0 && self.terrain_can_build(map, pos, terrain, heroes) {
+            result = 0;
+        }
+        if result < 0 {
+            None
+        } else {
+            Some(result as usize)
+        }
     }
 
     pub fn terrain_income_factor(&self, typ: TerrainType) -> i16 {
         self.terrain_config(typ).income_factor
     }
 
-    pub fn terrain_can_build(&self, typ: TerrainType) -> bool {
+    pub fn terrain_can_build_base(&self, typ: TerrainType) -> bool {
         self.terrain_config(typ).can_build
+    }
+
+    pub fn terrain_can_build<D: Direction>(
+        &self,
+        map: &impl GameView<D>,
+        pos: Point,
+        terrain: &Terrain,
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> bool {
+        let mut result = self.terrain_can_build_base(terrain.typ());
+        for config in self.terrain_power_configs(map, pos, terrain, false, heroes) {
+            if let Some(can_build) = config.build {
+                result = can_build;
+            }
+        }
+        result
     }
 
     pub fn terrain_can_repair(&self, typ: TerrainType) -> bool {
@@ -439,6 +511,21 @@ impl Config {
         let mut result = HashMap::new();
         for ov in &self.terrain_config(terrain.typ()).build_overrides {
             result.insert(ov.key(), ov.clone());
+        }
+        result
+    }
+
+    pub fn terrain_on_build<D: Direction>(
+        &self,
+        map: &impl GameView<D>,
+        pos: Point,
+        terrain: &Terrain,
+        is_bubble: bool,
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+    ) -> Vec<TerrainScript> {
+        let mut result = Vec::new();
+        for config in self.terrain_power_configs(map, pos, terrain, is_bubble, heroes) {
+            result.extend(config.on_build.iter().cloned())
         }
         result
     }

@@ -313,7 +313,7 @@ impl<D: Direction> Map<D> {
                 }
             }
             let t = self.get_terrain(p).unwrap();
-            if t.get_owner_id() >= 0 && t.can_build() {
+            if t.get_owner_id() >= 0 && t.can_build(self, p, &[]) {
                 owners.insert(t.get_owner_id() as u8);
             }
             for detail in self.get_details(p) {

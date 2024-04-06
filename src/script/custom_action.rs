@@ -36,7 +36,7 @@ pub enum CustomActionDataOptions<D: Direction> {
 }
 
 impl<D: Direction> CustomActionDataOptions<D> {
-    fn contains(&self, data: &CustomActionData<D>) -> bool {
+    pub fn contains(&self, data: &CustomActionData<D>) -> bool {
         match (self, data) {
             (Self::Point(options), CustomActionData::Point(option)) => options.contains(option),
             (Self::Direction(_visual_center, options), CustomActionData::Direction(option)) => options.contains(option),

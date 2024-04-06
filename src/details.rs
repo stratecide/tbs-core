@@ -20,7 +20,7 @@ use crate::units::hero::HeroType;
 use crate::units::unit::{Unit, UnitBuilder};
 use crate::units::unit_types::UnitType;
 
-pub const MAX_STACK_SIZE: u32 = 4;
+pub const MAX_STACK_SIZE: u32 = 31;
 
 #[derive(Debug, Clone, PartialEq, Eq, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
@@ -84,7 +84,7 @@ impl<D: Direction> Detail<D> {
                     }
                 }
                 Self::Bubble(_, typ) => {
-                    remove = bubble || pipe_directions.len() > 0 || !environment.config.terrain_can_build(*typ);
+                    remove = bubble || pipe_directions.len() > 0 || !environment.config.terrain_can_build_base(*typ);
                     if !remove {
                         bubble = true;
                     }

@@ -12,6 +12,7 @@ pub mod parse;
 pub mod environment;
 mod custom_action_config;
 mod hero_power_config;
+mod terrain_powered;
 
 use std::fmt::Debug;
 use std::fmt::Display;

@@ -1,8 +1,9 @@
-use interfaces::game_interface::{CommandInterface, GameInterface};
+use interfaces::game_interface::CommandInterface;
 
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::details::Detail;
+use crate::script::custom_action::CustomActionData;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::TerrainBuilder;
 use crate::map::direction::Direction;
@@ -19,7 +20,7 @@ pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand<D>),
     BuyUnit(Point, UnitType, D),
-    CommanderPowerSimple(usize),
+    CommanderPower(usize, Vec<CustomActionData<D>>),
 }
 
 impl<D: Direction> CommandInterface for Command<D> {
@@ -58,14 +59,15 @@ impl<D: Direction> Command<D> {
                         _ => (),
                     }
                 }
-                if !terrain.can_build() {
-                    return Err(CommandError::CannotBuildHere);
-                }
                 if terrain.get_owner_id() != player.get_owner_id() {
                     return Err(CommandError::NotYourProperty);
                 }
+                let heroes = Hero::hero_influence_at(handler.get_game(), pos, player.get_owner_id());
+                if !terrain.can_build(handler.get_game(), pos, &heroes) {
+                    return Err(CommandError::CannotBuildHere);
+                }
                 // TODO: when checking the config, make sure that terrain-buildable units don't have a drone id
-                if !terrain.buildable_units().contains(&unit_type) {
+                if !terrain.buildable_units(handler.get_game(), pos, bubble_index.is_some(), &heroes).contains(&unit_type) {
                     return Err(CommandError::InvalidUnitType);
                 }
                 let built_this_turn = terrain.get_built_this_turn();
@@ -73,7 +75,6 @@ impl<D: Direction> Command<D> {
                     return Err(CommandError::BuildLimitReached);
                 }
 
-                let heroes = Hero::hero_influence_at(handler.get_game(), pos, player.get_owner_id());
                 let (mut unit, cost) = terrain.unit_shop_option(handler.get_game(), pos, unit_type, &heroes);
                 if cost > *handler.get_game().current_player().funds {
                     return Err(CommandError::NotEnoughMoney)
@@ -93,13 +94,21 @@ impl<D: Direction> Command<D> {
                 } else if terrain.has_attribute(TerrainAttributeKey::BuiltThisTurn) {
                     handler.terrain_built_this_turn(pos, built_this_turn + 1);
                 }
+                for effect in terrain.on_build(handler.get_game(), pos, bubble_index.is_some()) {
+                    effect.trigger(handler, pos, &terrain);
+                }
                 Ok(())
             }
-            Self::CommanderPowerSimple(index) => {
-                if !handler.get_game().current_player().commander.can_activate_power(index, false) {
+            Self::CommanderPower(index, data) => {
+                let commander = &handler.get_game().current_player().commander;
+                if !commander.can_activate_power(index, false) {
                     return Err(CommandError::PowerNotUsable);
                 }
-                Self::activate_power(handler, index);
+                let script = commander.power_activation_script(index);
+                if !script.is_data_valid(handler.get_game(), &data) {
+                    return Err(CommandError::PowerNotUsable);
+                }
+                Self::activate_power(handler, index, &data);
                 Ok(())
             }
         }?;
@@ -113,15 +122,18 @@ impl<D: Direction> Command<D> {
                 handler.player_dies(owner_id as i8);
             }
         }
+        handler.recalculate_fog();
         Ok(())
     }
 
-    pub(crate) fn activate_power(handler: &mut EventHandler<D>, index: usize) {
+    pub(crate) fn activate_power(handler: &mut EventHandler<D>, index: usize, data: &[CustomActionData<D>]) {
         let owner_id = handler.get_game().current_player().get_owner_id();
-        handler.commander_charge_sub(owner_id, handler.get_game().current_player().commander.power_cost(index));
+        let commander = &handler.get_game().current_player().commander;
+        let script = commander.power_activation_script(index);
+        handler.commander_charge_sub(owner_id, commander.power_cost(index));
         handler.commander_power(owner_id, index);
-        for active_effect in handler.get_game().current_player().commander.power_activation_effects(index) {
-            active_effect.trigger(handler, owner_id);
+        if script.is_data_valid(handler.get_game(), &data) {
+            script.execute(handler, data);
         }
     }
 }

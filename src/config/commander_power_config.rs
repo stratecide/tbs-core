@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
-use crate::script::player::PlayerScript;
+use crate::script::custom_power::CustomPower;
 
 use super::ConfigParseError;
 
@@ -13,7 +13,7 @@ pub struct CommanderPowerConfig {
     pub(crate) usable_from_power: Vec<u8>,
     pub(crate) next_power: u8, // at the start of the player's turn, this index is automatically switched to if possible (e.g. player has enough charge)
     pub(crate) required_charge: u32,
-    pub(crate) effects: Vec<PlayerScript>,
+    pub(crate) script: CustomPower,
     pub(super) prevents_charging: bool,
 }
 
@@ -30,7 +30,7 @@ impl CommanderPowerConfig {
             usable_from_power: parse_vec_def(data, H::UsableFromPowers, Vec::new())?,
             next_power: parse_def(data, H::NextPower, 0)?,
             required_charge: parse_def(data, H::RequiredCharge, 0)?,
-            effects: parse_vec_def(data, H::Effects, Vec::new())?,
+            script: parse_def(data, H::Script, CustomPower::None)?,
             prevents_charging: parse_def(data, H::PreventsCharging, false)?,
         };
         result.simple_validation()?;
@@ -53,7 +53,7 @@ crate::listable_enum! {
         UsableFromPowers,
         NextPower,
         RequiredCharge,
-        Effects,
+        Script,
         PreventsCharging,
     }
 }
