@@ -229,4 +229,32 @@ mod tests {
         assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().get_hp(), 100);
         assert!(game.get_unit(Point::new(2, 0)).unwrap().get_hp() < hp);
     }
+
+
+    #[test]
+    fn capture_pyramid() {
+        let config = Arc::new(Config::test_config());
+        let map = PointMap::new(4, 4, false);
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+        let mut map = Map::new(wmap, &config);
+        let map_env = map.environment().clone();
+        map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(0, 1), Some(UnitType::Pyramid.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        let settings = map.settings().unwrap();
+        let (mut game, _) = map.game_server(&settings, || 0.);
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(0, 0)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        }), || 0.).unwrap();
+        assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_owner_id(), -1);
+        game.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(0, 2)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+        }), || 0.).unwrap();
+        assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_owner_id(), 0);
+    }
 }

@@ -4,6 +4,8 @@ Power;Affects;Attack;CounterAttack;Defense;CounterDefense;MinRange;MaxRange;Visi
 ;U(Tentacle);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Kraken;
 ;U(PufferFish);;*0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Ricochet(10), Attack(NoCounter, true, true)
 ;U(King, LifeCrystal);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;LoseGame;
+;U(Pyramid), Unowned;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;CopyAttacker(Owner), Attributes(Hp(50)), Revive;
+;U(Pyramid), Not(Unowned);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Attributes(Unowned, Hp(50)), Revive;
 ;T(FairyForest);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Heal(10);;;;;
 Co(Zombie);MovementPattern(Standard);-1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;DeadSkull;;
 Co(Zombie,1);MovementPattern(Standard);+1/10;+1/10;+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

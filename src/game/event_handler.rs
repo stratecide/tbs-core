@@ -131,8 +131,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 unit.on_end_turn(game, unit_pos, transporter, heroes)
             },
             |_observation_id| {},
-            |this, script, unit_pos, unit, _observation_id| {
-                script.trigger(this, unit_pos, unit);
+            |this, scripts, unit_pos, unit, _observation_id| {
+                for script in scripts {
+                    script.trigger(this, unit_pos, unit);
+                }
             }
         );
 
@@ -290,8 +292,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 }
             },
             |handler| handler.unit_mass_death(&dead_drones),
-            |handler, script, unit_pos, unit, _observation_id| {
-                script.trigger(handler, unit_pos, unit);
+            |handler, scripts, unit_pos, unit, _observation_id| {
+                let mut unit = unit.clone();
+                for script in scripts {
+                    script.trigger(handler, &mut unit, unit_pos, None, None);
+                }
             }
         );
 
@@ -322,8 +327,10 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 }
             },
             |_| {},
-            |this, script, unit_pos, unit, _observation_id| {
-                script.trigger(this, unit_pos, unit);
+            |this, scripts, unit_pos, unit, _observation_id| {
+                for script in scripts {
+                    script.trigger(this, unit_pos, unit);
+                }
             }
         );
 
@@ -873,7 +880,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         &mut self,
         get_script: impl Fn(&Game<D>, &Unit<D>, Point, Option<(&Unit<D>, usize)>, &[(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<S>,
         before_executing: impl FnOnce(&mut Self),
-        execute_script: impl Fn(&mut Self, S, Point, &Unit<D>, usize),
+        execute_script: impl Fn(&mut Self, Vec<S>, Point, &Unit<D>, usize),
     ) {
         let hero_auras = Hero::map_influence(self.get_game(), -1);
         let mut scripts = Vec::new();
@@ -897,9 +904,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         before_executing(self);
         for (scripts, unit, unit_pos, observation_id) in scripts {
             // the unit may not be at unit_pos anymore
-            for script in scripts {
-                execute_script(self, script, unit_pos, &unit, observation_id);
-            }
+            execute_script(self, scripts, unit_pos, &unit, observation_id);
         }
     }
 

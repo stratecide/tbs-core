@@ -10,6 +10,7 @@ use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::attack::AttackScript;
+use crate::script::death::DeathScript;
 use crate::script::defend::DefendScript;
 use crate::script::kill::KillScript;
 use crate::script::terrain::TerrainScript;
@@ -808,7 +809,7 @@ impl Config {
         attacker: Option<(&Unit<D>, Point)>,
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
         temporary_ballast: &[TBallast<D>],
-    ) -> Vec<UnitScript> {
+    ) -> Vec<DeathScript> {
         let mut result = Vec::new();
         for config in self.unit_power_configs(game, unit, unit_pos, transporter, attacker, heroes, temporary_ballast) {
             result.extend(config.on_death.iter().cloned())

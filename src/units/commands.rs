@@ -103,8 +103,11 @@ impl<D: Direction> UnitAction<D> {
                             }
                         },
                         |handler| handler.unit_mass_death(&deaths),
-                        |handler, script, unit_pos, unit, _observation_id| {
-                            script.trigger(handler, unit_pos, unit);
+                        |handler, scripts, unit_pos, unit, _observation_id| {
+                            let mut unit = unit.clone();
+                            for script in scripts {
+                                script.trigger(handler, &mut unit, unit_pos, None, Some((&attacker, end)));
+                            }
                         }
                     );
                 }

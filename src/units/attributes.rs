@@ -5,7 +5,7 @@ use zipper::*;
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;
-use crate::config::parse::{string_base, FromConfig};
+use crate::config::parse::{parse_tuple1, string_base, FromConfig};
 use crate::map::direction::{Direction, Direction4, Direction6};
 use crate::map::point::Point;
 use crate::player::Owner;
@@ -245,7 +245,8 @@ pub enum AttributeOverride {
     InWater,
     OnLand,
     Hp(u8),
-    Zombified
+    Zombified,
+    Unowned,
 }
 
 impl FromConfig for AttributeOverride {
@@ -256,13 +257,14 @@ impl FromConfig for AttributeOverride {
             "OnLand" => Self::OnLand,
             "Zombified" => Self::Zombified,
             "Hp" => {
-                let (hp, r) = u8::from_conf(s)?;
+                let (hp, r) = parse_tuple1::<u8>(s)?;
                 if hp == 0 || hp > 100 {
                     return Err(ConfigParseError::InvalidInteger(hp.to_string()));
                 }
                 s = r;
                 Self::Hp(hp)
             }
+            "Unowned" => Self::Unowned,
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         }, s))
     }
@@ -275,6 +277,7 @@ impl AttributeOverride {
             Self::OnLand => AttributeKey::Amphibious,
             Self::Hp(_) => AttributeKey::Hp,
             Self::Zombified => AttributeKey::Zombified,
+            Self::Unowned => AttributeKey::Owner,
         }
     }
 }
@@ -286,6 +289,7 @@ impl<D: Direction> From<&AttributeOverride> for Attribute<D> {
             AttributeOverride::InWater => Attribute::Amphibious(Amphibious::InWater),
             AttributeOverride::OnLand => Attribute::Amphibious(Amphibious::OnLand),
             AttributeOverride::Zombified => Attribute::Zombified(true),
+            AttributeOverride::Unowned => Attribute::Owner(-1),
         }
     }
 }

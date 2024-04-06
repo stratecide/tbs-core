@@ -682,8 +682,11 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
             }
         },
         |handler| handler.unit_mass_death(&deaths),
-        |handler, script, unit_pos, unit, _observation_id| {
-            script.trigger(handler, unit_pos, unit);
+        |handler, scripts, unit_pos, unit, _observation_id| {
+            let mut unit = unit.clone();
+            for script in scripts {
+                script.trigger(handler, &mut unit, unit_pos, None, Some((attacker, attacker_pos)));
+            }
         }
     );
     (filter_attack_targets(handler.get_game(), attacker, targets), hero_charge, attack_script_targets, dead_units)

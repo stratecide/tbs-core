@@ -108,8 +108,11 @@ pub(super) fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, points: i
             }
         },
         |handler| handler.unit_mass_death(&dead),
-        |handler, script, unit_pos, unit, _observation_id| {
-            script.trigger(handler, unit_pos, unit);
+        |handler, scripts, unit_pos, unit, _observation_id| {
+            let mut unit = unit.clone();
+            for script in scripts {
+                script.trigger(handler, &mut unit, unit_pos, None, None);
+            }
         }
     );
 }

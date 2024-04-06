@@ -70,6 +70,7 @@ pub(crate) enum UnitFilter {
     CommanderCharge(u32),
     Fog(HashSet<FogIntensity>),
     Moved,
+    Unowned,
     Status(HashSet<ActionStatus>),
     Not(Vec<Self>),
 }
@@ -129,6 +130,7 @@ impl FromConfig for UnitFilter {
                 Self::Fog(list.into_iter().collect())
             }
             "Moved" => Self::Moved,
+            "Unowned" => Self::Unowned,
             "S" | "Status" => {
                 let (list, r) = parse_inner_vec::<ActionStatus>(remainder, true)?;
                 remainder = r;
@@ -209,6 +211,7 @@ impl UnitFilter {
             Self::Moved => {
                 temporary_ballast.len() > 0
             }
+            Self::Unowned => unit.get_owner_id() < 0,
             Self::Status(status) => {
                 let s = unit.get_status();
                 status.iter().any(|a| *a == s)

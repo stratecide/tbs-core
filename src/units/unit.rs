@@ -23,6 +23,7 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Player, Owner};
 use crate::script::attack::AttackScript;
+use crate::script::death::DeathScript;
 use crate::script::defend::DefendScript;
 use crate::script::kill::KillScript;
 use crate::script::unit::UnitScript;
@@ -284,8 +285,12 @@ impl<D: Direction> Unit<D> {
     }
 
     fn set<T: TrAttribute<D>>(&mut self, value: T) -> bool {
-        if self.has_attribute(T::key()) {
-            self.attributes.insert(T::key(), value.into());
+        self.set_attribute(value.into())
+    }
+
+    pub(crate) fn set_attribute(&mut self, value: Attribute<D>) -> bool {
+        if self.has_attribute(value.key()) {
+            self.attributes.insert(value.key(), value);
             true
         } else {
             false
@@ -595,7 +600,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_death(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<(&Self, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<UnitScript> {
+    pub fn on_death(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<(&Self, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> Vec<DeathScript> {
         self.environment.config.unit_death_effects(
             game,
             self,

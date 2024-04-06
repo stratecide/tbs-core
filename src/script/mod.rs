@@ -6,3 +6,4 @@ pub mod custom_action;
 pub mod defend;
 pub mod custom_power;
 pub mod terrain;
+pub mod death;

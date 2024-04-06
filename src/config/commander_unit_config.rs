@@ -7,6 +7,7 @@ use num_rational::Rational32;
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
 use crate::script::attack::AttackScript;
+use crate::script::death::DeathScript;
 use crate::script::defend::DefendScript;
 use crate::script::kill::KillScript;
 use crate::script::unit::UnitScript;
@@ -47,7 +48,7 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) on_attack: Vec<AttackScript>,
     pub(super) on_defend: Vec<DefendScript>,
     pub(super) on_kill: Vec<KillScript>,
-    pub(super) on_death: Vec<UnitScript>,
+    pub(super) on_death: Vec<DeathScript>,
     pub(super) aura_range: NumberMod<i8>,
     pub(super) aura_range_transported: NumberMod<i8>,
 }
