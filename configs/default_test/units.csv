@@ -1,5 +1,5 @@
 Id;Name;Visibility;MovementPattern;MovementType;WaterMovementType;MovementPoints;VisionMode;Vision;TrueVision;NeedsOwner;Stealthy;CanBeMovedThrough;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity
-Marine;Marine;Normal;Standard;Foot;Hovercraft;7/2;Normal;2;1;true;;true;true;MachineGun;true;Adjacent;;;150;BetweenAttacks;;true;
+Marine;Marine;Normal;Standard;Foot;Hovercraft;3;Normal;2;1;true;;true;true;MachineGun;true;Adjacent;;;150;BetweenAttacks;;true;
 Sniper;Sniper;Normal;Standard;Bike;;9/2;Normal;3;1;true;;true;true;Rifle;true;Ranged(1,1);;;250;BetweenAttacks;;true;
 Bazooka;Bazooka;Normal;Standard;Foot;;5/2;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;350;BetweenAttacks;;true;
 Magnet;Magnet;Normal;Standard;Wheel;;5;Normal;2;1;true;;true;true;Bonk;true;Straight(2,0);All;;400;InsteadOfAttack;-1;true;
@@ -26,7 +26,7 @@ Bomber;Bomber;Normal;Standard;Plane;;6;Normal;2;1;true;;true;true;Shells;true;Ad
 Fighter;Fighter;Normal;Standard;Plane;;7;Normal;3;1;true;;true;true;AntiAir;true;Adjacent;;;1800;BetweenAttacks;;true;
 LightDrone;Drone;Normal;Standard;Heli;;5/2;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;100;BetweenAttacks;;true;
 HeroCrystal;Obelisk;AlwaysVisible;None;None;;;Normal;1;;true;;;;;;;;;0;;;true;
-Pyramid;Pyramid;AlwaysVisible;None;None;;;Normal;;;;;;;;;;;;100;;;;
+Pyramid;Pyramid;AlwaysVisible;None;None;;;Normal;;;;;true;;;;;;;100;;;;
 MegaCannon;Mega-Cannon;AlwaysVisible;None;None;;;Normal;;;;;;;;;Triangle(1,0);;1,1,1,1,1;800;;;;
 LaserCannon;Laser-Cannon;AlwaysVisible;None;None;;;Normal;;;;;;;;;Straight(1,0);;1,1,1,1,1,1,1,1,1,1;800;;;;
 DroneTower;Drone-Tower;AlwaysVisible;None;None;;;Normal;1;1;;;;;;;;;;800;;;;3

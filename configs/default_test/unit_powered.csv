@@ -1,5 +1,8 @@
 Power;Affects;Attack;CounterAttack;Defense;CounterDefense;MinRange;MaxRange;Visibility;MovementType;WaterMovementType;MovementPoints;Vision;TrueVision;Stealthy;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;CanBuildUnits;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity;BuildOverrides;AuraRange;OnStartTurn;OnEndTurn;OnAttack;OnKill;OnDeath;OnDefend
 ;U(Pawn),T(ChessPawnTile);;;;;;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;;;
+;Movement(Foot, Bike, Wheel, Treads),T(Hill);;;;;;;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;;
+;Movement(Foot),T(Mountain);;;;;;;;;;;+2;;;;;;;;;;;;;;;;;;;;;;;;
+;Movement(Foot, Bike, Wheel, Treads),T(Forest, FairyForest);;;;;;;Stealth;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;U(Submarine), Fog(TrueSight);;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;U(Tentacle);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Kraken;
 ;U(PufferFish);;*0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Ricochet(10), Attack(NoCounter, true, true)

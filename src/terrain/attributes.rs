@@ -37,7 +37,7 @@ impl TerrainAttributeKey {
         use TerrainAttribute as A;
         match self {
             //Self::PipeConnection => A::PipeConnection(D::angle_0().pipe_entry()),
-            Self::Owner => A::Owner(0),
+            Self::Owner => A::Owner(-1),
             Self::CaptureProgress => A::CaptureProgress(None),
             Self::BuiltThisTurn => A::BuiltThisTurn(0),
             Self::Exhausted => A::Exhausted(false),

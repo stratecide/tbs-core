@@ -1,5 +1,5 @@
 Id;Name;Visibility;MovementPattern;MovementType;WaterMovementType;MovementPoints;VisionMode;Vision;TrueVision;NeedsOwner;Stealthy;CanBeMovedThrough;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity
-Marine;Marine;Normal;Standard;Foot;Hovercraft;7/2;Normal;2;1;true;;true;true;MachineGun;true;Adjacent;;;150;BetweenAttacks;;true;
+Marine;Marine;Normal;Standard;Foot;Hovercraft;3;Normal;2;1;true;;true;true;MachineGun;true;Adjacent;;;150;BetweenAttacks;;true;
 Sniper;Sniper;Normal;Standard;Bike;;9/2;Normal;3;1;true;;true;true;Rifle;true;Ranged(1,1);;;250;BetweenAttacks;;true;
 Bazooka;Bazooka;Normal;Standard;Foot;;5/2;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;350;BetweenAttacks;;true;
 Magnet;Magnet;Normal;Standard;Wheel;;5;Normal;2;1;true;;true;true;Bonk;true;Straight(2,0);All;;400;InsteadOfAttack;-1;true;
