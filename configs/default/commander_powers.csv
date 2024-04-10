@@ -17,5 +17,5 @@ Tapio;Spirit Seed;0, 1;0;1000;;TapioSpiritSeed
 Tapio;Fairy Fury;0, 1;0;5000;true;TapioFairyFury(2, 20)
 Tapio;Living Trees;0, 1;0;8000;true;
 Lageos;;;;;;
-Lageos;Solar Storm;0;0;6000;true;LageosStunRockets(1, 1, 30)
-Lageos;Satellite Strike;0;0;9000;true;LageosRockets(3, 1, 30)
+Lageos;Solar Storm;0;0;6000;true;LageosRockets(2, 1, 30)
+Lageos;Satellite Strike;0;0;9000;true;LageosStunRockets(1, 1, 30)
