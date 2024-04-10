@@ -285,6 +285,7 @@ mod tests {
         map.set_unit(Point::new(2, 1), Some(enemy.clone()));
         let friend = UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults();
         map.set_unit(Point::new(0, 4), Some(friend.clone()));
+        map.set_unit(Point::new(2, 2), Some(enemy.clone()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -305,14 +306,23 @@ mod tests {
         assert_eq!(server.get_map().get_unit(Point::new(2, 1)), Some(&friend));
         assert_eq!(server.get_map().get_unit(Point::new(0, 4)), Some(&enemy));
 
-        // knockback
+        // knockback with power
+        server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(2, 1)),
+            action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        }), || 0.).unwrap();
+        assert_eq!(server.get_map().get_unit(Point::new(2, 2)), None);
+        assert!(server.get_map().get_unit(Point::new(2, 3)).is_some());
+
+        // no knockback without power
         let mut server = unchanged.clone();
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(1, 1)),
             action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
         }), || 0.).unwrap();
-        assert_eq!(server.get_map().get_unit(Point::new(2, 1)), None);
-        assert!(server.get_map().get_unit(Point::new(3, 1)).is_some());
+        assert_eq!(server.get_map().get_unit(Point::new(3, 1)), None);
+        assert!(server.get_map().get_unit(Point::new(2, 1)).is_some());
     }
 }
