@@ -182,12 +182,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                                 .build_with_defaults();
                                 self.terrain_replace(p, terrain);
                             }
-                            self.unit_status(p, ActionStatus::Ready);
                         }
                     } else {
                         self.terrain_capture_progress(p, None);
                     }
                 }
+            }
+            if self.get_map().get_unit(p).filter(|u| u.get_owner_id() == owner_id && u.get_status() == ActionStatus::Capturing).is_some() {
+                self.unit_status(p, ActionStatus::Ready);
             }
         }
 
