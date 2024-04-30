@@ -13,6 +13,7 @@ crate::enum_with_custom! {
         Bazooka,
         Magnet,
         DragonHead,
+        Convoy,
         Artillery,
         SmallTank,
         BigTank,
