@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::error::Error;
 
 use crate::config::parse::*;
 use crate::game::game_view::GameView;
@@ -20,7 +21,7 @@ pub struct CustomActionConfig {
 }
 
 impl CustomActionConfig {
-    pub fn parse(data: &HashMap<CustomActionConfigHeader, &str>) -> Result<Self, ConfigParseError> {
+    pub fn parse(data: &HashMap<CustomActionConfigHeader, &str>, load_config: &Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>) -> Result<Self, ConfigParseError> {
         use CustomActionConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {
@@ -28,7 +29,7 @@ impl CustomActionConfig {
         };
         let result = Self {
             name: get(H::Name)?.to_string(),
-            unit_filter: parse_vec_def(data, H::UnitFilter, Vec::new())?,
+            unit_filter: parse_vec_dyn_def(data, H::UnitFilter, Vec::new(), |s| UnitFilter::from_conf(s, load_config))?,
             script: parse(data, H::Script)?,
         };
         result.simple_validation()?;

@@ -952,11 +952,11 @@ impl<D: Direction> Unit<D> {
             if self.can_capture() && terrain.has_attribute(TerrainAttributeKey::Owner) && terrain.get_team() != self.get_team() {
                 result.push(UnitAction::Capture);
             }
-            if self.get_hp() < 100 && terrain.can_repair() && terrain.can_repair_unit(self.typ)
+            /*if self.get_hp() < 100 && terrain.can_repair() && terrain.can_repair_unit(self.typ)
             && (!terrain.has_attribute(TerrainAttributeKey::Owner) || terrain.get_owner_id() == self.get_owner_id())
             && funds_after_path * 100 >= self.full_price(game, destination, None, heroes.as_slice()) {
                 result.push(UnitAction::Repair);
-            }
+            }*/
             if self.can_have_status(ActionStatus::Exhausted) {
                 let mut take_instead_of_wait = false;
                 if takes != PathStepTakes::Deny && self.has_attribute(AttributeKey::EnPassant) {

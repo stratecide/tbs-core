@@ -64,6 +64,7 @@ pub enum CustomAction {
     ActivateUnits,
     BuyUnit,
     SwapUnitPositions,
+    Repair(u8),
 }
 
 impl FromConfig for CustomAction {
@@ -79,6 +80,11 @@ impl FromConfig for CustomAction {
             "ActivateUnits" => Self::ActivateUnits,
             "BuyUnit" => Self::BuyUnit,
             "SwapUnitPositions" => Self::SwapUnitPositions,
+            "Repair" => {
+                let (hp, remainder) = parse_tuple1(arguments)?;
+                arguments = remainder;
+                Self::Repair(1.max(99.min(hp)))
+            },
             invalid => return Err(ConfigParseError::UnknownEnumMember(format!("CustomAction::{}", invalid))),
         }, arguments))
     }
@@ -203,6 +209,13 @@ impl CustomAction {
                     CustomActionTestResult::Success
                 }
             }
+            Self::Repair(_) => {
+                if funds * 100 >= unit.full_price(game, destination, None, heroes) {
+                    CustomActionTestResult::Success
+                } else {
+                    CustomActionTestResult::Failure
+                }
+            }
         }
     }
 
@@ -293,6 +306,21 @@ impl CustomAction {
                 let unit2 = handler.get_map().get_unit(p2).cloned().unwrap();
                 handler.unit_replace(p1, unit2);
                 handler.unit_replace(p2, unit1);
+            }
+            Self::Repair(heal) => {
+                let heroes = Hero::hero_influence_at(handler.get_game(), destination, unit.get_owner_id());
+                let full_price = unit.full_price(handler.get_game(), destination, None, &heroes).max(0) as u32;
+                let mut heal = (*heal as u32)
+                    .min(100 - unit.get_hp() as u32);
+                if full_price > 0 {
+                    heal = heal.min(*handler.get_game().current_player().funds as u32 * 100 / full_price);
+                }
+                if heal > 0 {
+                    let cost = full_price * heal / 100;
+                    handler.money_buy(unit.get_owner_id(), cost as i32);
+                    handler.unit_repair(destination, heal as u8);
+                    handler.unit_status(destination, ActionStatus::Repairing);
+                }
             }
         }
     }

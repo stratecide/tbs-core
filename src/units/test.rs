@@ -110,7 +110,7 @@ mod tests {
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(3, 4)),
-            action: UnitAction::Repair,
+            action: UnitAction::Custom(1, Vec::new()),
         }), || 0.).unwrap();
         assert!(*server.get_owning_player(0).unwrap().funds < 1000);
         assert!(server.get_unit(Point::new(3, 4)).unwrap().get_hp() > 1);

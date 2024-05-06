@@ -1,5 +1,7 @@
 use std::collections::HashSet;
+use std::error::Error;
 
+use crate::commander::commander_type::CommanderType;
 use crate::details::Detail;
 use crate::game::fog::FogIntensity;
 use crate::game::game_view::GameView;
@@ -14,7 +16,7 @@ use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
 
 use super::movement_type_config::MovementPattern;
-use super::parse::{parse_inner_vec, parse_tuple1, string_base, FromConfig};
+use super::parse::{parse_inner_vec, parse_inner_vec_dyn, parse_tuple1, parse_tuple2, parse_tuple3, string_base, FromConfig};
 use super::ConfigParseError;
 use super::config::Config;
 
@@ -55,6 +57,35 @@ impl UnitTypeFilter {
 }
 
 
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum TableAxis {
+        Unit,
+        OtherUnit,
+        Terrain,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum TableAxisKey {
+    Unit(UnitType),
+    Terrain(TerrainType),
+}
+
+impl TableAxisKey {
+    fn from_conf(axis: TableAxis, s: &str) -> Result<Self, ConfigParseError> {
+        match axis {
+            TableAxis::Unit |
+            TableAxis::OtherUnit => {
+                Ok(Self::Unit(UnitType::from_conf(s)?.0))
+            }
+            TableAxis::Terrain => {
+                Ok(Self::Terrain(TerrainType::from_conf(s)?.0))
+            }
+        }
+    }
+}
+
 /**
  * UnitFilter and custom actions are the first things to replace with Rhai
  */
@@ -74,11 +105,15 @@ pub(crate) enum UnitFilter {
     Unowned,
     Status(HashSet<ActionStatus>),
     Sludge,
+    Commander(CommanderType, Option<u8>),
+    Hp(u8),
+    TerrainOwner,
+    Table(TableAxis, TableAxis, HashSet<[TableAxisKey; 2]>),
     Not(Vec<Self>),
 }
 
-impl FromConfig for UnitFilter {
-    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+impl UnitFilter {
+    pub fn from_conf<'a>(s: &'a str, load_config: &Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
         Ok((match base {
             "Unit" | "U" => {
@@ -139,17 +174,63 @@ impl FromConfig for UnitFilter {
                 Self::Status(list.into_iter().collect())
             }
             "Sludge" => Self::Sludge,
+            "Commander" | "Co" => {
+                if let Ok((commander, power, r)) = parse_tuple2(remainder) {
+                    remainder = r;
+                    Self::Commander(commander, Some(power))
+                } else {
+                    let (commander, r) = parse_tuple1(remainder)?;
+                    remainder = r;
+                    Self::Commander(commander, None)
+                }
+            }
+            "Hp" => {
+                let (hp, r) = parse_tuple1(remainder)?;
+                remainder = r;
+                Self::Hp(hp)
+            }
+            "TerrainOwner" => Self::TerrainOwner,
+            "Table" => {
+                let (y_axis, x_axis, filename, r): (TableAxis, TableAxis, String, &str) = parse_tuple3(remainder)?;
+                remainder = r;
+                if x_axis == y_axis {
+                    return Err(ConfigParseError::TableAxesShouldDiffer(format!("{:?}", x_axis)));
+                }
+                let data = load_config(&filename).map_err(|e| ConfigParseError::Other(e.to_string()))?;
+                let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+                let mut headers = Vec::new();
+                for h in reader.headers().map_err(|e| ConfigParseError::Other(e.to_string()))?.into_iter().skip(1) {
+                    let header = TableAxisKey::from_conf(x_axis, h)?;
+                    if headers.contains(&header) {
+                        return Err(ConfigParseError::DuplicateHeader(h.to_string()))
+                    }
+                    headers.push(header);
+                }
+                let mut set = HashSet::new();
+                for line in reader.records() {
+                    let line = line.map_err(|e| ConfigParseError::Other(e.to_string()))?;
+                    let mut line = line.into_iter();
+                    let y = TableAxisKey::from_conf(y_axis, line.next().unwrap())?;
+                    for (i, val) in line.enumerate() {
+                        if val == "true" {
+                            set.insert([headers[i], y]);
+                        }
+                    }
+                }
+                if set.len() == 0 {
+                    return Err(ConfigParseError::TableEmpty);
+                }
+                Self::Table(x_axis, y_axis, set)
+            }
             "Not" => {
-                let (list, r) = parse_inner_vec::<Self>(remainder, true)?;
+                let (list, r) = parse_inner_vec_dyn::<Self>(remainder, true, |s| Self::from_conf(s, load_config))?;
                 remainder = r;
                 Self::Not(list)
             }
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         }, remainder))
     }
-}
 
-impl UnitFilter {
     pub fn check<D: Direction>(
         &self,
         map: &impl GameView<D>,
@@ -225,6 +306,26 @@ impl UnitFilter {
                     Detail::SludgeToken(_) => true,
                     _ => false
                 })
+            }
+            Self::Commander(commander_type, power) => {
+                let commander = unit.get_commander(map);
+                commander.typ() == *commander_type
+                && (power.is_none() || power.unwrap() as usize == commander.get_active_power())
+            }
+            Self::Hp(hp) => unit.get_hp() >= *hp,
+            Self::TerrainOwner => {
+                map.get_terrain(unit_pos.0).unwrap().get_owner_id() == unit.get_owner_id()
+            }
+            Self::Table(x_axis, y_axis, set) => {
+                if let [Some(x), Some(y)] = [x_axis, y_axis].map(|axis| match axis {
+                    TableAxis::Unit => Some(TableAxisKey::Unit(unit.typ())),
+                    TableAxis::OtherUnit => other_unit.map(|(u, _)| TableAxisKey::Unit(u.typ())),
+                    TableAxis::Terrain => map.get_terrain(unit_pos.0).map(|t| TableAxisKey::Terrain(t.typ())),
+                }) {
+                    set.contains(&[x, y])
+                } else {
+                    false
+                }
             }
             Self::Not(negated) => {
                 // returns true if at least one check returns false

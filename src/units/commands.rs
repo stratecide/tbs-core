@@ -32,7 +32,6 @@ pub enum UnitAction<D: Direction> {
     Take,
     Enter,
     Capture,
-    Repair,
     Attack(AttackVector<D>),
     BuyHero(HeroType),
     HeroPower(usize, Vec<CustomActionData<D>>),
@@ -47,7 +46,6 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Take => write!(f, "Take"),
             Self::Enter => write!(f, "Enter"),
             Self::Capture => write!(f, "Capture"),
-            Self::Repair => write!(f, "Repair"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
             Self::BuyHero(_) => write!(f, "Buy Mercenary"),
             Self::HeroPower(index, _) => write!(f, "Hero Power {index}"),
@@ -131,25 +129,6 @@ impl<D: Direction> UnitAction<D> {
                 }
                 handler.unit_status(end, ActionStatus::Capturing);
                 false
-            }
-            Self::Repair => {
-                let unit = handler.get_map().get_unit(end).unwrap();
-                let heroes = Hero::hero_influence_at(handler.get_game(), end, unit.get_owner_id());
-                let full_price = unit.full_price(handler.get_game(), end, None, &heroes).max(0) as u32;
-                let mut heal = UNIT_REPAIR
-                    .min(100 - unit.get_hp() as u32);
-                if full_price > 0 {
-                    heal = heal.min(*handler.get_game().current_player().funds as u32 * 100 / full_price);
-                }
-                if heal > 0 {
-                    let cost = full_price * heal / 100;
-                    handler.money_buy(unit.get_owner_id(), cost as i32);
-                    handler.unit_repair(end, heal as u8);
-                    handler.unit_status(end, ActionStatus::Repairing);
-                    false
-                } else {
-                    true
-                }
             }
             Self::Attack(attack_vector) => {
                 let transporter = transporter.map(|(u, _)| (u, path.start));

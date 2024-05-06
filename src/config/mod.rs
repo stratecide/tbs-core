@@ -50,6 +50,9 @@ pub enum ConfigParseError {
     NumberTooBig(String),
     TooManyPowers(CommanderType, usize),
     UnknownEnumMember(String),
+    TableAxesShouldDiffer(String),
+    TableEmpty,
+    Other(String),
 }
 
 impl Display for ConfigParseError {

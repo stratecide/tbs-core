@@ -273,7 +273,7 @@ impl Config {
             for (i, s) in line.iter().enumerate().take(headers.len()) {
                 map.insert(headers[i], s);
             }
-            let conf = CustomActionConfig::parse(&map)?;
+            let conf = CustomActionConfig::parse(&map, &load_config)?;
             result.custom_actions.push(conf);
         }
 
@@ -690,7 +690,7 @@ impl Config {
             for (i, s) in line.iter().enumerate().take(headers.len()) {
                 map.insert(headers[i], s);
             }
-            let conf = CommanderPowerUnitConfig::parse(&map)?;
+            let conf = CommanderPowerUnitConfig::parse(&map, &load_config)?;
             match &conf.power {
                 PowerRestriction::None => result.default_unit_overrides.push(conf),
                 PowerRestriction::Commander(commander_type, power) => {
@@ -759,11 +759,13 @@ impl Config {
             None => return Err(Box::new(ConfigParseError::FolderMissing(folder.to_path_buf()))),
         };
         let load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>> = Box::new(move |filename: &str| {
-            let file = folder.join(filename);
-            if !file.exists() || !file.is_file() {
+            println!("{filename}");
+            // canonicalize and then check if still in same folder
+            // to prevent path traversal attacks
+            let file = folder.join(filename).canonicalize()?;
+            if !file.starts_with(&folder) || !file.exists() || !file.is_file() {
                 return Err(Box::new(ConfigParseError::FileMissing(filename.to_string())))
             }
-            println!("{filename}");
             Ok(fs::read_to_string(file)?)
         });
         Self::parse(name, load_config)
@@ -818,6 +820,16 @@ impl FromConfig for Rational32 {
             return Err(ConfigParseError::DivisionByZero(num));
         }
         Ok((Rational32::new(num, den), s))
+    }
+}
+
+impl FromConfig for String {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        if let Some(pos) = s.find(&[',', ')']) {
+            Ok((s[..pos].trim().to_string(), &s[pos..]))
+        } else {
+            Ok((s.trim().to_string(), ""))
+        }
     }
 }
 
@@ -906,6 +918,10 @@ pub fn parse_def<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, k
 }
 
 pub fn parse_inner_vec<T: FromConfig>(s: &str, needs_content: bool) -> Result<(Vec<T>, &str), ConfigParseError> {
+    parse_inner_vec_dyn(s, needs_content, T::from_conf)
+}
+
+pub fn parse_inner_vec_dyn<T>(s: &str, needs_content: bool, from_conf: impl Fn(&str) -> Result<(T, &str), ConfigParseError>) -> Result<(Vec<T>, &str), ConfigParseError> {
     let mut result: Vec<T> = Vec::new();
     let mut s = s.trim_start();
     let mut stop_char = None;
@@ -921,7 +937,7 @@ pub fn parse_inner_vec<T: FromConfig>(s: &str, needs_content: bool) -> Result<(V
             s = s[1..].trim_start();
             break;
         }
-        let (t, remainder) = T::from_conf(s)?;
+        let (t, remainder) = from_conf(s)?;
         result.push(t);
         s = remainder.trim_start();
         if s.starts_with(',') {
@@ -995,13 +1011,16 @@ pub fn parse_tuple3<
 }
 
 fn _parse_vec<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, def: Option<Vec<T>>) -> Result<Vec<T>, ConfigParseError> {
+    _parse_vec_dyn(data, key, def, T::from_conf)
+}
+fn _parse_vec_dyn<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Option<Vec<T>>, from_conf: impl Fn(&str) -> Result<(T, &str), ConfigParseError>) -> Result<Vec<T>, ConfigParseError> {
     let value = match data.get(&key) {
         Some(s) => s,
         None => {
             return def.ok_or(ConfigParseError::MissingColumn(format!("{key:?}")))
         }
     };
-    parse_inner_vec(value, false).map(|(r, _)| r)
+    parse_inner_vec_dyn(value, false, from_conf).map(|(r, _)| r)
 }
 
 pub fn parse_vec<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H) -> Result<Vec<T>, ConfigParseError> {
@@ -1009,6 +1028,10 @@ pub fn parse_vec<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, k
 }
 pub fn parse_vec_def<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, def: Vec<T>) -> Result<Vec<T>, ConfigParseError> {
     _parse_vec(data, key, Some(def))
+}
+
+pub fn parse_vec_dyn_def<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Vec<T>, from_conf: impl Fn(&str) -> Result<(T, &str), ConfigParseError>) -> Result<Vec<T>, ConfigParseError> {
+    _parse_vec_dyn(data, key, Some(def), from_conf)
 }
 
 

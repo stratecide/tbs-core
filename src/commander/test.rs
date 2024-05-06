@@ -440,6 +440,6 @@ fn sludge_monster() {
     assert_eq!(server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 0)),
-        action: UnitAction::Repair,
+        action: UnitAction::Custom(1, Vec::new()),
     }), || 0.), Err(CommandError::InvalidAction));
 }

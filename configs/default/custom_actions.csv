@@ -1,2 +1,3 @@
-Name;UnitFilter;Script
-Build Unit;Unit(DroneBoat, BattleShip, SwimmingFactory, DroneTower);BuyUnit
+Name;Script;UnitFilter
+Build Unit;BuyUnit;Unit(DroneBoat, BattleShip, SwimmingFactory, DroneTower)
+Repair;Repair(30);Not(Hp(100)), Table(Terrain, Unit, terrain_build_repair.csv), TerrainOwner, Not(Co(SludgeMonster))

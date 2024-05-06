@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::error::Error;
 use std::str::FromStr;
 
 use num_rational::Rational32;
@@ -55,14 +56,14 @@ pub(super) struct CommanderPowerUnitConfig {
 }
 
 impl CommanderPowerUnitConfig {
-    pub fn parse(data: &HashMap<CommanderPowerUnitConfigHeader, &str>) -> Result<Self, ConfigParseError> {
+    pub fn parse(data: &HashMap<CommanderPowerUnitConfigHeader, &str>, load_config: &Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>) -> Result<Self, ConfigParseError> {
         use CommanderPowerUnitConfigHeader as H;
         let result = Self {
             power: match data.get(&H::Power) {
                 Some(s) if s.len() > 0 => s.parse()?,
                 _ => PowerRestriction::None,
             },
-            affects: parse_vec_def(data, H::Affects, Vec::new())?,
+            affects: parse_vec_dyn_def(data, H::Affects, Vec::new(), |s| UnitFilter::from_conf(s, load_config))?,
             attack: parse_def(data, H::Attack, NumberMod::Keep)?,
             counter_attack: parse_def(data, H::CounterAttack, NumberMod::Keep)?,
             defense: parse_def(data, H::Defense, NumberMod::Keep)?,
