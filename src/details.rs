@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use interfaces::game_interface::ClientPerspective;
 use zipper_derive::Zippable;
-use zipper::{Exportable, SupportedZippable};
+use zipper::{bits_needed_for_max_value, Exportable, SupportedZippable, U};
 
 use crate::config::environment::Environment;
 use crate::game::fog::FogIntensity;
@@ -31,6 +31,7 @@ pub enum Detail<D: Direction> {
     Coins3,
     Bubble(Owner, TerrainType),
     Skull(SkullData<D>),
+    SludgeToken(SludgeToken),
 }
 impl<D: Direction> Detail<D> {
     pub fn get_vision(&self, game: &Game<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
@@ -70,6 +71,12 @@ impl<D: Direction> Detail<D> {
         let mut coin = false;
         let mut skull = false;
         let mut pipe_directions = HashSet::new();
+        let max_sludge = details.iter()
+        .filter_map(|d| match d {
+            Self::SludgeToken(token) => token.remaining_turns(environment),
+            _ => None,
+        }).max()
+        .unwrap_or(0);
         let details: Vec<Self> = details.into_iter().rev().filter(|detail| {
             let remove;
             match detail {
@@ -100,6 +107,9 @@ impl<D: Direction> Detail<D> {
                     if !remove {
                         skull = true;
                     }
+                }
+                Self::SludgeToken(token) => {
+                    remove = max_sludge != token.remaining_turns(environment).unwrap_or(0) || pipe_directions.len() > 0;
                 }
             }
             !remove
@@ -251,6 +261,53 @@ impl<D: Direction> Default for PipeState<D> {
             directions: [D::angle_0(), D::angle_0().opposite_direction()],
             ends: [true; 2],
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SludgeToken {
+    owner: Owner,
+    counter: u8,
+}
+
+impl SupportedZippable<&Environment> for SludgeToken {
+    fn export(&self, zipper: &mut zipper::Zipper, support: &Environment) {
+        self.owner.export(zipper, support);
+        zipper.write_u8(self.counter, bits_needed_for_max_value(support.config.max_sludge() as u32));
+    }
+
+    fn import(unzipper: &mut zipper::Unzipper, support: &Environment) -> Result<Self, zipper::ZipperError> {
+        let owner = Owner::import(unzipper, support)?;
+        let max_sludge = support.config.max_sludge();
+        let counter = unzipper.read_u8(bits_needed_for_max_value(max_sludge as u32))?;
+        Ok(Self {
+            owner,
+            counter: counter.min(max_sludge),
+        })
+    }
+}
+
+impl SludgeToken {
+    pub fn new(environment: &Environment, owner: i8, counter: u8) -> Self {
+        Self {
+            owner: owner.into(),
+            counter: counter.min(environment.config.max_sludge()),
+        }
+    }
+
+    pub fn remaining_turns(&self, environment: &Environment) -> Option<usize> {
+        let settings = environment.settings.as_ref()?;
+        let player_index = settings.players.iter()
+        .position(|p| p.get_owner_id() == self.get_owner_id())?;
+        Some(player_index + settings.players.len() * self.counter.max(0) as usize)
+    }
+
+    pub fn get_owner_id(&self) -> i8 {
+        self.owner.0
+    }
+
+    pub fn get_counter(&self) -> u8 {
+        self.counter
     }
 }
 

@@ -87,6 +87,8 @@ impl Config {
             max_capture_resistance: 0,
             terrain_max_anger: 0,
             terrain_max_built_this_turn: 0,
+            // detail
+            max_sludge: 1,
             // commanders
             commander_types: Vec::new(),
             commanders: HashMap::new(),

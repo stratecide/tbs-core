@@ -74,6 +74,8 @@ pub struct Config {
     pub(super) max_capture_resistance: u8,
     pub(super) terrain_max_anger: u8,
     pub(super) terrain_max_built_this_turn: u8,
+    // detail
+    pub(super) max_sludge: u8,
     // commanders
     pub(super) commander_types: Vec<CommanderType>,
     pub(super) commanders: HashMap<CommanderType, CommanderTypeConfig>,
@@ -99,6 +101,11 @@ impl Config {
 
     pub fn max_player_count(&self) -> i8 {
         16
+    }
+
+    pub fn max_sludge(&self) -> u8 {
+        // TODO: parse from config. currently is just set to a fixed value
+        self.max_sludge
     }
 
     // units
@@ -844,7 +851,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Rational32 {
-        let iter = self.unit_power_configs(
+        let iter = || self.unit_power_configs(
             game,
             unit,
             (unit_pos, None),
@@ -853,17 +860,25 @@ impl Config {
             heroes,
             temporary_ballast
         );
-        if is_counter {
+        let factor = if is_counter {
             NumberMod::update_value_repeatedly(
                 Rational32::from_integer(1),
-                iter.map(|c| &c.counter_attack)
+                iter().map(|c| &c.counter_attack)
             )
         } else {
             NumberMod::update_value_repeatedly(
                 Rational32::from_integer(1),
-                iter.map(|c| &c.attack)
+                iter().map(|c| &c.attack)
             )
-        }
+        };
+        // attack is reduced by the damage the attacker has already taken
+        let damage_factor = NumberMod::update_value_repeatedly(
+            Rational32::from_integer(1),
+            iter().map(|c| &c.attack_reduced_by_damage)
+        );
+        let damage = Rational32::from_integer(100 - unit.get_hp() as i32);
+        let hp_factor = (Rational32::from_integer(100) - damage * damage_factor) / 100;
+        hp_factor * factor
     }
 
     pub fn unit_defense<D: Direction>(

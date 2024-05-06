@@ -15,7 +15,7 @@ use crate::terrain::TerrainType;
 use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::units::combat::WeaponType;
 use crate::player::*;
-use crate::details::Detail;
+use crate::details::{Detail, SludgeToken};
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::game::fog::*;
@@ -336,6 +336,25 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             }
         );
 
+        // tick sludge tokens
+        for p in self.get_map().all_points() {
+            for (index, d) in self.get_map().get_details(p).iter().enumerate() {
+                match d {
+                    Detail::SludgeToken(token) => {
+                        if token.get_owner_id() == owner_id {
+                            let counter = token.get_counter();
+                            self.detail_remove(p, index);
+                            if counter > 0 {
+                                self.detail_add(p, Detail::SludgeToken(SludgeToken::new(self.environment(), owner_id, counter - 1)));
+                            }
+                        }
+                        break;
+                    },
+                    _ => ()
+                }
+            }
+        }
+
         // structures may have destroyed some units, vision may be reduced due to merc powers ending
         self.recalculate_fog();
     }
@@ -423,7 +442,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let old_details = self.get_map().get_details(position);
         let mut details = old_details.to_vec();
         details.push(detail);
-        self.add_event(Event::ReplaceDetail(position, old_details.to_vec().try_into().unwrap(), Detail::correct_stack(details, self.environment()).try_into().unwrap()));
+        if old_details != details.as_slice() {
+            self.add_event(Event::ReplaceDetail(position, old_details.to_vec().try_into().unwrap(), Detail::correct_stack(details, self.environment()).try_into().unwrap()));
+        }
     }
 
     pub fn detail_remove(&mut self, position: Point, index: usize) {
@@ -637,6 +658,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                     Detail::Skull(skull) => {
                         skull.get_owner_id() == unit.get_owner_id()
                     }
+                    Detail::SludgeToken(_) => true,
                 }
             }).collect();
             if details != old_details {

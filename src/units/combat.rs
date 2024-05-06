@@ -719,7 +719,7 @@ fn calculate_attack_damage<D: Direction>(game: &Game<D>, attacker: &Unit<D>, att
         path.map(|(_, _, tb)| tb).unwrap_or(&[]),
         counter.is_counter(),
     );
-    (Rational32::from_integer(attacker.get_hp() as i32) / 100 * base_attack * attack_bonus * factor / defense_bonus / terrain_defense)
+    (base_attack * attack_bonus * factor / defense_bonus / terrain_defense)
     .ceil().to_integer()
 }
 

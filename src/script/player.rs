@@ -3,7 +3,7 @@ use interfaces::game_interface::ClientPerspective;
 
 use crate::config::parse::{parse_tuple1, parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
-use crate::details::Detail;
+use crate::details::{Detail, SludgeToken};
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
 use crate::map::map_view::MapView;
@@ -19,6 +19,7 @@ pub enum PlayerScript {
     MassDamageAura(u8, u8),
     MassHeal(u8),
     ZombieResurrection(u8),
+    Sludge(u8),
 }
 
 impl FromConfig for PlayerScript {
@@ -46,6 +47,11 @@ impl FromConfig for PlayerScript {
                 s = r;
                 Self::ZombieResurrection(1.max(100.min(hp)))
             }
+            "Sludge" => {
+                let (counter, r) = parse_tuple1(s)?;
+                s = r;
+                Self::Sludge(counter)
+            }
             invalid => return Err(ConfigParseError::UnknownEnumMember(format!("PlayerScript::{}", invalid))),
         }, s))
     }
@@ -59,6 +65,7 @@ impl PlayerScript {
             Self::MassDamageAura(range, damage) => mass_damage_aura(handler, owner_id, *range, *damage),
             Self::MassHeal(heal) => mass_heal(handler, owner_id, *heal),
             Self::ZombieResurrection(hp) => zombie_resurrection(handler, owner_id as u8, *hp),
+            Self::Sludge(counter) => spread_sludge(handler, owner_id, *counter),
         }
     }
 }
@@ -150,6 +157,14 @@ pub(super) fn resurrect_zombie<D: Direction>(handler: &mut EventHandler<D>, p: P
                 break;
             }
             _ => ()
+        }
+    }
+}
+
+pub(super) fn spread_sludge<D: Direction>(handler: &mut EventHandler<D>, owner_id: i8, counter: u8) {
+    for p in handler.get_map().all_points() {
+        if handler.get_map().get_unit(p).is_some() {
+            handler.detail_add(p, Detail::SludgeToken(SludgeToken::new(handler.environment(), owner_id, counter)));
         }
     }
 }

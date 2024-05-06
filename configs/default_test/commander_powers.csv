@@ -19,3 +19,6 @@ Tapio;Living Trees;0, 1;0;8000;true;
 Lageos;;;;;;
 Lageos;Solar Storm;0;0;6000;true;LageosRockets(2, 1, 30)
 Lageos;Satellite Strike;0;0;9000;true;LageosStunRockets(1, 1, 30)
+SludgeMonster;;;;;;
+SludgeMonster;Rot;0;0;3000;true;L(Sludge(0))
+SludgeMonster;Decay;0;0;4000;true;L(Sludge(1))

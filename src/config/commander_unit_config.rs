@@ -27,6 +27,7 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) defense: NumberMod<Rational32>,
     pub(super) counter_attack: NumberMod<Rational32>,
     pub(super) counter_defense: NumberMod<Rational32>,
+    pub(super) attack_reduced_by_damage: NumberMod<Rational32>,
     pub(super) min_range: NumberMod<u8>,
     pub(super) max_range: NumberMod<u8>,
     pub(super) visibility: Option<UnitVisibility>,
@@ -66,6 +67,7 @@ impl CommanderPowerUnitConfig {
             counter_attack: parse_def(data, H::CounterAttack, NumberMod::Keep)?,
             defense: parse_def(data, H::Defense, NumberMod::Keep)?,
             counter_defense: parse_def(data, H::CounterDefense, NumberMod::Keep)?,
+            attack_reduced_by_damage: parse_def(data, H::AttackReducedByDamage, NumberMod::Keep)?,
             min_range: parse_def(data, H::MinRange, NumberMod::Keep)?,
             max_range: parse_def(data, H::MaxRange, NumberMod::Keep)?,
             visibility: match data.get(&H::Visibility) {
@@ -136,6 +138,7 @@ crate::listable_enum! {
         CounterAttack,
         Defense,
         CounterDefense,
+        AttackReducedByDamage,
         MinRange,
         MaxRange,
         Visibility,

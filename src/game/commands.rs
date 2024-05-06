@@ -138,7 +138,7 @@ impl<D: Direction> Command<D> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandError {
     NoVision,
     MissingUnit,

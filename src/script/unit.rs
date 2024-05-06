@@ -4,6 +4,7 @@ use num_rational::Rational32;
 
 use crate::config::parse::{parse_tuple1, parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
+use crate::details::{Detail, SludgeToken};
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
 use crate::map::map_view::MapView;
@@ -21,6 +22,7 @@ pub enum UnitScript {
     TakeDamage(u8),
     Heal(u8),
     LoseGame,
+    Sludge(u8),
 }
 
 impl FromConfig for UnitScript {
@@ -44,6 +46,11 @@ impl FromConfig for UnitScript {
                 Self::Heal(1.max(heal).min(99))
             }
             "LoseGame" => Self::LoseGame,
+            "Sludge" => {
+                let (counter, r) = parse_tuple1(s)?;
+                s = r;
+                Self::Sludge(counter)
+            }
             invalid => return Err(ConfigParseError::UnknownEnumMember(format!("UnitScript::{}", invalid))),
         }, s))
     }
@@ -60,6 +67,9 @@ impl UnitScript {
                 if unit.get_owner_id() >= 0 {
                     handler.player_dies(unit.get_owner_id());
                 }
+            }
+            Self::Sludge(counter) => {
+                handler.detail_add(position, Detail::SludgeToken(SludgeToken::new(handler.environment(), unit.get_owner_id(), *counter)));
             }
         }
     }

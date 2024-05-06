@@ -12,6 +12,7 @@ crate::enum_with_custom! {
         Simo,
         Tapio,
         Lageos,
+        SludgeMonster,
     }
 }
 

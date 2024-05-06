@@ -6,7 +6,9 @@ use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
 use crate::details::Detail;
 use crate::details::SkullData;
+use crate::details::SludgeToken;
 use crate::game::commands::Command;
+use crate::game::commands::CommandError;
 use crate::game::fog::*;
 use crate::game::game_view::GameView;
 use crate::map::direction::*;
@@ -339,4 +341,105 @@ fn tapio() {
     assert_eq!(server.get_terrain(Point::new(5, 3)).unwrap().typ(), TerrainType::Grass);
 }
 
+#[test]
+fn sludge_monster() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(5, 5, false);
+    let map = WMBuilder::<Direction4>::new(map);
+    let mut map = Map::new(map.build(), &config);
+    let map_env = map.environment().clone();
+    map.set_terrain(Point::new(1, 0), TerrainType::City.instance(&map_env).set_owner_id(0).build_with_defaults());
+    map.set_unit(Point::new(1, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
+    map.set_details(Point::new(2, 1), vec![Detail::SludgeToken(SludgeToken::new(&map_env, 1, 0))]);
+    map.set_unit(Point::new(2, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(60).build_with_defaults()));
+    map.set_terrain(Point::new(1, 2), TerrainType::OilPlatform.instance(&map_env).build_with_defaults());
+    map.set_unit(Point::new(1, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
 
+    let settings = map.settings().unwrap();
+
+    let mut settings = settings.clone();
+    for player in &settings.players {
+        assert!(player.get_commander_options().contains(&CommanderType::SludgeMonster));
+    }
+    settings.fog_mode = FogMode::Constant(FogSetting::None);
+    settings.players[0].set_commander(CommanderType::SludgeMonster);
+    let (mut server, _) = map.clone().game_server(&settings, || 0.);
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
+    let unchanged = server.clone();
+    let environment = server.environment().clone();
+
+    // no power attack bonuses
+    assert_eq!(server.get_unit(Point::new(0, 1)).unwrap().get_hp(), server.get_unit(Point::new(2, 1)).unwrap().get_hp(), "Sludge token should deal 10 damage");
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 1)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+    }), || 0.).unwrap();
+    let default_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
+    let mut server = unchanged.clone();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(2, 1)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D180)),
+    }), || 0.).unwrap();
+    let sludge_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
+    let mut server = unchanged.clone();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(1, 2)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+    }), || 0.).unwrap();
+    let oil_platform_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
+    assert!(default_attack < oil_platform_attack);
+    assert!(sludge_attack > oil_platform_attack, "sludge token should give +25% and oil platform only +20%");
+
+    // leave token after unit death
+    let mut server = unchanged.clone();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[]);
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(1, 0)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+    }), || 0.).unwrap();
+    assert_eq!(server.get_details(Point::new(1, 0)), &[Detail::SludgeToken(SludgeToken::new(&environment, 0, 0))]);
+
+    // small power
+    let mut server = unchanged.clone();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[]);
+    assert_eq!(server.get_details(Point::new(1, 1)), &[]);
+    server.handle_command(Command::CommanderPower(1, Vec::new()), || 0.).unwrap();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 0, 0))]);
+    assert_eq!(server.get_details(Point::new(1, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 0, 0))]);
+
+    // big power
+    let mut server = unchanged.clone();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[]);
+    assert_eq!(server.get_details(Point::new(1, 1)), &[]);
+    assert_eq!(server.get_details(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 1, 0))]);
+    server.handle_command(Command::CommanderPower(2, Vec::new()), || 0.).unwrap();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 0, 1))]);
+    assert_eq!(server.get_details(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 0, 1))]);
+    // tokens vanish over time
+    server.handle_command(Command::EndTurn, || 0.).unwrap();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 0, 1))]);
+    server.handle_command(Command::EndTurn, || 0.).unwrap();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 0, 0))]);
+    server.handle_command(Command::EndTurn, || 0.).unwrap();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 0, 0))]);
+    server.handle_command(Command::EndTurn, || 0.).unwrap();
+    assert_eq!(server.get_details(Point::new(0, 1)), &[]);
+    let mut server = unchanged.clone();
+    assert_eq!(server.get_details(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&environment, 1, 0))]);
+    server.handle_command(Command::EndTurn, || 0.).unwrap();
+    assert_eq!(server.get_details(Point::new(2, 1)), &[]);
+
+    // can't repair
+    let mut server = unchanged.clone();
+    assert_eq!(server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(1, 0)),
+        action: UnitAction::Repair,
+    }), || 0.), Err(CommandError::InvalidAction));
+}

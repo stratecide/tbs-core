@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
+use crate::details::Detail;
 use crate::game::fog::FogIntensity;
 use crate::game::game_view::GameView;
 use crate::map::point::Point;
 use crate::terrain::TerrainType;
 use crate::units::attributes::ActionStatus;
-use crate::units::combat::{AttackType, AttackTypeKey};
+use crate::units::combat::AttackTypeKey;
 use crate::units::hero::{Hero, HeroType};
 use crate::units::movement::{MovementType, TBallast};
 use crate::units::unit::Unit;
@@ -72,6 +73,7 @@ pub(crate) enum UnitFilter {
     Moved,
     Unowned,
     Status(HashSet<ActionStatus>),
+    Sludge,
     Not(Vec<Self>),
 }
 
@@ -136,6 +138,7 @@ impl FromConfig for UnitFilter {
                 remainder = r;
                 Self::Status(list.into_iter().collect())
             }
+            "Sludge" => Self::Sludge,
             "Not" => {
                 let (list, r) = parse_inner_vec::<Self>(remainder, true)?;
                 remainder = r;
@@ -215,6 +218,13 @@ impl UnitFilter {
             Self::Status(status) => {
                 let s = unit.get_status();
                 status.iter().any(|a| *a == s)
+            }
+            Self::Sludge => {
+                map.get_details(unit_pos.0).iter()
+                .any(|d| match d {
+                    Detail::SludgeToken(_) => true,
+                    _ => false
+                })
             }
             Self::Not(negated) => {
                 // returns true if at least one check returns false

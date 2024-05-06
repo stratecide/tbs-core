@@ -32,6 +32,11 @@ impl Environment {
         200
     }
 
+    pub fn sludge_damage(&self) -> u16 {
+        // TODO
+        10
+    }
+
     pub fn get_team(&self, owner_id: i8) -> ClientPerspective {
         if let Some(settings) = &self.settings {
             for player in &settings.players {
