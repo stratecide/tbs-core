@@ -9,7 +9,7 @@ use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::point_map;
 use crate::terrain::attributes::{CaptureProgress, Anger, BuiltThisTurn};
-use crate::units::attributes::{ActionStatus, AttributeKey};
+use crate::units::attributes::{ActionStatus, AttributeKey, Level};
 use crate::units::commands::UnloadIndex;
 use crate::units::hero::{Hero, HeroChargeChange};
 use crate::units::unit::Unit;
@@ -77,6 +77,7 @@ pub enum Event<D:Direction> {
     UnitMovedThisGame(Point),
     EnPassantOpportunity(Point, Option<Point>, Option<Point>),
     UnitDirection(Point, D, D),
+    UnitLevel(Point, Level, Level),
     // global
     NextTurn,
     MoneyChange(Owner, Funds),
@@ -244,6 +245,11 @@ impl<D: Direction> Event<D> {
                     unit.set_direction(*new_dir);
                 }
             }
+            Self::UnitLevel(p, _, level) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
+                    unit.set_level(level.0);
+                }
+            }
             Self::HeroSet(p, _, hero) => {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
                     unit.set_hero(hero.clone());
@@ -392,6 +398,11 @@ impl<D: Direction> Event<D> {
             Self::UnitDirection(p, old_dir, _) => {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
                     unit.set_direction(*old_dir);
+                }
+            }
+            Self::UnitLevel(p, level, _) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
+                    unit.set_level(level.0);
                 }
             }
             Self::HeroSet(p, hero, _) => {
@@ -607,6 +618,13 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitDirection(p, _, _) => {
                 if game.visible_unit_with_attribute(team, *p, AttributeKey::Direction) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitLevel(p, _, _) => {
+                if game.visible_unit_with_attribute(team, *p, AttributeKey::Level) {
                     Some(self.clone())
                 } else {
                     None

@@ -108,6 +108,10 @@ impl Config {
         self.max_sludge
     }
 
+    pub fn max_unit_level(&self) -> u8 {
+        3
+    }
+
     // units
 
     pub fn unit_count(&self) -> usize {

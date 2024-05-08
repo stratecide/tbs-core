@@ -23,6 +23,7 @@ pub enum UnitScript {
     Heal(u8),
     LoseGame,
     Sludge(u8),
+    LevelUp,
 }
 
 impl FromConfig for UnitScript {
@@ -51,6 +52,7 @@ impl FromConfig for UnitScript {
                 s = r;
                 Self::Sludge(counter)
             }
+            "LevelUp" => Self::LevelUp,
             invalid => return Err(ConfigParseError::UnknownEnumMember(format!("UnitScript::{}", invalid))),
         }, s))
     }
@@ -70,6 +72,11 @@ impl UnitScript {
             }
             Self::Sludge(counter) => {
                 handler.detail_add(position, Detail::SludgeToken(SludgeToken::new(&handler.environment().config, unit.get_owner_id(), *counter)));
+            }
+            Self::LevelUp => {
+                if let Some(unit) = handler.get_map().get_unit(position) {
+                    handler.unit_level(position, unit.get_level() + 1);
+                }
             }
         }
     }
@@ -105,6 +112,9 @@ pub(super) fn anger_kraken<D: Direction>(handler: &mut EventHandler<D>) {
 }
 
 pub(super) fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>, counter: AttackCounter, charge_powers: bool, input_factor: Rational32) {
+    if handler.get_map().get_unit(position).is_none() {
+        return;
+    }
     let attack_vector = match unit.attack_pattern() {
         AttackType::None => return,
         AttackType::Adjacent |

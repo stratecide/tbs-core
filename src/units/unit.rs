@@ -459,6 +459,8 @@ impl<D: Direction> Unit<D> {
                 if let Some(f) = Attribute::<D>::build_from_transporter(*key) {
                     let value = f(&self.attributes).expect(&format!("missing value for {key} in transporter"));
                     unit.attributes.insert(*key, value);
+                } else if !unit.attributes.contains_key(key) {
+                    unit.attributes.insert(*key, key.default());
                 }
             }
         }
@@ -491,6 +493,13 @@ impl<D: Direction> Unit<D> {
     }
     pub fn set_zombified(&mut self, zombified: bool) {
         self.set(Zombified(zombified));
+    }
+
+    pub fn get_level(&self) -> u8 {
+        self.get::<Level>().0
+    }
+    pub fn set_level(&mut self, level: u8) {
+        self.set(Level(level.min(self.environment.config.max_unit_level())));
     }
 
     // influenced by unit_power_config
@@ -651,7 +660,7 @@ impl<D: Direction> Unit<D> {
         let mut attributes = HashMap::default();
         let mut owner = transporter.map(|t| t.1).unwrap_or(-1);
         let mut hero = HeroType::None;
-        for key in environment.unit_attributes(typ, owner) {
+        for key in environment.config.unit_specific_attributes(typ) {
             if transporter.is_some() && Attribute::<D>::build_from_transporter(*key).is_some() {
                 continue;
             }

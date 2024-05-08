@@ -22,18 +22,22 @@ pub const DEFAULT_OWNER: i8 = 0;
 crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum AttributeKey {
-        Hp,
-        Hero,
+        // Owner should be the first attribute
+        // because other atributes may depend on Owner for importing
+        // and attributes are imported in order (except commander-specific ones)
         Owner,
+        Hero,
+        Hp,
         ActionStatus,
         Amphibious,
         Direction,
         DroneStationId,
         DroneId,
-        Transported,
         Zombified,
         Unmoved,
         EnPassant,
+        Level,
+        Transported,
     }
 }
 
@@ -52,6 +56,7 @@ impl Display for AttributeKey {
             Self::Zombified => "Zombified",
             Self::Unmoved => "Unmoved",
             Self::EnPassant => "Can be taken En Passant",
+            Self::Level => "Level",
         })
     }
 }
@@ -72,6 +77,7 @@ impl AttributeKey {
             Self::Zombified => A::Zombified(false),
             Self::Unmoved => A::Unmoved(true),
             Self::EnPassant => A::EnPassant(None),
+            Self::Level => A::Level(0),
         }
     }
 
@@ -99,6 +105,7 @@ pub enum Attribute<D: Direction> {
     Zombified(bool),
     Unmoved(bool),
     EnPassant(Option<Point>),
+    Level(u8),
 }
 
 impl<D: Direction> Attribute<D> {
@@ -117,6 +124,7 @@ impl<D: Direction> Attribute<D> {
             Self::Zombified(_) => A::Zombified,
             Self::Unmoved(_) => A::Unmoved,
             Self::EnPassant(_) => A::EnPassant,
+            Self::Level(_) => A::Level,
         }
     }
 
@@ -157,6 +165,10 @@ impl<D: Direction> Attribute<D> {
             Self::Zombified(z) => zipper.write_bool(*z),
             Self::Unmoved(z) => zipper.write_bool(*z),
             Self::EnPassant(z) => z.export(zipper, environment),
+            Self::Level(level) => {
+                let bits = bits_needed_for_max_value(environment.config.max_unit_level() as u32);
+                zipper.write_u8(*level, bits);
+            }
         }
     }
 
@@ -210,6 +222,10 @@ impl<D: Direction> Attribute<D> {
             A::Zombified => Self::Zombified(unzipper.read_bool()?),
             A::Unmoved => Self::Unmoved(unzipper.read_bool()?),
             A::EnPassant => Self::EnPassant(Option::<Point>::import(unzipper, environment)?),
+            A::Level => {
+                let bits = bits_needed_for_max_value(environment.config.max_unit_level() as u32);
+                Self::Level(unzipper.read_u8(bits)?)
+            }
         })
     }
     
@@ -449,6 +465,27 @@ attribute!(Option<Point>, EnPassant);
 
 pub(super) struct Zombified(pub(super) bool);
 attribute_tuple!(Zombified, Zombified);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Level(pub u8);
+attribute_tuple!(Level, Level);
+
+impl SupportedZippable<&Environment> for Level {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        let bits = bits_needed_for_max_value(support.config.max_unit_level() as u32);
+        zipper.write_u8(self.0, bits);
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let bits = bits_needed_for_max_value(support.config.max_unit_level() as u32);
+        Ok(Self(unzipper.read_u8(bits)?))
+    }
+}
+
+impl From<u8> for Level {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
 
 
 crate::listable_enum! {

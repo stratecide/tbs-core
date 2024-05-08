@@ -13,6 +13,7 @@ crate::enum_with_custom! {
         Tapio,
         Lageos,
         SludgeMonster,
+        Celerity,
     }
 }
 

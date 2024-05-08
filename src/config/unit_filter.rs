@@ -109,6 +109,7 @@ pub(crate) enum UnitFilter {
     Hp(u8),
     TerrainOwner,
     Counter,
+    Level(u8),
     Table(TableAxis, TableAxis, HashSet<[TableAxisKey; 2]>),
     Not(Vec<Self>),
 }
@@ -192,6 +193,11 @@ impl UnitFilter {
             }
             "TerrainOwner" => Self::TerrainOwner,
             "Counter" => Self::Counter,
+            "Level" => {
+                let (level, r) = parse_tuple1(remainder)?;
+                remainder = r;
+                Self::Level(level)
+            }
             "Table" => {
                 let (y_axis, x_axis, filename, r): (TableAxis, TableAxis, String, &str) = parse_tuple3(remainder)?;
                 remainder = r;
@@ -321,6 +327,7 @@ impl UnitFilter {
                 map.get_terrain(unit_pos.0).unwrap().get_owner_id() == unit.get_owner_id()
             }
             Self::Counter => is_counter,
+            Self::Level(level) => unit.get_level() >= *level,
             Self::Table(x_axis, y_axis, set) => {
                 if let [Some(x), Some(y)] = [x_axis, y_axis].map(|axis| match axis {
                     TableAxis::Unit => Some(TableAxisKey::Unit(unit.typ())),

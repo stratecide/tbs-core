@@ -9,9 +9,11 @@ use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::units::unit::Unit;
 
 use super::player::resurrect_zombie;
+use super::unit::UnitScript;
 
 #[derive(Debug, Clone)]
 pub enum KillScript {
+    UnitScript(UnitScript),
     Unexhaust,
     DeadSkull,
     ZombieResurrection(u8),
@@ -19,23 +21,35 @@ pub enum KillScript {
 
 impl FromConfig for KillScript {
     fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
-        let (base, mut s) = string_base(s);
+        let (base, mut remainder) = string_base(s);
         Ok((match base {
             "Unexhaust" => Self::Unexhaust,
             "DeadSkull" => Self::DeadSkull,
             "ZombieResurrection" => {
-                let (hp, r) = parse_tuple1(s)?;
-                s = r;
+                let (hp, r) = parse_tuple1(remainder)?;
+                remainder = r;
                 Self::ZombieResurrection(1.max(100.min(hp)))
             }
-            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("KillScript::{}", invalid))),
-        }, s))
+            invalid => {
+                if let Ok((us, r)) = UnitScript::from_conf(s) {
+                    remainder = r;
+                    Self::UnitScript(us)
+                } else {
+                    return Err(ConfigParseError::UnknownEnumMember(format!("KillScript::{}", invalid)))
+                }
+            }
+        }, remainder))
     }
 }
 
 impl KillScript {
     pub fn trigger<D: Direction>(&self, handler: &mut EventHandler<D>, attacker_pos: Option<(Point, Option<usize>)>, attacker: &Unit<D>, defender_pos: Point, defender: &Unit<D>) {
         match self {
+            Self::UnitScript(us) => {
+                if let Some((p, None)) = attacker_pos {
+                    us.trigger(handler, p, attacker);
+                }
+            }
             Self::Unexhaust => {
                 match attacker_pos {
                     Some((p, None)) => handler.unit_status(p, ActionStatus::Ready),

@@ -190,6 +190,7 @@ impl Config {
                     e => return Err(Box::new(ConfigParseError::InvalidCellData("unit_attribute_config", l, i, e.to_string()))),
                 }
             }
+            values.sort();
             result.unit_attributes.insert(typ, values);
             result.unit_hidden_attributes.insert(typ, hidden);
         }

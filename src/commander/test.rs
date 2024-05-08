@@ -2,6 +2,9 @@ use std::sync::Arc;
 
 use interfaces::game_interface::*;
 use interfaces::map_interface::*;
+use semver::Version;
+use zipper::Unzipper;
+use zipper::Zipper;
 use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
 use crate::details::Detail;
@@ -10,6 +13,7 @@ use crate::details::SludgeToken;
 use crate::game::commands::Command;
 use crate::game::commands::CommandError;
 use crate::game::fog::*;
+use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::map::Map;
@@ -22,11 +26,14 @@ use crate::script::custom_action::CustomActionData;
 use crate::terrain::TerrainType;
 use crate::units::attributes::ActionStatus;
 use crate::units::attributes::Amphibious;
+use crate::units::attributes::AttributeKey;
 use crate::units::combat::AttackVector;
 use crate::units::commands::UnitAction;
 use crate::units::commands::UnitCommand;
 use crate::units::movement::Path;
+use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
+use crate::VERSION;
 
 #[test]
 fn zombie() {
@@ -368,7 +375,6 @@ fn sludge_monster() {
     let (mut server, _) = map.clone().game_server(&settings, || 0.);
     server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
-    let environment = server.environment().clone();
 
     // no power attack bonuses
     assert_eq!(server.get_unit(Point::new(0, 1)).unwrap().get_hp(), server.get_unit(Point::new(2, 1)).unwrap().get_hp(), "Sludge token should deal 10 damage");
@@ -442,4 +448,121 @@ fn sludge_monster() {
         path: Path::new(Point::new(1, 0)),
         action: UnitAction::Custom(1, Vec::new()),
     }), || 0.), Err(CommandError::InvalidAction));
+}
+
+#[test]
+fn celerity() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(5, 5, false);
+    let map = WMBuilder::<Direction4>::new(map);
+    let mut map = Map::new(map.build(), &config);
+    let map_env = map.environment().clone();
+    map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+
+    map.set_unit(Point::new(4, 0), Some(UnitType::Convoy.instance(&map_env).set_owner_id(0).set_transported(vec![
+        UnitType::Marine.instance(&map_env).set_hp(34).build_with_defaults(),
+        UnitType::Sniper.instance(&map_env).set_hp(69).build_with_defaults(),
+    ]).set_hp(89).build_with_defaults()));
+
+    map.set_unit(Point::new(2, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(2, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(3, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(2, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+
+    map.set_terrain(Point::new(0, 4), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
+
+    let settings = map.settings().unwrap();
+
+    let mut settings = settings.clone();
+    for player in &settings.players {
+        assert!(player.get_commander_options().contains(&CommanderType::Celerity));
+    }
+    settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let funds = 10000;
+    settings.players[0].set_funds(funds);
+
+    // get some default values without using Celerity
+    let (mut server, _) = map.clone().game_server(&settings, || 0.);
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(2, 2)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+    }), || 0.).unwrap();
+    let default_attack = 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp();
+    server.handle_command(Command::BuyUnit(Point::new(0, 4), UnitType::SmallTank, Direction4::D0), || 0.).unwrap();
+    let default_cost = funds - *server.current_player().funds;
+    assert!(!server.get_unit(Point::new(0, 4)).unwrap().has_attribute(AttributeKey::Level));
+
+    settings.players[0].set_commander(CommanderType::Celerity);
+    let (mut server, _) = map.clone().game_server(&settings, || 0.);
+    let environment = server.environment().clone();
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
+    let unchanged = server.clone();
+
+    server.handle_command(Command::BuyUnit(Point::new(0, 4), UnitType::SmallTank, Direction4::D0), || 0.).unwrap();
+    assert!(funds - *server.current_player().funds < default_cost);
+    assert_eq!(server.get_unit(Point::new(0, 4)).unwrap().get_level(), 0, "New units are Level 0");
+
+    // level attack bonuses
+    let mut attack_damage = Vec::new();
+    for i in 0..=3 {
+        let mut server = unchanged.clone();
+        for d in Direction4::list().into_iter().take(i + 1).rev() {
+            server.handle_command(Command::UnitCommand(UnitCommand {
+                unload_index: None,
+                path: Path::new(Point::new(2, 2)),
+                action: UnitAction::Attack(AttackVector::Direction(d)),
+            }), || 0.).unwrap();
+            server.handle_command(Command::EndTurn, || 0.).unwrap();
+            server.handle_command(Command::EndTurn, || 0.).unwrap();
+        }
+        assert_eq!(server.get_unit(Point::new(2, 2)).unwrap().get_level(), i as u8);
+        attack_damage.push(100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
+    }
+    for i in 0..attack_damage.len() - 1 {
+        assert!(attack_damage[i] < attack_damage[i + 1], "attack damage by level: {:?}", attack_damage);
+    }
+    assert_eq!(default_attack, attack_damage[1]);
+
+    // small power
+    let mut server = unchanged.clone();
+    server.handle_command(Command::CommanderPower(1, Vec::new()), || 0.).unwrap();
+    assert!(server.get_unit(Point::new(0, 0)).unwrap().get_hp() > 1);
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(2, 2)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+    }), || 0.).unwrap();
+    assert_eq!(default_attack, 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
+
+    // big power
+    let mut server = unchanged.clone();
+    server.handle_command(Command::CommanderPower(2, Vec::new()), || 0.).unwrap();
+    assert_eq!(server.get_unit(Point::new(0, 0)).unwrap().get_hp(), 1);
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(2, 2)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+    }), || 0.).unwrap();
+    assert_eq!(attack_damage[3], 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
+
+    let convoy: Unit<Direction6> = UnitType::Convoy.instance(&environment).set_owner_id(0).set_transported(vec![
+        UnitType::Marine.instance(&environment).set_hp(34).build_with_defaults(),
+        UnitType::Sniper.instance(&environment).set_hp(69).build_with_defaults(),
+    ]).set_hp(89).build_with_defaults();
+
+    let mut zipper = Zipper::new();
+    convoy.zip(&mut zipper, None);
+    let mut unzipper = Unzipper::new(zipper.finish(), Version::parse(VERSION).unwrap());
+    let convoy2 = Unit::unzip(&mut unzipper, &environment, None);
+    assert_eq!(Ok(convoy), convoy2);
+
+    let exported = unchanged.export();
+    let imported: Game<Direction4> = *Game::import_server(exported, &config, unchanged.get_name().to_string(), Version::parse(VERSION).unwrap()).unwrap();
+    assert_eq!(imported, unchanged);
+    assert_eq!(server.get_unit(Point::new(4, 0)), Some(&UnitType::Convoy.instance(&environment).set_owner_id(0).set_transported(vec![
+        UnitType::Marine.instance(&environment).set_hp(34).build_with_defaults(),
+        UnitType::Sniper.instance(&environment).set_hp(69).build_with_defaults(),
+    ]).set_hp(89).build_with_defaults()));
 }

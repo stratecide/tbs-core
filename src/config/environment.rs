@@ -71,6 +71,9 @@ impl Environment {
     }
 
     pub(crate) fn unit_attributes(&self, typ: UnitType, owner: i8) -> std::iter::Chain<std::slice::Iter<'_, AttributeKey>, std::slice::Iter<'_, AttributeKey>> {
+        // order has to be preserved here
+        // because this method is used for exporting, while
+        // unit_specific_attributes and commander_attributes are used for importing
         self.config.unit_specific_attributes(typ).iter()
         .chain(self.config.commander_attributes(self.get_commander(owner), typ).iter())
     }

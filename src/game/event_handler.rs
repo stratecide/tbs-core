@@ -760,46 +760,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    /*pub fn unit_build_drone(&mut self, position: Point, drone: TransportableDrones) {
-        //let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        self.add_event(Event::BuildDrone(position, drone));
-    }*/
-
-    /*pub fn unit_exhaust(&mut self, position: Point) {
+    pub fn unit_level(&mut self, position: Point, level: u8) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        if !unit.is_exhausted() {
-            self.add_event(Event::UnitExhaust(position));
-        } else {
-            panic!("Unit at {position:?} is already exhausted!");
+        let level = level.min(self.environment().config.max_unit_level());
+        if unit.has_attribute(AttributeKey::Level) && level != unit.get_level() {
+            self.add_event(Event::UnitLevel(position, unit.get_level().into(), level.into()));
         }
     }
-
-    pub fn unit_unexhaust(&mut self, position: Point) {
-        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        if unit.is_exhausted() {
-            self.add_event(Event::UnitExhaust(position));
-        } else {
-            panic!("Unit at {position:?} isn't exhausted!");
-        }
-    }
-
-    pub fn unit_exhaust_boarded(&mut self, position: Point, index: UnloadIndex) {
-        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        if unit.get_boarded().len() > *index as usize && !unit.get_boarded()[*index as usize].data.exhausted {
-            self.add_event(Event::UnitExhaustBoarded(position, index));
-        } else {
-            panic!("Can't exhaust unit at {position:?}, boarded as {index}");
-        }
-    }
-
-    pub fn unit_unexhaust_boarded(&mut self, position: Point, index: UnloadIndex) {
-        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
-        if unit.get_boarded().len() > *index as usize && unit.get_boarded()[*index as usize].data.exhausted {
-            self.add_event(Event::UnitExhaustBoarded(position, index));
-        } else {
-            panic!("Can't unexhaust unit at {position:?}, boarded as {index}");
-        }
-    }*/
 
     pub fn unit_damage(&mut self, position: Point, damage: u16) {
         let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
