@@ -105,7 +105,8 @@ pub(crate) enum UnitFilter {
     Unowned,
     Status(HashSet<ActionStatus>),
     Sludge,
-    Commander(CommanderType, Option<u8>),
+    Commander(CommanderType),
+    CommanderPower(u8),
     Hp(u8),
     TerrainOwner,
     Counter,
@@ -177,14 +178,14 @@ impl UnitFilter {
             }
             "Sludge" => Self::Sludge,
             "Commander" | "Co" => {
-                if let Ok((commander, power, r)) = parse_tuple2(remainder) {
-                    remainder = r;
-                    Self::Commander(commander, Some(power))
-                } else {
-                    let (commander, r) = parse_tuple1(remainder)?;
-                    remainder = r;
-                    Self::Commander(commander, None)
-                }
+                let (commander, r) = parse_tuple1(remainder)?;
+                remainder = r;
+                Self::Commander(commander)
+            }
+            "CommanderPower" | "CoP" => {
+                let (power, r) = parse_tuple1(remainder)?;
+                remainder = r;
+                Self::CommanderPower(power)
             }
             "Hp" => {
                 let (hp, r) = parse_tuple1(remainder)?;
@@ -317,10 +318,13 @@ impl UnitFilter {
                     _ => false
                 })
             }
-            Self::Commander(commander_type, power) => {
+            Self::Commander(commander_type) => {
                 let commander = unit.get_commander(map);
                 commander.typ() == *commander_type
-                && (power.is_none() || power.unwrap() as usize == commander.get_active_power())
+            }
+            Self::CommanderPower(power) => {
+                let commander = unit.get_commander(map);
+                *power as usize == commander.get_active_power()
             }
             Self::Hp(hp) => unit.get_hp() >= *hp,
             Self::TerrainOwner => {
