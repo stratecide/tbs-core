@@ -108,6 +108,7 @@ pub(crate) enum UnitFilter {
     Commander(CommanderType, Option<u8>),
     Hp(u8),
     TerrainOwner,
+    Counter,
     Table(TableAxis, TableAxis, HashSet<[TableAxisKey; 2]>),
     Not(Vec<Self>),
 }
@@ -190,6 +191,7 @@ impl UnitFilter {
                 Self::Hp(hp)
             }
             "TerrainOwner" => Self::TerrainOwner,
+            "Counter" => Self::Counter,
             "Table" => {
                 let (y_axis, x_axis, filename, r): (TableAxis, TableAxis, String, &str) = parse_tuple3(remainder)?;
                 remainder = r;
@@ -244,6 +246,8 @@ impl UnitFilter {
         heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
         // empty if the unit hasn't moved
         temporary_ballast: &[TBallast<D>],
+        // true only during counter-attacks
+        is_counter: bool,
     ) -> bool {
         match self {
             Self::Unit(u) => u.contains(&unit.typ()),
@@ -316,6 +320,7 @@ impl UnitFilter {
             Self::TerrainOwner => {
                 map.get_terrain(unit_pos.0).unwrap().get_owner_id() == unit.get_owner_id()
             }
+            Self::Counter => is_counter,
             Self::Table(x_axis, y_axis, set) => {
                 if let [Some(x), Some(y)] = [x_axis, y_axis].map(|axis| match axis {
                     TableAxis::Unit => Some(TableAxisKey::Unit(unit.typ())),
@@ -331,7 +336,7 @@ impl UnitFilter {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
                 negated.iter()
-                .any(|negated| !negated.check(map, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast))
+                .any(|negated| !negated.check(map, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast, is_counter))
             }
         }
     }

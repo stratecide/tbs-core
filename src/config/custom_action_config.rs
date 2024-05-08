@@ -68,7 +68,7 @@ impl CustomActionConfig {
         temporary_ballast: &[TBallast<D>],
     ) -> bool {
         if self.unit_filter.iter().all(|f| {
-            f.check(game, unit, (destination, None), transporter.map(|(u, _)| (u, path.start)), other_unit, heroes, temporary_ballast)
+            f.check(game, unit, (destination, None), transporter.map(|(u, _)| (u, path.start)), other_unit, heroes, temporary_ballast, false)
         }) {
             self.script.next_condition(game, funds, unit, path, destination, transporter, heroes, temporary_ballast, &[])
             != CustomActionTestResult::Failure
