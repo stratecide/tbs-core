@@ -33,7 +33,7 @@ impl FromConfig for DefendScript {
             }
             "Attack" => {
                 let (counter, charge_powers, times_damage_taken, r) = parse_tuple3::<AttackCounter, bool, bool>(remainder)?;
-                if counter.allows_counter() {
+                if counter == AttackCounter::AllowCounter {
                     // might run into infinite recursion
                     return Err(ConfigParseError::UnknownEnumMember(format!("{counter:?} for DefendScript")));
                 }
@@ -90,7 +90,7 @@ impl DefendScript {
                     } else {
                         Rational32::from_integer(1)
                     };
-                    attack(handler, defender_pos, defender, *counter, *charge_powers, input_factor);
+                    attack(handler, defender_pos, defender, counter.into(), *charge_powers, input_factor);
                 }
             }
         }

@@ -293,7 +293,7 @@ impl UnitFilter {
                 || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
             }
             Self::AttackType(a) => {
-                let attack_type = unit.attack_pattern().key();
+                let attack_type = map.environment().config.default_attack_pattern(unit.typ()).key();
                 a.iter().any(|a| *a == attack_type)
             }
             Self::CommanderCharge(charge) => {

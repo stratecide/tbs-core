@@ -170,8 +170,8 @@ impl<D: Direction> Unit<D> {
         self.environment.config.can_attack_after_moving(self.typ)
     }
 
-    pub fn attack_pattern(&self) -> AttackType {
-        self.environment.config.attack_pattern(self.typ)
+    pub fn attack_pattern(&self, game: &impl GameView<D>, unit_pos: Point, counter: Counter<D>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>]) -> AttackType {
+        self.environment.config.unit_attack_pattern(game, self, unit_pos, counter, heroes, temporary_ballast)
     }
 
     pub fn attack_targeting(&self) -> AttackTargeting {
@@ -746,15 +746,15 @@ impl<D: Direction> Unit<D> {
         .collect()
     }
 
-    pub fn attackable_positions(&self, game: &Game<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>], is_counter: bool) -> HashSet<Point> {
+    pub fn attackable_positions(&self, game: &Game<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> HashSet<Point> {
         let mut result = HashSet::new();
         let mut game = UnitMovementView::new(game);
         if let Some((destination, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
             if (this.can_attack_after_moving() || path.steps.len() == 0) && game.get_unit(destination).is_none() {
                 game.put_unit(destination, this.clone());
                 let heroes = Hero::hero_influence_at(&game, destination, self.get_owner_id());
-                for attack_vector in AttackVector::search(&this, &game, destination, None, transporter.map(|(u, _)| (u, path.start)), ballast, false) {
-                    for (point, _, _) in attack_vector.get_splash(&this, &game, destination, &heroes, ballast, is_counter) {
+                for attack_vector in AttackVector::search(&this, &game, destination, None, transporter.map(|(u, _)| (u, path.start)), ballast, Counter::NoCounter) {
+                    for (point, _, _) in attack_vector.get_splash(&this, &game, destination, &heroes, ballast, Counter::NoCounter) {
                         result.insert(point);
                     }
                 }
@@ -776,9 +776,9 @@ impl<D: Direction> Unit<D> {
     }
 
     pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, goal: Point) -> Option<(Path<D>, TemporaryBallast<D>)> {
-        if AttackType::None == self.attack_pattern() {
+        /*if AttackType::None == self.attack_pattern() {
             return None;
-        }
+        }*/
         search_path(game, self, path_so_far, transporter, |path, p, can_stop_here, ballast| {
             let mut takes = PathStepTakes::Allow;
             for ballast in ballast.get_entries() {
@@ -796,7 +796,7 @@ impl<D: Direction> Unit<D> {
                 if let Some((destination, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
                     if (this.can_attack_after_moving() || path.steps.len() == 0) && game.get_unit(destination).is_none() {
                         game.put_unit(destination, this.clone());
-                        if AttackVector::search(&this, &game, destination, Some(goal), transporter.map(|(u, _)| (u, path.start)), ballast.get_entries(), false).len() > 0 {
+                        if AttackVector::search(&this, &game, destination, Some(goal), transporter.map(|(u, _)| (u, path.start)), ballast.get_entries(), Counter::NoCounter).len() > 0 {
                             return PathSearchFeedback::Found
                         }
                     }
@@ -957,7 +957,7 @@ impl<D: Direction> Unit<D> {
             // attack
             if self.can_attack_after_moving() || path.steps.len() == 0 {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
-                for attack_vector in AttackVector::find(self, game, destination, None, transporter, ballast, false) {
+                for attack_vector in AttackVector::find(self, game, destination, None, transporter, ballast, Counter::NoCounter) {
                     result.push(UnitAction::Attack(attack_vector));
                 }
             }

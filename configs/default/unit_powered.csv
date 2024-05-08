@@ -8,8 +8,10 @@ Power;Affects;Attack;Defense;AttackReducedByDamage;MinRange;MaxRange;Visibility;
 ;U(PufferFish);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Ricochet(10), Attack(NoCounter, true, true)
 ;U(PufferFish), Counter;*0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;U(King, LifeCrystal);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;LoseGame;
-;U(Pyramid), Unowned;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;CopyAttacker(Owner), Attributes(Hp(50)), Revive;
-;U(Pyramid), Not(Unowned);;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Attributes(Unowned, Hp(50)), Revive;
+;U(Pyramid, FactoryS);;;;;;;;;;;;;;;;;;;;;;;;;;;;;Heal(10);;;;;
+;U(Pyramid, FactoryS), Unowned;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;CopyAttacker(Owner), Attributes(Hp(50)), Revive;
+;U(Pyramid, FactoryS), Not(Unowned);;;;;;;;;;;;;;;;;;;;;;;;;;;;;Income;;;;Attributes(Unowned, Hp(50)), Revive;
+;U(Pyramid, FactoryS), Counter, Not(Unowned);;;;;;;;;;;;;;;;;;Adjacent;;;;;;;;;;;;;;;;
 ;T(FairyForest);;;;;;;;;;;;;;;;;;;;;;;;;;;;;Heal(10);;;;;
 ;Sludge;;;;;;;;;;;;;;;;;;;;;;;;;;;;;TakeDamage(10);;;;;
 Co(Zombie);MovementPattern(Standard);-1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;DeadSkull;;

@@ -12,7 +12,8 @@ use crate::map::point::Point;
 use crate::terrain::{KRAKEN_ATTACK_RANGE, KRAKEN_MAX_ANGER};
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::attributes::AttributeKey;
-use crate::units::combat::{AttackCounter, AttackType, AttackVector};
+use crate::units::combat::{AttackCounter, AttackType, AttackVector, Counter};
+use crate::units::hero::Hero;
 use crate::units::unit::Unit;
 
 #[derive(Debug, Clone)]
@@ -24,6 +25,7 @@ pub enum UnitScript {
     LoseGame,
     Sludge(u8),
     LevelUp,
+    Income,
 }
 
 impl FromConfig for UnitScript {
@@ -53,6 +55,7 @@ impl FromConfig for UnitScript {
                 Self::Sludge(counter)
             }
             "LevelUp" => Self::LevelUp,
+            "Income" => Self::Income,
             invalid => return Err(ConfigParseError::UnknownEnumMember(format!("UnitScript::{}", invalid))),
         }, s))
     }
@@ -62,7 +65,7 @@ impl UnitScript {
     pub fn trigger<D: Direction>(&self, handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>) {
         match self {
             Self::Kraken => anger_kraken(handler),
-            Self::Attack(allow_counter, charge_powers) => attack(handler, position, unit, *allow_counter, *charge_powers, Rational32::from_integer(1)),
+            Self::Attack(allow_counter, charge_powers) => attack(handler, position, unit, allow_counter.into(), *charge_powers, Rational32::from_integer(1)),
             Self::TakeDamage(damage) => take_damage(handler, position, *damage),
             Self::Heal(h) => heal(handler, position, *h),
             Self::LoseGame => {
@@ -76,6 +79,11 @@ impl UnitScript {
             Self::LevelUp => {
                 if let Some(unit) = handler.get_map().get_unit(position) {
                     handler.unit_level(position, unit.get_level() + 1);
+                }
+            }
+            Self::Income => {
+                if let Some(player) = unit.get_player(handler.get_game()) {
+                    handler.money_income(player.get_owner_id(), player.get_income());
                 }
             }
         }
@@ -111,11 +119,12 @@ pub(super) fn anger_kraken<D: Direction>(handler: &mut EventHandler<D>) {
     }
 }
 
-pub(super) fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>, counter: AttackCounter, charge_powers: bool, input_factor: Rational32) {
+pub(super) fn attack<D: Direction>(handler: &mut EventHandler<D>, position: Point, unit: &Unit<D>, counter: Counter<D>, charge_powers: bool, input_factor: Rational32) {
     if handler.get_map().get_unit(position).is_none() {
         return;
     }
-    let attack_vector = match unit.attack_pattern() {
+    let heroes = Hero::hero_influence_at(handler.get_game(), position, unit.get_owner_id());
+    let attack_vector = match unit.attack_pattern(handler.get_game(), position, counter.clone(), heroes.as_slice(), &[]) {
         AttackType::None => return,
         AttackType::Adjacent |
         AttackType::Straight(_, _) => {

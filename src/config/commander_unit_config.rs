@@ -36,6 +36,7 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) vision: NumberMod<u8>,
     pub(super) true_vision: NumberMod<u8>,
     pub(super) stealthy: Option<bool>,
+    pub(super) attack_pattern: Option<AttackType>,
     pub(super) attack_targets: Option<AttackTargeting>,
     pub(super) splash_damage: Vec<Rational32>, // doesn't override if empty. contains factor per additional distance
     pub(super) cost: NumberMod<i32>,
@@ -84,6 +85,10 @@ impl CommanderPowerUnitConfig {
             true_vision: parse_def(data, H::TrueVision, NumberMod::Keep)?,
             stealthy: match data.get(&H::Stealthy) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
+                _ => None,
+            },
+            attack_pattern: match data.get(&H::AttackPattern) {
+                Some(s) if s.len() > 0 => Some(AttackType::from_conf(s)?.0),
                 _ => None,
             },
             attack_targets: match data.get(&H::AttackTargets) {

@@ -39,8 +39,10 @@ crate::enum_with_custom! {
         // drones
         LightDrone,
         HeavyDrone,
-        //structures
+        // pseudo-buildings
         Pyramid,
+        FactoryS,
+        //structures
         MegaCannon,
         LaserCannon,
         DroneTower,

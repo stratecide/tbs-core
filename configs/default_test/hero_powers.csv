@@ -7,6 +7,6 @@ EarlGrey;;0;0;8;2;true;UnexhaustWithoutMoving
 BlueBerry;;;;;2;;
 BlueBerry;;0;0;15;3;true;ActivateUnits
 Tess;;;;;1;;
-Tess;;0;0;10;2;true;BuyUnit
+Tess;;0;0;10;2;true;BuyUnit(false)
 Edwin;;;;;1;;
 Edwin;;0;0;8;1;true;SwapUnitPositions

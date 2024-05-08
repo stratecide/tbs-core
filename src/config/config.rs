@@ -177,7 +177,7 @@ impl Config {
         self.unit_config(typ).can_attack_after_moving
     }
 
-    pub fn attack_pattern(&self, typ: UnitType) -> AttackType {
+    pub fn default_attack_pattern(&self, typ: UnitType) -> AttackType {
         self.unit_config(typ).attack_pattern
     }
 
@@ -847,6 +847,33 @@ impl Config {
             self.base_movement_points(unit.typ()),
             iter,
         )
+    }
+
+    pub fn unit_attack_pattern<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        counter: Counter<D>,
+        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        temporary_ballast: &[TBallast<D>],
+    ) -> AttackType {
+        let mut result = self.default_attack_pattern(unit.typ());
+        for conf in self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            None,
+            counter.attacker(),
+            heroes,
+            temporary_ballast,
+            counter.is_counter(),
+        ) {
+            if let Some(pattern) = conf.attack_pattern {
+                result = pattern;
+            }
+        }
+        result
     }
 
     pub fn unit_attack<D: Direction>(

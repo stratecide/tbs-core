@@ -132,7 +132,7 @@ impl<D: Direction> UnitAction<D> {
             }
             Self::Attack(attack_vector) => {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
-                attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true, Rational32::from_integer(1), AttackCounter::AllowCounter);
+                attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true, Rational32::from_integer(1), Counter::AllowCounter);
                 false
             }
             Self::BuyHero(hero_type) => {

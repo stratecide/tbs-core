@@ -62,7 +62,7 @@ pub enum CustomAction {
     UnexhaustWithoutMoving,
     SummonCrystal(HeroType),
     ActivateUnits,
-    BuyUnit,
+    BuyUnit(bool),
     SwapUnitPositions,
     Repair(u8),
 }
@@ -78,7 +78,11 @@ impl FromConfig for CustomAction {
                 Self::SummonCrystal(hero_type)
             },
             "ActivateUnits" => Self::ActivateUnits,
-            "BuyUnit" => Self::BuyUnit,
+            "BuyUnit" => {
+                let (exhaust, remainder) = parse_tuple1(arguments)?;
+                arguments = remainder;
+                Self::BuyUnit(exhaust)
+            }
             "SwapUnitPositions" => Self::SwapUnitPositions,
             "Repair" => {
                 let (hp, remainder) = parse_tuple1(arguments)?;
@@ -126,7 +130,7 @@ impl CustomAction {
                 }
             }
             Self::ActivateUnits => CustomActionTestResult::Success,
-            Self::BuyUnit => {
+            Self::BuyUnit(_) => {
                 let build_inside = unit.has_attribute(AttributeKey::Transported);
                 let team = unit.get_team();
                 if data_so_far.len() == 0 {
@@ -286,13 +290,13 @@ impl CustomAction {
                     }
                 }
             }
-            Self::BuyUnit => {
+            Self::BuyUnit(exhaust) => {
                 match data {
                     &[CustomActionData::UnitType(unit_type)] => {
-                        buy_transported_unit(handler, path.start, destination, unit_type, ballast, false);
+                        buy_transported_unit(handler, path.start, destination, unit_type, ballast, *exhaust);
                     },
                     &[CustomActionData::UnitType(unit_type), CustomActionData::Direction(dir)] => {
-                        buy_unit(handler, path.start, destination, unit_type, dir, ballast, false);
+                        buy_unit(handler, path.start, destination, unit_type, dir, ballast, *exhaust);
                     },
                     _ => panic!("BuyUnit Action Data is wrong: {:?}", data),
                 };
