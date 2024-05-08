@@ -4,6 +4,7 @@ use interfaces::game_interface::ClientPerspective;
 use zipper_derive::Zippable;
 use zipper::{bits_needed_for_max_value, Exportable, SupportedZippable, U};
 
+use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::game::fog::FogIntensity;
 use crate::game::game::Game;
@@ -288,10 +289,10 @@ impl SupportedZippable<&Environment> for SludgeToken {
 }
 
 impl SludgeToken {
-    pub fn new(environment: &Environment, owner: i8, counter: u8) -> Self {
+    pub fn new(config: &Config, owner: i8, counter: u8) -> Self {
         Self {
             owner: owner.into(),
-            counter: counter.min(environment.config.max_sludge()),
+            counter: counter.min(config.max_sludge()),
         }
     }
 

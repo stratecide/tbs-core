@@ -69,7 +69,7 @@ impl UnitScript {
                 }
             }
             Self::Sludge(counter) => {
-                handler.detail_add(position, Detail::SludgeToken(SludgeToken::new(handler.environment(), unit.get_owner_id(), *counter)));
+                handler.detail_add(position, Detail::SludgeToken(SludgeToken::new(&handler.environment().config, unit.get_owner_id(), *counter)));
             }
         }
     }

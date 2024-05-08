@@ -164,7 +164,7 @@ pub(super) fn resurrect_zombie<D: Direction>(handler: &mut EventHandler<D>, p: P
 pub(super) fn spread_sludge<D: Direction>(handler: &mut EventHandler<D>, owner_id: i8, counter: u8) {
     for p in handler.get_map().all_points() {
         if handler.get_map().get_unit(p).is_some() {
-            handler.detail_add(p, Detail::SludgeToken(SludgeToken::new(handler.environment(), owner_id, counter)));
+            handler.detail_add(p, Detail::SludgeToken(SludgeToken::new(&handler.environment().config, owner_id, counter)));
         }
     }
 }

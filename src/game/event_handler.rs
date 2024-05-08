@@ -345,7 +345,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                             let counter = token.get_counter();
                             self.detail_remove(p, index);
                             if counter > 0 {
-                                self.detail_add(p, Detail::SludgeToken(SludgeToken::new(self.environment(), owner_id, counter - 1)));
+                                self.detail_add(p, Detail::SludgeToken(SludgeToken::new(&self.environment().config, owner_id, counter - 1)));
                             }
                         }
                         break;
