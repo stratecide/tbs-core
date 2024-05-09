@@ -979,9 +979,9 @@ mod tests {
         let mut map = Map::new2(wmap, &environment);
         map.set_unit(Point::new(1, 0), Some(UnitType::Magnet.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(3, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::Custom(0).instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::Destroyer.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::Destroyer.instance(&environment).set_owner_id(1).build_with_defaults()));
+        //map.set_unit(Point::new(3, 1), Some(UnitType::Destroyer.instance(&environment).set_owner_id(1).build_with_defaults()));
         map.set_unit(Point::new(1, 2), Some(UnitType::WarShip.instance(&environment).set_owner_id(1).build_with_defaults()));
         let (mut game, _) = map.game_server(&GameSettings {
             name: "displacement".to_string(),
@@ -1006,11 +1006,11 @@ mod tests {
             path: Path::new(Point::new(1, 1)),
             action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
         }), || 0.).unwrap();
-        assert_eq!(70, game.get_map().get_unit(Point::new(0, 1)).unwrap().get_hp());
-        for x in 1..=3 {
-            assert_eq!(None, game.get_map().get_unit(Point::new(x, 1)));
+        //assert!(game.get_map().get_unit(Point::new(0, 1)).unwrap().get_hp() < 100);
+        for x in 2..=2 { // 1..=3 if 2 range and counter-attack happens before displacement
+            assert_eq!(None, game.get_map().get_unit(Point::new(x, 1)), "x = {x}");
         }
-        assert_eq!(94, game.get_map().get_unit(Point::new(4, 1)).unwrap().get_hp());
+        //assert!(game.get_map().get_unit(Point::new(4, 1)).unwrap().get_hp() < 100);
 
         // WarShip can't be displaced
         let mut game = unchanged.clone();

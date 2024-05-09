@@ -43,4 +43,3 @@ Knight;Knight;Normal;Knight;Chess2;;1;Movement;;;true;;;true;;;;;;800;;;true;
 Queen;Queen;Normal;Rays;Chess;;8;Movement;;;true;;;true;;;;;;1600;;;true;
 King;King;Normal;Rays;Chess2;;1;Movement;;;true;;;true;;;;;;0;;;true;
 Unknown;???;Normal;None;None;;;;;;;;true;true;;;;;;0;;;true;
-0;TestPusher;Normal;Standard;Treads;;5;Normal;1;1;true;;true;true;Shells;true;Straight(1,0);;1, 1/10;1600;AfterCounter;2;true;
