@@ -41,7 +41,7 @@ crate::enum_with_custom! {
         HeavyDrone,
         // pseudo-buildings
         Pyramid,
-        FactoryS,
+        Factory,
         //structures
         MegaCannon,
         LaserCannon,

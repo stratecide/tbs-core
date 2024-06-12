@@ -1,4 +1,4 @@
-;Marine;Sniper;Bazooka;Magnet;DragonHead;Convoy;Artillery;SmallTank;BigTank;AntiAir;RocketLauncher;LaserShark;TransportBoat;DroneBoat;WaveBreaker;Submarine;AntiAirBoat;Destroyer;BattleShip;WarShip;SwimmingFactory;TransportHeli;AttackHeli;Blimp;Bomber;Fighter;LightDrone;FactoryS;HeroCrystal;Pyramid;MegaCannon;LaserCannon;DroneTower;ShockTower;LifeCrystal;Tentacle;PufferFish;Pawn;Rook;Bishop;Knight;Queen;King;Unknown
+;Marine;Sniper;Bazooka;Magnet;DragonHead;Convoy;Artillery;SmallTank;BigTank;AntiAir;RocketLauncher;LaserShark;TransportBoat;DroneBoat;WaveBreaker;Submarine;AntiAirBoat;Destroyer;BattleShip;WarShip;SwimmingFactory;TransportHeli;AttackHeli;Blimp;Bomber;Fighter;LightDrone;Factory;HeroCrystal;Pyramid;MegaCannon;LaserCannon;DroneTower;ShockTower;LifeCrystal;Tentacle;PufferFish;Pawn;Rook;Bishop;Knight;Queen;King;Unknown
 Marine;60;50;50;10;10;15;10;5;5;5;20;50;10;50;5;;5;5;20;3;10;30;10;5;;;30;70;15;50;5;5;5;5;5;15;15;20;10;10;10;5;5;10
 Sniper;75;60;60;10;10;20;30;5;5;5;30;60;10;60;5;;5;5;30;3;15;50;20;5;;;100;75;10;50;5;5;5;5;5;10;15;20;10;10;10;10;10;10
 Bazooka;75;60;60;80;60;80;70;60;20;60;80;60;40;60;50;;60;40;80;15;40;50;15;5;;;50;75;25;50;25;25;25;25;25;25;50;40;25;25;25;25;25;25
@@ -22,7 +22,7 @@ Blimp;80;70;80;10;10;15;20;10;5;10;20;70;20;60;10;;10;10;20;3;5;60;30;30;10;10;6
 Bomber;120;110;120;110;110;110;110;100;90;100;110;110;100;120;100;60;100;95;110;75;80;;;;;;;;120;75;75;75;75;75;75;120;30;105;80;80;80;65;65;100
 Fighter;;;;;;;;;;;;;;;;;;;;;;120;120;90;70;60;140;;;;;;;;;;;;;;;;;
 LightDrone;50;50;50;60;50;50;50;45;15;45;55;50;25;60;45;;45;30;55;15;30;60;30;30;;;60;;25;25;25;25;25;25;25;25;45;40;25;25;25;25;25;25
-FactoryS;75;70;70;;;;;;;;;70;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Factory;75;70;70;;;;;;;;;70;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 MegaCannon;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50
 LaserCannon;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50
 ShockTower;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50;50

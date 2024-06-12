@@ -263,7 +263,7 @@ fn s_factory() {
     let wmap: WrappingMap<Direction6> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(1, 1), Some(UnitType::FactoryS.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::Factory.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
     map.set_unit(Point::new(1, 3), Some(UnitType::Pyramid.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
     map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();

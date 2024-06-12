@@ -126,6 +126,14 @@ impl Config {
         self.max_transported
     }
 
+    pub fn unit_max_transport_capacity(&self, typ: UnitType) -> usize {
+        self.unit_config(typ).transport_capacity
+        + self.commanders.values().map(|c| c.transport_capacity as usize).max().unwrap_or(0)
+        + self.heroes.iter()
+        .filter(|(hero, _)| self.hero_units.get(*hero).unwrap().contains(&typ))
+        .map(|(_, c)| c.transport_capacity as usize).max().unwrap_or(0)
+    }
+
     pub(super) fn unit_config(&self, typ: UnitType) -> &UnitTypeConfig {
         self.units.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
     }
@@ -561,7 +569,7 @@ impl Config {
         &self.commander_config(typ).name
     }
 
-    pub(crate) fn commander_attributes(&self, typ: CommanderType, unit: UnitType) -> &[AttributeKey] {
+    pub fn commander_attributes(&self, typ: CommanderType, unit: UnitType) -> &[AttributeKey] {
         if let Some(attributes) = self.commander_unit_attributes.get(&typ) {
             for (filter, attributes, _) in attributes {
                 if filter.check(self, unit) {
@@ -572,7 +580,7 @@ impl Config {
         &[]
     }
 
-    pub(crate) fn commander_attributes_hidden_by_fog(&self, typ: CommanderType, unit: UnitType) -> &[AttributeKey] {
+    pub fn commander_attributes_hidden_by_fog(&self, typ: CommanderType, unit: UnitType) -> &[AttributeKey] {
         if let Some(attributes) = self.commander_unit_attributes.get(&typ) {
             for (filter, _, attributes) in attributes {
                 if filter.check(self, unit) {
