@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Debug;
-use std::fs;
 use std::hash::Hash;
-use std::path::Path;
-use std::path::PathBuf;
+#[cfg(not(target_family = "wasm"))]
+use std::path::{Path, PathBuf};
+#[cfg(not(target_family = "wasm"))]
+use std::fs;
 
 use num_rational::Rational32;
 
@@ -54,7 +55,7 @@ const POWERED_TERRAIN: &'static str = "terrain_powered.csv";
 impl Config {
     pub fn parse(
         name: String,
-        load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>,
+        mut load_config: Box<dyn FnMut(&str) -> Result<String, Box<dyn Error>>>,
     ) -> Result<Self, Box<dyn Error>> {
         let mut result = Self {
             name,
@@ -274,7 +275,7 @@ impl Config {
             for (i, s) in line.iter().enumerate().take(headers.len()) {
                 map.insert(headers[i], s);
             }
-            let conf = CustomActionConfig::parse(&map, &load_config)?;
+            let conf = CustomActionConfig::parse(&map, &mut load_config)?;
             result.custom_actions.push(conf);
         }
 
@@ -691,7 +692,7 @@ impl Config {
             for (i, s) in line.iter().enumerate().take(headers.len()) {
                 map.insert(headers[i], s);
             }
-            let conf = CommanderPowerUnitConfig::parse(&map, &load_config)?;
+            let conf = CommanderPowerUnitConfig::parse(&map, &mut load_config)?;
             match &conf.power {
                 PowerRestriction::None => result.default_unit_overrides.push(conf),
                 PowerRestriction::Commander(commander_type, power) => {
@@ -751,6 +752,7 @@ impl Config {
         Ok(result)
     }
 
+    #[cfg(not(target_family = "wasm"))]
     pub fn parse_folder(folder: PathBuf) -> Result<Self, Box<dyn Error>> {
         if !folder.exists() || !folder.is_dir() {
             return Err(Box::new(ConfigParseError::FolderMissing(folder.to_path_buf())))
@@ -759,7 +761,7 @@ impl Config {
             Some(s) => s.to_string(),
             None => return Err(Box::new(ConfigParseError::FolderMissing(folder.to_path_buf()))),
         };
-        let load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>> = Box::new(move |filename: &str| {
+        let load_config: Box<dyn FnMut(&str) -> Result<String, Box<dyn Error>>> = Box::new(move |filename: &str| {
             println!("{filename}");
             // canonicalize and then check if still in same folder
             // to prevent path traversal attacks
@@ -772,6 +774,7 @@ impl Config {
         Self::parse(name, load_config)
     }
 
+    #[cfg(not(target_family = "wasm"))]
     #[allow(dead_code)]
     pub (crate) fn test_config() -> Self {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default_test");
@@ -779,6 +782,7 @@ impl Config {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Default for Config {
     fn default() -> Self {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default");
@@ -922,7 +926,7 @@ pub fn parse_inner_vec<T: FromConfig>(s: &str, needs_content: bool) -> Result<(V
     parse_inner_vec_dyn(s, needs_content, T::from_conf)
 }
 
-pub fn parse_inner_vec_dyn<T>(s: &str, needs_content: bool, from_conf: impl Fn(&str) -> Result<(T, &str), ConfigParseError>) -> Result<(Vec<T>, &str), ConfigParseError> {
+pub fn parse_inner_vec_dyn<T>(s: &str, needs_content: bool, mut from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>) -> Result<(Vec<T>, &str), ConfigParseError> {
     let mut result: Vec<T> = Vec::new();
     let mut s = s.trim_start();
     let mut stop_char = None;
@@ -1014,7 +1018,7 @@ pub fn parse_tuple3<
 fn _parse_vec<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, def: Option<Vec<T>>) -> Result<Vec<T>, ConfigParseError> {
     _parse_vec_dyn(data, key, def, T::from_conf)
 }
-fn _parse_vec_dyn<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Option<Vec<T>>, from_conf: impl Fn(&str) -> Result<(T, &str), ConfigParseError>) -> Result<Vec<T>, ConfigParseError> {
+fn _parse_vec_dyn<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Option<Vec<T>>, from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>) -> Result<Vec<T>, ConfigParseError> {
     let value = match data.get(&key) {
         Some(s) => s,
         None => {
@@ -1031,7 +1035,7 @@ pub fn parse_vec_def<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str
     _parse_vec(data, key, Some(def))
 }
 
-pub fn parse_vec_dyn_def<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Vec<T>, from_conf: impl Fn(&str) -> Result<(T, &str), ConfigParseError>) -> Result<Vec<T>, ConfigParseError> {
+pub fn parse_vec_dyn_def<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Vec<T>, from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>) -> Result<Vec<T>, ConfigParseError> {
     _parse_vec_dyn(data, key, Some(def), from_conf)
 }
 

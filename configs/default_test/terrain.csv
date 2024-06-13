@@ -12,7 +12,7 @@ Forest;Forest;;;Land;;;;;;;;;;
 Fountain;Fountain;;;Sea;;;;;;;;;Jump;
 Grass;Grass;;;Land;;;;;;;;;;
 Hill;Hill;;;Land;;;;;;;;;;
-Hq;Headquarters;;15;Beach;;;0;;true;;;;;
+Hq;Headquarters;;10;Beach;;;0;;true;;;;;
 Icebergs;Icebergs;;;Sea;;;;;;;;;;
 Kraken;Kraken;;;Sea;;8;;;;;;;;
 Lillypads;Lillypads;;;;;;;;;;;;;

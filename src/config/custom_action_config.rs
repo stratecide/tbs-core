@@ -21,7 +21,7 @@ pub struct CustomActionConfig {
 }
 
 impl CustomActionConfig {
-    pub fn parse(data: &HashMap<CustomActionConfigHeader, &str>, load_config: &Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>) -> Result<Self, ConfigParseError> {
+    pub fn parse(data: &HashMap<CustomActionConfigHeader, &str>, load_config: &mut Box<dyn FnMut(&str) -> Result<String, Box<dyn Error>>>) -> Result<Self, ConfigParseError> {
         use CustomActionConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {

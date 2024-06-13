@@ -55,7 +55,7 @@ pub(super) struct CommanderPowerUnitConfig {
 }
 
 impl CommanderPowerUnitConfig {
-    pub fn parse(data: &HashMap<CommanderPowerUnitConfigHeader, &str>, load_config: &Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>) -> Result<Self, ConfigParseError> {
+    pub fn parse(data: &HashMap<CommanderPowerUnitConfigHeader, &str>, load_config: &mut Box<dyn FnMut(&str) -> Result<String, Box<dyn Error>>>) -> Result<Self, ConfigParseError> {
         use CommanderPowerUnitConfigHeader as H;
         let result = Self {
             power: match data.get(&H::Power) {

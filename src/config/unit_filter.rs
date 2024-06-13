@@ -116,7 +116,7 @@ pub(crate) enum UnitFilter {
 }
 
 impl UnitFilter {
-    pub fn from_conf<'a>(s: &'a str, load_config: &Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>) -> Result<(Self, &'a str), ConfigParseError> {
+    pub fn from_conf<'a>(s: &'a str, load_config: &mut Box<dyn FnMut(&str) -> Result<String, Box<dyn Error>>>) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
         Ok((match base {
             "Unit" | "U" => {
