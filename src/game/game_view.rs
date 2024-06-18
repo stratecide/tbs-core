@@ -5,7 +5,7 @@ use interfaces::game_interface::ClientPerspective;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::player::Player;
-use crate::units::hero::{Hero, HeroType};
+use crate::units::hero::{Hero, HeroInfluence, HeroType};
 use crate::units::unit::Unit;
 
 use super::fog::FogIntensity;
@@ -39,10 +39,10 @@ pub trait GameView<D: Direction>: MapView<D> {
     }
 
     fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>>;
-    fn additional_hero_influence_at(&self, _point: Point, _only_owner_id: i8) -> Option<Vec<(Unit<D>, Hero, Point, Option<usize>)>> {
+    fn additional_hero_influence_at(&self, _point: Point, _only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
         None
     }
-    fn additional_hero_influence_map(&self, _only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<(Unit<D>, Hero, Point, Option<usize>)>>> {
+    fn additional_hero_influence_map(&self, _only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
         None
     }
 }

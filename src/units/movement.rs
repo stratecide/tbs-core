@@ -1042,7 +1042,7 @@ where F: Fn(&Path<D>, Point, bool, &TemporaryBallast<D>) -> PathSearchFeedback {
 
 /*pub(crate) struct HeroMap<'a, D: Direction> {
     map: ModifiedView<'a, D>,
-    base: HashMap<Point, Vec<(Unit<D>, Hero, Point, Option<usize>)>>,
+    base: HashMap<Point, Vec<HeroInfluence<D>>>,
     hero_unit: Option<Unit<D>>,
 }
 
@@ -1067,7 +1067,7 @@ impl<'a, D: Direction> HeroMap<'a, D> {
         }
     }
 
-    pub fn get(&self, pos: Point, round: usize, permanent: &PermanentBallast<D>, transporter: Option<(&Unit<D>, usize)>) -> Vec<(Unit<D>, Hero, Point, Option<usize>)> {
+    pub fn get(&self, pos: Point, round: usize, permanent: &PermanentBallast<D>, transporter: Option<(&Unit<D>, usize)>) -> Vec<HeroInfluence<D>> {
         let mut heroes = self.base.get(&pos).unwrap().clone();
         if let Some(mut unit) = self.hero_unit.clone() {
             permanent.update_unit(&mut unit);

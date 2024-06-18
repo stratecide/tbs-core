@@ -62,6 +62,7 @@ pub struct Config {
     pub(super) hero_powers: HashMap<HeroType, Vec<HeroPowerConfig>>,
     //pub(super) hero_powered_units: HashMap<HeroType, HashMap<Option<bool>, Vec<CommanderPowerUnitConfig>>>,
     pub(super) max_hero_charge: u8,
+    pub(super) max_aura_range: i8,
     // terrain
     pub(super) terrain_types: Vec<TerrainType>,
     pub(super) terrains: HashMap<TerrainType, TerrainTypeConfig>,
@@ -110,6 +111,10 @@ impl Config {
 
     pub fn max_unit_level(&self) -> u8 {
         3
+    }
+
+    pub fn max_aura_range(&self) -> i8 {
+        self.max_aura_range
     }
 
     // units
@@ -406,7 +411,7 @@ impl Config {
         terrain: &'a Terrain,
         is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
-        heroes: &'a [(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &'a [HeroInfluence<D>],
     ) -> impl DoubleEndedIterator<Item = &'a TerrainPoweredConfig> {
         let commander = terrain.get_commander(map);
         let mut slices = vec![&self.default_terrain_overrides];
@@ -456,7 +461,7 @@ impl Config {
         pos: Point,
         terrain: &Terrain,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> Option<usize> {
         let iter = self.terrain_power_configs(map, pos, terrain, false, heroes)
         .map(|c| &c.vision);
@@ -487,7 +492,7 @@ impl Config {
         map: &impl GameView<D>,
         pos: Point,
         terrain: &Terrain,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> bool {
         let mut result = self.terrain_can_build_base(terrain.typ());
         for config in self.terrain_power_configs(map, pos, terrain, false, heroes) {
@@ -527,7 +532,7 @@ impl Config {
         _game: &impl GameView<D>,
         terrain: &Terrain,
         _pos: Point,
-        _heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        _heroes: &[HeroInfluence<D>],
     ) -> HashMap<AttributeKey, AttributeOverride> {
         let mut result = HashMap::new();
         for ov in &self.terrain_config(terrain.typ()).build_overrides {
@@ -542,7 +547,7 @@ impl Config {
         pos: Point,
         terrain: &Terrain,
         is_bubble: bool,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> Vec<TerrainScript> {
         let mut result = Vec::new();
         for config in self.terrain_power_configs(map, pos, terrain, is_bubble, heroes) {
@@ -633,7 +638,7 @@ impl Config {
         // the attacked unit, the unit this one was destroyed by, ...
         other_unit: Option<(&'a Unit<D>, Point)>,
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
-        heroes: &'a [(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &'a [HeroInfluence<D>],
         // empty if the unit hasn't moved
         temporary_ballast: &'a [TBallast<D>],
         is_counter: bool,
@@ -662,7 +667,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: Point,
         factory_unit: Option<&Unit<D>>, // if built by a unit
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> i32 {
         let iter = self.unit_power_configs(game, unit, (unit_pos, None), factory_unit.map(|u| (u, unit_pos)), None, heroes, &[], false);
         NumberMod::update_value_repeatedly(
@@ -677,7 +682,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: Point,
         //transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> UnitVisibility {
         let mut result = self.unit_config(unit.typ()).visibility;
         for config in self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[], false) {
@@ -693,7 +698,7 @@ impl Config {
         game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> usize {
         let iter = self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[], false)
         .map(|c| &c.vision);
@@ -708,7 +713,7 @@ impl Config {
         game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> usize {
         let iter = self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[], false)
         .map(|c| &c.true_vision);
@@ -724,7 +729,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, Point)>, // move out of this transporter and then build something
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
     ) -> HashMap<AttributeKey, AttributeOverride> {
         let mut result = HashMap::new();
@@ -742,7 +747,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> Vec<UnitScript> {
         let mut result = Vec::new();
         for config in self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[], false) {
@@ -757,7 +762,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> Vec<UnitScript> {
         let mut result = Vec::new();
         for config in self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[], false) {
@@ -774,7 +779,7 @@ impl Config {
         defender: &Unit<D>,
         defender_pos: Point,
         transporter: Option<(&Unit<D>, Point)>, // if the attacker moved out of a transporter to attack
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Vec<AttackScript> {
@@ -793,7 +798,7 @@ impl Config {
         attacker: &Unit<D>,
         attacker_pos: Point,
         transporter: Option<(&Unit<D>, Point)>, // if the defender moved out of a transporter to attack + defend
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool
     ) -> Vec<DefendScript> {
@@ -813,7 +818,7 @@ impl Config {
         defender: &Unit<D>,
         defender_pos: Point,
         transporter: Option<(&Unit<D>, Point)>, // if the attacker moved out of a transporter to attack
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Vec<KillScript> {
@@ -831,7 +836,7 @@ impl Config {
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
         attacker: Option<(&Unit<D>, Point)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<DeathScript> {
         let mut result = Vec::new();
@@ -847,7 +852,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> Rational32 {
         let iter = self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[], false)
         .map(|c| &c.movement_points);
@@ -863,7 +868,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: Point,
         counter: Counter<D>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
     ) -> AttackType {
         let mut result = self.default_attack_pattern(unit.typ());
@@ -891,7 +896,7 @@ impl Config {
         unit_pos: Point,
         defender: &Unit<D>,
         defender_pos: Point,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Rational32 {
@@ -926,7 +931,7 @@ impl Config {
         unit_pos: Point,
         attacker: &Unit<D>,
         attacker_pos: Point,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         is_counter: bool,
     ) -> Rational32 {
         let iter = self.unit_power_configs(
@@ -951,7 +956,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         min_range: bool,
         base_range: u8,
@@ -986,7 +991,7 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> i8 {
@@ -1019,7 +1024,7 @@ impl Config {
         game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Vec<Rational32> {

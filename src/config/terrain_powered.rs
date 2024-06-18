@@ -12,6 +12,7 @@ use crate::terrain::terrain::Terrain;
 use crate::terrain::TerrainType;
 use crate::units::attributes::*;
 use crate::units::hero::Hero;
+use crate::units::hero::HeroInfluence;
 use crate::units::unit::Unit;
 
 use super::commander_unit_config::PowerRestriction;
@@ -53,7 +54,7 @@ impl TerrainFilter {
         terrain: &Terrain,
         is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> bool {
         match self {
             Self::Type(t) => t.contains(&terrain.typ()),

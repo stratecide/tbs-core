@@ -150,7 +150,7 @@ impl Hero {
         transporter: Option<(&Unit<D>, usize)>,
         target: Point,
     ) -> bool {
-        Self::aura(map, unit, unit_pos, transporter).contains(&target)
+        Self::aura(map, unit, unit_pos, transporter).keys().any(|p| *p == target)
     }
 
     pub fn aura<D: Direction>(
@@ -158,34 +158,39 @@ impl Hero {
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
-    ) -> HashSet<Point> {
-        let mut result = HashSet::new();
-        let aura_range = match Self::aura_range(map, unit, unit_pos, transporter) {
+    ) -> HashMap<Point, usize> {
+        let mut result = HashMap::new();
+        let mut aura_range = match Self::aura_range(map, unit, unit_pos, transporter) {
             Some(aura_range) => aura_range,
             _ => return result
         };
-        result.insert(unit_pos);
+        result.insert(unit_pos, aura_range);
         for layer in map.range_in_layers(unit_pos, aura_range) {
+            aura_range -= 1;
             for p in layer {
-                result.insert(p);
+                result.insert(p, aura_range);
             }
         }
         result
     }
 
-    pub fn hero_influence_at<D: Direction>(map: &impl GameView<D>, point: Point, only_owner_id: i8) -> Vec<(Unit<D>, Hero, Point, Option<usize>)> {
+    pub fn hero_influence_at<D: Direction>(map: &impl GameView<D>, point: Point, only_owner_id: i8) -> Vec<HeroInfluence<D>> {
         let mut result = Vec::new();
         for p in map.all_points() {
             if let Some(unit) = map.get_unit(p) {
                 if only_owner_id >= 0 && unit.get_owner_id() != only_owner_id {
                     continue;
                 }
-                if unit.is_hero() && Hero::in_range(map, unit, p, None, point) {
-                    result.push((unit.clone(), unit.get_hero(), p, None));
+                if unit.is_hero() {
+                    if let Some(strength) = Self::aura(map, unit, p, None).get(&point) {
+                        result.push((unit.clone(), unit.get_hero(), p, None, *strength as u8));
+                    }
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
-                    if unit.is_hero() && Hero::in_range(map, u, p, Some((unit, i)), point) {
-                        result.push((unit.clone(), unit.get_hero(), p, Some(i)));
+                    if unit.is_hero() {
+                        if let Some(strength) = Self::aura(map, u, p, Some((unit, i))).get(&point) {
+                            result.push((unit.clone(), unit.get_hero(), p, Some(i), *strength as u8));
+                        }
                     }
                 }
             }
@@ -196,7 +201,7 @@ impl Hero {
         result
     }
 
-    pub fn map_influence<D: Direction>(map: &impl GameView<D>, only_owner_id: i8) -> HashMap<(Point, i8), Vec<(Unit<D>, Hero, Point, Option<usize>)>> {
+    pub fn map_influence<D: Direction>(map: &impl GameView<D>, only_owner_id: i8) -> HashMap<(Point, i8), Vec<HeroInfluence<D>>> {
         let mut heroes = Vec::new();
         for p in map.all_points() {
             if let Some(unit) = map.get_unit(p) {
@@ -213,15 +218,16 @@ impl Hero {
                 }
             }
         }
-        let mut hero_auras: HashMap<(Point, i8), Vec<(Unit<D>, Hero, Point, Option<usize>)>> = HashMap::new();
+        let mut hero_auras: HashMap<(Point, i8), Vec<HeroInfluence<D>>> = HashMap::new();
         for hero in heroes {
             let transporter = hero.3.map(|i| (map.get_unit(hero.2).unwrap(), i));
-            for p in Hero::aura(map, &hero.0, hero.2, transporter) {
+            for (p, strength) in Hero::aura(map, &hero.0, hero.2, transporter) {
                 let key = (p, hero.0.get_owner_id());
+                let value = (hero.0.clone(), hero.1.clone(), hero.2, hero.3, strength as u8);
                 if let Some(list) = hero_auras.get_mut(&key) {
-                    list.push(hero.clone());
+                    list.push(value);
                 } else {
-                    hero_auras.insert(key, vec![hero.clone()]);
+                    hero_auras.insert(key, vec![value]);
                 }
             }
         }
@@ -246,7 +252,7 @@ impl Hero {
         path: &Path<D>,
         destination: Point,
         transporter: Option<(&Unit<D>, usize)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         ballast: &[TBallast<D>],
     ) {
         let data = Vec::new();
@@ -293,6 +299,8 @@ impl SupportedZippable<&Environment> for Hero {
         Ok(result)
     }
 }
+
+pub type HeroInfluence<D> = (Unit<D>, Hero, Point, Option<usize>, u8);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HeroChargeChange(pub i8);

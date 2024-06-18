@@ -17,7 +17,7 @@ use crate::map::map::NeighborMode;
 use crate::map::wrapping_map::{OrientedPoint, Distortion};
 
 use super::attributes::{AttributeKey, ActionStatus};
-use super::hero::Hero;
+use super::hero::{Hero, HeroInfluence};
 use super::movement::*;
 use super::unit::Unit;
 
@@ -158,7 +158,7 @@ impl<D: Direction> AttackVector<D> {
     // returns all AttackVectors with which the unit at target position can be attacked
     // if there is no unit or it can't be attacked, an empty Vec is returned
     pub fn find(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, target: Option<Point>, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>], is_counter: Counter<D>) -> HashSet<Self> {
-        let heroes: Vec<(Unit<D>, Hero, Point, Option<usize>)> = Hero::hero_influence_at(game, pos, attacker.get_owner_id());
+        let heroes: Vec<HeroInfluence<D>> = Hero::hero_influence_at(game, pos, attacker.get_owner_id());
         let splash_damage = attacker.get_splash_damage(game, pos, &heroes, temporary_ballast, is_counter.is_counter());
         let displacement_distance = attacker.displacement_distance(game, pos, transporter, &heroes, temporary_ballast, is_counter.is_counter());
         let team = attacker.get_team();
@@ -233,7 +233,7 @@ impl<D: Direction> AttackVector<D> {
 
     // doesn't check if there's a unit at the target position that can be attacked
     pub fn search(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, target: Option<Point>, transporter: Option<(&Unit<D>, Point)>, temporary_ballast: &[TBallast<D>], is_counter: Counter<D>) -> HashSet<Self> {
-        let heroes: Vec<(Unit<D>, Hero, Point, Option<usize>)> = Hero::hero_influence_at(game, pos, attacker.get_owner_id());
+        let heroes: Vec<HeroInfluence<D>> = Hero::hero_influence_at(game, pos, attacker.get_owner_id());
         let splash_damage = attacker.get_splash_damage(game, pos, &heroes, temporary_ballast, is_counter.is_counter());
         let displacement_distance = attacker.displacement_distance(game, pos, transporter, &heroes, temporary_ballast, is_counter.is_counter());
         Self::_search(attacker, game, pos, transporter, &heroes, temporary_ballast, is_counter, |p, splash_index, dir| {
@@ -242,7 +242,7 @@ impl<D: Direction> AttackVector<D> {
         })
     }
 
-    fn _search(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>], is_counter: Counter<D>, valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> HashSet<Self> {
+    fn _search(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: Counter<D>, valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> HashSet<Self> {
         // TODO: check if target is protected by terrain (e.g. tank can only attack stranded Submarines)
         let mut result = HashSet::new();
         //let splash_damage = attacker.get_splash_damage();
@@ -306,7 +306,7 @@ impl<D: Direction> AttackVector<D> {
         result
     }
 
-    fn straight_splash(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, dir: D, min: usize, max: usize, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>], is_counter: bool, valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> Vec<(OrientedPoint<D>, Rational32)> {
+    fn straight_splash(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, dir: D, min: usize, max: usize, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool, valid_target: impl Fn(Point, usize, Option<D>) -> bool) -> Vec<(OrientedPoint<D>, Rational32)> {
         let splash_damage = attacker.get_splash_damage(game, pos, heroes, temporary_ballast, is_counter);
         let points: Vec<_> = game.get_line(pos, dir, max + splash_damage.len(), NeighborMode::FollowPipes)
         .into_iter()
@@ -336,7 +336,7 @@ impl<D: Direction> AttackVector<D> {
         }
     }
 
-    fn adjacent_splash(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, dir: D, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<(Point, Option<D>, Rational32)> {
+    fn adjacent_splash(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, dir: D, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<(Point, Option<D>, Rational32)> {
         let splash_damage = attacker.get_splash_damage(game, pos, heroes, temporary_ballast, is_counter);
         let mut result = Vec::new();
         if let Some((pos, distortion)) = game.get_neighbor(pos, dir) {
@@ -357,7 +357,7 @@ impl<D: Direction> AttackVector<D> {
         result
     }
 
-    fn ranged_splash(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<(Point, Rational32)> {
+    fn ranged_splash(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<(Point, Rational32)> {
         let splash_damage = attacker.get_splash_damage(game, pos, heroes, temporary_ballast, is_counter);
         let mut result = vec![(pos, splash_damage[0])];
         for (i, ring) in game.range_in_layers(pos, splash_damage.len() - 1).into_iter().enumerate() {
@@ -368,7 +368,7 @@ impl<D: Direction> AttackVector<D> {
         result
     }
 
-    fn triangle_splash(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, dir: D, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<(Point, Option<D>, Rational32)> {
+    fn triangle_splash(attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, dir: D, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<(Point, Option<D>, Rational32)> {
         let splash_damage = attacker.get_splash_damage(game, pos, heroes, temporary_ballast, is_counter);
         let mut result = Vec::new();
         attack_area_cannon(game, pos, dir, 0, (splash_damage.len() + 1) / 2, |pos, dir, splash_index| {
@@ -379,7 +379,7 @@ impl<D: Direction> AttackVector<D> {
         result
     }
 
-    pub fn get_splash(&self, attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], temporary_ballast: &[TBallast<D>], is_counter: Counter<D>) -> Vec<(Point, Option<D>, Rational32)> {
+    pub fn get_splash(&self, attacker: &Unit<D>, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: Counter<D>) -> Vec<(Point, Option<D>, Rational32)> {
         match (attacker.attack_pattern(game, pos, is_counter.clone(), heroes, temporary_ballast), self) {
             (AttackType::None, _) => Vec::new(),
             (AttackType::Straight(min, max), Self::Direction(dir)) => {
@@ -416,8 +416,8 @@ impl<D: Direction> AttackVector<D> {
         let attacker_heroes: Vec<_> = Hero::hero_influence_at(handler.get_game(), attacker_pos, attacker.get_owner_id());
         let environment = handler.environment().clone();
         let attacker_hero_ids = attacker_heroes.iter()
-        .filter(|(_, hero, _, _)| hero.can_gain_charge(&environment))
-        .map(|(_, _, p, unload_index)| handler.observe_unit(*p, *unload_index).0)
+        .filter(|(_, hero, _, _, _)| hero.can_gain_charge(&environment))
+        .map(|(_, _, p, unload_index, _)| handler.observe_unit(*p, *unload_index).0)
         .collect();
         let (
             mut hero_charge,
@@ -479,7 +479,7 @@ impl<D: Direction> AttackVector<D> {
     }
 
     // set path to None if this is a counter-attack
-    fn execute_attack(&self, handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, counter: Counter<D>, attacker_heroes: &[(Unit<D>, Hero, Point, Option<usize>)], exhaust_after_attacking: bool, execute_scripts: bool, input_factor: Rational32) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
+    fn execute_attack(&self, handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, counter: Counter<D>, attacker_heroes: &[HeroInfluence<D>], exhaust_after_attacking: bool, execute_scripts: bool, input_factor: Rational32) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
         let temporary_ballast = path.map(|(_, _, t)| t).unwrap_or(&[]);
         let mut defenders = self.get_splash(attacker, handler.get_game(), attacker_pos, attacker_heroes, temporary_ballast, counter.clone());
         for (_, _, f) in defenders.iter_mut() {
@@ -489,7 +489,7 @@ impl<D: Direction> AttackVector<D> {
     }
 }
 
-pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, counter: Counter<D>, targets: Vec<(Point, Option<D>, Rational32)>, attacker_heroes: &[(Unit<D>, Hero, Point, Option<usize>)], exhaust_after_attacking: bool, execute_scripts: bool) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
+pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, counter: Counter<D>, targets: Vec<(Point, Option<D>, Rational32)>, attacker_heroes: &[HeroInfluence<D>], exhaust_after_attacking: bool, execute_scripts: bool) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
     let (attacker_id, _) = handler.observe_unit(attacker_pos, None);
     let mut defenders = filter_attack_targets(handler.get_game(), attacker, targets);
     let ricochet_directions: HashMap<usize, (D, Distortion<D>)> = defenders.iter()
@@ -616,7 +616,7 @@ fn filter_attack_targets<D: Direction>(game: &Game<D>, attacker: &Unit<D>, targe
     .collect()
 }
 
-fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, targets: Vec<(Point, Option<D>, Rational32)>, counter: Counter<D>, attacker_heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> (Vec<(Point, Option<D>, Rational32)>, u32, Vec<(usize, Point, Unit<D>, u8)>, Vec<(Point, Unit<D>)>) {
+fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, targets: Vec<(Point, Option<D>, Rational32)>, counter: Counter<D>, attacker_heroes: &[HeroInfluence<D>]) -> (Vec<(Point, Option<D>, Rational32)>, u32, Vec<(usize, Point, Unit<D>, u8)>, Vec<(Point, Unit<D>)>) {
     let mut raw_damage = HashMap::new();
     let mut hero_charge = 0;
     let mut attack_script_targets = Vec::new();
@@ -692,7 +692,7 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
     (filter_attack_targets(handler.get_game(), attacker, targets), hero_charge, attack_script_targets, dead_units)
 }
 
-fn calculate_attack_damage<D: Direction>(game: &Game<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, defender: &Unit<D>, defender_pos: Point, factor: Rational32, counter: Counter<D>, attacker_heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> i32 {
+fn calculate_attack_damage<D: Direction>(game: &Game<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, defender: &Unit<D>, defender_pos: Point, factor: Rational32, counter: Counter<D>, attacker_heroes: &[HeroInfluence<D>]) -> i32 {
     let defensive_terrain = game.get_map().get_terrain(defender_pos).unwrap();
     let terrain_defense = Rational32::from_integer(1) + defensive_terrain.defense_bonus(defender);
     let base_attack = Rational32::from_integer(attacker.base_damage(defender.typ()).unwrap() as i32);
@@ -723,7 +723,7 @@ fn calculate_attack_damage<D: Direction>(game: &Game<D>, attacker: &Unit<D>, att
     .ceil().to_integer()
 }
 
-fn displace<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, mut targets: Vec<(Point, Option<D>, Rational32)>, heroes: &[(Unit<D>, Hero, Point, Option<usize>)], is_counter: bool) -> Vec<(Point, Option<D>, Rational32)> {
+fn displace<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, mut targets: Vec<(Point, Option<D>, Rational32)>, heroes: &[HeroInfluence<D>], is_counter: bool) -> Vec<(Point, Option<D>, Rational32)> {
     let transporter = path.and_then(|(_, transporter, _)| transporter);
     let temporary_ballast = path.map(|(_, _, tb)| tb).unwrap_or(&[]);
     let distance = attacker.displacement_distance(handler.get_game(), attacker_pos, transporter, heroes, temporary_ballast, is_counter);

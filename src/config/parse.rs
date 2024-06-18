@@ -76,6 +76,7 @@ impl Config {
             hero_powers: HashMap::new(),
             //hero_powered_units: HashMap::new(),
             max_hero_charge: 0,
+            max_aura_range: 0,
             // terrain
             terrain_types: Vec::new(),
             terrains: HashMap::new(),
@@ -374,6 +375,7 @@ impl Config {
                 continue;
             }*/
             let conf = HeroPowerConfig::parse(&map)?;
+            result.max_aura_range = result.max_aura_range.max(conf.aura_range).max(conf.aura_range_transported);
             result.hero_powers.get_mut(&conf.hero)
             .ok_or(ConfigParseError::MissingHeroForPower(conf.hero))?
             .push(conf); // TODO: ensure that every hero has at least 1 power

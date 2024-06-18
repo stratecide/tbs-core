@@ -9,7 +9,7 @@ use crate::map::point::Point;
 use crate::terrain::TerrainType;
 use crate::units::attributes::ActionStatus;
 use crate::units::combat::AttackTypeKey;
-use crate::units::hero::{Hero, HeroType};
+use crate::units::hero::{Hero, HeroInfluence, HeroType};
 use crate::units::movement::{MovementType, TBallast};
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
@@ -250,7 +250,7 @@ impl UnitFilter {
         // the attacked unit, the unit this one was destroyed by, ...
         other_unit: Option<(&Unit<D>, Point)>,
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         // empty if the unit hasn't moved
         temporary_ballast: &[TBallast<D>],
         // true only during counter-attacks
@@ -262,7 +262,7 @@ impl UnitFilter {
             Self::Terrain(t) => t.contains(&map.get_terrain(unit_pos.0).unwrap().typ()),
             Self::MovementPattern(m) => m.contains(&unit.movement_pattern()),
             Self::Hero(h) => {
-                for (_, hero, _, _) in heroes {
+                for (_, hero, _, _, _) in heroes {
                     let power = hero.get_active_power() as u8;
                     if h.iter().any(|h| h.0 == hero.typ() && h.1.unwrap_or(power) == power) {
                         return true;

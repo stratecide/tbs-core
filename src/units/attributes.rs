@@ -41,26 +41,6 @@ crate::listable_enum! {
     }
 }
 
-impl Display for AttributeKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Self::Hp => "Hp",
-            Self::Hero => "Hero",
-            Self::Owner => "Owner",
-            Self::ActionStatus => "Action Status",
-            Self::Amphibious => "Amphibious",
-            Self::Direction => "Direction",
-            Self::DroneStationId => "Unique Drone-Station Id",
-            Self::DroneId => "Unique Drone Id",
-            Self::Transported => "Transported Units",
-            Self::Zombified => "Zombified",
-            Self::Unmoved => "Unmoved",
-            Self::EnPassant => "Can be taken En Passant",
-            Self::Level => "Level",
-        })
-    }
-}
-
 impl AttributeKey {
     pub fn default<D: Direction>(&self) -> Attribute<D> {
         use Attribute as A;
@@ -395,16 +375,6 @@ crate::listable_enum! {
     }
 }
 
-// TODO: delete this
-impl Display for Amphibious {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Self::OnLand => "Land-Mode",
-            Self::InWater => "Sea-Mode",
-        })
-    }
-}
-
 attribute!(Amphibious, Amphibious);
 
 impl Default for Amphibious {
@@ -443,17 +413,6 @@ impl SupportedZippable<&Environment> for ActionStatus {
         let list = Self::list();
         let index = unzipper.read_u8(bits_needed_for_max_value(list.len() as u32))?;
         Ok(list[index as usize])
-    }
-}
-
-impl Display for ActionStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Self::Ready => "Ready",
-            Self::Exhausted => "Exhausted",
-            Self::Capturing => "Capturing",
-            Self::Repairing => "Repairing",
-        })
     }
 }
 

@@ -9,7 +9,7 @@ use crate::map::map::NeighborMode;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::units::attributes::{ActionStatus, AttributeKey};
-use crate::units::hero::{Hero, HeroType};
+use crate::units::hero::{Hero, HeroInfluence, HeroType};
 use crate::units::movement::{Path, PathStep, TBallast};
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
@@ -103,7 +103,7 @@ impl CustomAction {
         path: &Path<D>,
         destination: Point,
         transporter: Option<(&Unit<D>, usize)>,
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         ballast: &[TBallast<D>],
         data_so_far: &[CustomActionData<D>],
     ) -> CustomActionTestResult<D> {
@@ -262,7 +262,7 @@ impl CustomAction {
         path: &Path<D>,
         destination: Point,
         _transporter: Option<(&Unit<D>, usize)>,
-        _heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        _heroes: &[HeroInfluence<D>],
         ballast: &[TBallast<D>],
         data: &[CustomActionData<D>],
     ) {

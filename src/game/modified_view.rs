@@ -9,7 +9,7 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::WrappingMap;
 use crate::player::Player;
 use crate::terrain::terrain::Terrain;
-use crate::units::hero::Hero;
+use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::{Path, PermanentBallast};
 use crate::units::unit::Unit;
 
@@ -185,11 +185,11 @@ impl<'a, D: Direction> GameView<D> for UnitMovementView<'a, D> {
         })
     }
 
-    fn additional_hero_influence_at(&self, point: Point, only_owner_id: i8) -> Option<Vec<(Unit<D>, Hero, Point, Option<usize>)>> {
+    fn additional_hero_influence_at(&self, point: Point, only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
         self.base.additional_hero_influence_at(point, only_owner_id)
     }
 
-    fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<(Unit<D>, Hero, Point, Option<usize>)>>> {
+    fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
         self.base.additional_hero_influence_map(only_owner_id)
     }
 }
@@ -283,31 +283,31 @@ impl<'a, D: Direction> GameView<D> for MovingHeroView<'a, D> {
         self.map.get_visible_unit(team, p)
     }
 
-    fn additional_hero_influence_at(&self, point: Point, only_owner_id: i8) -> Option<Vec<(Unit<D>, Hero, Point, Option<usize>)>> {
+    fn additional_hero_influence_at(&self, point: Point, only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
         if !self.hero_unit.is_hero() || self.hero_unit.get_owner_id() != only_owner_id {
             return None;
         }
         let pos = self.hero_pos?;
         let unit = self.hero_unit.clone();
-        if Hero::in_range(self, &unit, pos, self.get_transporter(), point) {
+        if let Some(strength) = Hero::aura(self, &unit, pos, self.get_transporter()).get(&point) {
             let hero = unit.get_hero();
-            Some(vec![(unit, hero, pos, self.get_transporter().map(|(_, unload_index)| unload_index))])
+            Some(vec![(unit, hero, pos, self.get_transporter().map(|(_, unload_index)| unload_index), *strength as u8)])
         } else {
             None
         }
     }
 
-    fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<(Unit<D>, Hero, Point, Option<usize>)>>> {
+    fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
         if !self.hero_unit.is_hero() || self.hero_unit.get_owner_id() != only_owner_id {
             return None;
         }
         let pos = self.hero_pos?;
         let unit = self.hero_unit.clone();
-        let mut result: HashMap<(Point, i8), Vec<(Unit<D>, Hero, Point, Option<usize>)>> = HashMap::new();
+        let mut result: HashMap<(Point, i8), Vec<HeroInfluence<D>>> = HashMap::new();
         let hero = unit.get_hero();
-        for p in Hero::aura(self, &unit, pos, self.get_transporter()) {
+        for (p, strength) in Hero::aura(self, &unit, pos, self.get_transporter()) {
             let key = (p, unit.get_owner_id());
-            result.insert(key, vec![(unit.clone(), hero.clone(), p, self.get_transporter().map(|(_, unload_index)| unload_index))]);
+            result.insert(key, vec![(unit.clone(), hero.clone(), p, self.get_transporter().map(|(_, unload_index)| unload_index), strength as u8)]);
         }
         Some(result)
     }

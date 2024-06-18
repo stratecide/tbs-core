@@ -20,7 +20,7 @@ use crate::map::point::Point;
 use crate::player::{Owner, Player};
 use crate::script::terrain::TerrainScript;
 use crate::units::attributes::{ActionStatus, AttributeOverride};
-use crate::units::hero::Hero;
+use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::MovementType;
 use crate::units::unit::{Unit, UnitBuilder};
 use crate::units::unit_types::UnitType;
@@ -101,7 +101,7 @@ impl Terrain {
         game: &Game<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> Option<usize> {
         if self.has_attribute(TerrainAttributeKey::Owner) && self.get_team() == ClientPerspective::Neutral {
             return None;
@@ -127,7 +127,7 @@ impl Terrain {
         game: &impl GameView<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> bool {
         self.environment.config.terrain_can_build(game, pos, self, heroes)
     }
@@ -138,7 +138,7 @@ impl Terrain {
         pos: Point,
         is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
     ) -> &[UnitType] {
         if self.can_build(game, pos, heroes) {
             self.environment.config.terrain_build_or_repair(self.typ)
@@ -248,6 +248,13 @@ impl Terrain {
         self.environment.config.terrain_max_builds_per_turn(self.typ)
     }
 
+    pub fn get_exhausted(&self) -> bool {
+        self.get::<Exhausted>().0
+    }
+    pub fn set_exhausted(&mut self, exhausted: bool) {
+        self.set(Exhausted(exhausted));
+    }
+
     // methods that go beyond getter / setter functionality
 
     pub fn get_vision<D: Direction>(
@@ -255,7 +262,7 @@ impl Terrain {
         game: &Game<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[(Unit<D>, Hero, Point, Option<usize>)],
+        heroes: &[HeroInfluence<D>],
         team: ClientPerspective
     ) -> HashMap<Point, FogIntensity> {
         if self.get_team() != team && self.get_team() != ClientPerspective::Neutral {
@@ -329,7 +336,7 @@ impl Terrain {
         true
     }
 
-    pub fn unit_build_overrides<D: Direction>(&self, game: &impl GameView<D>, position: Point, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> HashSet<AttributeOverride> {
+    pub fn unit_build_overrides<D: Direction>(&self, game: &impl GameView<D>, position: Point, heroes: &[HeroInfluence<D>]) -> HashSet<AttributeOverride> {
         self.environment.config.terrain_unit_attribute_overrides(
             game,
             self,
@@ -341,7 +348,7 @@ impl Terrain {
         .collect()
     }
 
-    pub(crate) fn unit_shop_option<D: Direction>(&self, game: &Game<D>, pos: Point, unit_type: UnitType, heroes: &[(Unit<D>, Hero, Point, Option<usize>)]) -> (Unit<D>, i32) {
+    pub(crate) fn unit_shop_option<D: Direction>(&self, game: &Game<D>, pos: Point, unit_type: UnitType, heroes: &[HeroInfluence<D>]) -> (Unit<D>, i32) {
         let attr_overrides = self.unit_build_overrides(game, pos, heroes);
         let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment)
         .set_status(ActionStatus::Exhausted);

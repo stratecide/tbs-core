@@ -19,7 +19,7 @@ use crate::details::{Detail, SludgeToken};
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::game::fog::*;
-use crate::units::hero::Hero;
+use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
@@ -680,8 +680,8 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         for (i, step) in path.steps.iter().enumerate() {
             if self.get_game().is_foggy() && !involuntarily && (i == 0 || unit.vision_mode().see_while_moving()) {
                 let mut heroes = heroes.get(&(current, owner_id)).map(|h| h.clone()).unwrap_or(Vec::new());
-                if transformed_unit.is_hero() && Hero::aura_range(self.get_game(), &transformed_unit, current, None).is_some() {
-                    heroes.push((transformed_unit.clone(), transformed_unit.get_hero(), current, None));
+                if let Some(strength) = Hero::aura_range(self.get_game(), &transformed_unit, current, None) {
+                    heroes.push((transformed_unit.clone(), transformed_unit.get_hero(), current, None, strength as u8));
                 }
                 for (p, vision) in unit.get_vision(self.get_game(), current, &heroes) {
                     let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
@@ -701,8 +701,8 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
         if self.get_game().is_foggy() {
             let mut heroes = heroes.get(&(current, owner_id)).map(|h| h.clone()).unwrap_or(Vec::new());
-            if transformed_unit.is_hero() && Hero::aura_range(self.get_game(), &transformed_unit, current, None).is_some() {
-                heroes.push((transformed_unit.clone(), transformed_unit.get_hero(), current, None));
+            if let Some(strength) = Hero::aura_range(self.get_game(), &transformed_unit, current, None) {
+                heroes.push((transformed_unit.clone(), transformed_unit.get_hero(), current, None, strength as u8));
             }
             for (p, vision) in unit.get_vision(self.get_game(), current, &heroes) {
                 let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
@@ -869,7 +869,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
 
     pub fn trigger_all_unit_scripts<S>(
         &mut self,
-        get_script: impl Fn(&Game<D>, &Unit<D>, Point, Option<(&Unit<D>, usize)>, &[(Unit<D>, Hero, Point, Option<usize>)]) -> Vec<S>,
+        get_script: impl Fn(&Game<D>, &Unit<D>, Point, Option<(&Unit<D>, usize)>, &[HeroInfluence<D>]) -> Vec<S>,
         before_executing: impl FnOnce(&mut Self),
         execute_script: impl Fn(&mut Self, Vec<S>, Point, &Unit<D>, usize),
     ) {

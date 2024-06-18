@@ -44,6 +44,14 @@ macro_rules! listable_enum {(
                 }
             }
         }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    $(Self::$member => write!(f, "{}", stringify!($member)),)*
+                }
+            }
+        }
     };
 }
 

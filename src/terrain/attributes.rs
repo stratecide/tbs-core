@@ -1,4 +1,4 @@
-use std::fmt::{Display, Debug};
+use std::fmt::Debug;
 
 use zipper::*;
 
@@ -16,19 +16,6 @@ crate::listable_enum! {
         BuiltThisTurn,
         Exhausted,
         Anger,
-    }
-}
-
-impl Display for TerrainAttributeKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            //Self::PipeConnection => "PipeConnection",
-            Self::Owner => "Owner",
-            Self::CaptureProgress => "Capture Progress",
-            Self::BuiltThisTurn => "# Built This Turn",
-            Self::Exhausted => "Exhausted",
-            Self::Anger => "Anger",
-        })
     }
 }
 
@@ -243,6 +230,25 @@ impl SupportedZippable<&Environment> for BuiltThisTurn {
 
 impl From<u8> for BuiltThisTurn {
     fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Exhausted(pub bool);
+attribute_tuple!(Exhausted, Exhausted);
+
+impl SupportedZippable<&Environment> for Exhausted {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        zipper.write_bool(self.0);
+    }
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        Ok(Self(unzipper.read_bool()?))
+    }
+}
+
+impl From<bool> for Exhausted {
+    fn from(value: bool) -> Self {
         Self(value)
     }
 }
