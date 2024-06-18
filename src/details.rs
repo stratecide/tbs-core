@@ -23,6 +23,20 @@ use crate::units::unit_types::UnitType;
 
 pub const MAX_STACK_SIZE: u32 = 31;
 
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum DetailType {
+        Pipe,
+        Coins1,
+        Coins2,
+        Coins3,
+        Bubble,
+        Skull,
+        SludgeToken,
+    }
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
 pub enum Detail<D: Direction> {
@@ -34,7 +48,20 @@ pub enum Detail<D: Direction> {
     Skull(SkullData<D>),
     SludgeToken(SludgeToken),
 }
+
 impl<D: Direction> Detail<D> {
+    pub fn typ(&self) -> DetailType {
+        match self {
+            Self::Pipe(_) => DetailType::Pipe,
+            Self::Coins1 => DetailType::Coins1,
+            Self::Coins2 => DetailType::Coins2,
+            Self::Coins3 => DetailType::Coins3,
+            Self::Bubble(_, _) => DetailType::Bubble,
+            Self::Skull(_) => DetailType::Skull,
+            Self::SludgeToken(_) => DetailType::SludgeToken,
+        }
+    }
+
     pub fn get_vision(&self, game: &Game<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
         let mut result = HashMap::new();
         match self {
@@ -194,6 +221,10 @@ impl<D: Direction> SkullData<D> {
 
     pub fn get_owner_id(&self) -> i8 {
         self.owner.0
+    }
+
+    pub fn get_unit_type(&self) -> UnitType {
+        self.unit_type
     }
 
     pub fn unit(&self, environment: &Environment, hp: u8) -> Unit<D> {
