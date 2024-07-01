@@ -8,6 +8,8 @@ use num_rational::Rational32;
 use zipper::*;
 use zipper::zipper_derive::*;
 
+use super::wrapping_map::Distortion;
+
 
 pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display + TrAttribute<Self> {
     type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + SupportedZippable<u16> + Rem<Output = Self::T>;
@@ -234,6 +236,13 @@ where D: Direction {
     fn screen_coordinates(&self) -> (f32, f32);
     fn rotate_by(&self, angle: D) -> Self;
     fn mirror_horizontally(&self) -> Self;
+    fn distort(&self, distortion: Distortion<D>) -> Self {
+        if distortion.is_mirrored() {
+            self.mirror_horizontally().rotate_by(distortion.get_rotation())
+        } else {
+            self.rotate_by(distortion.get_rotation())
+        }
+    }
     fn translate_point<P: Position<i16>>(&self, p: &P, odd_if_hex: bool) -> P;
 }
 

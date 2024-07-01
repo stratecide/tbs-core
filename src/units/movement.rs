@@ -102,6 +102,23 @@ impl<D: Direction> PathStep<D> {
             _ => None,
         }
     }
+
+    pub fn translation(&self) -> D::T {
+        match self {
+            PathStep::Dir(dir) => {
+                dir.translation(1)
+            }
+            PathStep::Diagonal(dir) => {
+                dir.translation(1) + dir.rotate(true).translation(1)
+            }
+            PathStep::Jump(dir) => {
+                dir.translation(2)
+            }
+            PathStep::Knight(dir, turn_left) => {
+                dir.translation(2) + dir.rotate(!turn_left).translation(1)
+            }
+        }
+    }
 }
 
 pub const MAX_PATH_LENGTH: u32 = 200;

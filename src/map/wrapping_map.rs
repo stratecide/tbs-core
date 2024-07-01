@@ -586,6 +586,10 @@ impl<D: Direction> WMBuilder<D> {
             wrapped_neighbors,
         }
     }
+
+    pub fn distortions<'a>(&'a self) -> impl Iterator<Item = Distortion<D>> + 'a {
+        [Distortion::neutral()].into_iter().chain(self.distortion_map.keys().cloned())
+    }
 }
 
 fn wrap_point<D: Direction>(point: &mut D::T, wrapping_vectors: &[D::T]) {
