@@ -362,6 +362,9 @@ impl<D: Direction> Unit<D> {
         self.fix_transported()
     }
 
+    pub fn get_max_charge(&self) -> u8 {
+        self.get::<Hero>().max_charge(&self.environment)
+    }
     pub fn get_charge(&self) -> u8 {
         self.get::<Hero>().get_charge()
     }

@@ -43,6 +43,14 @@ impl CommanderPowerConfig {
         }*/
         Ok(())
     }
+
+    pub fn is_power_usable_from(&self, previous_power: usize) -> bool {
+        self.usable_from_power.iter().any(|i| *i as usize == previous_power)
+    }
+
+    pub fn required_charge(&self) -> u32 {
+        self.required_charge
+    }
 }
 
 crate::listable_enum! {
