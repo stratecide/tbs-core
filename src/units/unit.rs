@@ -338,6 +338,10 @@ impl<D: Direction> Unit<D> {
         self.set(direction);
     }
 
+    pub fn distort(&mut self, distortion: Distortion<D>) {
+        self.set_direction(distortion.update_direction(self.get_direction()));
+    }
+
     pub fn is_hero(&self) -> bool {
         if let Some(Attribute::Hero(hero)) = self.attributes.get(&AttributeKey::Hero) {
             hero.typ() != HeroType::None

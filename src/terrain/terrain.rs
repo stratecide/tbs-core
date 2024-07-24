@@ -17,6 +17,7 @@ use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
+use crate::map::wrapping_map::Distortion;
 use crate::player::{Owner, Player};
 use crate::script::terrain::TerrainScript;
 use crate::units::attributes::{ActionStatus, AttributeOverride};
@@ -382,6 +383,10 @@ impl Terrain {
             is_bubble,
             &heroes,
         )
+    }
+
+    pub fn distort<D: Direction>(&mut self, _distortion: Distortion<D>) {
+        // TODO
     }
 }
 

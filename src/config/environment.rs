@@ -4,7 +4,9 @@ use interfaces::game_interface::ClientPerspective;
 
 use crate::commander::commander_type::CommanderType;
 use crate::map::point_map::MapSize;
+use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::*;
+use crate::terrain::TerrainType;
 use crate::units::unit_types::UnitType;
 use crate::units::attributes::*;
 use crate::units::hero::*;
@@ -70,7 +72,7 @@ impl Environment {
         CommanderType::None
     }
 
-    pub(crate) fn unit_attributes(&self, typ: UnitType, owner: i8) -> std::iter::Chain<std::slice::Iter<'_, AttributeKey>, std::slice::Iter<'_, AttributeKey>> {
+    pub fn unit_attributes(&self, typ: UnitType, owner: i8) -> impl Iterator<Item = &AttributeKey> {
         // order has to be preserved here
         // because this method is used for exporting, while
         // unit_specific_attributes and commander_attributes are used for importing
@@ -78,7 +80,7 @@ impl Environment {
         .chain(self.config.commander_attributes(self.get_commander(owner), typ).iter())
     }
 
-    pub(crate) fn unit_attributes_hidden_by_fog(&self, typ: UnitType, hero: &Hero, owner: i8) -> Vec<AttributeKey> {
+    pub fn unit_attributes_hidden_by_fog(&self, typ: UnitType, _hero: &Hero, owner: i8) -> Vec<AttributeKey> {
         self.config.unit_specific_hidden_attributes(typ).iter()
         .chain(self.config.commander_attributes_hidden_by_fog(self.get_commander(owner), typ).iter())
         .cloned()
@@ -96,6 +98,13 @@ impl Environment {
     }
 
     // terrain
+
+    pub fn terrain_attributes(&self, typ: TerrainType, _owner: i8) -> impl Iterator<Item = &TerrainAttributeKey> {
+        // order has to be preserved here
+        // because this method is used for exporting, while
+        // terrain_specific_attributes and commander_attributes are used for importing
+        self.config.terrain_specific_attributes(typ).iter()
+    }
 
     pub fn default_terrain(&self) -> Terrain {
         TerrainBuilder::new(self, crate::terrain::TerrainType::Grass)

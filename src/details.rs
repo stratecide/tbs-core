@@ -168,6 +168,14 @@ impl<D: Direction> Detail<D> {
             _ => ()
         }
     }
+
+    pub fn distort(&mut self, distortion: Distortion<D>) {
+        match self {
+            Self::Pipe(pipe_state) => pipe_state.distort(distortion),
+            _ => (),
+        }
+    }
+
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -276,7 +284,13 @@ impl<D: Direction> PipeState<D> {
         }
         None
     }
-    
+
+    pub fn distort(&mut self, distortion: Distortion<D>) {
+        for d in &mut self.directions {
+            *d = distortion.update_direction(*d);
+        }
+    }
+
     pub fn is_open(&self, d: D) -> bool {
         for i in 0..self.directions.len() {
             if d == self.directions[i] {
