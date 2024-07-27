@@ -509,6 +509,12 @@ impl<D: Direction> Unit<D> {
         self.set(Level(level.min(self.environment.config.max_unit_level())));
     }
 
+    pub fn translate(&mut self, translations: [D::T; 2], odd_if_hex: bool) {
+        for attribute in self.attributes.values_mut() {
+            attribute.translate(translations, odd_if_hex);
+        }
+    }
+
     // influenced by unit_power_config
 
     // ignores current hp
@@ -1026,7 +1032,8 @@ impl<D: Direction> Unit<D> {
         self.transportable_units().iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, transporter, &heroes, ballast)
         }).collect()
-    }}
+    }
+}
 
 impl<D: Direction> SupportedZippable<&Environment> for Unit<D> {
     fn export(&self, zipper: &mut Zipper, _support: &Environment) {

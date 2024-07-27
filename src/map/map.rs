@@ -93,9 +93,9 @@ impl<D: Direction> Map<D> {
         }
     }
 
-    /*pub fn odd_if_hex(&self) -> bool {
+    pub fn odd_if_hex(&self) -> bool {
         self.wrapping_logic.pointmap().odd_if_hex()
-    }*/
+    }
 
     pub fn width(&self) -> u8 {
         self.wrapping_logic.pointmap().width()

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{Display, Debug};
+use std::fmt::Debug;
 
 use zipper::*;
 
@@ -222,6 +222,18 @@ impl<D: Direction> Attribute<D> {
             AttributeKey::Owner => Some(Box::new(|attributes| attributes.get(&AttributeKey::Owner).cloned())),
             AttributeKey::Zombified => Some(Box::new(|attributes| attributes.get(&AttributeKey::Zombified).cloned())),
             _ => None,
+        }
+    }
+
+    pub fn translate(&mut self, translations: [D::T; 2], odd_if_hex: bool) {
+        match self {
+            Self::EnPassant(Some(p)) => {
+                *p = p.translate::<D>(&translations[p.y as usize % 2], odd_if_hex)
+            }
+            Self::Hero(hero) => {
+                hero.translate::<D>(translations, odd_if_hex);
+            }
+            _ => ()
         }
     }
 }

@@ -278,7 +278,7 @@ impl<D: Direction> WMBuilder<D> {
     }
 
     fn point_map_equivalent(&self, p: GlobalPoint) -> Option<Point> {
-        if p.x < 0 || p.y < 0 || p.x as u32 >= MAX_SIZE || p.y as u32 >= MAX_SIZE {
+        if p.x < 0 || p.y < 0 || p.x as u32 >= self.map.width() as u32 || p.y as u32 >= self.map.height() as u32 {
             return None;
         }
         let p = Point::new(p.x as u8, p.y as u8);
@@ -650,7 +650,7 @@ where D: Direction {
     /*pub fn odd_if_hex(&self) -> bool {
         self.pointmap.odd_if_hex() == ((self.pointmap.height() / 2) % 2 == 0)
     }*/
-    fn max_translation(map_size: MapSize) -> u16 {
+    pub fn max_translation(map_size: MapSize) -> u16 {
         if D::is_hex() {
             map_size.width().max(map_size.height()) as u16 * 2
         } else {

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use zipper::*;
 
@@ -80,6 +80,11 @@ impl Hero {
 
     pub fn get_origin(&self) -> Option<Point> {
         self.origin
+    }
+    pub fn translate<D: Direction>(&mut self, translations: [D::T; 2], odd_if_hex: bool) {
+        if let Some(p) = &mut self.origin {
+            *p = p.translate::<D>(&translations[p.y as usize % 2], odd_if_hex)
+        }
     }
 
     pub fn max_charge(&self, environment: &Environment) -> u8 {
