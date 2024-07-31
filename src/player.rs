@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use interfaces::game_interface::ClientPerspective;
+use interfaces::ClientPerspective;
 use zipper::*;
 
 use crate::commander::Commander;

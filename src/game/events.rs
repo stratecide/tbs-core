@@ -1,4 +1,4 @@
-use interfaces::game_interface::{EventInterface, ClientPerspective};
+use interfaces::ClientPerspective;
 use semver::Version;
 use zipper::*;
 use zipper::zipper_derive::*;
@@ -109,9 +109,6 @@ pub enum Event<D:Direction> {
     // commander events
     CommanderCharge(Owner, CommanderChargeChange),
     CommanderPowerIndex(Owner, U<31>, U<31>),
-}
-
-impl<D: Direction> EventInterface for Event<D> {
 }
 
 impl<D: Direction> Event<D> {

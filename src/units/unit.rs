@@ -4,7 +4,7 @@ use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use interfaces::game_interface::ClientPerspective;
+use interfaces::ClientPerspective;
 use num_rational::Rational32;
 use zipper::*;
 
@@ -928,7 +928,7 @@ impl<D: Direction> Unit<D> {
             // custom actions
             for (i, custom_action) in self.environment.config.custom_actions().iter().enumerate() {
                 if custom_action.add_as_option(game, self, path, destination, funds_after_path, transporter, None, &heroes, ballast) {
-                    result.push(UnitAction::Custom(i, Vec::new()));
+                    result.push(UnitAction::custom(i, Vec::new()));
                 }
             }
             // build units

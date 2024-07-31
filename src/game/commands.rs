@@ -1,5 +1,10 @@
-use interfaces::game_interface::CommandInterface;
+use std::error::Error;
+use std::fmt::Display;
 
+use zipper_derive::Zippable;
+use zipper::*;
+
+use crate::config::environment::Environment;
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::details::Detail;
@@ -8,28 +13,27 @@ use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::TerrainBuilder;
 use crate::map::direction::Direction;
 use crate::units::attributes::{ActionStatus, AttributeKey};
-use crate::units::commands::UnitCommand;
+use crate::units::commands::{UnitCommand, MAX_CUSTOM_ACTION_STEPS};
 use crate::units::hero::Hero;
 use crate::units::unit_types::UnitType;
 use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
 use super::game_view::GameView;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Zippable)]
+#[zippable(bits = 4, support_ref = Environment)]
 pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand<D>),
     BuyUnit(Point, UnitType, D),
-    CommanderPower(usize, Vec<CustomActionData<D>>),
-}
-
-impl<D: Direction> CommandInterface for Command<D> {
-    fn end_turn() -> Self {
-        Self::EndTurn
-    }
+    CommanderPower(CommanderPowerIndex, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
 }
 
 impl<D: Direction> Command<D> {
+    pub fn commander_power(index: usize, custom_action_data: Vec<CustomActionData<D>>) -> Self {
+        Self::CommanderPower(CommanderPowerIndex(index), custom_action_data.try_into().unwrap())
+    }
+
     pub fn execute(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         match self {
             Self::EndTurn => {
@@ -101,14 +105,14 @@ impl<D: Direction> Command<D> {
             }
             Self::CommanderPower(index, data) => {
                 let commander = &handler.get_game().current_player().commander;
-                if !commander.can_activate_power(index, false) {
+                if !commander.can_activate_power(index.0, false) {
                     return Err(CommandError::PowerNotUsable);
                 }
-                let script = commander.power_activation_script(index);
+                let script = commander.power_activation_script(index.0);
                 if !script.is_data_valid(handler.get_game(), &data) {
                     return Err(CommandError::PowerNotUsable);
                 }
-                Self::activate_power(handler, index, &data);
+                Self::activate_power(handler, index.0, &data);
                 Ok(())
             }
         }?;
@@ -135,6 +139,29 @@ impl<D: Direction> Command<D> {
         if script.is_data_valid(handler.get_game(), &data) {
             script.execute(handler, data);
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CommanderPowerIndex(pub usize);
+
+impl SupportedZippable<&Environment> for CommanderPowerIndex {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        let max_len = support.config.commander_types().iter()
+            .map(|co| support.config.commander_powers(*co).len())
+            .max()
+            .unwrap_or(0) as u32;
+        let bits = bits_needed_for_max_value(max_len.max(1) - 1);
+        zipper.write_u32(self.0 as u32, bits);
+    }
+
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let max_len = support.config.commander_types().iter()
+            .map(|co| support.config.commander_powers(*co).len())
+            .max()
+            .unwrap_or(0) as u32;
+        let bits = bits_needed_for_max_value(max_len.max(1) - 1);
+        Ok(Self(unzipper.read_u32(bits)? as usize))
     }
 }
 
@@ -167,3 +194,10 @@ pub enum CommandError {
     CannotBuildHere,
 }
 
+impl Display for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl Error for CommandError {}

@@ -1,13 +1,23 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::error::Error;
+use std::sync::Arc;
 
-use interfaces::ConfigInterface;
+use interfaces::*;
 use num_rational::Rational32;
+use semver::Version;
+use zipper::Unzipper;
 
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
 use crate::game::game_view::GameView;
+use crate::game::import_client;
+use crate::game::import_server;
+use crate::game::settings::GameSettings;
+use crate::game::GameType;
 use crate::map::direction::Direction;
+use crate::map::map::import_map;
+use crate::map::map::MapType;
 use crate::map::point::Point;
 use crate::script::attack::AttackScript;
 use crate::script::death::DeathScript;
@@ -27,6 +37,7 @@ use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::units::attributes::*;
 use crate::units::hero::*;
+use crate::VERSION;
 
 use super::custom_action_config::CustomActionConfig;
 use super::hero_power_config::HeroPowerConfig;
@@ -90,16 +101,38 @@ pub struct Config {
 }
 
 impl ConfigInterface for Config {
-    fn id(&self) -> &str {
+    fn get_name(&self) -> &str {
         &self.name
+    }
+
+    fn parse_map(self: Arc<Self>, bytes: Vec<u8>) -> Result<Box<dyn MapInterface>, Box<dyn Error>> {
+        match import_map(&self, bytes, Version::parse(VERSION)?)? {
+            MapType::Hex(map) => Ok(Box::new(map)),
+            MapType::Square(map) => Ok(Box::new(map)),
+        }
+    }
+
+    fn parse_game_settings(self: Arc<Self>, bytes: Vec<u8>) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
+        let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION)?);
+        Ok(Box::new(GameSettings::import(&mut unzipper, self, false)?))
+    }
+
+    fn parse_server(self: Arc<Self>, data: ExportedGame) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
+        match import_server(&self, data, Version::parse(VERSION)?)? {
+            GameType::Hex(game) => Ok(Box::new(game)),
+            GameType::Square(game) => Ok(Box::new(game)),
+        }
+    }
+
+    fn parse_client(self: Arc<Self>, public: Vec<u8>, secret: Option<(Team, Vec<u8>)>) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
+        match import_client(&self, public, secret, Version::parse(VERSION)?)? {
+            GameType::Hex(game) => Ok(Box::new(game)),
+            GameType::Square(game) => Ok(Box::new(game)),
+        }
     }
 }
 
 impl Config {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
     pub fn max_player_count(&self) -> i8 {
         16
     }

@@ -1,5 +1,6 @@
 pub mod attributes;
 pub mod terrain;
+#[cfg(test)]
 mod test;
 
 use std::str::FromStr;

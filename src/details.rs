@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use interfaces::game_interface::ClientPerspective;
+use interfaces::ClientPerspective;
 use zipper_derive::Zippable;
 use zipper::{bits_needed_for_max_value, Exportable, SupportedZippable, U};
 

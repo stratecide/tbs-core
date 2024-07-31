@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::sync::Arc;
-use interfaces::game_interface::ClientPerspective;
+use interfaces::ClientPerspective;
 
 use crate::commander::commander_type::CommanderType;
 use crate::map::point_map::MapSize;
@@ -127,9 +127,10 @@ impl PartialEq for Environment {
 impl Eq for Environment {}
 impl Debug for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(settings) = &self.settings {
-            write!(f, "Game '{:?}' with ", **settings)?;
-        }
-        write!(f, "Ruleset: '{}'", self.config.name())
+        f.debug_struct("Environment")
+        .field("ruleset", &self.config.name)
+        .field("map size", &self.map_size)
+        .field("settings", &self.settings)
+        .finish()
     }
 }

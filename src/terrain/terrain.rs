@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use interfaces::game_interface::ClientPerspective;
+use interfaces::ClientPerspective;
 use num_rational::Rational32;
 use rustc_hash::FxHashMap;
 use zipper::*;
@@ -137,7 +137,7 @@ impl Terrain {
         &self,
         game: &impl GameView<D>,
         pos: Point,
-        is_bubble: bool,
+        _is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
     ) -> &[UnitType] {

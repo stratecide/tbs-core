@@ -1,5 +1,9 @@
 use std::collections::HashSet;
 
+use zipper_derive::Zippable;
+use zipper::*;
+
+use crate::config::environment::Environment;
 use crate::config::parse::{parse_tuple1, string_base, FromConfig};
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
@@ -21,7 +25,8 @@ use crate::units::unit_types::UnitType;
     UnitType,
 }*/
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(bits=5, support_ref = Environment)]
 pub enum CustomActionData<D: Direction> {
     Point(Point),
     Direction(D),
@@ -364,7 +369,7 @@ pub fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, path_start: Point, 
         }
         let path = Path {
             start: end,
-            steps: vec![PathStep::Dir(dir)],
+            steps: vec![PathStep::Dir(dir)].try_into().unwrap(),
         };
         handler.money_buy(handler.get_game().current_player().get_owner_id(), cost);
         let unit = handler.animate_unit_path(&unit, &path, false);

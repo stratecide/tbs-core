@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use interfaces::game_interface::ClientPerspective;
+use interfaces::ClientPerspective;
 
 use crate::config::environment::Environment;
 use crate::details::Detail;

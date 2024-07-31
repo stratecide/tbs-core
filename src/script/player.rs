@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use interfaces::game_interface::ClientPerspective;
+use interfaces::ClientPerspective;
 
 use crate::config::parse::{parse_tuple1, parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;

@@ -239,10 +239,10 @@ pub struct Exhausted(pub bool);
 attribute_tuple!(Exhausted, Exhausted);
 
 impl SupportedZippable<&Environment> for Exhausted {
-    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+    fn export(&self, zipper: &mut Zipper, _support: &Environment) {
         zipper.write_bool(self.0);
     }
-    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+    fn import(unzipper: &mut Unzipper, _support: &Environment) -> Result<Self, ZipperError> {
         Ok(Self(unzipper.read_bool()?))
     }
 }

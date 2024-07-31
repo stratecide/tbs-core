@@ -755,32 +755,28 @@ impl Config {
     }
 
     #[cfg(not(target_family = "wasm"))]
-    pub fn parse_folder(folder: PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn parse_folder(name: impl ToString, folder: PathBuf) -> Result<Self, Box<dyn Error>> {
         if !folder.exists() || !folder.is_dir() {
             return Err(Box::new(ConfigParseError::FolderMissing(folder.to_path_buf())))
         }
-        let name = match folder.file_name().and_then(|s| s.to_str()) {
-            Some(s) => s.to_string(),
-            None => return Err(Box::new(ConfigParseError::FolderMissing(folder.to_path_buf()))),
-        };
         let load_config: Box<dyn FnMut(&str) -> Result<String, Box<dyn Error>>> = Box::new(move |filename: &str| {
-            println!("{filename}");
             // canonicalize and then check if still in same folder
             // to prevent path traversal attacks
-            let file = folder.join(filename).canonicalize()?;
+            let file = folder.join(filename);
+            let file = file.canonicalize()?;
             if !file.starts_with(&folder) || !file.exists() || !file.is_file() {
                 return Err(Box::new(ConfigParseError::FileMissing(filename.to_string())))
             }
             Ok(fs::read_to_string(file)?)
         });
-        Self::parse(name, load_config)
+        Self::parse(name.to_string(), load_config)
     }
 
     #[cfg(not(target_family = "wasm"))]
     #[allow(dead_code)]
     pub (crate) fn test_config() -> Self {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default_test");
-        Self::parse_folder(path).expect("Failed to parse test config")
+        Self::parse_folder("Test", path).expect("Failed to parse test config")
     }
 }
 
@@ -788,7 +784,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default");
-        Self::parse_folder(path).expect("Failed to parse default config")
+        Self::parse_folder("Default", path).expect("Failed to parse default config")
     }
 }
 

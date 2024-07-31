@@ -8,6 +8,7 @@ use num_rational::Rational32;
 use zipper::*;
 use zipper_derive::*;
 
+use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
 use crate::game::commands::CommandError;
 use crate::game::game_view::GameView;
@@ -123,16 +124,24 @@ impl<D: Direction> PathStep<D> {
 
 pub const MAX_PATH_LENGTH: u32 = 200;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Zippable)]
+#[zippable(support_ref = Environment)]
 pub struct Path<D: Direction> {
     pub start: Point,
-    pub steps: Vec<PathStep::<D>>,
+    pub steps: LVec<PathStep::<D>, {MAX_PATH_LENGTH}>,
 }
 impl<D: Direction> Path<D> {
     pub fn new(start: Point) -> Self {
         Self {
             start,
-            steps: Vec::new(),
+            steps: LVec::new(),
+        }
+    }
+
+    pub fn with_steps(start: Point, steps: Vec<PathStep<D>>) -> Self {
+        Self {
+            start,
+            steps: steps.try_into().unwrap(),
         }
     }
 

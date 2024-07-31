@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::error::Error;
+use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
-use interfaces::game_interface::{ClientPerspective, Events};
+use interfaces::*;
 use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
@@ -13,7 +14,7 @@ use crate::game::game_view::GameView;
 use crate::game::settings::{self, GameSettings};
 use crate::game::game::*;
 use crate::game::fog::*;
-use crate::game::events;
+use crate::game::events::Event;
 use crate::game::settings::PlayerSettings;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
@@ -375,6 +376,21 @@ impl<D: Direction> Map<D> {
             }
         }
     }
+
+    pub fn settings(&self) -> Result<GameSettings, NotPlayable> {
+        let owners = self.get_viable_player_ids();
+        if owners.len() < 2 {
+            return Err(NotPlayable::TooFewPlayers);
+        }
+        let players:Vec<PlayerSettings> = owners.into_iter()
+            .map(|owner| PlayerSettings::new(&self.environment.config, owner))
+            .collect();
+        Ok(settings::GameSettings {
+            config: self.environment.config.clone(),
+            fog_mode: FogMode::Constant(FogSetting::Light(0)),
+            players: players.try_into().unwrap(),
+        })
+    }
 }
 
 impl<D: Direction> MapView<D> for Map<D> {
@@ -461,13 +477,7 @@ impl<D: Direction> FieldData<D> {
     }
 }
 
-impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
-    type Terrain = Terrain;
-    type Detail = Detail<D>;
-    type Unit = Unit<D>;
-    type GameSettings = settings::GameSettings;
-    type Game = Game<D>;
-
+impl<D: Direction> MapInterface for Map<D> {
     fn export(&self) -> Vec<u8> {
         let mut zipper = Zipper::new();
         zipper.write_bool(D::is_hex());
@@ -478,34 +488,82 @@ impl<D: Direction> interfaces::map_interface::MapInterface for Map<D> {
         zipper.finish()
     }
 
-    fn settings(&self) -> Result<Self::GameSettings, interfaces::map_interface::NotPlayable> {
-        let owners = self.get_viable_player_ids();
-        if owners.len() < 2 {
-            return Err(interfaces::map_interface::NotPlayable::TooFewPlayers);
+    fn width(&self) -> usize {
+        self.width() as usize
+    }
+
+    fn height(&self) -> usize {
+        self.height() as usize
+    }
+
+    fn player_count(&self) -> u16 {
+        self.get_viable_player_ids().len() as u16
+    }
+
+    fn metrics(&self) -> HashMap<String, i32> {
+        let mut result = HashMap::new();
+        let mut income = 0;
+        for t in self.terrain.values() {
+            income += t.income_factor();
         }
-        let players:Vec<PlayerSettings> = owners.into_iter()
-            .map(|owner| PlayerSettings::new(&self.environment.config, owner))
-            .collect();
-        Ok(settings::GameSettings {
-            name: "".to_string(),
-            fog_mode: FogMode::Constant(FogSetting::Light(0)),
-            players: players.try_into().unwrap(),
-        })
+        result.insert("Income".to_string(), income);
+        result
     }
 
-    fn game_server<R: 'static + Fn() -> f32>(self, settings: &settings::GameSettings, random: R) -> (Game<D>, Events<Game<D>>) {
-        Game::new_server(self, settings, random)
-    }
-    fn game_client(self, settings: &settings::GameSettings, events: &[events::Event<D>]) -> Game<D> {
-        Game::new_client(self, settings, events)
-    }
-
-    fn get_config(&self) -> &Arc<Config> {
-        &self.environment().config
+    fn default_settings(&self) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
+        match self.settings() {
+            Ok(s) => Ok(Box::new(s)),
+            Err(e) => Err(Box::new(e)),
+        }
     }
 
-    fn get_version() -> Version {
-        Version::parse(VERSION).expect(&format!("Cargo version has invalid format: {}", VERSION))
+    fn parse_settings(self: Box<Self>, bytes: Vec<u8>) -> Result<Box<dyn GameCreationInterface>, Box<dyn Error>> {
+        let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION).unwrap());
+        let settings = GameSettings::import(&mut unzipper, self.environment.config.clone(), false)?;
+        Ok(Box::new(GameCreation {
+            map: *self,
+            settings,
+        }))
+    }
+}
+
+#[derive(Debug)]
+pub enum NotPlayable {
+    TooFewPlayers,
+}
+
+impl Display for NotPlayable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooFewPlayers => write!(f, "This map has less than 2 Players"),
+        }
+    }
+}
+
+impl Error for NotPlayable {}
+
+pub struct GameCreation<D: Direction> {
+    pub map: Map<D>,
+    pub settings: settings::GameSettings,
+}
+
+impl<D: Direction> GameCreationInterface for GameCreation<D> {
+    fn server(self, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Events) {
+        let (server, events) = Game::new_server(self.map, &self.settings, random);
+        let events = events.export(server.environment());
+        (server, events)
+    }
+
+    fn client(self, events: Vec<u8>) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
+        let events = Event::import_list(events, self.map.environment(), Version::parse(VERSION).unwrap())?;
+        Ok(Game::new_client(self.map, &self.settings, &events))
+    }
+
+    fn server_and_client(self, client_perspective: ClientPerspective, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
+        let (server, events) = Game::new_server(self.map.clone(), &self.settings, random);
+        let client = Game::new_client(self.map, &self.settings, events.get(&client_perspective.into()).unwrap_or(&[]));
+        let events = events.export(server.environment());
+        (server, client, events)
     }
 }
 

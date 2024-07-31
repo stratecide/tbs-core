@@ -5,6 +5,7 @@ use interfaces::game_interface::GameInterface;
 use num_rational::Rational32;
 use semver::Version;
 use zipper::*;
+use zipper_derive::Zippable;
 
 use crate::config::environment::Environment;
 use crate::game::commands::*;
@@ -25,8 +26,10 @@ use super::unit::Unit;
 use super::unit_types::UnitType;
 
 pub const UNIT_REPAIR: u32 = 30;
+pub const MAX_CUSTOM_ACTION_STEPS: u32 = 8;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(bits=5, support_ref = Environment)]
 pub enum UnitAction<D: Direction> {
     Wait,
     Take,
@@ -34,9 +37,9 @@ pub enum UnitAction<D: Direction> {
     Capture,
     Attack(AttackVector<D>),
     BuyHero(HeroType),
-    HeroPower(usize, Vec<CustomActionData<D>>),
+    HeroPower(HeroPowerIndex, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
     PawnUpgrade(UnitType),
-    Custom(usize, Vec<CustomActionData<D>>),
+    Custom(CustomActionIndex, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
 }
 
 impl<D: Direction> fmt::Display for UnitAction<D> {
@@ -48,30 +51,38 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Capture => write!(f, "Capture"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
             Self::BuyHero(_) => write!(f, "Buy Mercenary"),
-            Self::HeroPower(index, _) => write!(f, "Hero Power {index}"),
+            Self::HeroPower(index, _) => write!(f, "Hero Power {}", index.0),
             Self::PawnUpgrade(u) => write!(f, "Upgrade unit to {u:?}"),
-            Self::Custom(index, _) => write!(f, "Custom {index}"),
+            Self::Custom(index, _) => write!(f, "Custom {}", index.0),
         }
     }
 }
 
 impl<D: Direction> UnitAction<D> {
+    pub fn custom(index: usize, custom_action_data: Vec<CustomActionData<D>>) -> Self {
+        Self::Custom(CustomActionIndex(index), custom_action_data.try_into().unwrap())
+    }
+
+    pub fn hero_power(index: usize, custom_action_data: Vec<CustomActionData<D>>) -> Self {
+        Self::HeroPower(HeroPowerIndex(index), custom_action_data.try_into().unwrap())
+    }
+
     pub fn is_valid_option(&self, game: &Game<D>, unit: &Unit<D>, path: &Path<D>, destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> bool {
         let options = unit.options_after_path(game, path, transporter, ballast);
         match self {
             Self::HeroPower(index, data) => {
-                if !options.contains(&Self::HeroPower(*index, Vec::new())) {
+                if !options.contains(&Self::hero_power(index.0, Vec::new())) {
                     return false;
                 }
                 let hero = unit.get_hero();
-                let power = &game.environment().config.hero_powers(hero.typ())[*index];
+                let power = &game.environment().config.hero_powers(hero.typ())[index.0];
                 power.script.is_data_valid(game, unit, path, destination, transporter, ballast, data)
             }
             Self::Custom(index, data) => {
-                if !options.contains(&Self::Custom(*index, Vec::new())) {
+                if !options.contains(&Self::custom(index.0, Vec::new())) {
                     return false;
                 }
-                let custom_action = &game.environment().config.custom_actions()[*index];
+                let custom_action = &game.environment().config.custom_actions()[index.0];
                 custom_action.script.is_data_valid(game, unit, path, destination, transporter, ballast, data)
             }
             _ => options.contains(self)
@@ -146,9 +157,9 @@ impl<D: Direction> UnitAction<D> {
                 let unit = handler.get_map().get_unit(end).unwrap().clone();
                 let hero = unit.get_hero();
                 let config = handler.environment().config.clone();
-                let power = &config.hero_powers(hero.typ())[*index];
+                let power = &config.hero_powers(hero.typ())[index.0];
                 handler.hero_charge_sub(end, None, power.required_charge.into());
-                handler.hero_power(end, *index);
+                handler.hero_power(end, index.0);
                 let heroes = Hero::hero_influence_at(handler.get_game(), end, unit.get_owner_id());
                 handler.unit_status(end, ActionStatus::Exhausted);
                 // TODO: allow partial success, maybe even a failure handler
@@ -174,7 +185,7 @@ impl<D: Direction> UnitAction<D> {
             Self::Custom(index, data) => {
                 let unit = handler.get_map().get_unit(end).unwrap().clone();
                 let config = handler.environment().config.clone();
-                let custom_action = &config.custom_actions()[*index];
+                let custom_action = &config.custom_actions()[index.0];
                 let heroes = Hero::hero_influence_at(handler.get_game(), end, unit.get_owner_id());
                 handler.unit_status(end, ActionStatus::Exhausted);
                 // TODO: allow partial success, maybe even a failure handler
@@ -196,9 +207,10 @@ impl<D: Direction> UnitAction<D> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Zippable)]
+#[zippable(support_ref = Environment)]
 pub struct UnitCommand<D: Direction> {
-    pub unload_index: Option<usize>,
+    pub unload_index: Option<UnloadIndex>,
     pub path: Path<D>,
     pub action: UnitAction<D>,
 }
@@ -212,8 +224,7 @@ impl<D: Direction> UnitCommand<D> {
             .and_then(|mut h| h.teams.remove(&player))
             .map(|h| (player, h));
             let version = Version::parse(VERSION).unwrap();
-            let name = format!("--CLIENT VERIFICATION-- {}", handler.environment().config.name());
-            *Game::import_client(data.public, secret, &handler.environment().config, name, version).unwrap()
+            *Game::import_client(data.public, secret, &handler.environment().config, version).unwrap()
         } else {
             handler.get_game().clone()
         };
@@ -230,9 +241,9 @@ impl<D: Direction> UnitCommand<D> {
             let unit = client.get_map().get_unit(start).cloned().ok_or(CommandError::MissingUnit)?;
             let mut transporter = None;
             let unit = if let Some(index) = self.unload_index {
-                transporter = Some((&unit, index));
+                transporter = Some((&unit, index.0));
                 let boarded = unit.get_transported();
-                boarded.get(index).ok_or(CommandError::MissingBoardedUnit)?.clone()
+                boarded.get(index.0).ok_or(CommandError::MissingBoardedUnit)?.clone()
             } else {
                 unit
             };
@@ -273,9 +284,9 @@ impl<D: Direction> UnitCommand<D> {
         let unit = handler.get_map().get_unit(start).unwrap().clone();
         let mut transporter = None;
         let unit = if let Some(index) = self.unload_index {
-            transporter = Some((&unit, index));
+            transporter = Some((&unit, index.0));
             let boarded = unit.get_transported();
-            boarded.get(index).unwrap().clone()
+            boarded.get(index.0).unwrap().clone()
         } else {
             unit
         };
@@ -304,19 +315,19 @@ impl<D: Direction> UnitCommand<D> {
         if let Some(fog_trap) = fog_trap {
             // no event for the path is necessary if the unit is unable to move at all
             if path_taken.steps.len() > 0 {
-                handler.unit_path(self.unload_index, &path_taken, false, false);
+                handler.unit_path(self.unload_index.map(|i| i.0), &path_taken, false, false);
             }
             // fog trap
             handler.effect_fog_surprise(fog_trap);
             // special case of a unit being unable to move that's loaded in a transport
             if path_taken.steps.len() == 0 && self.unload_index.is_some() {
-                handler.unit_status_boarded(path_taken.start, self.unload_index.unwrap(), ActionStatus::Exhausted);
+                handler.unit_status_boarded(path_taken.start, self.unload_index.unwrap().0, ActionStatus::Exhausted);
             } else {
                 handler.unit_status(path_taken.end(handler.get_map())?.0, ActionStatus::Exhausted);
             }
         } else {
             let ballast = if path_taken.steps.len() > 0 {
-                handler.unit_path(self.unload_index, &path_taken, board_at_the_end, false);
+                handler.unit_path(self.unload_index.map(|i| i.0), &path_taken, board_at_the_end, false);
                 ballast.get_entries()
             } else {
                 &[]
@@ -367,5 +378,45 @@ impl SupportedZippable<&Environment> for UnloadIndex {
 impl From<usize> for UnloadIndex {
     fn from(value: usize) -> Self {
         Self(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CustomActionIndex(pub usize);
+
+impl SupportedZippable<&Environment> for CustomActionIndex {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        let len = support.config.custom_actions().len() as u32;
+        let bits = bits_needed_for_max_value(len.max(1) - 1);
+        zipper.write_u32(self.0 as u32, bits);
+    }
+
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let len = support.config.custom_actions().len() as u32;
+        let bits = bits_needed_for_max_value(len.max(1) - 1);
+        Ok(Self(unzipper.read_u32(bits)? as usize))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeroPowerIndex(pub usize);
+
+impl SupportedZippable<&Environment> for HeroPowerIndex {
+    fn export(&self, zipper: &mut Zipper, support: &Environment) {
+        let max_len = support.config.hero_types().iter()
+            .map(|hero| support.config.hero_powers(*hero).len())
+            .max()
+            .unwrap_or(0) as u32;
+        let bits = bits_needed_for_max_value(max_len.max(1) - 1);
+        zipper.write_u32(self.0 as u32, bits);
+    }
+
+    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
+        let max_len = support.config.hero_types().iter()
+            .map(|hero| support.config.hero_powers(*hero).len())
+            .max()
+            .unwrap_or(0) as u32;
+        let bits = bits_needed_for_max_value(max_len.max(1) - 1);
+        Ok(Self(unzipper.read_u32(bits)? as usize))
     }
 }

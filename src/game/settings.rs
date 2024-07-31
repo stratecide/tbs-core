@@ -1,26 +1,32 @@
+use std::fmt::Debug;
 use std::sync::Arc;
 
 use crate::commander::Commander;
 use crate::commander::commander_type::CommanderType;
 use crate::config::environment::Environment;
 use crate::config::config::Config;
-use crate::map::direction::Direction;
 use crate::player::*;
 
 use super::fog::FogMode;
-use super::game::Game;
 use interfaces::map_interface::GameSettingsInterface;
-use semver::Version;
 use zipper::*;
-use interfaces::game_interface;
 use zipper_derive::Zippable;
 
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone)]
 pub struct GameSettings {
-    pub name: String, // should name even be part of the settings?
+    pub config: Arc<Config>,
     pub fog_mode: FogMode,
     pub players: Vec<PlayerSettings>,
+}
+
+impl Debug for GameSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GameSettings")
+        .field("fog_mode", &self.fog_mode)
+        .field("players", &self.players)
+        .finish()
+    }
 }
 
 impl PartialEq for GameSettings {
@@ -39,29 +45,30 @@ impl GameSettings {
         result
     }
 
-    pub fn import(unzipper: &mut Unzipper, config: &Config, name: String, started: bool) -> Result<Self, ZipperError> {
+    pub fn import(unzipper: &mut Unzipper, config: Arc<Config>, started: bool) -> Result<Self, ZipperError> {
         let fog_mode = FogMode::unzip(unzipper)?;
         let mut players = Vec::new();
         for _ in 0..unzipper.read_u8(bits_needed_for_max_value(config.max_player_count() as u32 - 1))? + 1 {
-            players.push(PlayerSettings::import(unzipper, (config, started))?);
+            players.push(PlayerSettings::import(unzipper, (&config, started))?);
         }
         Ok(Self {
-            name,
+            config,
             fog_mode,
             players,
         })
     }
-    pub fn export(&self, zipper: &mut Zipper, config: &Config, started: bool) {
+
+    pub fn export(&self, zipper: &mut Zipper, started: bool) {
         self.fog_mode.zip(zipper);
-        zipper.write_u8((self.players.len() - 1) as u8, bits_needed_for_max_value(config.max_player_count() as u32 - 1));
+        zipper.write_u8((self.players.len() - 1) as u8, bits_needed_for_max_value(self.config.max_player_count() as u32 - 1));
         for p in &self.players {
-            p.export(zipper, (config, started));
+            p.export(zipper, (&self.config, started));
         }
     }
 }
 
-impl<D: Direction> GameSettingsInterface<Game<D>> for GameSettings {
-    fn players(&self) -> Vec<game_interface::PlayerData> {
+impl GameSettingsInterface for GameSettings {
+    /*fn players(&self) -> Vec<game_interface::PlayerData> {
         self.players.iter()
         .map(|p| {
             game_interface::PlayerData {
@@ -70,15 +77,12 @@ impl<D: Direction> GameSettingsInterface<Game<D>> for GameSettings {
                 dead: false,
             }
         }).collect()
-    }
-    fn export(&self, config: &Arc<Config>) -> Vec<u8> {
+    }*/
+
+    fn export(&self) -> Vec<u8> {
         let mut zipper = Zipper::new();
-        self.export(&mut zipper, config, false);
+        self.export(&mut zipper, false);
         zipper.finish()
-    }
-    fn import(data: Vec<u8>, config: &Arc<Config>, name: String, version: Version) -> Result<Self, ZipperError> {
-        let mut unzipper = Unzipper::new(data, version);
-        Self::import(&mut unzipper, config, name, false)
     }
 }
 
@@ -186,6 +190,8 @@ impl PlayerSettings {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use semver::Version;
     use zipper::{SupportedZippable, Unzipper, Zipper};
 
@@ -215,11 +221,10 @@ mod tests {
 
     #[test]
     fn export_settings() {
-        let config = Config::test_config();
-        let name = String::new();
+        let config = Arc::new(Config::test_config());
         let setting = GameSettings {
+            config: config.clone(),
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
-            name: name.clone(),
             players: vec![
                 PlayerSettings::new(&config, 0),
                 PlayerSettings::new(&config, 3),
@@ -227,7 +232,7 @@ mod tests {
         };
         for started in [false, true] {
             let mut zipper = Zipper::new();
-            setting.export(&mut zipper, &config, started);
+            setting.export(&mut zipper, started);
             zipper.write_u8(8, 4);
             let data = zipper.finish();
             let setting = if started {
@@ -241,7 +246,7 @@ mod tests {
             };
             println!("{started}: {data:?}");
             let mut unzipper = Unzipper::new(data, Version::parse(VERSION).unwrap());
-            assert_eq!(setting, GameSettings::import(&mut unzipper, &config, name.clone(), started).unwrap());
+            assert_eq!(setting, GameSettings::import(&mut unzipper, config.clone(), started).unwrap());
             assert_eq!(8, unzipper.read_u8(4).unwrap())
         }
     }

@@ -9,7 +9,7 @@ pub mod modified_view;
 
 use std::sync::Arc;
 
-use interfaces::game_interface::{ExportedGame, GameInterface};
+use interfaces::ExportedGame;
 use semver::Version;
 use zipper::{Unzipper, ZipperError};
 
@@ -22,21 +22,21 @@ pub enum GameType {
     Hex(Game<Direction6>),
 }
 
-pub fn import_server(config: &Arc<Config>, data: ExportedGame, name: String, version: Version) -> Result<GameType, ZipperError> {
+pub fn import_server(config: &Arc<Config>, data: ExportedGame, version: Version) -> Result<GameType, ZipperError> {
     let mut unzipper = Unzipper::new(vec![data.public[0]], version.clone());
     if unzipper.read_bool()? {
-        Ok(GameType::Hex(*Game::import_server(data, config, name, version)?))
+        Ok(GameType::Hex(*Game::import_server(data, config, version)?))
     } else {
-        Ok(GameType::Square(*Game::import_server(data, config, name, version)?))
+        Ok(GameType::Square(*Game::import_server(data, config, version)?))
     }
 }
 
-pub fn import_client(config: &Arc<Config>, public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, name: String, version: Version) -> Result<GameType, ZipperError> {
+pub fn import_client(config: &Arc<Config>, public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, version: Version) -> Result<GameType, ZipperError> {
     let mut unzipper = Unzipper::new(vec![public[0]], version.clone());
     if unzipper.read_bool()? {
-        Ok(GameType::Hex(*Game::import_client(public, team_view, config, name, version)?))
+        Ok(GameType::Hex(*Game::import_client(public, team_view, config, version)?))
     } else {
-        Ok(GameType::Square(*Game::import_client(public, team_view, config, name, version)?))
+        Ok(GameType::Square(*Game::import_client(public, team_view, config, version)?))
     }
 }
 
@@ -46,7 +46,7 @@ mod tests {
     use std::sync::Arc;
 
     use interfaces::game_interface::*;
-    use interfaces::map_interface::*;
+    use interfaces::Perspective;
     use semver::Version;
     use crate::config::config::Config;
     use crate::game::game::*;
@@ -109,15 +109,15 @@ mod tests {
             let mut settings = settings.clone();
             settings.fog_mode = FogMode::Constant(fog_setting);
             let perspective = Perspective::Team(0);
-            let (server, events) = map.clone().game_server(&settings, || 0.);
-            let client = map.clone().game_client(&settings, events.get(&perspective).unwrap().0);
+            let (server, events) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+            let client = Game::new_client(map.clone(), &settings, events.get(&perspective).unwrap());
             let data = server.export();
             println!("data: {data:?}");
-            let imported_server = Game::import_server(data.clone(), &config, "".to_string(), version.clone()).unwrap();
+            let imported_server = Game::import_server(data.clone(), &config, version.clone()).unwrap();
             assert_eq!(server.get_fog(), imported_server.get_fog());
             assert_eq!(server.environment(), imported_server.environment());
-            assert_eq!(Box::new(server), imported_server);
-            assert_eq!(Ok(Box::new(client)), Game::import_client(data.public.clone(), data.get_team(0), &config, "".to_string(), version.clone()));
+            assert_eq!(server, imported_server);
+            assert_eq!(Ok(client), Game::import_client(data.public.clone(), data.get_team(0), &config, version.clone()));
         }
     }
 }

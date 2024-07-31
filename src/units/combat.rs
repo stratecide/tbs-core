@@ -748,10 +748,7 @@ fn displace<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, att
                     let steps = line.into_iter()
                     .map(|dp| PathStep::Dir(dp.direction))
                     .collect();
-                    let path = Path {
-                        start: *pos,
-                        steps,
-                    };
+                    let path = Path::with_steps(*pos, steps);
                     *pos = end;
                     if path.steps.len() == distance.abs() as usize {
                         *dir = None;
@@ -903,9 +900,6 @@ crate::listable_enum! {
 mod tests {
     use std::sync::Arc;
 
-    use interfaces::game_interface::GameInterface;
-    use interfaces::map_interface::MapInterface;
-
     use crate::config::config::Config;
     use crate::config::environment::Environment;
     use crate::game::commands::Command;
@@ -946,20 +940,20 @@ mod tests {
         map.set_unit(Point::new(1, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(2, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(3, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
-        let (mut game, _) = map.game_server(&GameSettings {
-            name: "terrain_defense".to_string(),
+        let (mut game, _) = Game::new_server(map, &GameSettings {
+            config: environment.config.clone(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
             players: vec![
                 PlayerSettings::new(&environment.config, 0),
                 PlayerSettings::new(&environment.config, 1),
             ],
-        }, || 0.);
+        }, Box::new(|| 0.));
         for x in 0..4 {
             game.handle_command(Command::UnitCommand(UnitCommand {
                 unload_index: None,
                 path: Path::new(Point::new(x, 1)),
                 action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
-            }), || 0.).unwrap();
+            }), Box::new(|| 0.)).unwrap();
         }
         let base_damage = 100. - game.get_map().get_unit(Point::new(0, 0)).unwrap().get_hp() as f32;
         assert_eq!(100 - (base_damage / 1.1).ceil() as u8, game.get_map().get_unit(Point::new(1, 0)).unwrap().get_hp());
@@ -983,21 +977,21 @@ mod tests {
         map.set_unit(Point::new(2, 1), Some(UnitType::Destroyer.instance(&environment).set_owner_id(1).build_with_defaults()));
         //map.set_unit(Point::new(3, 1), Some(UnitType::Destroyer.instance(&environment).set_owner_id(1).build_with_defaults()));
         map.set_unit(Point::new(1, 2), Some(UnitType::WarShip.instance(&environment).set_owner_id(1).build_with_defaults()));
-        let (mut game, _) = map.game_server(&GameSettings {
-            name: "displacement".to_string(),
+        let (mut game, _) = Game::new_server(map, &GameSettings {
+            config: environment.config.clone(),
             fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
             players: vec![
                 PlayerSettings::new(&environment.config, 0),
                 PlayerSettings::new(&environment.config, 1),
             ],
-        }, || 0.);
+        }, Box::new(|| 0.));
         let unchanged = game.clone();
 
         game.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(1, 0)),
             action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
-        }), || 0.).unwrap();
+        }), Box::new(|| 0.)).unwrap();
         assert_eq!(100, game.get_map().get_unit(Point::new(1, 0)).unwrap().get_hp());
         assert_eq!(100, game.get_map().get_unit(Point::new(2, 0)).unwrap().get_hp());
         assert_eq!(None, game.get_map().get_unit(Point::new(3, 0)));
@@ -1005,7 +999,7 @@ mod tests {
             unload_index: None,
             path: Path::new(Point::new(1, 1)),
             action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
-        }), || 0.).unwrap();
+        }), Box::new(|| 0.)).unwrap();
         //assert!(game.get_map().get_unit(Point::new(0, 1)).unwrap().get_hp() < 100);
         for x in 2..=2 { // 1..=3 if 2 range and counter-attack happens before displacement
             assert_eq!(None, game.get_map().get_unit(Point::new(x, 1)), "x = {x}");
@@ -1018,7 +1012,7 @@ mod tests {
             unload_index: None,
             path: Path::new(Point::new(1, 1)),
             action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
-        }), || 0.).unwrap();
+        }), Box::new(|| 0.)).unwrap();
         assert!(game.get_map().get_unit(Point::new(1, 2)).unwrap().get_hp() < 100);
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use interfaces::game_interface::GameInterface;
-use interfaces::game_interface::{Events, Perspective as IPerspective, ClientPerspective};
+use interfaces::{Perspective as IPerspective, ClientPerspective};
 
 use crate::config::environment::Environment;
 use crate::map::map::Map;
@@ -900,19 +900,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
 
-    pub fn accept(mut self) -> Events<Game<D>> {
+    pub fn accept(mut self) -> EventsMap<D> {
         if self.events.get(&IPerspective::Server) == self.events.get(&IPerspective::Neutral) {
             // if no info is hidden, there's no need to store multiple identical entries
             let events = self.events.remove(&IPerspective::Server).unwrap();
-            let bytes = Event::export_list(&events, self.environment());
-            Events::Public(events, bytes)
+            EventsMap::Public(events)
         } else {
-            let environment = self.game.environment();
-            Events::Secrets(self.events.into_iter()
-            .map(|(perspective, events)| {
-                let bytes = Event::export_list(&events, environment);
-                (perspective, (events, bytes))
-            }).collect())
+            EventsMap::Secrets(self.events)
         }
     }
 

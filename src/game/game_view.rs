@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
-use interfaces::game_interface::ClientPerspective;
+use interfaces::ClientPerspective;
 
 use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::player::Player;
-use crate::units::hero::{Hero, HeroInfluence, HeroType};
+use crate::units::hero::{HeroInfluence, HeroType};
 use crate::units::unit::Unit;
 
 use super::fog::FogIntensity;

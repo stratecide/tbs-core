@@ -41,6 +41,19 @@ impl HeroType {
     }
 }
 
+impl SupportedZippable<&Environment> for HeroType {
+    fn export(&self, zipper: &mut Zipper, environment: &Environment) {
+        let bits = bits_needed_for_max_value(environment.config.hero_count() as u32 - 1);
+        zipper.write_u32(environment.config.hero_types().iter().position(|t| t == self).unwrap_or(0) as u32, bits);
+    }
+
+    fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
+        let bits = bits_needed_for_max_value(environment.config.hero_count() as u32 - 1);
+        environment.config.hero_types().get(unzipper.read_u32(bits)? as usize).cloned()
+            .ok_or(ZipperError::EnumOutOfBounds("HeroType".to_string()))
+    }
+}
+
 // TODO: implement Display
 /**
  * Hero purposefully doesn't have Environment.
@@ -264,7 +277,7 @@ impl Hero {
         for (i, power) in game.environment().config.hero_powers(self.typ).iter().enumerate() {
             if self.can_activate_power(game.environment(), i, false)
             && power.script.next_condition(game, funds, unit, path, destination, transporter, heroes, ballast, &data) != CustomActionTestResult::Failure {
-                list.push(UnitAction::HeroPower(i, Vec::new()));
+                list.push(UnitAction::hero_power(i, Vec::new()));
             }
         }
     }
@@ -272,8 +285,7 @@ impl Hero {
 
 impl SupportedZippable<&Environment> for Hero {
     fn export(&self, zipper: &mut Zipper, environment: &Environment) {
-        let bits = bits_needed_for_max_value(environment.config.hero_count() as u32 - 1);
-        zipper.write_u32(environment.config.hero_types().iter().position(|t| *t == self.typ).unwrap_or(0) as u32, bits);
+        self.typ.export(zipper, environment);
         if self.typ == HeroType::None {
             return;
         }
@@ -286,8 +298,7 @@ impl SupportedZippable<&Environment> for Hero {
     }
 
     fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
-        let bits = bits_needed_for_max_value(environment.config.hero_count() as u32 - 1);
-        let typ = *environment.config.hero_types().get(unzipper.read_u32(bits)? as usize).ok_or(ZipperError::EnumOutOfBounds("HeroType".to_string()))?;
+        let typ = HeroType::import(unzipper, environment)?;
         let origin = if typ != HeroType::None {
             Option::<Point>::import(unzipper, environment)?
         } else {
