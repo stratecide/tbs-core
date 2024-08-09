@@ -133,7 +133,7 @@ impl PlayerSettings {
         let commander_options = config.commander_types();
         let commander = commander_options.get(0).cloned().unwrap_or(CommanderType::None);
         Self {
-            commander_options: CommanderOptions(commander_options.try_into().unwrap()),
+            commander_options: CommanderOptions(commander_options.to_vec()),
             commander,
             income: 100.into(),
             funds: 0.into(),
@@ -157,9 +157,12 @@ impl PlayerSettings {
         &self.commander_options.0
     }
     
-    /*pub fn set_commander_options(&mut self, options: Vec<CommanderOption>) {
-        // TODO
-    }*/
+    pub fn set_commander_options(&mut self, options: Vec<CommanderType>) {
+        self.commander_options.0 = options;
+        if !self.commander_options.0.contains(&self.commander) {
+            self.commander = self.commander_options.0.get(0).cloned().unwrap_or(CommanderType::None);
+        }
+    }
 
     pub fn get_commander(&self) -> CommanderType {
         self.commander

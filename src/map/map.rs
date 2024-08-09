@@ -548,6 +548,10 @@ pub struct GameCreation<D: Direction> {
 }
 
 impl<D: Direction> GameCreationInterface for GameCreation<D> {
+    fn get_settings(&self) -> Box<dyn GameSettingsInterface> {
+        Box::new(self.settings.clone())
+    }
+
     fn server(self, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Events) {
         let (server, events) = Game::new_server(self.map, &self.settings, random);
         let events = events.export(server.environment());
