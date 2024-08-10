@@ -6,14 +6,13 @@ use std::sync::Arc;
 use interfaces::*;
 use num_rational::Rational32;
 use semver::Version;
-use zipper::Unzipper;
 
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
 use crate::game::game_view::GameView;
 use crate::game::import_client;
 use crate::game::import_server;
-use crate::game::settings::GameSettings;
+use crate::game::settings::GameConfig;
 use crate::game::GameType;
 use crate::map::direction::Direction;
 use crate::map::map::import_map;
@@ -113,8 +112,7 @@ impl ConfigInterface for Config {
     }
 
     fn parse_game_settings(self: Arc<Self>, bytes: Vec<u8>) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
-        let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION)?);
-        Ok(Box::new(GameSettings::import(&mut unzipper, self, false)?))
+        Ok(Box::new(GameConfig::import(self, bytes)?))
     }
 
     fn parse_server(self: Arc<Self>, data: ExportedGame) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {

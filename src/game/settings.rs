@@ -1,17 +1,76 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
 use crate::commander::Commander;
 use crate::commander::commander_type::CommanderType;
 use crate::config::environment::Environment;
 use crate::config::config::Config;
-use crate::player::*;
+use crate::{player::*, VERSION};
 
 use super::fog::FogMode;
 use interfaces::map_interface::GameSettingsInterface;
+use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
 
+
+#[derive(Clone)]
+pub struct GameConfig {
+    pub config: Arc<Config>,
+    pub fog_mode: FogMode,
+    pub players: Vec<PlayerConfig>,
+}
+
+impl GameConfig {
+    pub fn build(&self, player_selections: &[PlayerSelectedOptions], random: &Box<dyn Fn() -> f32>) -> GameSettings {
+        GameSettings {
+            config: self.config.clone(),
+            fog_mode: self.fog_mode.clone(),
+            players: self.players.iter()
+                .enumerate()
+                .map(|(i, p)| p.build(&player_selections[i], random))
+                .collect(),
+        }
+    }
+
+    pub fn build_default(&self) -> GameSettings {
+        let player_selections: Vec<_> = (0..self.players.len()).map(|_| PlayerSelectedOptions {
+            commander: None,
+        }).collect();
+        let random: Box<dyn Fn() -> f32> = Box::new(|| 0.);
+        Self::build(&self, &player_selections, &random)
+    }
+
+    pub fn import(config: Arc<Config>, bytes: Vec<u8>) -> Result<Self, ZipperError> {
+        let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION).unwrap());
+        let fog_mode = FogMode::unzip(&mut unzipper)?;
+        let mut players = Vec::new();
+        for _ in 0..unzipper.read_u8(bits_needed_for_max_value(config.max_player_count() as u32 - 1))? + 1 {
+            players.push(PlayerConfig::import(&mut unzipper, &config)?);
+        }
+        Ok(Self {
+            config,
+            fog_mode,
+            players,
+        })
+    }
+}
+
+impl Debug for GameConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GameConfig")
+        .field("fog_mode", &self.fog_mode)
+        .field("players", &self.players)
+        .finish()
+    }
+}
+
+impl PartialEq for GameConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.fog_mode == other.fog_mode &&
+        self.players == other.players
+    }
+}
 
 #[derive(Clone)]
 pub struct GameSettings {
@@ -37,19 +96,11 @@ impl PartialEq for GameSettings {
 }
 
 impl GameSettings {
-    pub fn start(&self) -> Self {
-        let mut result = self.clone();
-        for p in &mut result.players {
-            p.commander_options.0 = Vec::new();
-        }
-        result
-    }
-
-    pub fn import(unzipper: &mut Unzipper, config: Arc<Config>, started: bool) -> Result<Self, ZipperError> {
+    pub fn import(unzipper: &mut Unzipper, config: Arc<Config>) -> Result<Self, ZipperError> {
         let fog_mode = FogMode::unzip(unzipper)?;
         let mut players = Vec::new();
         for _ in 0..unzipper.read_u8(bits_needed_for_max_value(config.max_player_count() as u32 - 1))? + 1 {
-            players.push(PlayerSettings::import(unzipper, (&config, started))?);
+            players.push(PlayerSettings::import(unzipper, &config)?);
         }
         Ok(Self {
             config,
@@ -58,88 +109,112 @@ impl GameSettings {
         })
     }
 
-    pub fn export(&self, zipper: &mut Zipper, started: bool) {
+    pub fn export(&self, zipper: &mut Zipper) {
         self.fog_mode.zip(zipper);
         zipper.write_u8((self.players.len() - 1) as u8, bits_needed_for_max_value(self.config.max_player_count() as u32 - 1));
         for p in &self.players {
-            p.export(zipper, (&self.config, started));
+            p.export(zipper, &self.config);
         }
     }
 }
 
-impl GameSettingsInterface for GameSettings {
-    /*fn players(&self) -> Vec<game_interface::PlayerData> {
-        self.players.iter()
-        .map(|p| {
-            game_interface::PlayerData {
-                color_id: p.owner_id.0 as u8,
-                team: p.team.0,
-                dead: false,
+#[derive(Debug)]
+pub enum PlayerSettingError {
+    PlayerIndex(usize, usize),
+    Commander(usize, CommanderType),
+    PlayerCount(usize, usize),
+}
+
+impl Display for PlayerSettingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PlayerIndex(index, player_count) => write!(f, "Only {player_count} player slots exist, can't join as player {}", index + 1),
+            Self::Commander(index, commander) => write!(f, "Player {} can't take {commander:?}", index + 1),
+            Self::PlayerCount(slots, joined) => write!(f, "{slots} player slots exist, but {joined} players joined"),
+        }
+    }
+}
+
+impl std::error::Error for PlayerSettingError {}
+
+impl GameSettingsInterface for GameConfig {
+    fn check_player_setting(&self, player_index: usize, bytes: Vec<u8>) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        if player_index >= self.players.len() {
+            return Err(Box::new(PlayerSettingError::PlayerIndex(player_index, self.players.len())));
+        }
+        let options = &self.players[player_index].options;
+        let selected = PlayerSelectedOptions::parse(bytes, &self.config)?;
+        if let Some(commander) = &selected.commander {
+            if !options.commanders.contains(commander) {
+                return Err(Box::new(PlayerSettingError::Commander(player_index, *commander)));
             }
-        }).collect()
-    }*/
+        }
+        Ok(selected.pack(&self.config))
+    }
 
     fn export(&self) -> Vec<u8> {
         let mut zipper = Zipper::new();
-        self.export(&mut zipper, false);
+        self.fog_mode.zip(&mut zipper);
+        zipper.write_u8((self.players.len() - 1) as u8, bits_needed_for_max_value(self.config.max_player_count() as u32 - 1));
+        for p in &self.players {
+            p.export(&mut zipper, &self.config);
+        }
         zipper.finish()
     }
 }
 
-type ConfigStarted<'a> = (&'a Config, bool);
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct CommanderOptions(Vec<CommanderType>);
-impl<'a> SupportedZippable<ConfigStarted<'a>> for CommanderOptions {
-    fn export(&self, zipper: &mut Zipper, (config, started): (&'a Config, bool)) {
-        if started {
-            return;
-        }
+pub struct PlayerOptions {
+    commanders: Vec<CommanderType>,
+}
+
+impl SupportedZippable<&Config> for PlayerOptions {
+    fn export(&self, zipper: &mut Zipper, config: &Config) {
         for option in config.commander_types() {
-            // could be made more efficient by assuming that commander types are sorted in self
-            zipper.write_bool(self.0.contains(option));
+            zipper.write_bool(self.commanders.contains(option));
         }
     }
-    fn import(unzipper: &mut Unzipper, (config, started): (&'a Config, bool)) -> Result<Self, ZipperError> {
-        if started {
-            return Ok(Self(Vec::new()));
-        }
-        let mut result = Vec::new();
+    fn import(unzipper: &mut Unzipper, config: &Config) -> Result<Self, ZipperError> {
+        let mut commanders = Vec::new();
         for option in config.commander_types() {
             if unzipper.read_bool()? {
-                result.push(*option);
+                commanders.push(*option);
             }
         }
-        Ok(Self(result))
+        Ok(Self {
+            commanders,
+        })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Zippable)]
-#[zippable(support = ConfigStarted::<'_>)]
-pub struct PlayerSettings {
-    commander_options: CommanderOptions,
-    #[supp(support.0)]
-    commander: CommanderType,
+#[zippable(support_ref = Config)]
+pub struct PlayerConfig {
+    pub options: PlayerOptions,
     funds: Funds,
     income: Income,
-    #[supp(support.0)]
     team: Team,
-    #[supp(support.0)]
     owner_id: Owner,
 }
 
-impl PlayerSettings {
-    pub fn new(config: &Config, owner_id: u8) -> Self {
-        let commander_options = config.commander_types();
-        let commander = commander_options.get(0).cloned().unwrap_or(CommanderType::None);
+impl PlayerConfig {
+    pub fn new(owner_id: u8, config: &Config) -> Self {
         Self {
-            commander_options: CommanderOptions(commander_options.to_vec()),
-            commander,
+            options: PlayerOptions {
+                commanders: config.commander_types().to_vec(),
+            },
             income: 100.into(),
             funds: 0.into(),
             team: Team(owner_id),
             owner_id: Owner(owner_id as i8),
         }
+    }
+
+    pub fn get_commander_options(&self) -> &[CommanderType] {
+        &self.options.commanders
+    }
+    pub fn set_commander_options(&mut self, commanders: Vec<CommanderType>) {
+        self.options.commanders = commanders;
     }
 
     pub fn get_owner_id(&self) -> i8 {
@@ -153,30 +228,102 @@ impl PlayerSettings {
         self.team = team.into();
     }
 
-    pub fn get_commander_options(&self) -> &[CommanderType] {
-        &self.commander_options.0
+    pub fn get_income(&self) -> i32 {
+        *self.income
     }
-    
-    pub fn set_commander_options(&mut self, options: Vec<CommanderType>) {
-        self.commander_options.0 = options;
-        if !self.commander_options.0.contains(&self.commander) {
-            self.commander = self.commander_options.0.get(0).cloned().unwrap_or(CommanderType::None);
+    pub fn set_income(&mut self, income: i32) {
+        self.income = income.into();
+    }
+
+    pub fn get_funds(&self) -> i32 {
+        *self.funds
+    }
+    pub fn set_funds(&mut self, funds: i32) {
+        self.funds = funds.into();
+    }
+
+    pub fn build(&self, player_selection: &PlayerSelectedOptions, random: &Box<dyn Fn() -> f32>) -> PlayerSettings {
+        let commander = player_selection.commander.unwrap_or_else(|| {
+            if self.options.commanders.len() == 0 {
+                CommanderType::None
+            } else {
+                let index = (self.options.commanders.len() as f32 * random()).floor() as usize;
+                self.options.commanders[index]
+            }
+        });
+        PlayerSettings {
+            commander,
+            funds: self.funds,
+            income: self.income,
+            team: self.team,
+            owner_id: self.owner_id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Zippable)]
+#[zippable(support_ref = Config)]
+pub struct PlayerSelectedOptions {
+    pub commander: Option<CommanderType>,
+}
+
+impl PlayerSelectedOptions {
+    pub fn default(_options: &PlayerOptions) -> Self {
+        Self {
+            commander: None,
+        }
+    }
+
+    pub fn parse(bytes: Vec<u8>, config: &Config) -> Result<Self, ZipperError> {
+        let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION).unwrap());
+        Self::import(&mut unzipper, config)
+    }
+
+    pub fn pack(&self, config: &Config) -> Vec<u8> {
+        let mut zipper = Zipper::new();
+        self.export(&mut zipper, config);
+        zipper.finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Zippable)]
+#[zippable(support_ref = Config)]
+pub struct PlayerSettings {
+    commander: CommanderType,
+    funds: Funds,
+    income: Income,
+    team: Team,
+    owner_id: Owner,
+}
+
+impl PlayerSettings {
+    pub fn new(owner_id: u8, commander: CommanderType) -> Self {
+        Self {
+            commander,
+            income: 100.into(),
+            funds: 0.into(),
+            team: Team(owner_id),
+            owner_id: Owner(owner_id as i8),
         }
     }
 
     pub fn get_commander(&self) -> CommanderType {
         self.commander
     }
-
     pub fn set_commander(&mut self, commander: CommanderType) {
-        self.commander = commander;
+        self.commander = commander
+    }
+
+    pub fn get_owner_id(&self) -> i8 {
+        self.owner_id.0
+    }
+
+    pub fn get_team(&self) -> u8 {
+        self.team.0
     }
 
     pub fn get_income(&self) -> i32 {
         *self.income
-    }
-    pub fn set_income(&mut self, income: i32) {
-        self.income = income.into();
     }
 
     pub fn get_funds(&self) -> i32 {
@@ -195,6 +342,7 @@ impl PlayerSettings {
 mod tests {
     use std::sync::Arc;
 
+    use interfaces::GameSettingsInterface;
     use semver::Version;
     use zipper::{SupportedZippable, Unzipper, Zipper};
 
@@ -203,54 +351,67 @@ mod tests {
     use crate::game::fog::{FogMode, FogSetting};
     use crate::VERSION;
 
-    use super::{GameSettings, PlayerSettings, CommanderOptions};
+    use super::{GameConfig, GameSettings, PlayerOptions, PlayerSettings, PlayerConfig};
 
     #[test]
     fn export_commander_options() {
         let config = Config::test_config();
-        let options = CommanderOptions(vec![CommanderType::None]);
+        let options = PlayerOptions{
+            commanders: vec![CommanderType::None]
+        };
         let co = CommanderType::None;
         let mut zipper = Zipper::new();
-        options.export(&mut zipper, (&config, false));
+        options.export(&mut zipper, &config);
         co.export(&mut zipper, &config);
         zipper.write_u8(1, 1);
         let data = zipper.finish();
         println!("export_commander_options: {data:?}");
         let mut unzipper = Unzipper::new(data, Version::parse(VERSION).unwrap());
-        assert_eq!(Ok(options), CommanderOptions::import(&mut unzipper, (&config, false)));
+        assert_eq!(Ok(options), PlayerOptions::import(&mut unzipper, &config));
         assert_eq!(Ok(co), CommanderType::import(&mut unzipper, &config));
-        assert_eq!(1, unzipper.read_u8(1).unwrap())
+        assert_eq!(1, unzipper.read_u8(1).unwrap());
     }
 
     #[test]
-    fn export_settings() {
+    fn export_game_config() {
+        let config = Arc::new(Config::test_config());
+        let setting = GameConfig {
+            config: config.clone(),
+            fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
+            players: vec![
+                PlayerConfig::new(0, &config),
+                PlayerConfig {
+                    options: PlayerOptions {
+                        commanders: Vec::new(),
+                    },
+                    funds: 23.into(),
+                    income: (-198).into(),
+                    team: 1.into(),
+                    owner_id: 3.into(),
+                },
+            ],
+        };
+        let bytes = setting.export();
+        assert_eq!(Ok(setting), GameConfig::import(config, bytes));
+    }
+
+    #[test]
+    fn export_game_settings() {
         let config = Arc::new(Config::test_config());
         let setting = GameSettings {
             config: config.clone(),
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
             players: vec![
-                PlayerSettings::new(&config, 0),
-                PlayerSettings::new(&config, 3),
+                PlayerSettings::new(0, CommanderType::Celerity),
+                PlayerSettings::new(3, CommanderType::None),
             ],
         };
-        for started in [false, true] {
-            let mut zipper = Zipper::new();
-            setting.export(&mut zipper, started);
-            zipper.write_u8(8, 4);
-            let data = zipper.finish();
-            let setting = if started {
-                let mut setting = setting.clone();
-                for player in &mut setting.players {
-                    player.commander_options = CommanderOptions(Vec::new());
-                }
-                setting
-            } else {
-                setting.clone()
-            };
-            println!("{started}: {data:?}");
-            let mut unzipper = Unzipper::new(data, Version::parse(VERSION).unwrap());
-            assert_eq!(setting, GameSettings::import(&mut unzipper, config.clone(), started).unwrap());
-            assert_eq!(8, unzipper.read_u8(4).unwrap())
-        }
+        let mut zipper = Zipper::new();
+        setting.export(&mut zipper);
+        zipper.write_u8(8, 4);
+        let data = zipper.finish();
+        let mut unzipper = Unzipper::new(data, Version::parse(VERSION).unwrap());
+        assert_eq!(setting, GameSettings::import(&mut unzipper, config.clone()).unwrap());
+        assert_eq!(8, unzipper.read_u8(4).unwrap())
     }
 }

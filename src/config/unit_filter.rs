@@ -9,14 +9,14 @@ use crate::map::point::Point;
 use crate::terrain::TerrainType;
 use crate::units::attributes::ActionStatus;
 use crate::units::combat::AttackTypeKey;
-use crate::units::hero::{Hero, HeroInfluence, HeroType};
+use crate::units::hero::{HeroInfluence, HeroType};
 use crate::units::movement::{MovementType, TBallast};
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
 
 use super::movement_type_config::MovementPattern;
-use super::parse::{parse_inner_vec, parse_inner_vec_dyn, parse_tuple1, parse_tuple2, parse_tuple3, string_base, FromConfig};
+use super::parse::{parse_inner_vec, parse_inner_vec_dyn, parse_tuple1, parse_tuple3, string_base, FromConfig};
 use super::ConfigParseError;
 use super::config::Config;
 

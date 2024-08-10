@@ -44,7 +44,7 @@ mod tests {
         settings.fog_mode = FogMode::Constant(FogSetting::None);
         settings.players[0].set_funds(999999);
 
-        let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+        let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
         let environment: crate::config::environment::Environment = server.environment().clone();
         assert_eq!(Hero::aura_range(&*server, server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), None);
         let path = Path::new(Point::new(1, 1));
@@ -81,7 +81,7 @@ mod tests {
         let mut settings = settings.clone();
         settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-        let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+        let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
         let unchanged = server.clone();
         let environment: crate::config::environment::Environment = server.environment().clone();
         assert_eq!(Hero::aura_range(&*server, server.get_map().get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
@@ -131,7 +131,7 @@ mod tests {
 
         // test crystal obelisk behavior when hero is missing
         map.set_unit(Point::new(1, 1), None);
-        let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+        let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
         let crystal_damage = 100 - server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp();
         assert!(crystal_damage > 0);
         server.handle_command(Command::EndTurn, Box::new(|| 0.)).unwrap();
@@ -167,7 +167,7 @@ mod tests {
         let mut settings = settings.clone();
         settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-        let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+        let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
         let influence1 = Hero::hero_influence_at(&*server, Point::new(2, 1), 0);
         let influence2 = Hero::hero_influence_at(&*server, Point::new(4, 4), 0);
         assert_eq!(
@@ -220,7 +220,7 @@ mod tests {
         let mut settings = settings.clone();
         settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-        let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+        let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
         assert!(server.get_map().get_unit(Point::new(2, 1)).unwrap().get_hp() > 50);
         assert_eq!(server.get_map().get_unit(Point::new(4, 4)).unwrap().get_hp(), 50);
         // use power
@@ -255,7 +255,7 @@ mod tests {
         settings.fog_mode = FogMode::Constant(FogSetting::None);
         settings.players[0].set_funds(9999);
 
-        let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+        let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
         // use power
         let path = Path::new(Point::new(1, 1));
         let options = server.get_map().get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
@@ -290,7 +290,7 @@ mod tests {
         let mut settings = settings.clone();
         settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-        let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+        let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
         let unchanged = server.clone();
         // use power
         let path = Path::new(Point::new(1, 1));

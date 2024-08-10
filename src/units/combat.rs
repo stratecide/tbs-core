@@ -903,8 +903,6 @@ mod tests {
     use crate::config::config::Config;
     use crate::config::environment::Environment;
     use crate::game::commands::Command;
-    use crate::game::fog::FogMode;
-    use crate::game::settings::{GameSettings, PlayerSettings};
     use crate::map::direction::Direction4;
     use crate::map::map::Map;
     use crate::map::point::{Point, Position};
@@ -940,14 +938,8 @@ mod tests {
         map.set_unit(Point::new(1, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(2, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
         map.set_unit(Point::new(3, 1), Some(UnitType::Bazooka.instance(&environment).set_owner_id(0).build_with_defaults()));
-        let (mut game, _) = Game::new_server(map, &GameSettings {
-            config: environment.config.clone(),
-            fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
-            players: vec![
-                PlayerSettings::new(&environment.config, 0),
-                PlayerSettings::new(&environment.config, 1),
-            ],
-        }, Box::new(|| 0.));
+        let settings = map.settings().unwrap().build_default();
+        let (mut game, _) = Game::new_server(map, settings, Box::new(|| 0.));
         for x in 0..4 {
             game.handle_command(Command::UnitCommand(UnitCommand {
                 unload_index: None,
@@ -977,14 +969,8 @@ mod tests {
         map.set_unit(Point::new(2, 1), Some(UnitType::Destroyer.instance(&environment).set_owner_id(1).build_with_defaults()));
         //map.set_unit(Point::new(3, 1), Some(UnitType::Destroyer.instance(&environment).set_owner_id(1).build_with_defaults()));
         map.set_unit(Point::new(1, 2), Some(UnitType::WarShip.instance(&environment).set_owner_id(1).build_with_defaults()));
-        let (mut game, _) = Game::new_server(map, &GameSettings {
-            config: environment.config.clone(),
-            fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
-            players: vec![
-                PlayerSettings::new(&environment.config, 0),
-                PlayerSettings::new(&environment.config, 1),
-            ],
-        }, Box::new(|| 0.));
+        let settings = map.settings().unwrap().build_default();
+        let (mut game, _) = Game::new_server(map, settings, Box::new(|| 0.));
         let unchanged = game.clone();
 
         game.handle_command(Command::UnitCommand(UnitCommand {

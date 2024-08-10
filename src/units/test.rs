@@ -66,8 +66,8 @@ fn build_drone() {
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].set_funds(1000);
-    let (mut server, events) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
-    let mut client = Game::new_client(map, &settings, events.get(&Perspective::Team(0)).unwrap());
+    let (mut server, events) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
+    let mut client = Game::new_client(map, settings.build_default(), events.get(&Perspective::Team(0)).unwrap());
     let events = server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
@@ -104,7 +104,7 @@ fn repair_unit() {
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].set_funds(1000);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
@@ -129,7 +129,7 @@ fn end_game() {
     map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
     map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -152,7 +152,7 @@ fn defeat_player_of_3() {
     map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(2).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -181,7 +181,7 @@ fn on_death_lose_game() {
     map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -209,7 +209,7 @@ fn puffer_fish() {
     map.set_unit(Point::new(1, 1), Some(UnitType::PufferFish.instance(&map_env).build_with_defaults()));
     map.set_unit(Point::new(2, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
@@ -241,7 +241,7 @@ fn capture_pyramid() {
     map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
     map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -267,7 +267,7 @@ fn s_factory() {
     map.set_unit(Point::new(1, 3), Some(UnitType::Pyramid.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
     map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
     let environment = game.environment().clone();
     assert_eq!(*game.current_player().funds, game.current_player().get_income() * 2);
     assert_ne!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);

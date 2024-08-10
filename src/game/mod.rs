@@ -109,8 +109,8 @@ mod tests {
             let mut settings = settings.clone();
             settings.fog_mode = FogMode::Constant(fog_setting);
             let perspective = Perspective::Team(0);
-            let (server, events) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
-            let client = Game::new_client(map.clone(), &settings, events.get(&perspective).unwrap());
+            let (server, events) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
+            let client = Game::new_client(map.clone(), settings.build_default(), events.get(&perspective).unwrap());
             let data = server.export();
             println!("data: {data:?}");
             let imported_server = Game::import_server(data.clone(), &config, version.clone()).unwrap();

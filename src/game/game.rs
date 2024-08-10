@@ -44,8 +44,7 @@ pub struct Game<D: Direction> {
 }
 
 impl<D: Direction> Game<D> {
-    fn new(mut map: Map<D>, settings: &settings::GameSettings) -> Self {
-        let settings = settings.start();
+    fn new(mut map: Map<D>, settings: settings::GameSettings) -> Self {
         map.start_game(&Arc::new(settings));
         let settings = map.environment().settings.as_ref().unwrap();
         let fog_mode = settings.fog_mode.clone();
@@ -63,13 +62,13 @@ impl<D: Direction> Game<D> {
         }
     }
 
-    pub fn new_server<R: 'static + Fn() -> f32>(map: Map<D>, settings: &settings::GameSettings, random: R) -> (Box<Self>, EventsMap<D>) {
+    pub fn new_server<R: 'static + Fn() -> f32>(map: Map<D>, settings: settings::GameSettings, random: R) -> (Box<Self>, EventsMap<D>) {
         let mut this = Self::new(map, settings);
         let events = this.start_server(random);
         (Box::new(this), events)
     }
 
-    pub fn new_client(map: Map<D>, settings: &settings::GameSettings, events: &[events::Event<D>]) -> Box<Self> {
+    pub fn new_client(map: Map<D>, settings: settings::GameSettings, events: &[events::Event<D>]) -> Box<Self> {
         let mut this = Self::new(map, settings);
         for e in events {
             e.apply(&mut this);
@@ -303,7 +302,7 @@ impl<D: Direction> Game<D> {
 
     pub fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
         zipper.write_bool(D::is_hex());
-        self.environment.settings.as_ref().unwrap().export(zipper, true);
+        self.environment.settings.as_ref().unwrap().export(zipper);
         self.map.wrapping_logic().zip(zipper);
         for p in self.map.all_points() {
             self.export_field(zipper, p, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
@@ -410,7 +409,7 @@ fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: &Arc<Config>,
     let mut environment = Environment {
         config: config.clone(),
         map_size: MapSize::new(0, 0),
-        settings: Some(Arc::new(GameSettings::import(unzipper, config.clone(), true)?)),
+        settings: Some(Arc::new(GameSettings::import(unzipper, config.clone())?)),
     };
     let map = Map::<D>::import_from_unzipper(unzipper, &mut environment)?;
     let current_turn = unzipper.read_u32(32)?;

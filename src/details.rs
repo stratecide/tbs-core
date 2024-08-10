@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use interfaces::ClientPerspective;
 use zipper_derive::Zippable;
-use zipper::{bits_needed_for_max_value, Exportable, SupportedZippable, U};
+use zipper::{bits_needed_for_max_value, Exportable, SupportedZippable};
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;

@@ -3,9 +3,7 @@ use std::sync::Arc;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::game::commands::Command;
-use crate::game::fog::FogMode;
 use crate::game::game::Game;
-use crate::game::settings::{GameSettings, PlayerSettings};
 use crate::map::direction::*;
 use crate::map::map::Map;
 use crate::map::map_view::MapView;
@@ -32,14 +30,8 @@ fn capture_city() {
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build_with_defaults());
     map.set_unit(Point::new(0, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
     map.set_unit(Point::new(3, 3), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
-    let (mut game, _) = Game::new_server(map, &GameSettings {
-        config: environment.config.clone(),
-        fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
-        players: vec![
-            PlayerSettings::new(&environment.config, 0),
-            PlayerSettings::new(&environment.config, 1),
-        ],
-    }, Box::new(|| 0.));
+    let settings = map.settings().unwrap().build_default();
+    let (mut game, _) = Game::new_server(map, settings, Box::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(0, 0), vec![
@@ -66,16 +58,9 @@ fn build_unit() {
     map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build_with_defaults());
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build_with_defaults());
     map.set_unit(Point::new(3, 3), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
-    let mut player_setting = PlayerSettings::new(&environment.config, 0);
-    player_setting.set_income(1000);
-    let (mut game, _) = Game::new_server(map, &GameSettings {
-        config: environment.config.clone(),
-        fog_mode: FogMode::Constant(crate::game::fog::FogSetting::None),
-        players: vec![
-            player_setting,
-            PlayerSettings::new(&environment.config, 1),
-        ],
-    }, Box::new(|| 0.));
+    let mut settings = map.settings().unwrap();
+    settings.players[0].set_income(1000);
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
     assert_eq!(1000, *game.current_player().funds);
     game.handle_command(Command::BuyUnit(Point::new(0, 0), UnitType::Marine, Direction4::D0), Box::new(|| 0.)).unwrap();
     assert!(*game.current_player().funds < 1000);
@@ -104,7 +89,7 @@ fn kraken() {
     map.set_unit(Point::new(1, 2), Some(UnitType::WarShip.instance(&map_env).set_owner_id(0).build_with_defaults()));
     map.set_unit(Point::new(3, 2), Some(UnitType::WarShip.instance(&map_env).set_owner_id(0).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
     let environment = game.environment();
     assert_eq!(game.get_unit(Point::new(0, 0)), Some(&UnitType::Tentacle.instance(&environment).build_with_defaults()));
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_anger(), 7);

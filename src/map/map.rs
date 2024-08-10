@@ -11,11 +11,9 @@ use zipper_derive::Zippable;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::game::game_view::GameView;
-use crate::game::settings::{self, GameSettings};
+use crate::game::settings::{self, GameConfig, GameSettings, PlayerConfig, PlayerSelectedOptions, PlayerSettingError};
 use crate::game::game::*;
 use crate::game::fog::*;
-use crate::game::events::Event;
-use crate::game::settings::PlayerSettings;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
@@ -377,15 +375,15 @@ impl<D: Direction> Map<D> {
         }
     }
 
-    pub fn settings(&self) -> Result<GameSettings, NotPlayable> {
+    pub fn settings(&self) -> Result<GameConfig, NotPlayable> {
         let owners = self.get_viable_player_ids();
         if owners.len() < 2 {
             return Err(NotPlayable::TooFewPlayers);
         }
-        let players:Vec<PlayerSettings> = owners.into_iter()
-            .map(|owner| PlayerSettings::new(&self.environment.config, owner))
+        let players:Vec<PlayerConfig> = owners.into_iter()
+            .map(|owner| PlayerConfig::new(owner, &self.environment.config))
             .collect();
-        Ok(settings::GameSettings {
+        Ok(settings::GameConfig {
             config: self.environment.config.clone(),
             fog_mode: FogMode::Constant(FogSetting::Light(0)),
             players: players.try_into().unwrap(),
@@ -517,12 +515,25 @@ impl<D: Direction> MapInterface for Map<D> {
         }
     }
 
-    fn parse_settings(self: Box<Self>, bytes: Vec<u8>) -> Result<Box<dyn GameCreationInterface>, Box<dyn Error>> {
-        let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION).unwrap());
-        let settings = GameSettings::import(&mut unzipper, self.environment.config.clone(), false)?;
+    fn parse_settings(&self, bytes: Vec<u8>) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
+        let settings = GameConfig::import(self.environment.config.clone(), bytes)?;
+        Ok(Box::new(settings))
+    }
+
+    fn game_creator(self: Box<Self>, settings: Vec<u8>, player_settings: Vec<Vec<u8>>) -> Result<Box<dyn GameCreationInterface>, Box<dyn Error>> {
+        let settings = GameConfig::import(self.environment.config.clone(), settings)?;
+        if player_settings.len() != settings.players.len() {
+            return Err(Box::new(PlayerSettingError::PlayerCount(settings.players.len(), player_settings.len())));
+        }
+        let mut player_selection = Vec::with_capacity(player_settings.len());
+        for bytes in player_settings {
+            let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION).unwrap());
+            player_selection.push(PlayerSelectedOptions::import(&mut unzipper, &settings.config)?);
+        }
         Ok(Box::new(GameCreation {
             map: *self,
             settings,
+            player_selection,
         }))
     }
 }
@@ -544,28 +555,22 @@ impl Error for NotPlayable {}
 
 pub struct GameCreation<D: Direction> {
     pub map: Map<D>,
-    pub settings: settings::GameSettings,
+    pub settings: settings::GameConfig,
+    pub player_selection: Vec<settings::PlayerSelectedOptions>,
 }
 
 impl<D: Direction> GameCreationInterface for GameCreation<D> {
-    fn get_settings(&self) -> Box<dyn GameSettingsInterface> {
-        Box::new(self.settings.clone())
-    }
-
     fn server(self, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Events) {
-        let (server, events) = Game::new_server(self.map, &self.settings, random);
+        let settings = self.settings.build(&self.player_selection, &random);
+        let (server, events) = Game::new_server(self.map, settings, random);
         let events = events.export(server.environment());
         (server, events)
     }
 
-    fn client(self, events: Vec<u8>) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
-        let events = Event::import_list(events, self.map.environment(), Version::parse(VERSION).unwrap())?;
-        Ok(Game::new_client(self.map, &self.settings, &events))
-    }
-
     fn server_and_client(self, client_perspective: ClientPerspective, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
-        let (server, events) = Game::new_server(self.map.clone(), &self.settings, random);
-        let client = Game::new_client(self.map, &self.settings, events.get(&client_perspective.into()).unwrap_or(&[]));
+        let settings = self.settings.build(&self.player_selection, &random);
+        let (server, events) = Game::new_server(self.map.clone(), settings.clone(), random);
+        let client = Game::new_client(self.map, settings, events.get(&client_perspective.into()).unwrap_or(&[]));
         let events = events.export(server.environment());
         (server, client, events)
     }

@@ -58,8 +58,9 @@ fn zombie() {
         assert!(player.get_commander_options().contains(&CommanderType::Zombie));
     }
     settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = settings.build_default();
     settings.players[0].set_commander(CommanderType::Zombie);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), settings, Box::new(|| 0.));
     server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
     let environment = server.environment().clone();
@@ -113,8 +114,9 @@ fn simo() {
         assert!(player.get_commander_options().contains(&CommanderType::Simo));
     }
     settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = settings.build_default();
     settings.players[0].set_commander(CommanderType::Simo);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), settings, Box::new(|| 0.));
     server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
 
@@ -221,8 +223,9 @@ fn vlad() {
         assert!(player.get_commander_options().contains(&CommanderType::Vlad));
     }
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    settings.players[0].set_commander(CommanderType::Vlad);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let mut sett = settings.build_default();
+    sett.players[0].set_commander(CommanderType::Vlad);
+    let (mut server, _) = Game::new_server(map.clone(), sett, Box::new(|| 0.));
 
     // d2d daylight
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -234,7 +237,9 @@ fn vlad() {
 
     // d2d night
     settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let mut settings = settings.build_default();
+    settings.players[0].set_commander(CommanderType::Vlad);
+    let (mut server, _) = Game::new_server(map.clone(), settings, Box::new(|| 0.));
     server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -290,8 +295,9 @@ fn tapio() {
         assert!(player.get_commander_options().contains(&CommanderType::Tapio));
     }
     settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
+    let mut settings = settings.build_default();
     settings.players[0].set_commander(CommanderType::Tapio);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), settings, Box::new(|| 0.));
     server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
 
@@ -370,8 +376,9 @@ fn sludge_monster() {
         assert!(player.get_commander_options().contains(&CommanderType::SludgeMonster));
     }
     settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = settings.build_default();
     settings.players[0].set_commander(CommanderType::SludgeMonster);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), settings, Box::new(|| 0.));
     server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
 
@@ -482,7 +489,7 @@ fn celerity() {
     settings.players[0].set_funds(funds);
 
     // get some default values without using Celerity
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 2)),
@@ -493,8 +500,9 @@ fn celerity() {
     let default_cost = funds - *server.current_player().funds;
     assert!(!server.get_unit(Point::new(0, 4)).unwrap().has_attribute(AttributeKey::Level));
 
+    let mut settings = settings.build_default();
     settings.players[0].set_commander(CommanderType::Celerity);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, Box::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), settings, Box::new(|| 0.));
     let environment = server.environment().clone();
     server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();

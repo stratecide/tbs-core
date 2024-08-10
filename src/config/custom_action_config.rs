@@ -6,7 +6,7 @@ use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::custom_action::{CustomAction, CustomActionTestResult};
-use crate::units::hero::{Hero, HeroInfluence};
+use crate::units::hero::HeroInfluence;
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
 
