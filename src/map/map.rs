@@ -560,14 +560,14 @@ pub struct GameCreation<D: Direction> {
 }
 
 impl<D: Direction> GameCreationInterface for GameCreation<D> {
-    fn server(self, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Events) {
+    fn server(self: Box<Self>, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Events) {
         let settings = self.settings.build(&self.player_selection, &random);
         let (server, events) = Game::new_server(self.map, settings, random);
         let events = events.export(server.environment());
         (server, events)
     }
 
-    fn server_and_client(self, client_perspective: ClientPerspective, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
+    fn server_and_client(self: Box<Self>, client_perspective: ClientPerspective, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
         let settings = self.settings.build(&self.player_selection, &random);
         let (server, events) = Game::new_server(self.map.clone(), settings.clone(), random);
         let client = Game::new_client(self.map, settings, events.get(&client_perspective.into()).unwrap_or(&[]));
