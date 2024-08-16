@@ -586,12 +586,25 @@ impl<D: Direction> EventsMap<D> {
             Self::Secrets(map) => {
                 Events::Secrets(map.iter().map(|(perspective, events)| {
                     (
-                        perspective.clone(),
+                        Events::perspective_to_i16(perspective),
                         Event::export_list(&events, environment),
                     )
                 }).collect())
             }
             Self::Public(events) => Events::Public(Event::export_list(&events, environment))
         }
+    }
+    pub fn import(environment: &Environment, raw: Events) -> Result<Self, ZipperError> {
+        let version = Version::parse(VERSION).unwrap();
+        Ok(match raw {
+            Events::Secrets(map) => {
+                let mut result = HashMap::new();
+                for (perspective, events) in map {
+                    result.insert(Events::i16_to_perspective(perspective), Event::import_list(events, environment, version.clone())?);
+                }
+                Self::Secrets(result)
+            }
+            Events::Public(events) => Self::Public(Event::import_list(events, environment, version)?)
+        })
     }
 }
