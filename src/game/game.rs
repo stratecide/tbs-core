@@ -584,11 +584,13 @@ impl<D: Direction> EventsMap<D> {
     pub fn export(&self, environment: &Environment) -> Events {
         match self {
             Self::Secrets(map) => {
-                Events::Secrets(map.iter().map(|(perspective, events)| {
-                    (
-                        Events::perspective_to_i16(perspective),
-                        Event::export_list(&events, environment),
-                    )
+                Events::Secrets(map.iter()
+                    .filter(|(_, events)| events.len() > 0)
+                    .map(|(perspective, events)| {
+                        (
+                            Events::perspective_to_i16(perspective),
+                            Event::export_list(&events, environment),
+                        )
                 }).collect())
             }
             Self::Public(events) => Events::Public(Event::export_list(&events, environment))
