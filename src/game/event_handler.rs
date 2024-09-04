@@ -791,7 +791,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn unit_heal(&mut self, position: Point, heal: u8) {
-        let hp = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position)).get_hp();
+        let unit = self.get_map().get_unit(position).expect(&format!("Missing unit at {:?}", position));
+        if !unit.has_attribute(AttributeKey::Hp) {
+            return;
+        }
+        let hp = unit.get_hp();
         self.effect_heal(position);
         self.add_event(Event::UnitHpChange(position, (heal.min(100 - hp) as i32).into(), (heal.min(100) as i32).into()));
     }
