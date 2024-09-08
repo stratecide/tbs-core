@@ -51,6 +51,8 @@ fn zombie() {
     let skull2 = SkullData::new(&UnitType::Marine.instance(&map_env).set_owner_id(1).set_amphibious(Amphibious::OnLand).build_with_defaults(), 0);
     map.set_details(Point::new(1, 4), vec![Detail::Skull(skull2.clone())]);
 
+    map.set_terrain(Point::new(3, 1), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
+
     let settings = map.settings().unwrap();
 
     let mut settings = settings.clone();
@@ -88,6 +90,16 @@ fn zombie() {
     }), Box::new(|| 0.)).unwrap();
     assert_eq!(server.get_map().get_details(Point::new(2, 1)), Vec::new());
     assert_eq!(server.get_map().get_unit(Point::new(2, 1)), Some(&UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).build_with_defaults()));
+    // buy unit
+    let mut server = unchanged.clone();
+    server.players.get_mut(0).unwrap().funds = 1000.into();
+    server.handle_command(Command::BuyUnit(Point::new(3, 1), UnitType::Marine, Direction6::D0), Box::new(|| 0.)).unwrap();
+    assert!(server.get_unit(Point::new(3, 1)).is_some());
+    for p in server.get_map().all_points() {
+        if let Some(unit) = server.get_unit(p) {
+            assert!(!unit.get_zombified());
+        }
+    }
 }
 
 #[test]
