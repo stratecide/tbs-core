@@ -87,7 +87,7 @@ impl<D: Direction> Unit<D> {
     }
 
     // getters that aren't influenced by attributes
-    pub(crate) fn environment(&self) -> &Environment {
+    pub fn environment(&self) -> &Environment {
         &self.environment
     }
 
