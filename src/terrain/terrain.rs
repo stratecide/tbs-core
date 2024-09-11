@@ -62,6 +62,9 @@ impl Terrain {
     }
 
     // getters that aren't influenced by attributes
+    pub fn environment(&self) -> &Environment {
+        &self.environment
+    }
 
     pub fn typ(&self) -> TerrainType {
         self.typ

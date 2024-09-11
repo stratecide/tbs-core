@@ -486,6 +486,15 @@ impl Config {
         .unwrap_or(Rational32::from_integer(0))
     }
 
+    pub fn terrain_vision_range_base(&self, typ: TerrainType) -> Option<usize> {
+        let range = self.terrain_config(typ).vision_range;
+        if range < 0 {
+            None
+        } else {
+            Some(range as usize)
+        }
+    }
+
     pub fn terrain_vision_range<D: Direction>(
         &self,
         map: &impl GameView<D>,
