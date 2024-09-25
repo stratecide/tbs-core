@@ -1,30 +1,30 @@
-Id;Name;NeedsOwner;CaptureResistance;UpdateAmphibious;MaxBuildsPerTurn;MaxAnger;VisionRange;IncomeFactor;Repair;Build;SellsHero;Chess;MovementOptions;BuildOverrides
-Airport;Airport;;10;Land;4;;0;;true;true;;;;
-Beach;Beach;;;Beach;;;;;;;;;;
-Bridge;Bridge;;;;;;;;;;;;;
-ChessPawnTile;Special Checkerboard;;;Land;;;;;;;;true;;
-ChessTile;Checkerboard;;;Land;;;;;;;;true;;
-City;City;;10;Land;;;0;1;true;;;;;
-ConstructionSite;Construction Site;;10;Land;4;;0;;true;true;;;;
-Factory;Factory;;10;Land;4;;0;;true;true;;;;
-Flame;Flame;;;;;;2;;;;;;;
-Forest;Forest;;;Land;;;;;;;;;;
-Fountain;Fountain;;;Sea;;;;;;;;;Jump;
-Grass;Grass;;;Land;;;;;;;;;;
-Hill;Hill;;;Land;;;;;;;;;;
-Hq;Headquarters;;10;Beach;;;0;;true;;;;;
-Icebergs;Icebergs;;;Sea;;;;;;;;;;
-Kraken;Kraken;;;Sea;;8;;;;;;;;
-Lillypads;Lillypads;;;;;;;;;;;;;
-Mountain;Mountain;;;Land;;;;;;;;;;
-OilPlatform;Oil Rig;;10;Beach;;;0;1;true;;;;;
-Reef;Reef;;;Sea;;;;;;;;;;
-Ruins;Ruins;;;Land;;;;;;;;;;
-Sea;Sea;;;Sea;;;;;;;;;;
-ShallowSea;Shallows;;;Sea;;;;;;;;;;
-Street;Street;;;Land;;;;;;;;;;
-StatueLand;Statue of Mars;;;Land;;;;;;;true;;;
-TentacleDepths;Tentacle Depths;;;Sea;;;;;;;;;;
-Port;Port;;10;Beach;4;;0;;true;true;;;;InWater
-StatueSea;Statue of Poseidon;;;Sea;;;;;;;true;;;
-FairyForest;Fairy Forest;;;Land;;;;;;;;;;
+Id;Name;NeedsOwner;CaptureResistance;UpdateAmphibious;MaxBuildsPerTurn;MaxAnger;VisionRange;IncomeFactor;Repair;Build;SellsHero;Chess;MovementOptions;BuildOverrides;Preview
+Airport;Airport;;10;Land;4;;0;;true;true;;;;;Fill(owner), CornerBottomRight(#000)
+Beach;Beach;;;Beach;;;;;;;;;;;Fill(#bdb871)
+Bridge;Bridge;;;;;;;;;;;;;;Fill(#7f7f7f)
+ChessPawnTile;Special Checkerboard;;;Land;;;;;;;;true;;;Fill(#756b6a), Dither(#cac8bd)
+ChessTile;Checkerboard;;;Land;;;;;;;;true;;;Fill(#756b6a), Dither(#cac8bd)
+City;City;;10;Land;;;0;1;true;;;;;;Fill(owner), CornerBottomRight(#000)
+ConstructionSite;Construction Site;;10;Land;4;;0;;true;true;;;;;Fill(owner), CornerBottomRight(#000)
+Factory;Factory;;10;Land;4;;0;;true;true;;;;;Fill(owner), CornerBottomRight(#000)
+Flame;Flame;;;;;;2;;;;;;;;Fill(#81c486), Circle(#fdd251)
+Forest;Forest;;;Land;;;;;;;;;;;Fill(#81c486), Circle(#476d2e)
+Fountain;Fountain;;;Sea;;;;;;;;;Jump;;Fill(#49619b), Center(#5383f6)
+Grass;Grass;;;Land;;;;;;;;;;;Fill(#81c486)
+Hill;Hill;;;Land;;;;;;;;;;;Fill(#81c486), Hill(#797524)
+Hq;Headquarters;;10;Beach;;;0;;true;;;;;;Fill(owner), CornerBottomRight(#000)
+Icebergs;Icebergs;;;Sea;;;;;;;;;;;Fill(#49619b), Dither(#e0f2f5)
+Kraken;Kraken;;;Sea;;8;;;;;;;;;Fill(#5383f6), Dither(#49619b)
+Lillypads;Lillypads;;;;;;;;;;;;;;Fill(#5383f6), Dither(#6bc321)
+Mountain;Mountain;;;Land;;;;;;;;;;;Fill(#81c486), Hill(#797524), HillLeft(#cece39)
+OilPlatform;Oil Rig;;10;Beach;;;0;1;true;;;;;;Fill(owner), CornerBottomRight(#000)
+Reef;Reef;;;Sea;;;;;;;;;;;Fill(#49619b), Dither(#727959)
+Ruins;Ruins;;;Land;;;;;;;;;;;Fill(owner), CornerBottomRight(#777)
+Sea;Sea;;;Sea;;;;;;;;;;;Fill(#49619b)
+ShallowSea;Shallows;;;Sea;;;;;;;;;;;Fill(#5383f6)
+Street;Street;;;Land;;;;;;;;;;;Fill(#7f7f7f)
+StatueLand;Statue of Mars;;;Land;;;;;;;true;;;;Fill(#81c486), Center(#595652)
+TentacleDepths;Tentacle Depths;;;Sea;;;;;;;;;;;Fill(#5383f6), Center(#49619b)
+Port;Port;;10;Beach;4;;0;;true;true;;;;InWater;Fill(owner), CornerBottomRight(#000)
+StatueSea;Statue of Poseidon;;;Sea;;;;;;;true;;;;Fill(#5383f6), Center(#595652)
+FairyForest;Fairy Forest;;;Land;;;;;;;;;;;Fill(#81c486), Circle(#476d2e), Center(owner)

@@ -31,6 +31,7 @@ use super::unit_filter::*;
 use super::unit_type_config::*;
 use super::config::Config;
 
+const RULESET_CONFIG: &'static str = "ruleset.csv";
 const UNIT_CONFIG: &'static str = "units.csv";
 const UNIT_ATTRIBUTES: &'static str = "unit_attributes.csv";
 const UNIT_TRANSPORT: &'static str = "unit_transport.csv";
@@ -59,6 +60,7 @@ impl Config {
     ) -> Result<Self, Box<dyn Error>> {
         let mut result = Self {
             name,
+            owner_colors: Vec::new(),
             // units
             unit_types: Vec::new(),
             units: HashMap::new(),
@@ -102,6 +104,36 @@ impl Config {
             commander_unit_attributes: HashMap::new(),
             max_commander_charge: 0,
         };
+
+        // ruleset.csv
+        let mut neutral_color = None;
+        let data = load_config(RULESET_CONFIG)?;
+        let mut reader = csv::ReaderBuilder::new().delimiter(b';').has_headers(false).from_reader(data.as_bytes());
+        for line in reader.records() {
+            let line = line?;
+            let mut line = line.iter();
+            match line.next().unwrap().trim() {
+                "NeutralColor" => {
+                    if let Some(color) = line.next() {
+                        neutral_color = Some(<[u8; 4]>::from_conf(color.trim())?.0);
+                    }
+                }
+                "PlayerColors" => {
+                    if let Some(colors) = line.next() {
+                        // owner_colors.len is checked below, so needs_content can be false here
+                        result.owner_colors = parse_inner_vec(colors, false)?.0;
+                    }
+                }
+                _ => ()
+            }
+        }
+        if result.owner_colors.len() < 2 {
+            return Err(Box::new(ConfigParseError::NotEnoughPlayerColors));
+        }
+        match neutral_color {
+            Some(color) => result.owner_colors.insert(0, color),
+            None => return Err(Box::new(ConfigParseError::MissingNeutralColor)),
+        }
 
         // simple unit data
         let data = load_config(UNIT_CONFIG)?;
@@ -1037,6 +1069,62 @@ pub fn parse_vec_dyn_def<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: 
     _parse_vec_dyn(data, key, Some(def), from_conf)
 }
 
+#[cfg(feature = "rendering")]
+impl FromConfig for (interfaces::PreviewShape, Option<[u8; 4]>) {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let (shape, s) = string_base(s);
+        let shape = match shape.parse() {
+            Ok(shape) => shape,
+            _ => return Err(ConfigParseError::UnknownEnumMember(shape.to_string()))
+        };
+        let (color, s) = parse_tuple1::<String>(s)?;
+        let color = if color.trim().to_lowercase().as_str() != "owner" {
+            Some(<[u8; 4]>::from_conf(&color)?.0)
+        } else {
+            None
+        };
+        Ok(((shape, color), s))
+    }
+}
+
+impl FromConfig for [u8; 4] {
+    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+        let mut i = 0;
+        if s.starts_with('#') {
+            i += 1;
+        }
+        let len = s[i..].find(|c| !"0123456789abcdefABCDEF".contains(c))
+            .unwrap_or(s.len() - i);
+        println!("len is {len}");
+        if len == 6 || len == 8 {
+            let alpha = if len == 6 {
+                255
+            } else {
+                u8::from_str_radix(&s[i + 6 .. i + 8], 16).unwrap()
+            };
+            Ok(([
+                u8::from_str_radix(&s[i .. i + 2], 16).unwrap(),
+                u8::from_str_radix(&s[i + 2 .. i + 4], 16).unwrap(),
+                u8::from_str_radix(&s[i + 4 .. i + 6], 16).unwrap(),
+                alpha,
+            ], &s[i + len..]))
+        } else if len == 3 || len == 4 {
+            let alpha = if len == 3 {
+                255
+            } else {
+                17 * u8::from_str_radix(&s[i + 3 .. i + 4], 16).unwrap()
+            };
+            Ok(([
+                17 * u8::from_str_radix(&s[i .. i + 1], 16).unwrap(),
+                17 * u8::from_str_radix(&s[i + 1 .. i + 2], 16).unwrap(),
+                17 * u8::from_str_radix(&s[i + 2 .. i + 3], 16).unwrap(),
+                alpha,
+            ], &s[i + len..]))
+        } else {
+            Err(ConfigParseError::InvalidColor(s.to_string()))
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

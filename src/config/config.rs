@@ -55,6 +55,7 @@ const DEFAULT_SPLASH: [Rational32; 1] = [Rational32::new_raw(1, 1)];
 
 pub struct Config {
     pub(super) name: String,
+    pub(super) owner_colors: Vec<[u8; 4]>,
     // units
     pub(super) unit_types: Vec<UnitType>,
     pub(super) units: HashMap<UnitType, UnitTypeConfig>,
@@ -594,6 +595,16 @@ impl Config {
             result.extend(config.on_build.iter().cloned())
         }
         result
+    }
+
+    #[cfg(feature = "rendering")]
+    pub fn terrain_preview(&self, typ: TerrainType, owner: i8) -> Vec<(interfaces::PreviewShape, [u8; 4])> {
+        self.terrain_config(typ).preview.iter()
+        .map(|(shape, color)| {
+            let color = color.clone()
+                .unwrap_or(self.owner_colors[(owner + 1) as usize]);
+            (*shape, color)
+        }).collect()
     }
 
     // commanders

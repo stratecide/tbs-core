@@ -52,6 +52,9 @@ pub enum ConfigParseError {
     UnknownEnumMember(String),
     TableAxesShouldDiffer(String),
     TableEmpty,
+    NotEnoughPlayerColors,
+    MissingNeutralColor,
+    InvalidColor(String),
     Other(String),
 }
 

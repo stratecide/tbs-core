@@ -24,6 +24,8 @@ pub struct TerrainTypeConfig {
     pub(super) can_sell_hero: bool,
     pub(super) extra_movement_options: ExtraMovementOptions,
     pub(super) build_overrides: HashSet<AttributeOverride>,
+    #[cfg(feature = "rendering")]
+    pub(super) preview: Vec<(interfaces::PreviewShape, Option<[u8; 4]>)>,
 }
 
 impl TerrainTypeConfig {
@@ -52,6 +54,8 @@ impl TerrainTypeConfig {
             chess: parse_def(data, H::Chess, false)?,
             extra_movement_options: parse_def(data, H::MovementOptions, ExtraMovementOptions::None)?,
             build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new())?.into_iter().collect(),
+            #[cfg(feature = "rendering")]
+            preview: parse_vec_def(data, H::Preview, Vec::new())?,
         };
         result.simple_validation()?;
         Ok(result)
@@ -64,6 +68,10 @@ impl TerrainTypeConfig {
         // TODO: error if build_overrides overrides its own values
         if self.max_builds_per_turn == 0 && self.can_build {
             // TODO: could remove can_build column
+        }
+        #[cfg(feature = "rendering")]
+        if self.preview.len() == 0 {
+            // TODO
         }
         Ok(())
     }
@@ -87,5 +95,6 @@ crate::listable_enum! {
         Chess,
         MovementOptions,
         BuildOverrides,
+        Preview,
     }
 }
