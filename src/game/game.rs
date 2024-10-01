@@ -588,7 +588,7 @@ impl<D: Direction> EventsMap<D> {
                     .filter(|(_, events)| events.len() > 0)
                     .map(|(perspective, events)| {
                         (
-                            Events::perspective_to_i16(perspective),
+                            perspective.to_i16(),
                             Event::export_list(&events, environment),
                         )
                 }).collect())
@@ -602,7 +602,7 @@ impl<D: Direction> EventsMap<D> {
             Events::Secrets(map) => {
                 let mut result = HashMap::new();
                 for (perspective, events) in map {
-                    result.insert(Events::i16_to_perspective(perspective), Event::import_list(events, environment, version.clone())?);
+                    result.insert(interfaces::Perspective::from_i16(perspective).unwrap_or(interfaces::Perspective::Server), Event::import_list(events, environment, version.clone())?);
                 }
                 Self::Secrets(result)
             }
