@@ -5,6 +5,7 @@ use zipper::*;
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;
+use crate::config::file_loader::FileLoader;
 use crate::config::parse::{parse_tuple1, string_base, FromConfig};
 use crate::map::direction::{Direction, Direction4, Direction6};
 use crate::map::point::Point;
@@ -258,14 +259,14 @@ pub enum AttributeOverride {
 }
 
 impl FromConfig for AttributeOverride {
-    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut s) = string_base(s);
         Ok((match base {
             "InWater" => Self::InWater,
             "OnLand" => Self::OnLand,
             "Zombified" => Self::Zombified,
             "Hp" => {
-                let (hp, r) = parse_tuple1::<u8>(s)?;
+                let (hp, r) = parse_tuple1::<u8>(s, loader)?;
                 if hp == 0 || hp > 100 {
                     return Err(ConfigParseError::InvalidInteger(hp.to_string()));
                 }

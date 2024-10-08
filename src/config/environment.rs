@@ -1,9 +1,13 @@
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::Mutex;
 use interfaces::ClientPerspective;
+use rhai::*;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::commander::commander_type::CommanderType;
 use crate::map::point_map::MapSize;
+use crate::script::create_base_engine;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::*;
 use crate::terrain::TerrainType;
@@ -13,15 +17,37 @@ use crate::units::hero::*;
 use crate::game::settings::GameSettings;
 
 use super::config::Config;
+use super::table_config::TableAxisKey;
+use super::table_config::TableValue;
 
 #[derive(Clone)]
 pub struct Environment {
     pub map_size: MapSize,
     pub config: Arc<Config>,
     pub settings: Option<Arc<GameSettings>>,
+    // cache compilation
+    compiled_asts: Arc<Mutex<HashMap<usize, Shared<AST>>>>,
 }
 
 impl Environment {
+    pub fn new_map(config: Arc<Config>, map_size: MapSize) -> Self {
+        Self {
+            config,
+            map_size,
+            settings: None,
+            compiled_asts: Arc::default(),
+        }
+    }
+
+    pub fn new_game(config: Arc<Config>, map_size: MapSize, settings: GameSettings) -> Self {
+        Self {
+            config,
+            map_size,
+            settings: Some(Arc::new(settings)),
+            compiled_asts: Arc::default(),
+        }
+    }
+
     pub fn start_game(&mut self, settings: &Arc<GameSettings>) {
         if self.settings.is_some() {
             panic!("Attempted to start an already started game!")
@@ -37,6 +63,38 @@ impl Environment {
     pub fn sludge_damage(&self) -> u16 {
         // TODO
         10
+    }
+
+    pub fn get_engine(&self) -> Engine {
+        let mut engine = create_base_engine();
+        engine.register_global_module(self.config.global_module.clone());
+        engine
+    }
+
+    pub fn rhai_function_name(&self, engine: &Engine, index: usize) -> (Shared<AST>, &String) {
+        let (ast_index, name) = &self.config.functions[index];
+        let mut asts = self.compiled_asts.lock().unwrap();
+        let ast = if let Some(ast) = asts.get(ast_index) {
+            ast.clone()
+        } else {
+            let ast = self.config.asts[*ast_index].clone();
+            let ast = Shared::new(engine.optimize_ast(&self.config.global_constants, ast, OptimizationLevel::Simple));
+            asts.insert(*ast_index, ast.clone());
+            ast
+        };
+        (ast, name)
+    }
+
+    pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
+        for (key, (default_value, map)) in &self.config.custom_tables {
+            if key.as_str() == name {
+                let value = map.get(&(x, y))
+                    .unwrap_or(default_value)
+                    .clone();
+                return Some(value);
+            }
+        }
+        None
     }
 
     pub fn get_team(&self, owner_id: i8) -> ClientPerspective {

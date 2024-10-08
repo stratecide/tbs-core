@@ -6,7 +6,6 @@ use crate::config::ConfigParseError;
 use crate::details::{Detail, SludgeToken};
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
-use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::units::attributes::AttributeKey;
 
@@ -150,7 +149,7 @@ pub(super) fn resurrect_zombie<D: Direction>(handler: &mut EventHandler<D>, p: P
         match detail {
             Detail::Skull(skull) => {
                 if skull.get_owner_id() == owner_id {
-                    let unit = skull.unit(handler.environment(), hp);
+                    let unit = skull.unit(&handler.environment(), hp);
                     handler.detail_remove(p, index.into());
                     handler.unit_creation(p, unit);
                 }

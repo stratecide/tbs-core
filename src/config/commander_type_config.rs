@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::error::Error;
+
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
 
+use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
 
 /**
@@ -16,29 +19,29 @@ pub struct CommanderTypeConfig {
     pub(super) max_charge: u32,
 }
 
-impl CommanderTypeConfig {
-    pub fn parse(data: &HashMap<CommanderTypeConfigHeader, &str>) -> Result<Self, ConfigParseError> {
+impl TableLine for CommanderTypeConfig {
+    type Header = CommanderTypeConfigHeader;
+    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
         use CommanderTypeConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: parse(data, H::Id)?,
+            id: parse(data, H::Id, loader)?,
             name: get(H::Name)?.to_string(),
-            transport_capacity: parse_def(data, H::TransportCapacity, 0)?,
-            max_charge: parse(data, H::Charge)?,
+            transport_capacity: parse_def(data, H::TransportCapacity, 0, loader)?,
+            max_charge: parse(data, H::Charge, loader)?,
         };
-        result.simple_validation()?;
         Ok(result)
     }
 
-    pub fn simple_validation(&self) -> Result<(), ConfigParseError> {
+    fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
         if self.name.trim().len() == 0 {
-            return Err(ConfigParseError::NameTooShort);
+            return Err(Box::new(ConfigParseError::NameTooShort));
         }
         if self.max_charge > i32::MAX as u32 {
-            return Err(ConfigParseError::CommanderMaxChargeExceeded(i32::MAX as u32));
+            return Err(Box::new(ConfigParseError::CommanderMaxChargeExceeded(i32::MAX as u32)));
         }
         Ok(())
     }

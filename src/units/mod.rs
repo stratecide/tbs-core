@@ -5,6 +5,7 @@ pub mod attributes;
 pub mod hero;
 pub mod unit_types;
 pub mod unit;
+pub mod rhai_unit;
 #[cfg(test)]
 mod test;
 

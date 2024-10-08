@@ -1,15 +1,17 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::error::Error;
 
 use crate::config::parse::*;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
-use crate::script::custom_action::{CustomAction, CustomActionTestResult};
+use crate::script::custom_action::CustomAction;
+use crate::script::executor::Executor;
 use crate::units::hero::HeroInfluence;
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
 
+use super::file_loader::{FileLoader, TableLine};
 use super::unit_filter::UnitFilter;
 use super::ConfigParseError;
 
@@ -20,35 +22,50 @@ pub struct CustomActionConfig {
     pub(crate) script: CustomAction,
 }
 
-impl CustomActionConfig {
-    pub fn parse(data: &HashMap<CustomActionConfigHeader, &str>, load_config: &mut Box<dyn FnMut(&str) -> Result<String, Box<dyn Error>>>) -> Result<Self, ConfigParseError> {
+impl TableLine for CustomActionConfig {
+    type Header = CustomActionConfigHeader;
+    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
         use CustomActionConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {
             data.get(&key).ok_or(E::MissingColumn(format!("CustomActionConfig::{key:?}")))
         };
+        let name = get(H::Name)?.to_string();
+        let script = match data.get(&H::Script) {
+            Some(s) if s.len() > 0 => {
+                let exe = loader.rhai_function(s, 0..=1)?;
+                let input = if exe.parameter_count > 0 {
+                    Some(loader.rhai_function(&format!("{s}_input"), 0..=0)?.index)
+                } else {
+                    None
+                };
+                Ok((input, exe.index))
+            }
+            _ => Err(ConfigParseError::CustomActionScriptMissing(name.clone())),
+        }?;
         let result = Self {
-            name: get(H::Name)?.to_string(),
-            unit_filter: parse_vec_dyn_def(data, H::UnitFilter, Vec::new(), |s| UnitFilter::from_conf(s, load_config))?,
-            script: parse(data, H::Script)?,
+            unit_filter: parse_vec_dyn_def(data, H::UnitFilter, Vec::new(), |s| UnitFilter::from_conf(s, loader))?,
+            script,
+            name,
         };
-        result.simple_validation()?;
         Ok(result)
     }
 
-    pub fn simple_validation(&self) -> Result<(), ConfigParseError> {
+    fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
         if self.name.trim().len() == 0 {
-            return Err(ConfigParseError::NameTooShort);
+            return Err(Box::new(ConfigParseError::NameTooShort));
         }
         Ok(())
     }
+}
 
+impl CustomActionConfig {
     pub fn get_name(&self) -> &str {
         &self.name
     }
 
-    pub fn get_script(&self) -> &CustomAction {
-        &self.script
+    pub fn get_script(&self) -> CustomAction {
+        self.script
     }
 
     pub fn add_as_option<D: Direction>(
@@ -57,7 +74,7 @@ impl CustomActionConfig {
         unit: &Unit<D>,
         path: &Path<D>,
         destination: Point,
-        funds: i32,
+        _funds: i32,
         // when moving out of a transporter, or start_turn for transported units
         transporter: Option<(&Unit<D>, usize)>,
         // the attacked unit, the unit this one was destroyed by, ...
@@ -66,15 +83,11 @@ impl CustomActionConfig {
         heroes: &[HeroInfluence<D>],
         // empty if the unit hasn't moved
         temporary_ballast: &[TBallast<D>],
+        executor: &Executor,
     ) -> bool {
-        if self.unit_filter.iter().all(|f| {
-            f.check(game, unit, (destination, None), transporter.map(|(u, _)| (u, path.start)), other_unit, heroes, temporary_ballast, false)
-        }) {
-            self.script.next_condition(game, funds, unit, path, destination, transporter, heroes, temporary_ballast, &[])
-            != CustomActionTestResult::Failure
-        } else {
-            false
-        }
+        self.unit_filter.iter().all(|f| {
+            f.check(game, unit, (destination, None), transporter.map(|(u, _)| (u, path.start)), other_unit, heroes, temporary_ballast, false, executor)
+        })
     }
 }
 

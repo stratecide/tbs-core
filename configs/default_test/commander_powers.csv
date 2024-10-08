@@ -1,8 +1,8 @@
 Id;Name;UsableFromPowers;NextPower;RequiredCharge;PreventsCharging;Script
 None;-;;;;;
 Zombie;;;;;;
-Zombie;Resurrection;0;0;4000;true;L(ZombieResurrection(50))
-Zombie;Plague;0;0;6000;true;L(ZombieResurrection(50))
+Zombie;Resurrection;0;0;4000;true;commanders/zombie > co_resurrection
+Zombie;Plague;0;0;6000;true;commanders/zombie > co_resurrection
 Simo;;;;;;
 Simo;Chaos;0;1;0;;
 Simo;Order;0;2;0;;
@@ -10,18 +10,18 @@ Simo;Shrapnel Charges;1;1;6000;true;
 Simo;Hyperfocus;2;2;3000;true;
 Simo;Perfect Shot;2;2;6000;true;
 Vlad;;;;;;
-Vlad;Red Dance;0;0;4000;true;L(MassDamageAura(4, 10))
-Vlad;Crimson Rain;0;0;8000;true;L(MassDamageAura(4, 20), MassHeal(10))
+Vlad;Red Dance;0;0;4000;true;commanders/vlad > co_red_dance
+Vlad;Crimson Rain;0;0;8000;true;commanders/vlad > co_crimson_rain
 Tapio;;;;;;
-Tapio;Spirit Seed;0, 1;0;1000;;TapioSpiritSeed
-Tapio;Fairy Fury;0, 1;0;5000;true;TapioFairyFury(2, 20)
+Tapio;Spirit Seed;0, 1;0;1000;;commanders/tapio > co_spirit_seed
+Tapio;Fairy Fury;0, 1;0;5000;true;commanders/tapio > co_fairy_fury
 Tapio;Living Trees;0, 1;0;8000;true;
 Lageos;;;;;;
-Lageos;Solar Storm;0;0;6000;true;LageosRockets(2, 1, 30)
-Lageos;Satellite Strike;0;0;9000;true;LageosStunRockets(1, 1, 30)
+Lageos;Solar Storm;0;0;6000;true;commanders/lageos > co_rockets
+Lageos;Satellite Strike;0;0;9000;true;commanders/lageos > co_stun_rockets
 SludgeMonster;;;;;;
-SludgeMonster;Rot;0;0;3000;true;L(Sludge(0))
-SludgeMonster;Decay;0;0;7000;true;L(Sludge(1))
+SludgeMonster;Rot;0;0;3000;true;commanders/sludge_monster > co_rot
+SludgeMonster;Decay;0;0;7000;true;commanders/sludge_monster > co_decay
 Celerity;;;;;;
-Celerity;Quick Recovery;0;0;4000;true;L(MassHeal(30))
+Celerity;Quick Recovery;0;0;4000;true;commanders/celerity > co_recovery
 Celerity;Momentum;0;0;6000;true;

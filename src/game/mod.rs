@@ -2,9 +2,11 @@ pub mod game;
 pub mod settings;
 pub mod events;
 pub mod event_handler;
+pub mod rhai_event_handler;
 pub mod commands;
 pub mod fog;
 pub mod game_view;
+pub mod rhai_board;
 pub mod modified_view;
 
 use std::sync::Arc;
@@ -53,7 +55,6 @@ mod tests {
     use crate::game::fog::*;
     use crate::map::direction::*;
     use crate::map::map::Map;
-    use crate::map::map_view::MapView;
     use crate::map::point::Point;
     use crate::map::point::Position;
     use crate::map::point_map::PointMap;
@@ -109,15 +110,19 @@ mod tests {
             let mut settings = settings.clone();
             settings.fog_mode = FogMode::Constant(fog_setting);
             let perspective = Perspective::Team(0);
-            let (server, events) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
+            let (server, events) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
             let client = Game::new_client(map.clone(), settings.build_default(), events.get(&perspective).unwrap());
             let data = server.export();
             println!("data: {data:?}");
             let imported_server = Game::import_server(data.clone(), &config, version.clone()).unwrap();
-            assert_eq!(server.get_fog(), imported_server.get_fog());
-            assert_eq!(server.environment(), imported_server.environment());
-            assert_eq!(server, imported_server);
-            assert_eq!(Ok(client), Game::import_client(data.public.clone(), data.get_team(0), &config, version.clone()));
+            server.with(|server| {
+                assert_eq!(server.get_fog(), imported_server.get_fog());
+                assert_eq!(server.environment(), imported_server.environment());
+                assert_eq!(*server, *imported_server);
+            });
+            client.with(|client| {
+                assert_eq!(*client, *Game::import_client(data.public.clone(), data.get_team(0), &config, version.clone()).unwrap());
+            });
         }
     }
 }

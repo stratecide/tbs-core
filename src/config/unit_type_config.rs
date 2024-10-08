@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
+use std::error::Error;
 use num_rational::Rational32;
 
 use crate::game::fog::VisionMode;
@@ -7,6 +8,8 @@ use crate::units::combat::*;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
+use super::file_loader::FileLoader;
+use super::file_loader::TableLine;
 use super::ConfigParseError;
 use super::movement_type_config::MovementPattern;
 use super::parse::*;
@@ -45,52 +48,52 @@ pub struct UnitTypeConfig {
     pub(super) transport_capacity: usize,
 }
 
-impl UnitTypeConfig {
-    pub fn parse(data: &HashMap<UnitTypeConfigHeader, &str>) -> Result<Self, ConfigParseError> {
+impl TableLine for UnitTypeConfig {
+    type Header = UnitTypeConfigHeader;
+    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
         use UnitTypeConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: parse(data, H::Id)?,
+            id: parse(data, H::Id, loader)?,
             name: get(H::Name)?.to_string(),
             visibility: match data.get(&H::Visibility) {
-                Some(s) => UnitVisibility::from_conf(s)?.0,
+                Some(s) => UnitVisibility::from_conf(s, loader)?.0,
                 None => UnitVisibility::Normal,
             },
-            movement_pattern: parse_def(data, H::MovementPattern, MovementPattern::Standard)?,
-            movement_type: parse(data, H::MovementType)?,
+            movement_pattern: parse_def(data, H::MovementPattern, MovementPattern::Standard, loader)?,
+            movement_type: parse(data, H::MovementType, loader)?,
             water_movement_type: match data.get(&H::WaterMovementType) {
-                Some(s) if s.len() > 0 => Some(MovementType::from_conf(s)?.0),
+                Some(s) if s.len() > 0 => Some(MovementType::from_conf(s, loader)?.0),
                 _ => None,
             },
-            movement_points: parse_def(data, H::MovementPoints, Rational32::from_integer(0))?,
-            vision_mode: parse_def(data, H::VisionMode, VisionMode::Normal)?,
-            vision: parse_def(data, H::Vision, 0 as u8)? as usize,
-            true_vision: parse_def(data, H::TrueVision, 0 as u8)? as usize,
-            needs_owner: parse_def(data, H::NeedsOwner, false)?,
-            stealthy: parse_def(data, H::Stealthy, false)?,
-            can_be_moved_through: parse_def(data, H::CanBeMovedThrough, false)?,
-            can_be_taken: parse_def(data, H::CanBeTaken, false)?,
-            weapon: parse_def(data, H::Weapon, WeaponType::MachineGun)?,
-            can_attack_after_moving: parse_def(data, H::CanAttackAfterMoving, false)?,
-            attack_pattern: parse_def(data, H::AttackPattern, AttackType::None)?,
-            attack_targets: parse_def(data, H::AttackTargets, AttackTargeting::Enemy)?,
-            splash_damage: parse_vec_def(data, H::SplashDamage, vec![Rational32::from_integer(1)])?,
-            cost: parse(data, H::Cost)?,
-            displacement: parse_def(data, H::Displacement, Displacement::None)?,
-            displacement_distance: parse_def(data, H::DisplacementDistance, 0)?,
-            can_be_displaced: parse_def(data, H::CanBeDisplaced, false)?,
-            transport_capacity: parse_def(data, H::TransportCapacity, 0 as u8)? as usize,
+            movement_points: parse_def(data, H::MovementPoints, Rational32::from_integer(0), loader)?,
+            vision_mode: parse_def(data, H::VisionMode, VisionMode::Normal, loader)?,
+            vision: parse_def(data, H::Vision, 0 as u8, loader)? as usize,
+            true_vision: parse_def(data, H::TrueVision, 0 as u8, loader)? as usize,
+            needs_owner: parse_def(data, H::NeedsOwner, false, loader)?,
+            stealthy: parse_def(data, H::Stealthy, false, loader)?,
+            can_be_moved_through: parse_def(data, H::CanBeMovedThrough, false, loader)?,
+            can_be_taken: parse_def(data, H::CanBeTaken, false, loader)?,
+            weapon: parse_def(data, H::Weapon, WeaponType::MachineGun, loader)?,
+            can_attack_after_moving: parse_def(data, H::CanAttackAfterMoving, false, loader)?,
+            attack_pattern: parse_def(data, H::AttackPattern, AttackType::None, loader)?,
+            attack_targets: parse_def(data, H::AttackTargets, AttackTargeting::Enemy, loader)?,
+            splash_damage: parse_vec_def(data, H::SplashDamage, vec![Rational32::from_integer(1)], loader)?,
+            cost: parse(data, H::Cost, loader)?,
+            displacement: parse_def(data, H::Displacement, Displacement::None, loader)?,
+            displacement_distance: parse_def(data, H::DisplacementDistance, 0, loader)?,
+            can_be_displaced: parse_def(data, H::CanBeDisplaced, false, loader)?,
+            transport_capacity: parse_def(data, H::TransportCapacity, 0 as u8, loader)? as usize,
         };
-        result.simple_validation()?;
         Ok(result)
     }
 
-    pub fn simple_validation(&self) -> Result<(), ConfigParseError> {
+    fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
         if self.name.trim().len() == 0 {
-            return Err(ConfigParseError::NameTooShort);
+            return Err(Box::new(ConfigParseError::NameTooShort));
         }
         if self.vision < self.true_vision {
             // TODO

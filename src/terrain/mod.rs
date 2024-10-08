@@ -1,5 +1,6 @@
 pub mod attributes;
 pub mod terrain;
+pub mod rhai_terrain;
 #[cfg(test)]
 mod test;
 
@@ -7,6 +8,7 @@ use std::str::FromStr;
 use zipper::*;
 
 use crate::config::environment::Environment;
+use crate::config::file_loader::FileLoader;
 use crate::config::parse::{string_base, FromConfig};
 use crate::config::ConfigParseError;
 
@@ -86,7 +88,7 @@ pub enum ExtraMovementOptions {
 }
 
 impl FromConfig for ExtraMovementOptions {
-    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+    fn from_conf<'a>(s: &'a str, _loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, remainder) = string_base(s);
         Ok((match base {
             "None" => Self::None,

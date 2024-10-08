@@ -7,7 +7,6 @@ use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
-use crate::map::map_view::MapView;
 use crate::terrain::TerrainType;
 use crate::units::attributes::ActionStatus;
 
@@ -132,7 +131,7 @@ impl CustomPower {
                     CustomActionData::Point(p) => p,
                     _ => panic!("TapioSpiritSeed needs Point, got {data:?}"),
                 };
-                handler.terrain_replace(target, TerrainType::FairyForest.instance(handler.environment()).set_owner_id(owner_id).build_with_defaults());
+                handler.terrain_replace(target, TerrainType::FairyForest.instance(&handler.environment()).set_owner_id(owner_id).build_with_defaults());
             }
             Self::TapioFairyFury(range, damage) => {
                 tapio_fairy_fury(handler, owner_id, *range, *damage);
@@ -190,7 +189,7 @@ pub(super) fn tapio_fairy_fury<D: Direction>(handler: &mut EventHandler<D>, owne
                     aura.insert(p);
                 }
             }
-            handler.terrain_replace(p, TerrainType::Grass.instance(handler.environment()).build_with_defaults());
+            handler.terrain_replace(p, TerrainType::Grass.instance(&handler.environment()).build_with_defaults());
         }
     }
     deal_damage(handler, aura.into_iter(), team, damage);

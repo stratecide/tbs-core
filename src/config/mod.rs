@@ -13,6 +13,8 @@ pub mod environment;
 mod custom_action_config;
 mod hero_power_config;
 mod terrain_powered;
+pub mod file_loader;
+pub mod table_config;
 
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -27,6 +29,8 @@ use crate::units::unit_types::UnitType;
 #[derive(Debug, Clone)]
 pub enum ConfigParseError {
     CommanderMaxChargeExceeded(u32),
+    CustomActionScriptMissing(String),
+    DontCallGlobalScriptDirectly(String),
     DuplicateHeader(String),
     MissingUnit(String),
     EmptyList,
@@ -48,6 +52,9 @@ pub enum ConfigParseError {
     NameTooShort,
     NotEnoughValues(String),
     NumberTooBig(String),
+    ScriptCompilation(String, String),
+    ScriptFunctionNotFound(String, String),
+    ScriptNeedsFileAndFunctionName(String),
     TooManyPowers(CommanderType, usize),
     UnknownEnumMember(String),
     TableAxesShouldDiffer(String),

@@ -9,6 +9,7 @@ use crate::{player::*, VERSION};
 
 use super::fog::FogMode;
 use interfaces::map_interface::GameSettingsInterface;
+use interfaces::RandomFn;
 use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
@@ -22,7 +23,7 @@ pub struct GameConfig {
 }
 
 impl GameConfig {
-    pub fn build(&self, player_selections: &[PlayerSelectedOptions], random: &Box<dyn Fn() -> f32>) -> GameSettings {
+    pub fn build(&self, player_selections: &[PlayerSelectedOptions], random: &RandomFn) -> GameSettings {
         GameSettings {
             config: self.config.clone(),
             fog_mode: self.fog_mode.clone(),
@@ -37,7 +38,7 @@ impl GameConfig {
         let player_selections: Vec<_> = (0..self.players.len()).map(|_| PlayerSelectedOptions {
             commander: None,
         }).collect();
-        let random: Box<dyn Fn() -> f32> = Box::new(|| 0.);
+        let random: RandomFn = Arc::new(|| 0.);
         Self::build(&self, &player_selections, &random)
     }
 
@@ -242,7 +243,7 @@ impl PlayerConfig {
         self.funds = funds.into();
     }
 
-    pub fn build(&self, player_selection: &PlayerSelectedOptions, random: &Box<dyn Fn() -> f32>) -> PlayerSettings {
+    pub fn build(&self, player_selection: &PlayerSelectedOptions, random: &RandomFn) -> PlayerSettings {
         let commander = player_selection.commander.unwrap_or_else(|| {
             if self.options.commanders.len() == 0 {
                 CommanderType::None

@@ -1,23 +1,24 @@
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use zipper_derive::Zippable;
 use zipper::*;
 
 use crate::config::environment::Environment;
-use crate::config::parse::{parse_tuple1, string_base, FromConfig};
-use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
+use crate::game::rhai_event_handler::EventHandlerPackage;
 use crate::map::direction::Direction;
-use crate::map::map::NeighborMode;
-use crate::map::map_view::MapView;
 use crate::map::point::Point;
-use crate::units::attributes::{ActionStatus, AttributeKey};
-use crate::units::hero::{Hero, HeroInfluence, HeroType};
-use crate::units::movement::{Path, PathStep, TBallast};
+use crate::units::hero::HeroInfluence;
+use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 
+use super::executor::Executor;
+use super::*;
+
+pub type CustomAction = (Option<usize>, usize);
 
 /*pub enum CustomActionDataType {
     Point,
@@ -61,7 +62,146 @@ pub enum CustomActionTestResult<D: Direction> {
     NextOrSuccess(CustomActionDataOptions<D>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+pub fn is_unit_script_input_valid<D: Direction>(
+    script: usize,
+    game: &impl GameView<D>,
+    unit: &Unit<D>,
+    path: &Path<D>,
+    unit_pos: Point,
+    transporter: Option<(&Unit<D>, usize)>,
+    _heroes: &[HeroInfluence<D>],
+    _ballast: &[TBallast<D>],
+    data: &[CustomActionData<D>],
+) -> bool {
+    let mut scope = Scope::new();
+    scope.push_constant("transporter", transporter.map(|(t, _)| t.clone()));
+    scope.push_constant("transporter_position", path.start);
+    scope.push_constant("transporter_index", transporter.map(|(_, i)| i));
+    scope.push_constant("path", path.clone());
+    scope.push_constant("unit", unit.clone());
+    scope.push_constant("unit_position", unit_pos);
+    is_script_input_valid(script, game, scope, data)
+}
+
+pub fn is_commander_script_input_valid<D: Direction>(
+    script: usize,
+    game: &impl GameView<D>,
+    data: &[CustomActionData<D>],
+) -> bool {
+    is_script_input_valid(script, game, Scope::new(), data)
+}
+
+fn is_script_input_valid<D: Direction>(
+    script: usize,
+    game: &impl GameView<D>,
+    mut scope: Scope<'static>,
+    data: &[CustomActionData<D>],
+) -> bool {
+    game.add_self_to_scope(&mut scope);
+    let index = Arc::new(Mutex::new(0));
+    let success = Arc::new(Mutex::new(false));
+    let success_ = success.clone();
+    let invalid_data = Arc::new(Mutex::new(false));
+    let invalid_data_ = invalid_data.clone();
+    let data = data.to_vec();
+    let environment = game.environment();
+    let mut engine = environment.get_engine();
+    engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<CustomActionData<D>, Box<EvalAltResult>> {
+        let mut index = index.lock().unwrap();
+        let i = *index;
+        *index += 1;
+        if i >= data.len() {
+            if or_succeed {
+                // early success
+                *success.lock().unwrap() = true;
+            } else {
+                *invalid_data.lock().unwrap() = true;
+            }
+            return Err(format!("not enough data ({}) for script {script}", data.len()).into());
+        }
+        if !options.contains(&data[i]) {
+            *invalid_data.lock().unwrap() = true;
+            return Err(format!("script {script} asks for ({i}) {options:?} but received {:?}", data[i]).into());
+        }
+        Ok(data[i].clone())
+    });
+    let executor = Executor::new(engine, scope, environment);
+    match executor.run(script, ()) {
+        Ok(b) => b,
+        Err(_e) => {
+            if !*success_.lock().unwrap() {
+                // early success
+                true
+            } else if !*invalid_data_.lock().unwrap() {
+                // wrong data supplied
+                // TODO: log error
+                false
+            } else {
+                // script had an error
+                // TODO: log error
+                false
+            }
+        }
+    }
+}
+
+pub fn execute_unit_script<D: Direction>(
+    script: usize,
+    handler: &mut EventHandler<D>,
+    unit: &Unit<D>,
+    path: &Path<D>,
+    unit_pos: Point,
+    transporter: Option<(&Unit<D>, usize)>,
+    _heroes: &[HeroInfluence<D>],
+    _ballast: &[TBallast<D>],
+    data: Option<&[CustomActionData<D>]>,
+) {
+    let mut scope = Scope::new();
+    scope.push_constant("transporter", transporter.map(|(t, _)| t.clone()));
+    scope.push_constant("transporter_position", path.start);
+    scope.push_constant("transporter_index", transporter.map(|(_, i)| i));
+    scope.push_constant("path", path.clone());
+    scope.push_constant("unit", unit.clone());
+    scope.push_constant("unit_position", unit_pos);
+    execute_script(script, handler, scope, data)
+}
+
+pub fn execute_commander_script<D: Direction>(
+    script: usize,
+    handler: &mut EventHandler<D>,
+    data: Option<&[CustomActionData<D>]>,
+) {
+    execute_script(script, handler, Scope::new(), data)
+}
+
+fn execute_script<D: Direction>(
+    script: usize,
+    handler: &mut EventHandler<D>,
+    mut scope: Scope<'static>,
+    data: Option<&[CustomActionData<D>]>,
+) {
+    handler.get_game().add_self_to_scope(&mut scope);
+    scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
+    let environment = handler.get_game().environment();
+    let mut engine = environment.get_engine();
+    EventHandlerPackage::new().register_into_engine(&mut engine);
+    let executor = Executor::new(engine, scope, environment);
+    let result: Result<(), Box<EvalAltResult>> = if let Some(data) = data {
+        executor.run(script, (data.to_vec(), ))
+    } else {
+        executor.run(script, ())
+    };
+    match result {
+        Ok(_) => (),
+        Err(e) => {
+            // TODO: log error
+            println!("execute_unit_script: {e}");
+            handler.effect_glitch();
+        }
+    }
+}
+
+/*#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustomAction {
     None, // not parsed, since this isn't valid for normal units. it's used as default for hero powers
     UnexhaustWithoutMoving,
@@ -281,7 +421,7 @@ impl CustomAction {
                     &[CustomActionData::Point(p)] => p,
                     _ => panic!("SummonCrystal Action Data is wrong: {:?}", data),
                 };
-                let builder = UnitType::HeroCrystal.instance(handler.environment())
+                let builder = UnitType::HeroCrystal.instance(&handler.environment())
                 .set_owner_id(unit.get_owner_id())
                 .set_hero(Hero::new(*hero_type, None));
                 handler.unit_creation(crystal_pos, builder.build_with_defaults());
@@ -333,9 +473,9 @@ impl CustomAction {
             }
         }
     }
-}
+}*/
 
-pub fn buy_transported_unit<D: Direction>(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, ballast: &[TBallast<D>], exhaust: bool) {
+/*pub fn buy_transported_unit<D: Direction>(handler: &mut EventHandler<D>, path_start: Point, end: Point, unit_type: UnitType, ballast: &[TBallast<D>], exhaust: bool) {
     let transporter = handler.get_map().get_unit(path_start).filter(|_| path_start != end);
     let factory_unit = handler.get_map().get_unit(end).unwrap();
     let heroes = Hero::hero_influence_at(handler.get_game(), end, factory_unit.get_owner_id());
@@ -376,4 +516,4 @@ pub fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, path_start: Point, 
         handler.unit_creation(destination, unit);
         true
     }
-}
+}*/

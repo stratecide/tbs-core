@@ -4,8 +4,8 @@ use zipper::*;
 use zipper::zipper_derive::*;
 
 use crate::commander::commander_type::CommanderChargeChange;
+use crate::handle::Handle;
 use crate::map::map::FieldData;
-use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::point_map;
 use crate::terrain::attributes::{CaptureProgress, Anger, BuiltThisTurn};
@@ -442,13 +442,13 @@ impl<D: Direction> Event<D> {
             }
         }
     }
-    pub fn fog_replacement(&self, game: &Game<D>, team: ClientPerspective) -> Option<Event<D>> {
+    pub fn fog_replacement(&self, game: &Handle<Game<D>>, team: ClientPerspective) -> Option<Event<D>> {
         match self {
             Self::PureFogChange(t, points) => {
                 if to_client_perspective(t) == team {
                     let mut changes = LVec::new();
                     for (p, intensity_before, intensity) in points.iter() {
-                        let fd = game.get_map().get_field_data(*p);
+                        let fd = FieldData::game_field(game, *p);
                         changes.push((*p, *intensity_before, fd.clone().fog_replacement(game, *p, *intensity_before), *intensity, fd.fog_replacement(game, *p, *intensity)));
                     }
                     Some(Self::FogChange(t.clone(), changes))
@@ -461,14 +461,14 @@ impl<D: Direction> Event<D> {
             }
             Self::NextTurn => Some(Self::NextTurn),
             Self::UnitActionStatus(p, _, _) => {
-                if game.visible_unit_with_attribute(team, *p, AttributeKey::ActionStatus) {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::ActionStatus) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::UnitHpChange(p, _, _) => {
-                if game.visible_unit_with_attribute(team, *p, AttributeKey::Hp) {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Hp) {
                     Some(self.clone())
                 } else {
                     None
@@ -493,14 +493,14 @@ impl<D: Direction> Event<D> {
             Self::UnitAddBoarded(p, _) |
             Self::UnitRemoveBoarded(p, _, _) |
             Self::HeroChargeTransported(p, _, _) => {
-                if game.visible_unit_with_attribute(team, *p, AttributeKey::Transported) {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Transported) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::MoneyChange(owner, _) => {
-                if !game.is_foggy() || team == game.get_team(Some(owner.0)) {
+                if !game.is_foggy() || team == game.get_team(owner.0) {
                     Some(self.clone())
                 } else {
                     None
@@ -509,7 +509,7 @@ impl<D: Direction> Event<D> {
             Self::PlayerDies(_) |
             Self::GameEnds => Some(self.clone()),
             Self::PureHideFunds(owner) => {
-                if team != game.get_team(Some(owner.0)) {
+                if team != game.get_team(owner.0) {
                     Some(Self::HideFunds(owner.clone(), game.get_owning_player(owner.0).unwrap().funds))
                 } else {
                     None
@@ -519,7 +519,7 @@ impl<D: Direction> Event<D> {
                 panic!("HideFunds should only ever be created as replacement for PureHideFunds. It shouldn't be replaced itself!");
             }
             Self::PureRevealFunds(owner) => {
-                if team != game.get_team(Some(owner.0)) {
+                if team != game.get_team(owner.0) {
                     Some(Self::RevealFunds(owner.clone(), game.get_owning_player(owner.0).unwrap().funds))
                 } else {
                     None
@@ -534,7 +534,7 @@ impl<D: Direction> Event<D> {
                     Some(self.clone())
                 } else if let Some(detail) = detail.fog_replacement(fog_intensity) {
                     let mut new_index = 0;
-                    for (i, detail) in game.get_map().get_details(*p).into_iter().enumerate() {
+                    for (i, detail) in game.get_details(*p).into_iter().enumerate() {
                         if i == **index as usize {
                             break;
                         }
@@ -600,35 +600,35 @@ impl<D: Direction> Event<D> {
                 Some(self.clone())
             }
             Self::UnitMovedThisGame(p) => {
-                if game.visible_unit_with_attribute(team, *p, AttributeKey::Unmoved) {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Unmoved) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::EnPassantOpportunity(p, _, _) => {
-                if game.visible_unit_with_attribute(team, *p, AttributeKey::EnPassant) {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::EnPassant) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::UnitDirection(p, _, _) => {
-                if game.visible_unit_with_attribute(team, *p, AttributeKey::Direction) {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Direction) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::UnitLevel(p, _, _) => {
-                if game.visible_unit_with_attribute(team, *p, AttributeKey::Level) {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Level) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             Self::HeroSet(pos, _, _) => {
-                if game.can_see_unit_at(team, *pos, game.get_map().get_unit(*pos).unwrap(), false) {
+                if can_see_unit_at(game, team, *pos, &game.get_unit(*pos).unwrap(), false) {
                     Some(self.clone())
                 } else {
                     None
@@ -636,7 +636,7 @@ impl<D: Direction> Event<D> {
             }
             Self::HeroCharge(p, _) |
             Self::HeroPower(p, _, _) => {
-                if game.visible_unit_with_attribute(team, *p, AttributeKey::Hero) {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Hero) {
                     Some(self.clone())
                 } else {
                     None
@@ -699,12 +699,12 @@ impl<D: Direction> UnitStep<D> {
         }
     }
 
-    fn replace_unit_path(&self, game: &Game<D>, team: ClientPerspective, unit: &mut Unit<D>) -> Option<Self> {
+    fn replace_unit_path(&self, game: &impl GameView<D>, team: ClientPerspective, unit: &mut Unit<D>) -> Option<Self> {
         let (p, step, unit2) = match self {
             Self::Simple(p, step) => (*p, *step, Some(unit.clone())),
             Self::Transform(p, step, unit2) => (*p, *step, unit2.clone()),
         };
-        let p2 = step.progress(game.get_map(), p).unwrap().0;
+        let p2 = step.progress(game, p).unwrap().0;
         let unit1 = unit.fog_replacement(game, p, game.get_fog_at(team, p));
         let unit2 = unit2.and_then(|unit| unit.fog_replacement(game, p2, game.get_fog_at(team, p2)));
         if let Some(unit2) = unit2.clone() {
@@ -736,7 +736,7 @@ pub enum Effect<D: Direction> {
     Surprise(Point, Team),
 }
 impl<D: Direction> Effect<D> {
-    pub fn fog_replacement(&self, game: &Game<D>, team: ClientPerspective) -> Option<Self> {
+    pub fn fog_replacement(&self, game: &impl GameView<D>, team: ClientPerspective) -> Option<Self> {
         match self {
             Self::Flame(p) |
             Self::GunFire(p) |

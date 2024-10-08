@@ -1,9 +1,50 @@
+use rhai::*;
+use rhai::packages::*;
+
+pub mod executor;
+pub mod custom_action;
+//pub mod custom_power;
+/*pub mod defend;
 pub mod unit;
 pub mod player;
 pub mod attack;
 pub mod kill;
-pub mod custom_action;
-pub mod defend;
-pub mod custom_power;
 pub mod terrain;
-pub mod death;
+pub mod death;*/
+
+pub const CONST_NAME_BOARD: &'static str = "BOARD";
+pub const CONST_NAME_EVENT_HANDLER: &'static str = "EVENT_HANDLER";
+pub const CONST_NAME_POSITION: &'static str = "POSITION";
+pub const CONST_NAME_OTHER_POSITION: &'static str = "OTHER_POSITION";
+pub const CONST_NAME_TERRAIN: &'static str = "TERRAIN";
+pub const CONST_NAME_IS_BUBBLE: &'static str = "IS_BUBBLE";
+pub const CONST_NAME_UNIT: &'static str = "UNIT";
+pub const CONST_NAME_UNIT_ID: &'static str = "UNIT_ID";
+pub const CONST_NAME_OTHER_UNIT: &'static str = "OTHER_UNIT";
+pub const CONST_NAME_OTHER_UNIT_ID: &'static str = "OTHER_UNIT_ID";
+pub const CONST_NAME_PATH: &'static str = "PATH";
+pub const CONST_NAME_TRANSPORTER: &'static str = "TRANSPORTER";
+pub const CONST_NAME_TRANSPORT_INDEX: &'static str = "TRANSPORT_INDEX";
+pub const CONST_NAME_TRANSPORTER_POSITION: &'static str = "TRANSPORTER_POSITION";
+pub const CONST_NAME_IS_COUNTER: &'static str = "IS_COUNTER";
+pub const CONST_NAME_DAMAGE: &'static str = "DAMAGE";
+
+pub const FUNCTION_NAME_INPUT_CHOICE: &'static str = "user_selection";
+pub const FUNCTION_NAME_BLAST_DIRECTION: &'static str = "get_blast_direction";
+
+pub fn create_base_engine() -> Engine {
+    let mut engine = Engine::new_raw();
+    // add built-in packages
+    CorePackage::new().register_into_engine(&mut engine);
+    CorePackage::new().register_into_engine(&mut engine);
+    BasicArrayPackage::new().register_into_engine(&mut engine);
+    BasicMapPackage::new().register_into_engine(&mut engine);
+    // maybe add MoreStringPackage or BitFieldPackage
+    // my packages
+    crate::map::rhai_point::PositionPackage::new().register_into_engine(&mut engine);
+    crate::map::rhai_direction::DirectionPackage::new().register_into_engine(&mut engine);
+    crate::game::rhai_board::BoardPackage::new().register_into_engine(&mut engine);
+    crate::terrain::rhai_terrain::TerrainPackage::new().register_into_engine(&mut engine);
+    crate::units::rhai_unit::UnitPackage::new().register_into_engine(&mut engine);
+    engine
+}

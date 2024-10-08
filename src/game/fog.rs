@@ -1,9 +1,21 @@
 use std::fmt::Display;
 
+use interfaces::ClientPerspective;
+use rustc_hash::{FxHashMap, FxHashSet};
 use zipper::*;
 use zipper::zipper_derive::*;
 
+use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
+use crate::map::point::Point;
+use crate::units::attributes::AttributeKey;
+use crate::units::hero::Hero;
+use crate::units::movement::Path;
+use crate::units::unit::Unit;
+use crate::units::unit_types::UnitType;
+
+use super::game_view::GameView;
+use super::Direction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable, PartialOrd, Ord, Hash)]
 #[zippable(bits = 2)]
@@ -15,7 +27,7 @@ pub enum FogIntensity {
 }
 
 impl FromConfig for FogIntensity {
-    fn from_conf(s: &str) -> Result<(Self, &str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(s: &'a str, _: &mut FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
         match base {
             "TrueSight" => Ok((Self::TrueSight, s)),
@@ -221,4 +233,67 @@ impl VisionMode {
             Self::Movement => false,
         }
     }
+}
+
+pub fn recalculate_fog<D: Direction>(game: &impl GameView<D>, perspective: ClientPerspective) -> FxHashMap<Point, FogIntensity> {
+    let mut fog = FxHashMap::default();
+    let strongest_intensity = game.get_fog_setting().intensity();
+    for p in game.all_points() {
+        fog.insert(p, strongest_intensity);
+    }
+    if !game.is_foggy() {
+        return fog;
+    }
+    let heroes = Hero::map_influence(game, -1);
+    for p in game.all_points() {
+        let terrain = game.get_terrain(p).unwrap();
+        let terrain_heroes = if terrain.get_team() != ClientPerspective::Neutral {
+            heroes.get(&(p, terrain.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[])
+        } else {
+            &[]
+        };
+        for (p, v) in terrain.get_vision(game, p, terrain_heroes, perspective) {
+            fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
+        }
+        if let Some(unit) = game.get_unit(p) {
+            if perspective != ClientPerspective::Neutral && perspective == unit.get_team() {
+                let heroes = heroes.get(&(p, unit.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
+                for (p, v) in unit.get_vision(game, p, heroes) {
+                    fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
+                }
+            }
+        }
+        for det in game.get_details(p) {
+            for (p, v) in det.get_vision(game, p, perspective) {
+                fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
+            }
+        }
+    }
+    fog
+}
+
+pub fn can_see_unit_at<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {
+    match unit.fog_replacement(game, position, game.get_fog_at(team, position)) {
+        None => false,
+        Some(unit) => accept_unknowns || unit.typ() != UnitType::Unknown,
+    }
+}
+
+pub fn find_visible_threats<D: Direction>(game: &impl GameView<D>, pos: Point, threatened: &Unit<D>, team: ClientPerspective) -> FxHashSet<Point> {
+    let mut result = FxHashSet::default();
+    for p in game.all_points() {
+        if let Some(unit) = game.get_unit(p) {
+            if can_see_unit_at(game, team, p, &unit, false) && unit.threatens(threatened) && unit.shortest_path_to_attack(game, &Path::new(p), None, pos).is_some() {
+                result.insert(p);
+            }
+            // TODO: also check transported units
+        }
+    }
+    result
+}
+
+pub fn visible_unit_with_attribute<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, pos: Point, attribute: AttributeKey) -> bool {
+    game.get_unit(pos).unwrap()
+    .fog_replacement(game, pos, game.get_fog_at(team, pos))
+    .and_then(|u| Some(u.has_attribute(attribute))).unwrap_or(false)
 }

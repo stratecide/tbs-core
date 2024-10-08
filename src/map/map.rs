@@ -7,6 +7,7 @@ use interfaces::*;
 use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
+use rhai::Scope;
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;
@@ -14,16 +15,17 @@ use crate::game::game_view::GameView;
 use crate::game::settings::{self, GameConfig, GameSettings, PlayerConfig, PlayerSelectedOptions, PlayerSettingError};
 use crate::game::game::*;
 use crate::game::fog::*;
+use crate::handle::Handle;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::player::Player;
+use crate::script::CONST_NAME_BOARD;
 use crate::{details::*, VERSION};
 use crate::details;
 use crate::terrain::terrain::Terrain;
 use crate::units::unit::Unit;
 
-use super::map_view::MapView;
 use super::point_map::MapSize;
 
 #[derive(Clone, PartialEq)]
@@ -60,11 +62,7 @@ impl<D: Direction> Debug for Map<D> {
 
 impl<D: Direction> Map<D> {
     pub fn new(wrapping_logic: WrappingMap<D>, config: &Arc<Config>) -> Self {
-        let environment = Environment {
-            config: config.clone(),
-            map_size: wrapping_logic.pointmap().size(),
-            settings: None,
-        };
+        let environment = Environment::new_map(config.clone(), wrapping_logic.pointmap().size());
         let mut terrain = HashMap::new();
         for p in wrapping_logic.pointmap().get_valid_points() {
             terrain.insert(p, environment.default_terrain());
@@ -92,6 +90,14 @@ impl<D: Direction> Map<D> {
         }
     }
 
+    pub fn environment(&self) -> &Environment {
+        &self.environment
+    }
+
+    pub fn wrapping_logic(&self) -> &WrappingMap<D> {
+        &self.wrapping_logic
+    }
+
     pub fn odd_if_hex(&self) -> bool {
         self.wrapping_logic.pointmap().odd_if_hex()
     }
@@ -102,6 +108,10 @@ impl<D: Direction> Map<D> {
 
     pub fn height(&self) -> u8 {
         self.wrapping_logic.pointmap().height()
+    }
+
+    pub fn all_points(&self) -> Vec<Point> {
+        self.wrapping_logic.pointmap().get_valid_points()
     }
 
     pub fn is_point_valid(&self, point: Point) -> bool {
@@ -119,6 +129,9 @@ impl<D: Direction> Map<D> {
         None
     }
 
+    pub fn get_terrain(&self, p: Point) -> Option<&Terrain> {
+        self.terrain.get(&p)
+    }
     pub fn get_terrain_mut(&mut self, p: Point) -> Option<&mut Terrain> {
         self.terrain.get_mut(&p)
     }
@@ -128,6 +141,9 @@ impl<D: Direction> Map<D> {
         }
     }
 
+    pub fn get_unit(&self, p: Point) -> Option<&Unit<D>> {
+        self.units.get(&p)
+    }
     pub fn get_unit_mut(&mut self, p: Point) -> Option<&mut Unit<D>> {
         self.units.get_mut(&p)
     }
@@ -143,6 +159,9 @@ impl<D: Direction> Map<D> {
         }
     }
 
+    pub fn get_details(&self, p: Point) -> &[Detail<D>] {
+        self.details.get(&p).map(|v| v.as_slice()).unwrap_or(&[])
+    }
     pub fn set_details(&mut self, p: Point, value: Vec<Detail<D>>) {
         if self.is_point_valid(p) {
             let value = Detail::correct_stack(value, &self.environment);
@@ -199,6 +218,122 @@ impl<D: Direction> Map<D> {
             drone_id = (drone_id + 1) % u16::MAX as u16;
         }
         drone_id
+    }
+
+    /**
+     * checks the pipe at dp.point for whether it can be entered by dp.direction and if true, returns the position of the next pipe tile
+     * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
+     */
+    pub fn next_pipe_tile(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
+        for det in self.get_details(point) {
+            match det {
+                Detail::Pipe(pipe_state) => {
+                    if let Some(disto) = pipe_state.distortion(direction) {
+                        return self.wrapping_logic().get_neighbor(point, disto.update_direction(direction))
+                        .and_then(|(p, d)| Some((p, disto + d)))
+                    }
+                }
+                _ => (),
+            }
+        }
+        None
+    }
+
+    /**
+     * the returned Distortion has to be applied to 'd' in order to
+     * keep moving in the same direction
+     */
+    pub fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
+        if let Some((point, mut distortion)) = self.wrapping_logic().get_neighbor(p, d) {
+            for det in self.get_details(point) {
+                match det {
+                    Detail::Pipe(pipe_state) => {
+                        if !pipe_state.is_open(distortion.update_direction(d).opposite_direction()) {
+                            continue;
+                        }
+                        if let Some(_disto) = pipe_state.distortion(distortion.update_direction(d)) {
+                        //if pipe_state.transform_direction(n.1.update_direction(d)).is_some() {
+                            //distortion += disto;
+                            let mut current = point;
+                            while let Some((next, disto)) = self.next_pipe_tile(current, distortion.update_direction(d)) {
+                                current = next;
+                                distortion += disto;
+                                if current == point {
+                                    // infinite loop, abort
+                                    return None;
+                                }
+                            }
+                            return Some((current, distortion));
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            Some((point, distortion))
+        } else {
+            None
+        }
+    }
+
+    pub fn get_neighbors(&self, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+        let mut result = vec![];
+        for d in D::list() {
+            match mode {
+                NeighborMode::Direct => {
+                    if let Some((p, distortion)) = self.wrapping_logic().get_neighbor(p, d) {
+                        result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+                    }
+                }
+                NeighborMode::FollowPipes => {
+                    if let Some((p, distortion)) = self.get_neighbor(p, d) {
+                        result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    // the result includes start, the OrientedPoints point towards the next point
+    // the result may be shorter than the requested length if not enough points could be found
+    pub fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+        let mut result = vec![OrientedPoint::new(start, false, d)];
+        let mut distortion = Distortion::neutral();
+        while result.len() < length {
+            let current = result.get(result.len() - 1).unwrap();
+            let next = match mode {
+                NeighborMode::Direct => self.wrapping_logic().get_neighbor(current.point, distortion.update_direction(d)),
+                NeighborMode::FollowPipes => self.get_neighbor(current.point, distortion.update_direction(d)),
+            };
+            if let Some((p, disto)) = next {
+                distortion += disto;
+                result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+            } else {
+                break;
+            }
+        }
+        result
+    }
+
+    pub fn width_search(&self, start: Point, mut f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
+        let mut result = HashSet::new();
+        let mut to_check = HashSet::new();
+        to_check.insert(start);
+        while to_check.len() > 0 {
+            let mut next = HashSet::new();
+            for p in to_check {
+                if f(p) {
+                    result.insert(p);
+                    for p in self.get_neighbors(p, NeighborMode::Direct) {
+                        if !result.contains(&p.point) {
+                            next.insert(p.point);
+                        }
+                    }
+                }
+            }
+            to_check = next;
+        }
+        result
     }
 
     pub fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<Point>> {
@@ -303,7 +438,7 @@ impl<D: Direction> Map<D> {
         income_factor
     }
     
-    pub fn get_viable_player_ids(&self) -> Vec<u8> {
+    pub fn get_viable_player_ids(&self, game: &impl GameView<D>) -> Vec<u8> {
         let mut owners = HashSet::new();
         for p in self.all_points() {
             if let Some(unit) = self.get_unit(p) {
@@ -312,7 +447,7 @@ impl<D: Direction> Map<D> {
                 }
             }
             let t = self.get_terrain(p).unwrap();
-            if t.get_owner_id() >= 0 && t.can_build(self, p, &[]) {
+            if t.get_owner_id() >= 0 && t.can_build(game, p, &[]) {
                 owners.insert(t.get_owner_id() as u8);
             }
             for detail in self.get_details(p) {
@@ -376,7 +511,8 @@ impl<D: Direction> Map<D> {
     }
 
     pub fn settings(&self) -> Result<GameConfig, NotPlayable> {
-        let owners = self.get_viable_player_ids();
+        let as_view = Handle::new(self.clone());
+        let owners = self.get_viable_player_ids(&as_view);
         if owners.len() < 2 {
             return Err(NotPlayable::TooFewPlayers);
         }
@@ -391,47 +527,91 @@ impl<D: Direction> Map<D> {
     }
 }
 
-impl<D: Direction> MapView<D> for Map<D> {
-    fn environment(&self) -> &Environment {
-        &self.environment
-    }
-
-    fn wrapping_logic(&self) -> &WrappingMap<D> {
-        &self.wrapping_logic
+impl<D: Direction> GameView<D> for Handle<Map<D>> {
+    fn environment(&self) -> Environment {
+        self.with(|map| map.environment.clone())
     }
 
     fn all_points(&self) -> Vec<Point> {
-        self.wrapping_logic.pointmap().get_valid_points()
+        self.with(|map| map.all_points())
     }
 
-    fn get_terrain(&self, p: Point) -> Option<&Terrain> {
-        self.terrain.get(&p)
+    fn get_terrain(&self, p: Point) -> Option<Terrain> {
+        self.with(|map| map.get_terrain(p).cloned())
     }
 
-    fn get_details(&self, p: Point) -> &[Detail<D>] {
-        self.details.get(&p).map(|v| v.as_slice()).unwrap_or(&[])
+    fn get_details(&self, p: Point) -> Vec<Detail<D>> {
+        self.with(|map| map.get_details(p).to_vec())
     }
 
-    fn get_unit(&self, p: Point) -> Option<&Unit<D>> {
-        self.units.get(&p)
+    fn get_unit(&self, p: Point) -> Option<Unit<D>> {
+        self.with(|map| map.get_unit(p).cloned())
     }
-}
 
-impl<D: Direction> GameView<D> for Map<D> {
-    fn get_owning_player(&self, _owner: i8) -> Option<&Player> {
+    fn add_self_to_scope(&self, scope: &mut Scope<'_>) {
+        self.clone_into_scope(CONST_NAME_BOARD, scope);
+    }
+
+    fn wrapping_logic(&self) -> crate::handle::BorrowedHandle<WrappingMap<D>> {
+        self.borrow(|map| map.wrapping_logic())
+    }
+
+    fn next_pipe_tile(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
+        self.with(|map| map.next_pipe_tile(point, direction))
+    }
+
+    fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
+        self.with(|map| map.get_neighbor(p, d))
+    }
+
+    fn get_neighbors(&self, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+        self.with(|map| map.get_neighbors(p, mode))
+    }
+
+    fn width_search(&self, start: Point, f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
+        self.with(|map| map.width_search(start, f))
+    }
+
+    fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<Point>> {
+        self.with(|map| map.range_in_layers(center, range))
+    }
+
+    fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+        self.with(|map| map.get_line(start, d, length, mode))
+    }
+
+    fn get_owning_player(&self, _: i8) -> Option<Player> {
         None
     }
 
-    fn fog_intensity(&self) -> FogIntensity {
+    fn get_team(&self, _owner: i8) -> ClientPerspective {
+        // could be useful to give each owner a team
+        ClientPerspective::Neutral
+    }
+
+    fn get_fog_setting(&self) -> FogSetting {
+        FogSetting::None
+    }
+
+    fn get_fog_at(&self, _: ClientPerspective, _: Point) -> FogIntensity {
         FogIntensity::TrueSight
     }
 
-    fn get_fog_at(&self, _team: ClientPerspective, _position: Point) -> FogIntensity {
-        FogIntensity::TrueSight
+    fn get_visible_unit(&self, _: ClientPerspective, p: Point) -> Option<Unit<D>> {
+        self.with(|map| map.get_unit(p).cloned())
     }
-
-    fn get_visible_unit(&self, _team: ClientPerspective, p: Point) -> Option<Unit<D>> {
-        self.get_unit(p).cloned()
+    
+    fn get_unit_config_limit(&self) -> Option<usize> {
+        Handle::get_unit_config_limit(self)
+    }
+    fn set_unit_config_limit(&self, limit: Option<usize>) {
+        Handle::set_unit_config_limit(self, limit);
+    }
+    fn get_terrain_config_limit(&self) -> Option<usize> {
+        Handle::get_terrain_config_limit(self)
+    }
+    fn set_terrain_config_limit(&self, limit: Option<usize>) {
+        Handle::set_terrain_config_limit(self, limit);
     }
 }
 
@@ -441,11 +621,7 @@ pub enum MapType {
 }
 
 pub fn import_map(config: &Arc<Config>, bytes: Vec<u8>, version: Version) -> Result<MapType, ZipperError> {
-    let mut environment = Environment {
-        config: config.clone(),
-        map_size: MapSize::new(0, 0),
-        settings: None,
-    };
+    let mut environment = Environment::new_map(config.clone(), MapSize::new(0, 0));
     let mut unzipper = Unzipper::new(bytes, version);
     if unzipper.read_bool()? {
         Ok(MapType::Hex(Map::import_from_unzipper(&mut unzipper, &mut environment)?))
@@ -463,7 +639,15 @@ pub struct FieldData<D: Direction> {
 }
 
 impl<D: Direction> FieldData<D> {
-    pub fn fog_replacement(self, game: &Game<D>, pos: Point, intensity: FogIntensity) -> Self {
+    pub fn game_field(game: &Handle<Game<D>>, p: Point) -> Self {
+        Self {
+            terrain: game.get_terrain(p).unwrap(),
+            details: game.get_details(p).try_into().unwrap(),
+            unit: game.get_unit(p),
+        }
+    }
+
+    pub fn fog_replacement(self, game: &Handle<Game<D>>, pos: Point, intensity: FogIntensity) -> Self {
         let details: Vec<_> = self.details.into_iter()
         .filter_map(|d| d.fog_replacement(intensity))
         .collect();
@@ -475,53 +659,65 @@ impl<D: Direction> FieldData<D> {
     }
 }
 
-impl<D: Direction> MapInterface for Map<D> {
+impl<D: Direction> MapInterface for Handle<Map<D>> {
     fn export(&self) -> Vec<u8> {
         let mut zipper = Zipper::new();
         zipper.write_bool(D::is_hex());
-        self.wrapping_logic.zip(&mut zipper);
-        for p in self.all_points() {
-            self.get_field_data(p).export(&mut zipper, &self.environment);
-        }
+        self.with(|map| {
+            map.wrapping_logic.zip(&mut zipper);
+            for p in map.all_points() {
+                map.get_field_data(p).export(&mut zipper, &map.environment);
+            }
+        });
         zipper.finish()
     }
 
     fn width(&self) -> usize {
-        self.width() as usize
+        self.with(|map| map.width()) as usize
     }
 
     fn height(&self) -> usize {
-        self.height() as usize
+        self.with(|map| map.height()) as usize
     }
 
     fn player_count(&self) -> u16 {
-        self.get_viable_player_ids().len() as u16
+        self.with(|map| map.get_viable_player_ids(self).len()) as u16
     }
 
     fn metrics(&self) -> HashMap<String, i32> {
         let mut result = HashMap::new();
         let mut income = 0;
-        for t in self.terrain.values() {
-            income += t.income_factor();
-        }
-        result.insert("Income".to_string(), income);
+        self.with(|map| {
+            for t in map.terrain.values() {
+                income += t.income_factor();
+            }
+        });
+        result.insert("Total Income".to_string(), income);
         result
     }
 
     fn default_settings(&self) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
-        match self.settings() {
-            Ok(s) => Ok(Box::new(s)),
-            Err(e) => Err(Box::new(e)),
+        let owners = self.with(|map| map.get_viable_player_ids(self));
+        if owners.len() < 2 {
+            return Err(Box::new(NotPlayable::TooFewPlayers));
         }
+        let players:Vec<PlayerConfig> = owners.into_iter()
+            .map(|owner| PlayerConfig::new(owner, &self.environment().config))
+            .collect();
+        Ok(Box::new(settings::GameConfig {
+            config: self.environment().config.clone(),
+            fog_mode: FogMode::Constant(FogSetting::Light(0)),
+            players: players.try_into().unwrap(),
+        }))
     }
 
     fn parse_settings(&self, bytes: Vec<u8>) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
-        let settings = GameConfig::import(self.environment.config.clone(), bytes)?;
+        let settings = GameConfig::import(self.environment().config.clone(), bytes)?;
         Ok(Box::new(settings))
     }
 
     fn game_creator(self: Box<Self>, settings: Vec<u8>, player_settings: Vec<Vec<u8>>) -> Result<Box<dyn GameCreationInterface>, Box<dyn Error>> {
-        let settings = GameConfig::import(self.environment.config.clone(), settings)?;
+        let settings = GameConfig::import(self.environment().config.clone(), settings)?;
         if player_settings.len() != settings.players.len() {
             return Err(Box::new(PlayerSettingError::PlayerCount(settings.players.len(), player_settings.len())));
         }
@@ -531,7 +727,7 @@ impl<D: Direction> MapInterface for Map<D> {
             player_selection.push(PlayerSelectedOptions::import(&mut unzipper, &settings.config)?);
         }
         Ok(Box::new(GameCreation {
-            map: *self,
+            map: self.with(|map| map.clone()),
             settings,
             player_selection,
         }))
@@ -540,25 +736,27 @@ impl<D: Direction> MapInterface for Map<D> {
     #[cfg(feature = "rendering")]
     fn preview(&self) -> MapPreview {
         let mut base = Vec::new();
-        let base_x = if self.odd_if_hex() {
-            2
-        } else {
-            0
-        };
-        for (p, terrain) in &self.terrain {
-            let (x, y) = D::T::between(&GlobalPoint::ZERO, &GlobalPoint::new(p.x as i16, p.y as i16), self.odd_if_hex()).screen_coordinates();
-            let pos = PreviewPos {
-                x: base_x + (x * 4.).round() as u16,
-                y: (y * 4.).round() as u16,
+        self.with(|map| {
+            let base_x = if map.odd_if_hex() {
+                2
+            } else {
+                0
             };
-            for (shape, color) in self.environment.config.terrain_preview(terrain.typ(), terrain.get_owner_id()) {
-                base.push(PreviewTile {
-                    pos,
-                    shape,
-                    color,
-                });
+            for (p, terrain) in &map.terrain {
+                let (x, y) = D::T::between(&GlobalPoint::ZERO, &GlobalPoint::new(p.x as i16, p.y as i16), map.odd_if_hex()).screen_coordinates();
+                let pos = PreviewPos {
+                    x: base_x + (x * 4.).round() as u16,
+                    y: (y * 4.).round() as u16,
+                };
+                for (shape, color) in map.environment().config.terrain_preview(terrain.typ(), terrain.get_owner_id()) {
+                    base.push(PreviewTile {
+                        pos,
+                        shape,
+                        color,
+                    });
+                }
             }
-        }
+        });
         MapPreview {
             base,
             frames: Vec::new(),
@@ -588,18 +786,18 @@ pub struct GameCreation<D: Direction> {
 }
 
 impl<D: Direction> GameCreationInterface for GameCreation<D> {
-    fn server(self: Box<Self>, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Events) {
+    fn server(self: Box<Self>, random: RandomFn) -> (Box<dyn GameInterface>, Events) {
         let settings = self.settings.build(&self.player_selection, &random);
         let (server, events) = Game::new_server(self.map, settings, random);
-        let events = events.export(server.environment());
+        let events = server.with(|s| events.export(s.environment()));
         (server, events)
     }
 
-    fn server_and_client(self: Box<Self>, client_perspective: ClientPerspective, random: Box<dyn 'static + Fn() -> f32>) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
+    fn server_and_client(self: Box<Self>, client_perspective: ClientPerspective, random: RandomFn) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
         let settings = self.settings.build(&self.player_selection, &random);
         let (server, events) = Game::new_server(self.map.clone(), settings.clone(), random);
         let client = Game::new_client(self.map, settings, events.get(&client_perspective.into()).unwrap_or(&[]));
-        let events = events.export(server.environment());
+        let events = server.with(|s| events.export(s.environment()));
         (server, client, events)
     }
 }

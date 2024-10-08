@@ -1,12 +1,12 @@
 Hero;Name;UsableFromPowers;NextPower;RequiredCharge;AuraRange;PreventsCharging;Script
 Crystal;;;;;2;;
-Crystal;Obelisk;0;0;12;3;true;SummonCrystal(CrystalObelisk)
+Crystal;Summon Obelisk;0;0;12;3;true;hero_powers/crystal > ua_summon_obelisk
 CrystalObelisk;;;;;2;;
 EarlGrey;;;;;1;;
-EarlGrey;;0;0;8;2;true;UnexhaustWithoutMoving
+EarlGrey;;0;0;8;2;true;hero_powers/earl_grey > ua_power
 BlueBerry;;;;;2;;
-BlueBerry;;0;0;15;3;true;ActivateUnits
+BlueBerry;;0;0;15;3;true;hero_powers/blue_berry > ua_power
 Tess;;;;;1;;
-Tess;;0;0;10;2;true;BuyUnit(false)
+Tess;;0;0;10;2;true;hero_powers/tess > ua_power
 Edwin;;;;;1;;
-Edwin;;0;0;8;1;true;SwapUnitPositions
+Edwin;;0;0;8;1;true;hero_powers/edwin > ua_power

@@ -1,11 +1,11 @@
 use std::collections::HashSet;
-use std::error::Error;
 
 use crate::commander::commander_type::CommanderType;
 use crate::details::Detail;
 use crate::game::fog::FogIntensity;
 use crate::game::game_view::GameView;
 use crate::map::point::Point;
+use crate::script::executor::Executor;
 use crate::terrain::TerrainType;
 use crate::units::attributes::ActionStatus;
 use crate::units::combat::AttackTypeKey;
@@ -15,8 +15,9 @@ use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
 
+use super::file_loader::FileLoader;
 use super::movement_type_config::MovementPattern;
-use super::parse::{parse_inner_vec, parse_inner_vec_dyn, parse_tuple1, parse_tuple3, string_base, FromConfig};
+use super::parse::{parse_inner_vec, parse_inner_vec_dyn, parse_tuple1, parse_tuple2, string_base, FromConfig};
 use super::ConfigParseError;
 use super::config::Config;
 
@@ -29,16 +30,16 @@ pub(super) enum UnitTypeFilter {
 }
 
 impl FromConfig for UnitTypeFilter {
-    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
         Ok((match base {
             "U" | "Unit" => {
-                let (list, r) = parse_inner_vec::<UnitType>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<UnitType>(remainder, true, loader)?;
                 remainder = r;
                 Self::Unit(list.into_iter().collect())
             }
             "MP" | "MovementPattern" => {
-                let (list, r) = parse_inner_vec::<MovementPattern>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<MovementPattern>(remainder, true, loader)?;
                 remainder = r;
                 Self::MovementPattern(list.into_iter().collect())
             }
@@ -56,150 +57,131 @@ impl UnitTypeFilter {
     }
 }
 
-
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub(crate) enum TableAxis {
-        Unit,
-        OtherUnit,
-        Terrain,
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum TableAxisKey {
-    Unit(UnitType),
-    Terrain(TerrainType),
-}
-
-impl TableAxisKey {
-    fn from_conf(axis: TableAxis, s: &str) -> Result<Self, ConfigParseError> {
-        match axis {
-            TableAxis::Unit |
-            TableAxis::OtherUnit => {
-                Ok(Self::Unit(UnitType::from_conf(s)?.0))
-            }
-            TableAxis::Terrain => {
-                Ok(Self::Terrain(TerrainType::from_conf(s)?.0))
-            }
-        }
-    }
-}
-
 /**
  * UnitFilter and custom actions are the first things to replace with Rhai
  */
 #[derive(Debug, Clone)]
 pub(crate) enum UnitFilter {
-    Unit(HashSet<UnitType>),
-    Movement(HashSet<MovementType>),
-    Terrain(HashSet<TerrainType>),
-    MovementPattern(HashSet<MovementPattern>),
+    Rhai(usize),
+    // commander
+    Commander(CommanderType, Option<u8>),
+    CommanderCharge(u32),
+    // hero
     Hero(HashSet<(HeroType, Option<u8>)>),
     HeroGlobal(HashSet<(HeroType, Option<u8>)>),
     IsHero(HashSet<(HeroType, Option<u8>)>),
+    // this unit
+    Unit(HashSet<UnitType>),
+    Movement(HashSet<MovementType>),
+    MovementPattern(HashSet<MovementPattern>),
     AttackType(HashSet<AttackTypeKey>),
-    CommanderCharge(u32),
-    Fog(HashSet<FogIntensity>),
-    Moved,
     Unowned,
+    // situation/environment
+    Counter,
+    Terrain(HashSet<TerrainType>),
+    Fog(HashSet<FogIntensity>),
+    // recursive
+    Not(Vec<Self>),
+    // replace with Rhai
+    Moved,
+    Hp(u8),
     Status(HashSet<ActionStatus>),
     Sludge,
-    Commander(CommanderType),
-    CommanderPower(u8),
-    Hp(u8),
     TerrainOwner,
-    Counter,
+    //Table(TableAxis, TableAxis, HashSet<[TableAxisKey; 2]>),
     Level(u8),
-    Table(TableAxis, TableAxis, HashSet<[TableAxisKey; 2]>),
-    Not(Vec<Self>),
 }
 
-impl UnitFilter {
-    pub fn from_conf<'a>(s: &'a str, load_config: &mut Box<dyn FnMut(&str) -> Result<String, Box<dyn Error>>>) -> Result<(Self, &'a str), ConfigParseError> {
+impl FromConfig for UnitFilter {
+    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
         Ok((match base {
+            "Rhai" | "Script" => {
+                let (name, r) = parse_tuple1::<String>(remainder, loader)?;
+                remainder = r;
+                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+            }
             "Unit" | "U" => {
-                let (list, r) = parse_inner_vec::<UnitType>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<UnitType>(remainder, true, loader)?;
                 remainder = r;
                 Self::Unit(list.into_iter().collect())
             }
             "Movement" | "M" => {
-                let (list, r) = parse_inner_vec::<MovementType>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<MovementType>(remainder, true, loader)?;
                 remainder = r;
                 Self::Movement(list.into_iter().collect())
             }
             "Terrain" | "T" => {
-                let (list, r) = parse_inner_vec::<TerrainType>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<TerrainType>(remainder, true, loader)?;
                 remainder = r;
                 Self::Terrain(list.into_iter().collect())
             }
             "MP" | "MovementPattern" => {
-                let (list, r) = parse_inner_vec::<MovementPattern>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<MovementPattern>(remainder, true, loader)?;
                 remainder = r;
                 Self::MovementPattern(list.into_iter().collect())
             }
             "H" | "Hero" => {
-                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, true, loader)?;
                 remainder = r;
                 Self::Hero(list.into_iter().collect())
             }
             "HG" | "HeroGlobal" => {
-                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, true, loader)?;
                 remainder = r;
                 Self::HeroGlobal(list.into_iter().collect())
             }
             "IH" | "IsHero" => {
-                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, false)?;
+                let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, false, loader)?;
                 remainder = r;
                 Self::IsHero(list.into_iter().collect())
             }
             "A" | "AttackType" => {
-                let (list, r) = parse_inner_vec::<AttackTypeKey>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<AttackTypeKey>(remainder, true, loader)?;
                 remainder = r;
                 Self::AttackType(list.into_iter().collect())
             }
             "CC" | "CommanderCharge" => {
-                let (charge, r) = parse_tuple1(remainder)?;
+                let (charge, r) = parse_tuple1(remainder, loader)?;
                 remainder = r;
                 Self::CommanderCharge(charge)
             }
             "Fog" => {
-                let (list, r) = parse_inner_vec::<FogIntensity>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<FogIntensity>(remainder, true, loader)?;
                 remainder = r;
                 Self::Fog(list.into_iter().collect())
             }
             "Moved" => Self::Moved,
             "Unowned" => Self::Unowned,
             "S" | "Status" => {
-                let (list, r) = parse_inner_vec::<ActionStatus>(remainder, true)?;
+                let (list, r) = parse_inner_vec::<ActionStatus>(remainder, true, loader)?;
                 remainder = r;
                 Self::Status(list.into_iter().collect())
             }
             "Sludge" => Self::Sludge,
             "Commander" | "Co" => {
-                let (commander, r) = parse_tuple1(remainder)?;
-                remainder = r;
-                Self::Commander(commander)
-            }
-            "CommanderPower" | "CoP" => {
-                let (power, r) = parse_tuple1(remainder)?;
-                remainder = r;
-                Self::CommanderPower(power)
+                if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
+                    remainder = r;
+                    Self::Commander(commander, Some(power))
+                } else {
+                    let (commander, r) = parse_tuple1(remainder, loader)?;
+                    remainder = r;
+                    Self::Commander(commander, None)
+                }
             }
             "Hp" => {
-                let (hp, r) = parse_tuple1(remainder)?;
+                let (hp, r) = parse_tuple1(remainder, loader)?;
                 remainder = r;
                 Self::Hp(hp)
             }
             "TerrainOwner" => Self::TerrainOwner,
             "Counter" => Self::Counter,
             "Level" => {
-                let (level, r) = parse_tuple1(remainder)?;
+                let (level, r) = parse_tuple1(remainder, loader)?;
                 remainder = r;
                 Self::Level(level)
             }
-            "Table" => {
+            /*"Table" => {
                 let (y_axis, x_axis, filename, r): (TableAxis, TableAxis, String, &str) = parse_tuple3(remainder)?;
                 remainder = r;
                 if x_axis == y_axis {
@@ -230,19 +212,21 @@ impl UnitFilter {
                     return Err(ConfigParseError::TableEmpty);
                 }
                 Self::Table(x_axis, y_axis, set)
-            }
+            }*/
             "Not" => {
-                let (list, r) = parse_inner_vec_dyn::<Self>(remainder, true, |s| Self::from_conf(s, load_config))?;
+                let (list, r) = parse_inner_vec_dyn::<Self>(remainder, true, |s| Self::from_conf(s, loader))?;
                 remainder = r;
                 Self::Not(list)
             }
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         }, remainder))
     }
+}
 
+impl UnitFilter {
     pub fn check<D: Direction>(
         &self,
-        map: &impl GameView<D>,
+        game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         // when moving out of a transporter, or start_turn for transported units
@@ -255,11 +239,21 @@ impl UnitFilter {
         temporary_ballast: &[TBallast<D>],
         // true only during counter-attacks
         is_counter: bool,
+        executor: &Executor,
     ) -> bool {
         match self {
+            Self::Rhai(function_index) => {
+                match executor.run(*function_index, ()) {
+                    Ok(result) => result,
+                    Err(_e) => {
+                        // TODO: log error
+                        false
+                    }
+                }
+            }
             Self::Unit(u) => u.contains(&unit.typ()),
             Self::Movement(m) => m.contains(&unit.default_movement_type()),
-            Self::Terrain(t) => t.contains(&map.get_terrain(unit_pos.0).unwrap().typ()),
+            Self::Terrain(t) => t.contains(&game.get_terrain(unit_pos.0).unwrap().typ()),
             Self::MovementPattern(m) => m.contains(&unit.movement_pattern()),
             Self::Hero(h) => {
                 for (_, hero, _, _, _) in heroes {
@@ -271,8 +265,8 @@ impl UnitFilter {
                 false
             }
             Self::HeroGlobal(h) => {
-                for p in map.all_points() {
-                    if let Some(u) = map.get_unit(p) {
+                for p in game.all_points() {
+                    if let Some(u) = game.get_unit(p) {
                         if u.get_owner_id() == unit.get_owner_id() && u.is_hero() {
                             let hero = u.get_hero();
                             let power = hero.get_active_power() as u8;
@@ -293,14 +287,14 @@ impl UnitFilter {
                 || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
             }
             Self::AttackType(a) => {
-                let attack_type = map.environment().config.default_attack_pattern(unit.typ()).key();
+                let attack_type = game.environment().config.default_attack_pattern(unit.typ()).key();
                 a.iter().any(|a| *a == attack_type)
             }
             Self::CommanderCharge(charge) => {
-                unit.get_commander(map).get_charge() >= *charge
+                unit.get_commander(game).get_charge() >= *charge
             }
             Self::Fog(f) => {
-                let fog = map.fog_intensity();
+                let fog = game.get_fog_setting().intensity();
                 f.iter().any(|f| *f == fog)
             }
             Self::Moved => {
@@ -312,42 +306,39 @@ impl UnitFilter {
                 status.iter().any(|a| *a == s)
             }
             Self::Sludge => {
-                map.get_details(unit_pos.0).iter()
+                game.get_details(unit_pos.0).iter()
                 .any(|d| match d {
                     Detail::SludgeToken(_) => true,
                     _ => false
                 })
             }
-            Self::Commander(commander_type) => {
-                let commander = unit.get_commander(map);
+            Self::Commander(commander_type, power) => {
+                let commander = unit.get_commander(game);
                 commander.typ() == *commander_type
-            }
-            Self::CommanderPower(power) => {
-                let commander = unit.get_commander(map);
-                *power as usize == commander.get_active_power()
+                && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
             Self::Hp(hp) => unit.get_hp() >= *hp,
             Self::TerrainOwner => {
-                map.get_terrain(unit_pos.0).unwrap().get_owner_id() == unit.get_owner_id()
+                game.get_terrain(unit_pos.0).unwrap().get_owner_id() == unit.get_owner_id()
             }
             Self::Counter => is_counter,
             Self::Level(level) => unit.get_level() >= *level,
-            Self::Table(x_axis, y_axis, set) => {
+            /*Self::Table(x_axis, y_axis, set) => {
                 if let [Some(x), Some(y)] = [x_axis, y_axis].map(|axis| match axis {
                     TableAxis::Unit => Some(TableAxisKey::Unit(unit.typ())),
                     TableAxis::OtherUnit => other_unit.map(|(u, _)| TableAxisKey::Unit(u.typ())),
-                    TableAxis::Terrain => map.get_terrain(unit_pos.0).map(|t| TableAxisKey::Terrain(t.typ())),
+                    TableAxis::Terrain => game.get_terrain(unit_pos.0).map(|t| TableAxisKey::Terrain(t.typ())),
                 }) {
                     set.contains(&[x, y])
                 } else {
                     false
                 }
-            }
+            }*/
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
                 negated.iter()
-                .any(|negated| !negated.check(map, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast, is_counter))
+                .any(|negated| !negated.check(game, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast, is_counter, executor))
             }
         }
     }

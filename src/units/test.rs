@@ -7,9 +7,9 @@ use crate::game::commands::Command;
 use crate::game::fog::*;
 use crate::game::game::Game;
 use crate::game::game_view::GameView;
+use crate::handle::Handle;
 use crate::map::direction::*;
 use crate::map::map::Map;
-use crate::map::map_view::MapView;
 use crate::map::point::*;
 use crate::map::point_map::PointMap;
 use crate::map::wrapping_map::*;
@@ -43,8 +43,9 @@ fn fog_replacement() {
     let map_env = map.environment().clone();
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&map_env).build_with_defaults());
     let unit = UnitType::Sniper.instance(&map_env).set_owner_id(0).set_status(ActionStatus::Capturing).build_with_defaults();
+    let map_view = Handle::new(map);
     assert_eq!(
-        unit.fog_replacement(&map, Point::new(1, 1), FogIntensity::Light),
+        unit.fog_replacement(&map_view, Point::new(1, 1), FogIntensity::Light),
         Some(UnitType::Unknown.instance(&map_env).build_with_defaults())
     );
 }
@@ -66,16 +67,18 @@ fn build_drone() {
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].set_funds(1000);
-    let (mut server, events) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
+    let (mut server, events) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
     let mut client = Game::new_client(map, settings.build_default(), events.get(&Perspective::Team(0)).unwrap());
     let events = server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
         action: UnitAction::custom(0, vec![CustomActionData::UnitType(UnitType::LightDrone)]),
-    }), Box::new(|| 0.)).unwrap();
-    for ev in events.get(&Perspective::Team(0)).unwrap() {
-        ev.apply(&mut client);
-    }
+    }), Arc::new(|| 0.)).unwrap();
+    client.with_mut(|client| {
+        for ev in events.get(&Perspective::Team(0)).unwrap() {
+            ev.apply(client);
+        }
+    });
     assert_eq!(
         server.get_unit(Point::new(3, 4)).unwrap().get_transported().len(),
         1
@@ -104,17 +107,17 @@ fn repair_unit() {
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].set_funds(1000);
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Box::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
         action: UnitAction::custom(1, Vec::new()),
-    }), Box::new(|| 0.)).unwrap();
+    }), Arc::new(|| 0.)).unwrap();
     assert!(*server.get_owning_player(0).unwrap().funds < 1000);
     assert!(server.get_unit(Point::new(3, 4)).unwrap().get_hp() > 1);
     assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_status(), ActionStatus::Repairing);
-    server.handle_command(Command::EndTurn, Box::new(|| 0.)).unwrap();
-    server.handle_command(Command::EndTurn, Box::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_status(), ActionStatus::Ready);
 }
 
@@ -129,16 +132,18 @@ fn end_game() {
     map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
     map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
-    }), Box::new(|| 0.)).unwrap();
-    assert!(game.has_ended());
-    for (i, player) in game.players.iter().enumerate() {
-        assert_eq!(player.dead, i != 0);
-    }
+    }), Arc::new(|| 0.)).unwrap();
+    game.with(|game| {
+        assert!(game.has_ended());
+        for (i, player) in game.players.iter().enumerate() {
+            assert_eq!(player.dead, i != 0);
+        }
+    });
 }
 
 #[test]
@@ -152,21 +157,23 @@ fn defeat_player_of_3() {
     map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(2).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
-    }), Box::new(|| 0.)).unwrap();
-    assert!(!game.has_ended());
-    for (i, player) in game.players.iter().enumerate() {
-        assert_eq!(player.dead, i == 0);
-    }
-    assert_eq!(game.current_player().get_owner_id(), 1);
-    game.handle_command(Command::EndTurn, Box::new(|| 0.)).unwrap();
-    assert_eq!(game.current_player().get_owner_id(), 2);
-    game.handle_command(Command::EndTurn, Box::new(|| 0.)).unwrap();
-    assert_eq!(game.current_player().get_owner_id(), 1);
+    }), Arc::new(|| 0.)).unwrap();
+    game.with(|game| {
+        assert!(!game.has_ended());
+        for (i, player) in game.players.iter().enumerate() {
+            assert_eq!(player.dead, i == 0);
+        }
+    });
+    assert_eq!(game.current_owner(), 1);
+    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    assert_eq!(game.current_owner(), 2);
+    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    assert_eq!(game.current_owner(), 1);
 }
 
 #[test]
@@ -181,16 +188,18 @@ fn on_death_lose_game() {
     map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
-    }), Box::new(|| 0.)).unwrap();
-    assert!(game.has_ended());
-    for (i, player) in game.players.iter().enumerate() {
-        assert_eq!(player.dead, i != 0);
-    }
+    }), Arc::new(|| 0.)).unwrap();
+    game.with(|game| {
+        assert!(game.has_ended());
+        for (i, player) in game.players.iter().enumerate() {
+            assert_eq!(player.dead, i != 0);
+        }
+    });
 }
 
 #[test]
@@ -209,12 +218,12 @@ fn puffer_fish() {
     map.set_unit(Point::new(1, 1), Some(UnitType::PufferFish.instance(&map_env).build_with_defaults()));
     map.set_unit(Point::new(2, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
-    }), Box::new(|| 0.)).unwrap();
+    }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_hp(), 100);
     assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().get_hp(), 100);
     let hp = game.get_unit(Point::new(2, 0)).unwrap().get_hp();
@@ -223,7 +232,7 @@ fn puffer_fish() {
         unload_index: None,
         path: Path::new(Point::new(0, 2)),
         action: UnitAction::Attack(AttackVector::Point(Point::new(2, 1))),
-    }), Box::new(|| 0.)).unwrap();
+    }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().get_hp(), 100);
     assert!(game.get_unit(Point::new(2, 0)).unwrap().get_hp() < hp);
 }
@@ -241,18 +250,18 @@ fn capture_pyramid() {
     map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
     map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
-    }), Box::new(|| 0.)).unwrap();
+    }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_owner_id(), -1);
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 2)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
-    }), Box::new(|| 0.)).unwrap();
+    }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_owner_id(), 0);
 }
 
@@ -267,15 +276,17 @@ fn s_factory() {
     map.set_unit(Point::new(1, 3), Some(UnitType::Pyramid.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
     map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Box::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     let environment = game.environment().clone();
-    assert_eq!(*game.current_player().funds, game.current_player().get_income() * 2);
+    game.with(|game| {
+        assert_eq!(*game.current_player().funds, game.current_player().get_income() * 2);
+    });
     assert_ne!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::custom(0, vec![CustomActionData::UnitType(UnitType::Marine), CustomActionData::Direction(Direction6::D180)]),
-    }), Box::new(|| 0.)).unwrap();
-    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), &UnitType::Marine.instance(&environment).set_owner_id(0). set_status(ActionStatus::Exhausted).build_with_defaults());
+    }), Arc::new(|| 0.)).unwrap();
+    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), UnitType::Marine.instance(&environment).set_owner_id(0). set_status(ActionStatus::Exhausted).build_with_defaults());
     assert_eq!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);
 }

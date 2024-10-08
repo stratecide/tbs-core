@@ -4,29 +4,25 @@ use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
+use executor::Executor;
 use interfaces::ClientPerspective;
 use num_rational::Rational32;
+use rhai::Scope;
 use zipper::*;
 
 use crate::commander::commander_type::CommanderType;
 use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
 use crate::game::fog::{FogIntensity, VisionMode, FogSetting};
-use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::game::modified_view::*;
 use crate::game::settings::GameSettings;
 use crate::commander::Commander;
 use crate::map::direction::Direction;
-use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Player, Owner};
-use crate::script::attack::AttackScript;
-use crate::script::death::DeathScript;
-use crate::script::defend::DefendScript;
-use crate::script::kill::KillScript;
-use crate::script::unit::UnitScript;
+use crate::script::*;
 use crate::terrain::attributes::TerrainAttributeKey;
 
 use super::combat::*;
@@ -198,7 +194,7 @@ impl<D: Direction> Unit<D> {
         self.environment.config.vision_mode(self.typ)
     }
 
-    pub fn vision_range(&self, game: &Game<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> usize {
+    pub fn vision_range(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> usize {
         let mut range = self.environment.config.unit_vision(game, self, pos, heroes);
         match game.get_fog_setting() {
             FogSetting::None => (),
@@ -211,11 +207,11 @@ impl<D: Direction> Unit<D> {
         range
     }
 
-    fn true_vision_range(&self, game: &Game<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> usize {
+    fn true_vision_range(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> usize {
         self.environment.config.unit_true_vision(game, self, pos, heroes)
     }
 
-    pub fn get_vision(&self, game: &Game<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> HashMap<Point, FogIntensity> {
+    pub fn get_vision(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> HashMap<Point, FogIntensity> {
         let mut result = HashMap::new();
         result.insert(pos, FogIntensity::TrueSight);
         let vision_range = self.vision_range(game, pos, heroes);
@@ -228,7 +224,7 @@ impl<D: Direction> Unit<D> {
         let true_vision_range = self.true_vision_range(game, pos, heroes);
         match self.vision_mode() {
             VisionMode::Normal => {
-                let layers = game.get_map().range_in_layers(pos, vision_range);
+                let layers = game.range_in_layers(pos, vision_range);
                 for (i, layer) in layers.into_iter().enumerate() {
                     for p in layer {
                         let vision = if i < true_vision_range {
@@ -320,7 +316,7 @@ impl<D: Direction> Unit<D> {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_player<'a>(&self, game: &'a impl GameView<D>) -> Option<&'a Player> {
+    pub fn get_player(&self, game: &impl GameView<D>) -> Option<Player> {
         game.get_owning_player(self.get_owner_id())
     }
 
@@ -529,7 +525,7 @@ impl<D: Direction> Unit<D> {
     }
 
     // full_price reduced by hp lost
-    pub fn value(&self, game: &Game<D>, position: Point) -> i32 {
+    pub fn value(&self, game: &impl GameView<D>, position: Point) -> i32 {
         self.full_price(game, position, None, &[]) * self.get_hp() as i32 / 100
     }
 
@@ -563,7 +559,7 @@ impl<D: Direction> Unit<D> {
         self.environment.config.unit_splash_damage(game, self, unit_pos, heroes, temporary_ballast, is_counter)
     }
 
-    pub fn on_start_turn(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[HeroInfluence<D>]) -> Vec<UnitScript> {
+    pub fn on_start_turn(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[HeroInfluence<D>]) -> Vec<usize> {
         self.environment.config.unit_start_turn_effects(
             game,
             self,
@@ -573,7 +569,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_end_turn(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[HeroInfluence<D>]) -> Vec<UnitScript> {
+    pub fn on_end_turn(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[HeroInfluence<D>]) -> Vec<usize> {
         self.environment.config.unit_end_turn_effects(
             game,
             self,
@@ -583,7 +579,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_attack(&self, game: &Game<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<AttackScript> {
+    pub fn on_attack(&self, game: &impl GameView<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<usize> {
         self.environment.config.unit_attack_effects(
             game,
             self,
@@ -597,7 +593,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_defend(&self, game: &Game<D>, position: Point, attacker: &Self, attacker_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<DefendScript> {
+    pub fn on_defend(&self, game: &impl GameView<D>, position: Point, attacker: &Self, attacker_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<usize> {
         self.environment.config.unit_defend_effects(
             game,
             self,
@@ -611,7 +607,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_kill(&self, game: &Game<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<KillScript> {
+    pub fn on_kill(&self, game: &impl GameView<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<usize> {
         self.environment.config.unit_kill_effects(
             game,
             self,
@@ -625,7 +621,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_death(&self, game: &Game<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<(&Self, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>]) -> Vec<DeathScript> {
+    pub fn on_death(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<(&Self, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>]) -> Vec<usize> {
         self.environment.config.unit_death_effects(
             game,
             self,
@@ -752,14 +748,14 @@ impl<D: Direction> Unit<D> {
         Some(builder.build_with_defaults())
     }
 
-    pub fn movable_positions(&self, game: &Game<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>) -> HashSet<Point> {
+    pub fn movable_positions(&self, game: &impl GameView<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>) -> HashSet<Point> {
         movement_area_game(game, self, path_so_far, 1, transporter)
         .keys()
         .cloned()
         .collect()
     }
 
-    pub fn attackable_positions(&self, game: &Game<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> HashSet<Point> {
+    pub fn attackable_positions(&self, game: &impl GameView<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> HashSet<Point> {
         let mut result = HashSet::new();
         let mut game = UnitMovementView::new(game);
         if let Some((destination, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
@@ -776,7 +772,7 @@ impl<D: Direction> Unit<D> {
         result
     }
 
-    pub fn shortest_path_to(&self, game: &Game<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, goal: Point) -> Option<(Path<D>, TemporaryBallast<D>)> {
+    pub fn shortest_path_to(&self, game: &impl GameView<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, goal: Point) -> Option<(Path<D>, TemporaryBallast<D>)> {
         search_path(game, self, path_so_far, transporter, |_path, p, can_stop_here, _| {
             if goal == p {
                 PathSearchFeedback::Found
@@ -788,7 +784,7 @@ impl<D: Direction> Unit<D> {
         })
     }
 
-    pub fn shortest_path_to_attack(&self, game: &Game<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, goal: Point) -> Option<(Path<D>, TemporaryBallast<D>)> {
+    pub fn shortest_path_to_attack(&self, game: &impl GameView<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, goal: Point) -> Option<(Path<D>, TemporaryBallast<D>)> {
         /*if AttackType::None == self.attack_pattern() {
             return None;
         }*/
@@ -819,16 +815,16 @@ impl<D: Direction> Unit<D> {
         })
     }
 
-    pub fn transformed_by_movement(&mut self, map: &impl MapView<D>, from: Point, to: Point, distortion: Distortion<D>) -> bool {
+    pub fn transformed_by_movement(&mut self, map: &impl GameView<D>, from: Point, to: Point, distortion: Distortion<D>) -> bool {
         let prev_terrain = map.get_terrain(from).unwrap();
         let terrain = map.get_terrain(to).unwrap();
-        let permanent = PermanentBallast::from_unit(self, prev_terrain);
-        let changed = permanent.step(distortion, terrain);
+        let permanent = PermanentBallast::from_unit(self, &prev_terrain);
+        let changed = permanent.step(distortion, &terrain);
         changed.update_unit(self);
         changed != permanent
     }
 
-    pub fn transformed_by_path(&mut self, map: &impl MapView<D>, path: &Path<D>) {
+    pub fn transformed_by_path(&mut self, map: &impl GameView<D>, path: &Path<D>) {
         let mut current = path.start;
         for step in &path.steps {
             let (next, distortion) = match step.progress(map, current) {
@@ -876,7 +872,7 @@ impl<D: Direction> Unit<D> {
         self.could_attack(defender, false) && defender.get_team() != self.get_team()
     }
 
-    pub fn options_after_path(&self, game: &Game<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Vec<UnitAction<D>> {
+    pub fn options_after_path(&self, game: &impl GameView<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Vec<UnitAction<D>> {
         let mut game = UnitMovementView::new(game);
         if let Some((end, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
             this._options_after_path_transformed(&game, path, end, transporter, ballast)
@@ -914,11 +910,11 @@ impl<D: Direction> Unit<D> {
             let game = &game;
             let heroes = Hero::hero_influence_at(game, destination, self.get_owner_id());
             // hero power
-            self.get_hero().add_options_after_path(&mut result, self, game, funds_after_path, path, destination, transporter, &heroes, ballast);
+            self.get_hero().add_options_after_path(&mut result, game);
             // buy hero
             if !self.is_hero() && terrain.can_sell_hero(game, destination, self.get_owner_id()) {
-                for hero in game.available_heroes(self.get_player(game).unwrap()) {
-                    if let Some(cost) = hero.price(game.environment(), self) {
+                for hero in game.available_heroes(&self.get_player(game).unwrap()) {
+                    if let Some(cost) = game.environment().config.hero_price(game, hero, self.clone(), path.clone(), destination, transporter, &heroes, ballast) {
                         if cost <= funds_after_path {
                             result.push(UnitAction::BuyHero(hero));
                         }
@@ -926,9 +922,24 @@ impl<D: Direction> Unit<D> {
                 }
             }
             // custom actions
-            for (i, custom_action) in self.environment.config.custom_actions().iter().enumerate() {
-                if custom_action.add_as_option(game, self, path, destination, funds_after_path, transporter, None, &heroes, ballast) {
-                    result.push(UnitAction::custom(i, Vec::new()));
+            let custom_actions = self.environment.config.custom_actions();
+            if custom_actions.len() > 0 {
+                let engine = game.environment().get_engine();
+                // build scope
+                let mut scope = Scope::new();
+                game.add_self_to_scope(&mut scope);
+                scope.push_constant(CONST_NAME_UNIT, self.clone());
+                scope.push_constant(CONST_NAME_PATH, path.clone());
+                scope.push_constant(CONST_NAME_POSITION, destination);
+                scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transporter.map(|(_, i)| i));
+                scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
+                scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
+                // TODO: heroes and ballast (put them into Arc<>s)
+                let executor = Arc::new(Executor::new(engine, scope, game.environment()));
+                for (i, custom_action) in custom_actions.iter().enumerate() {
+                    if custom_action.add_as_option(game, self, path, destination, funds_after_path, transporter, None, &heroes, ballast, &executor) {
+                        result.push(UnitAction::custom(i, Vec::new()));
+                    }
                 }
             }
             // build units

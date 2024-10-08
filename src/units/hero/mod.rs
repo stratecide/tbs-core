@@ -35,10 +35,6 @@ impl HeroType {
     pub fn transport_capacity(&self, environment: &Environment) -> usize {
         environment.config.hero_transport_capacity(*self) as usize
     }
-
-    pub fn price<D: Direction>(&self, environment: &Environment, unit: &Unit<D>) -> Option<i32> {
-        environment.config.hero_price(*self, unit.typ())
-    }
 }
 
 impl SupportedZippable<&Environment> for HeroType {
@@ -200,13 +196,13 @@ impl Hero {
                     continue;
                 }
                 if unit.is_hero() {
-                    if let Some(strength) = Self::aura(map, unit, p, None).get(&point) {
+                    if let Some(strength) = Self::aura(map, &unit, p, None).get(&point) {
                         result.push((unit.clone(), unit.get_hero(), p, None, *strength as u8));
                     }
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
                     if unit.is_hero() {
-                        if let Some(strength) = Self::aura(map, u, p, Some((unit, i))).get(&point) {
+                        if let Some(strength) = Self::aura(map, u, p, Some((&unit, i))).get(&point) {
                             result.push((unit.clone(), unit.get_hero(), p, Some(i), *strength as u8));
                         }
                     }
@@ -239,7 +235,7 @@ impl Hero {
         let mut hero_auras: HashMap<(Point, i8), Vec<HeroInfluence<D>>> = HashMap::new();
         for hero in heroes {
             let transporter = hero.3.map(|i| (map.get_unit(hero.2).unwrap(), i));
-            for (p, strength) in Hero::aura(map, &hero.0, hero.2, transporter) {
+            for (p, strength) in Hero::aura(map, &hero.0, hero.2, transporter.as_ref().map(|(u, i)| (u, *i))) {
                 let key = (p, hero.0.get_owner_id());
                 let value = (hero.0.clone(), hero.1.clone(), hero.2, hero.3, strength as u8);
                 if let Some(list) = hero_auras.get_mut(&key) {
@@ -264,19 +260,10 @@ impl Hero {
     pub fn add_options_after_path<D: Direction>(
         &self,
         list: &mut Vec<UnitAction<D>>,
-        unit: &Unit<D>,
         game: &impl GameView<D>,
-        funds: i32,
-        path: &Path<D>,
-        destination: Point,
-        transporter: Option<(&Unit<D>, usize)>,
-        heroes: &[HeroInfluence<D>],
-        ballast: &[TBallast<D>],
     ) {
-        let data = Vec::new();
-        for (i, power) in game.environment().config.hero_powers(self.typ).iter().enumerate() {
-            if self.can_activate_power(game.environment(), i, false)
-            && power.script.next_condition(game, funds, unit, path, destination, transporter, heroes, ballast, &data) != CustomActionTestResult::Failure {
+        for (i, _) in game.environment().config.hero_powers(self.typ).iter().enumerate() {
+            if self.can_activate_power(&game.environment(), i, false) {
                 list.push(UnitAction::hero_power(i, Vec::new()));
             }
         }

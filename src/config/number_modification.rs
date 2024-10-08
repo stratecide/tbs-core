@@ -3,7 +3,10 @@ use std::ops::{Add, Div, Mul, Sub};
 
 use num_rational::Rational32;
 
-use super::parse::FromConfig;
+use crate::script::executor::Executor;
+
+use super::file_loader::FileLoader;
+use super::parse::{parse_tuple1, string_base, FromConfig};
 use super::ConfigParseError;
 
 pub trait MulRational32: Debug + Clone + Add<Self, Output = Self> + Sub<Self, Output = Self> + Mul<Self, Output = Self> + Div<Self, Output = Self> {
@@ -19,44 +22,63 @@ pub enum NumberMod<T: MulRational32 + FromConfig> {
     Mul(Rational32),
     MulAdd(Rational32, T),
     MulSub(Rational32, T),
+    Rhai(usize),
+    RhaiReplace(usize),
 }
 
 impl<T: MulRational32 + FromConfig> FromConfig for NumberMod<T> {
-    fn from_conf(s: &str) -> Result<(Self, &str), ConfigParseError> {
+    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
         if s.len() == 0 {
             return Ok((Self::Keep, ""));
         }
         match s.get(..1) {
-            Some("=") => T::from_conf(&s[1..]).map(|(n, s)| (Self::Replace(n), s)),
-            Some("+") => T::from_conf(&s[1..]).map(|(n, s)| (Self::Add(n), s)),
-            Some("-") => T::from_conf(&s[1..]).map(|(n, s)| (Self::Sub(n), s)),
+            Some("=") => T::from_conf(&s[1..], loader).map(|(n, s)| (Self::Replace(n), s)),
+            Some("+") => T::from_conf(&s[1..], loader).map(|(n, s)| (Self::Add(n), s)),
+            Some("-") => T::from_conf(&s[1..], loader).map(|(n, s)| (Self::Sub(n), s)),
             Some("*") => {
-                let (first, s) = Rational32::from_conf(&s[1..])?;
+                let (first, s) = Rational32::from_conf(&s[1..], loader)?;
                 if s.starts_with('-') {
-                    let (second, s) = T::from_conf(&s[1..])?;
+                    let (second, s) = T::from_conf(&s[1..], loader)?;
                     Ok((Self::MulSub(first, second), s))
                 } else if s.starts_with('+') {
-                    let (second, s) = T::from_conf(&s[1..])?;
+                    let (second, s) = T::from_conf(&s[1..], loader)?;
                     Ok((Self::MulAdd(first, second), s))
                 } else {
                     Ok((Self::Mul(first), s))
                 }
             }
-            _ => return Err(ConfigParseError::InvalidNumberModifier(s.to_string()))
+            _ => {
+                let (base, s) = string_base(s);
+                match base {
+                    "Rhai" | "Script" => {
+                        let (name, s) = parse_tuple1::<String>(s, loader)?;
+                        let f = loader.rhai_function(&name, 0..=1)?;
+                        if f.parameter_count == 0 {
+                            Ok((Self::Rhai(f.index), s))
+                        } else {
+                            Ok((Self::RhaiReplace(f.index), s))
+                        }
+                    }
+                    _ => {
+                        return Err(ConfigParseError::InvalidNumberModifier(s.to_string()))
+                    }
+                }
+            }
         }
     }
 }
 
-impl<T: MulRational32 + FromConfig + 'static> NumberMod<T> {
+impl<T: MulRational32 + FromConfig + Clone + Send + Sync + 'static> NumberMod<T> {
     pub fn ignores_previous_value(&self) -> bool {
         match self {
             Self::Replace(_) => true,
+            Self::RhaiReplace(_) => true,
             _ => false
         }
     }
 
     // TODO: prevent overflow / underflow
-    pub fn update_value(&self, value: T) -> T {
+    pub fn update_value(&self, value: T, executor: &Executor) -> T {
         match self.clone() {
             Self::Keep => value,
             Self::Replace(v) => v,
@@ -65,10 +87,28 @@ impl<T: MulRational32 + FromConfig + 'static> NumberMod<T> {
             Self::Mul(a) => value.mul_r32(a),
             Self::MulAdd(a, b) => value.mul_r32(a) + b,
             Self::MulSub(a, b) => value.mul_r32(a) - b,
+            Self::Rhai(function_index) => {
+                match executor.run(function_index, (value.clone(), )) {
+                    Ok(t) => t,
+                    Err(_e) => {
+                        // TODO: log error
+                        value
+                    }
+                }
+            }
+            Self::RhaiReplace(function_index) => {
+                match executor.run(function_index, ()) {
+                    Ok(t) => t,
+                    Err(_e) => {
+                        // TODO: log error
+                        value
+                    }
+                }
+            }
         }
     }
 
-    pub fn update_value_repeatedly<'a>(mut value: T, iter: impl DoubleEndedIterator<Item = &'a Self>) -> T {
+    pub fn update_value_repeatedly<'a>(mut value: T, iter: impl DoubleEndedIterator<Item = &'a Self>, executor: &Executor) -> T {
         let mut stack = Vec::new();
         for v in iter.rev() {
             stack.push(v);
@@ -77,7 +117,7 @@ impl<T: MulRational32 + FromConfig + 'static> NumberMod<T> {
             }
         }
         while let Some(v) = stack.pop() {
-            value = v.update_value(value);
+            value = v.update_value(value, executor);
         }
         value
     }

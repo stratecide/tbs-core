@@ -1,9 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::error::Error;
+
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::config::parse::*;
 use crate::terrain::*;
 use crate::units::attributes::AttributeOverride;
 
+use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
 
 #[derive(Debug)]
@@ -28,42 +31,42 @@ pub struct TerrainTypeConfig {
     pub(super) preview: Vec<(interfaces::PreviewShape, Option<[u8; 4]>)>,
 }
 
-impl TerrainTypeConfig {
-    pub fn parse(data: &HashMap<TerrainTypeConfigHeader, &str>) -> Result<Self, ConfigParseError> {
+impl TableLine for TerrainTypeConfig {
+    type Header = TerrainTypeConfigHeader;
+    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
         use TerrainTypeConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: parse(data, H::Id)?,
+            id: parse(data, H::Id, loader)?,
             name: get(H::Name)?.to_string(),
-            needs_owner: parse_def(data, H::NeedsOwner, false)?,
-            capture_resistance: parse_def(data, H::CaptureResistance, 0)?,
+            needs_owner: parse_def(data, H::NeedsOwner, false, loader)?,
+            capture_resistance: parse_def(data, H::CaptureResistance, 0, loader)?,
             update_amphibious: match data.get(&H::UpdateAmphibious) {
                 Some(s) if s.len() > 0 => Some(s.parse()?),
                 _ => None,
             },
-            max_builds_per_turn: parse_def(data, H::MaxBuildsPerTurn, 0)?,
-            max_anger: parse_def(data, H::MaxAnger, 0)?,
-            vision_range: parse_def(data, H::VisionRange, -1)?,
-            income_factor: parse_def(data, H::IncomeFactor, 0)?,
-            can_repair: parse_def(data, H::Repair, false)?,
-            can_build: parse_def(data, H::Build, false)?,
-            can_sell_hero: parse_def(data, H::SellsHero, false)?,
-            chess: parse_def(data, H::Chess, false)?,
-            extra_movement_options: parse_def(data, H::MovementOptions, ExtraMovementOptions::None)?,
-            build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new())?.into_iter().collect(),
+            max_builds_per_turn: parse_def(data, H::MaxBuildsPerTurn, 0, loader)?,
+            max_anger: parse_def(data, H::MaxAnger, 0, loader)?,
+            vision_range: parse_def(data, H::VisionRange, -1, loader)?,
+            income_factor: parse_def(data, H::IncomeFactor, 0, loader)?,
+            can_repair: parse_def(data, H::Repair, false, loader)?,
+            can_build: parse_def(data, H::Build, false, loader)?,
+            can_sell_hero: parse_def(data, H::SellsHero, false, loader)?,
+            chess: parse_def(data, H::Chess, false, loader)?,
+            extra_movement_options: parse_def(data, H::MovementOptions, ExtraMovementOptions::None, loader)?,
+            build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
             #[cfg(feature = "rendering")]
-            preview: parse_vec_def(data, H::Preview, Vec::new())?,
+            preview: parse_vec_def(data, H::Preview, Vec::new(), loader)?,
         };
-        result.simple_validation()?;
         Ok(result)
     }
 
-    pub fn simple_validation(&self) -> Result<(), ConfigParseError> {
+    fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
         if self.name.trim().len() == 0 {
-            return Err(ConfigParseError::NameTooShort);
+            return Err(Box::new(ConfigParseError::NameTooShort));
         }
         // TODO: error if build_overrides overrides its own values
         if self.max_builds_per_turn == 0 && self.can_build {

@@ -15,11 +15,9 @@ use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
-use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Owner, Player};
-use crate::script::terrain::TerrainScript;
 use crate::units::attributes::{ActionStatus, AttributeOverride};
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::MovementType;
@@ -102,7 +100,7 @@ impl Terrain {
 
     pub fn vision_range<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
@@ -218,7 +216,7 @@ impl Terrain {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_player<'a, D: Direction>(&self, game: &'a impl GameView<D>) -> Option<&'a Player> {
+    pub fn get_player<D: Direction>(&self, game: &impl GameView<D>) -> Option<Player> {
         game.get_owning_player(self.get_owner_id())
     }
 
@@ -263,7 +261,7 @@ impl Terrain {
 
     pub fn get_vision<D: Direction>(
         &self,
-        game: &Game<D>,
+        game: &impl GameView<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
@@ -285,7 +283,7 @@ impl Terrain {
             FogSetting::Fade2(_) => 2.max(vision_range) - 2,
             _ => vision_range
         };
-        let layers = game.get_map().range_in_layers(pos, vision_range);
+        let layers = game.range_in_layers(pos, vision_range);
         for (i, layer) in layers.into_iter().enumerate() {
             for p in layer {
                 let vision = if i < normal_range {
@@ -315,7 +313,7 @@ impl Terrain {
         }
     }
 
-    pub fn can_sell_hero<D: Direction>(&self, map: &impl MapView<D>, pos: Point, owner_id: i8) -> bool {
+    pub fn can_sell_hero<D: Direction>(&self, map: &impl GameView<D>, pos: Point, owner_id: i8) -> bool {
         if !self.could_sell_hero() {
             return false;
         }
@@ -352,7 +350,7 @@ impl Terrain {
         .collect()
     }
 
-    pub(crate) fn unit_shop_option<D: Direction>(&self, game: &Game<D>, pos: Point, unit_type: UnitType, heroes: &[HeroInfluence<D>]) -> (Unit<D>, i32) {
+    pub(crate) fn unit_shop_option<D: Direction>(&self, game: &impl GameView<D>, pos: Point, unit_type: UnitType, heroes: &[HeroInfluence<D>]) -> (Unit<D>, i32) {
         let attr_overrides = self.unit_build_overrides(game, pos, heroes);
         let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment)
         .set_status(ActionStatus::Exhausted);
@@ -367,7 +365,7 @@ impl Terrain {
         (unit, cost)
     }
 
-    pub fn unit_shop<D: Direction>(&self, game: &Game<D>, pos: Point, is_bubble: bool) -> Vec<(Unit<D>, i32)> {
+    pub fn unit_shop<D: Direction>(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<(Unit<D>, i32)> {
         let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         if !self.can_build(game, pos, &heroes) {
             return Vec::new();
@@ -377,7 +375,7 @@ impl Terrain {
         }).collect()
     }
 
-    pub fn on_build<D: Direction>(&self, game: &Game<D>, pos: Point, is_bubble: bool) -> Vec<TerrainScript> {
+    pub fn on_build<D: Direction>(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<usize> {
         let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         self.environment.config.terrain_on_build(
             game,

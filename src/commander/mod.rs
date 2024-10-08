@@ -5,8 +5,7 @@ mod test;
 use commander_type::CommanderType;
 use zipper::*;
 
-use crate::config::environment::Environment;
-use crate::script::custom_power::CustomPower;
+use crate::{config::environment::Environment, script::custom_action::CustomAction};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Commander {
@@ -117,12 +116,9 @@ impl Commander {
         power.required_charge
     }
 
-    pub fn power_activation_script(&self, index: usize) -> CustomPower {
-        let power = match self.environment.config.commander_powers(self.typ).get(index) {
-            Some(power) => power,
-            None => return CustomPower::None,
-        };
-        power.script.clone()
+    pub fn power_activation_script(&self, index: usize) -> Option<CustomAction> {
+        self.environment.config.commander_powers(self.typ).get(index)
+            .and_then(|config| config.script)
     }
 
 }

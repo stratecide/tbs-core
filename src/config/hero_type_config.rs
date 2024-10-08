@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::error::Error;
+
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
 use crate::units::hero::*;
 
+use super::file_loader::{FileLoader, TableLine};
 use super::number_modification::NumberMod;
 use super::ConfigParseError;
 
@@ -18,25 +21,25 @@ pub struct HeroTypeConfig {
     pub(super) transport_capacity: u8,
 }
 
-impl HeroTypeConfig {
-    pub fn parse(data: &HashMap<HeroTypeConfigHeader, &str>) -> Result<Self, ConfigParseError> {
+impl TableLine for HeroTypeConfig {
+    type Header = HeroTypeConfigHeader;
+    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
         use HeroTypeConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: parse(data, H::Id)?,
+            id: parse(data, H::Id, loader)?,
             name: get(H::Name)?.to_string(),
-            price: parse_def(data, H::Price, NumberMod::Keep)?,
-            charge: parse_def(data, H::Charge, 0)?,
-            transport_capacity: parse_def(data, H::TransportCapacity, 0)?,
+            price: parse_def(data, H::Price, NumberMod::Keep, loader)?,
+            charge: parse_def(data, H::Charge, 0, loader)?,
+            transport_capacity: parse_def(data, H::TransportCapacity, 0, loader)?,
         };
-        result.simple_validation()?;
         Ok(result)
     }
 
-    pub fn simple_validation(&self) -> Result<(), ConfigParseError> {
+    fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
         // TODO
         Ok(())
     }

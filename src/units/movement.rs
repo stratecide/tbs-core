@@ -14,7 +14,6 @@ use crate::game::commands::CommandError;
 use crate::game::game_view::GameView;
 use crate::game::modified_view::*;
 use crate::map::direction::Direction;
-use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::map::map::*;
@@ -65,7 +64,7 @@ pub enum PathStep<D: Direction> {
     //Point(Point),
 }
 impl<D: Direction> PathStep<D> {
-    pub fn progress(&self, map: &impl MapView<D>, pos: Point) -> Result<(Point, Distortion<D>), CommandError> {
+    pub fn progress(&self, map: &impl GameView<D>, pos: Point) -> Result<(Point, Distortion<D>), CommandError> {
         match *self {
             Self::Dir(d) => {
                 map.get_neighbor(pos, d)
@@ -149,7 +148,7 @@ impl<D: Direction> Path<D> {
         self.steps.len()
     }
 
-    pub fn end(&self, map: &impl MapView<D>) -> Result<(Point, Distortion<D>), CommandError> {
+    pub fn end(&self, map: &impl GameView<D>) -> Result<(Point, Distortion<D>), CommandError> {
         let mut current = self.start;
         let mut distortion = Distortion::neutral();
         for step in &self.steps {
@@ -160,7 +159,7 @@ impl<D: Direction> Path<D> {
         Ok((current, distortion))
     }
     
-    pub fn points(&self, game: &impl MapView<D>) -> Result<Vec<Point>, CommandError> {
+    pub fn points(&self, game: &impl GameView<D>) -> Result<Vec<Point>, CommandError> {
         let mut points = vec![self.start];
         let mut current = self.start;
         for step in self.steps.iter() {
@@ -183,7 +182,7 @@ impl<D: Direction> Path<D> {
 }
 
 // rotated slightly counter-clockwise compared to dir
-pub fn get_diagonal_neighbor<D: Direction>(map: &impl MapView<D>, p: Point, dir: D) -> Option<(Point, Distortion<D>)> {
+pub fn get_diagonal_neighbor<D: Direction>(map: &impl GameView<D>, p: Point, dir: D) -> Option<(Point, Distortion<D>)> {
     let map = map.wrapping_logic();
     let dir2 = dir.rotate(false);
     for (dir, dir2) in [(dir, dir2), (dir2, dir)] {
@@ -197,7 +196,7 @@ pub fn get_diagonal_neighbor<D: Direction>(map: &impl MapView<D>, p: Point, dir:
 }
 
 // moves 2 fields in the given direction, then turns left or right and moves another field
-pub fn get_knight_neighbor<D: Direction>(map: &impl MapView<D>, p: Point, dir: D, turn_left: bool) -> Option<(Point, Distortion<D>)> {
+pub fn get_knight_neighbor<D: Direction>(map: &impl GameView<D>, p: Point, dir: D, turn_left: bool) -> Option<(Point, Distortion<D>)> {
     let map = map.wrapping_logic();
     let dir2 = dir.rotate(!turn_left);
     for (dir, dir2, dir3) in [(dir, dir, dir2), (dir, dir2, dir), (dir2, dir, dir)] {
@@ -272,7 +271,7 @@ impl<D: Direction> TBallast<D> {
         }
     }
 
-    fn useful_with<'a>(&self, mut others: impl Iterator<Item = &'a Self>, _map: &impl MapView<D>, _point: Point) -> bool {
+    fn useful_with<'a>(&self, mut others: impl Iterator<Item = &'a Self>, _map: &impl GameView<D>, _point: Point) -> bool {
         match self {
             Self::MovementPoints(mp) => {
                 others.all(|other| match other {
@@ -370,7 +369,7 @@ impl<D: Direction> TemporaryBallast<D> {
         order
     }
 
-    fn useful_with<'a>(&self, others: impl Iterator<Item = &'a Self>, map: &impl MapView<D>, point: Point) -> bool {
+    fn useful_with<'a>(&self, others: impl Iterator<Item = &'a Self>, map: &impl GameView<D>, point: Point) -> bool {
         let mut sub_others = Vec::new();
         for _ in &self.entries {
             sub_others.push(Vec::new());
@@ -473,7 +472,7 @@ impl<D: Direction> PermanentBallast<D> {
         Self::new(permanents)
     }
 
-    fn worse_or_equal(&self, other: &Self, map: &impl MapView<D>, point: Point) -> bool {
+    fn worse_or_equal(&self, other: &Self, map: &impl GameView<D>, point: Point) -> bool {
         /*if self.unit_type != other.unit_type {
             return false;
         }*/
@@ -552,7 +551,7 @@ pub enum PbEntry<D: Direction> {
 }
 
 impl<D: Direction> PbEntry<D> {
-    fn worse_or_equal(&self, other: &Self, map: &impl MapView<D>, point: Point) -> bool {
+    fn worse_or_equal(&self, other: &Self, map: &impl GameView<D>, point: Point) -> bool {
         match (self, other) {
             (Self::PawnDirection(d1), Self::PawnDirection(d2)) => {
                 if map.get_terrain(point).unwrap().is_chess() {
@@ -590,7 +589,7 @@ impl<D: Direction> MovementSearchMeta<D> {
             other.previous_turns.len().cmp(&self.previous_turns.len())
         }
     }
-    fn useful_with<'a>(&self, others: impl Iterator<Item = &'a Self>, map: &impl MapView<D>, point: Point) -> bool {
+    fn useful_with<'a>(&self, others: impl Iterator<Item = &'a Self>, map: &impl GameView<D>, point: Point) -> bool {
         let mut similar = Vec::new();
         // search for items that are at least as good as this one before considering temporary ballast
         for other in others.filter(|other| {
@@ -652,7 +651,7 @@ impl<D: Direction> Ord for MovementSearch<D> {
 // changes to themself s
 
 fn movement_search_core<D, CanStartFrom, BaseMovement, FindSteps, DoStep, CALLBACK>(
-    map: &impl MapView<D>,
+    map: &impl GameView<D>,
     start: Point,
     starting_ballast: PermanentBallast<D>,
     additional_turns: usize,
@@ -785,13 +784,13 @@ fn movement_search_map<D: Direction>(
     }
     let movement_pattern = unit.movement_pattern();
     let terrain = map.get_terrain(start).unwrap();
-    let first_permanent = PermanentBallast::from_unit(unit, terrain);
+    let first_permanent = PermanentBallast::from_unit(unit, &terrain);
     let base_movement = |pos: Point, permanent: &PermanentBallast<D>, round: usize| {
         let terrain = map.get_terrain(pos).unwrap();
         let mut temps = Vec::new();
         let mp = movement_points(pos, permanent, round);
         temps.push(TBallast::MovementPoints(mp));
-        movement_pattern.add_temporary_ballast(terrain, &permanent.entries, &mut temps);
+        movement_pattern.add_temporary_ballast(&terrain, &permanent.entries, &mut temps);
         // TODO: doesn't seem necessary for most units. there's probably a better way to do this...
         temps.push(TBallast::Takes(PathStepTakes::Allow));
         TemporaryBallast::new(temps)
@@ -837,7 +836,7 @@ fn movement_search_map<D: Direction>(
                 if let Some(cost) = movement_cost(point, &permanent_ballast, temporary_ballast.get_entries(), round) {
                     // TODO: preventing beach <-> bridge only needs the prev Terrain
                     // if the current one is either bridge or beach
-                    let permanent = permanent_ballast.step(distortion, terrain);
+                    let permanent = permanent_ballast.step(distortion, &terrain);
                     let mut temporary = temporary_ballast.entries.clone();
                     match temporary.get_mut(0) {
                         Some(TBallast::MovementPoints(mp)) => {
@@ -869,7 +868,7 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool, &TemporaryBallast<D>) -> PathS
             if u.get_transported().get(unload_index) == Some(unit) {
                 ignore_unit = Some((path_so_far.start, Some(unload_index)));
             }
-        } else if u == unit {
+        } else if u == *unit {
             ignore_unit = Some((path_so_far.start, None));
         }
     }
@@ -917,7 +916,7 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool, &TemporaryBallast<D>) -> PathS
                     reject = false;
                 }
                 // chess take
-                if unit.could_take(blocking_unit, takes) {
+                if unit.could_take(&blocking_unit, takes) {
                     can_continue = false;
                     can_stop_here = true;
                     reject = false;
@@ -972,7 +971,7 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool, &TemporaryBallast<D>) -> PathS
             game.update_hero(pos, permanent, round);
             let unit = game.get_hero();
             let terrain = game.get_terrain(pos).unwrap();
-            permanent.movement_cost(terrain, &unit)
+            permanent.movement_cost(&terrain, &unit)
         },
     )
 }
@@ -1003,12 +1002,12 @@ where F: FnMut(&[Path<D>], &Path<D>, Point, &TemporaryBallast<D>, &PermanentBall
             game.update_hero(pos, permanent, round);
             let unit = game.get_hero();
             let terrain = game.get_terrain(pos).unwrap();
-            permanent.movement_cost(terrain, &unit)
+            permanent.movement_cost(&terrain, &unit)
         },
     )
 }
 
-pub fn movement_area_map<D: Direction>(map: &Map<D>, unit: &Unit<D>, path_so_far: &Path<D>, rounds: usize) -> HashMap<Point, usize> {
+pub fn movement_area_map<D: Direction>(map: &impl GameView<D>, unit: &Unit<D>, path_so_far: &Path<D>, rounds: usize) -> HashMap<Point, usize> {
     let mut result = HashMap::new();
     let callback = |previous_turns: &[Path<D>], path: &Path<D>, point, _: &TemporaryBallast<D>, _: &_| {
         if previous_turns.len() == 0 && path.steps.len() <= path_so_far.steps.len() && path.steps[..] != path_so_far.steps[..path.steps.len()] {
@@ -1025,7 +1024,7 @@ pub fn movement_area_map<D: Direction>(map: &Map<D>, unit: &Unit<D>, path_so_far
     result
 }
 
-pub fn movement_area_game<D: Direction>(game: &Game<D>, unit: &Unit<D>, path_so_far: &Path<D>, rounds: usize, transporter: Option<(&Unit<D>, usize)>) -> HashMap<Point, usize> {
+pub fn movement_area_game<D: Direction>(game: &impl GameView<D>, unit: &Unit<D>, path_so_far: &Path<D>, rounds: usize, transporter: Option<(&Unit<D>, usize)>) -> HashMap<Point, usize> {
     let mut result = HashMap::new();
     movement_search_game(game, unit, path_so_far, rounds, transporter,
         |previous_turns: &[Path<D>], _path: &Path<D>, destination, can_continue, can_stop_here, _| {
@@ -1045,7 +1044,7 @@ pub fn movement_area_game<D: Direction>(game: &Game<D>, unit: &Unit<D>, path_so_
     result
 }
 
-pub fn search_path<D: Direction, F>(game: &Game<D>, unit: &Unit<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, callback: F) -> Option<(Path<D>, TemporaryBallast<D>)>
+pub fn search_path<D: Direction, F>(game: &impl GameView<D>, unit: &Unit<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>, callback: F) -> Option<(Path<D>, TemporaryBallast<D>)>
 where F: Fn(&Path<D>, Point, bool, &TemporaryBallast<D>) -> PathSearchFeedback {
     let mut result = None;
     movement_search_game(game, unit, path_so_far, 1, transporter,

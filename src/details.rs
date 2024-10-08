@@ -11,7 +11,6 @@ use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
-use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::Owner;
@@ -62,7 +61,7 @@ impl<D: Direction> Detail<D> {
         }
     }
 
-    pub fn get_vision(&self, game: &Game<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
+    pub fn get_vision(&self, game: &impl GameView<D>, pos: Point, team: ClientPerspective) -> HashMap<Point, FogIntensity> {
         let mut result = HashMap::new();
         match self {
             Self::Bubble(owner, _) => {
@@ -365,7 +364,6 @@ mod tests {
     use crate::details::Detail;
     use crate::map::direction::*;
     use crate::map::map::*;
-    use crate::map::map_view::MapView;
     use crate::map::point::*;
     use crate::map::point_map::PointMap;
     use crate::map::wrapping_map::*;

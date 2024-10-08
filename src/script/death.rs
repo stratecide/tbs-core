@@ -5,7 +5,6 @@ use crate::config::parse::*;
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
 use crate::map::direction::Direction;
-use crate::map::map_view::MapView;
 use crate::map::point::Point;
 use crate::units::attributes::AttributeKey;
 use crate::units::attributes::AttributeOverride;
@@ -66,7 +65,7 @@ impl DeathScript {
                 us.trigger(handler, death_pos, corpse);
             }
             Self::Type(typ) => {
-                let new_unit = typ.instance(handler.environment()).copy_from(corpse).build_with_defaults();
+                let new_unit = typ.instance(&handler.environment()).copy_from(corpse).build_with_defaults();
                 *corpse = new_unit;
             }
             Self::CopyAttacker(attribute_keys) => {

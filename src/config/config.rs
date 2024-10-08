@@ -1,37 +1,30 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::error::Error;
 use std::sync::Arc;
 
 use interfaces::*;
 use num_rational::Rational32;
+use rhai::*;
 use semver::Version;
 
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
 use crate::game::game_view::GameView;
-use crate::game::import_client;
-use crate::game::import_server;
+use crate::game::{import_client, import_server};
 use crate::game::settings::GameConfig;
 use crate::game::GameType;
+use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::map::import_map;
 use crate::map::map::MapType;
 use crate::map::point::Point;
-use crate::script::attack::AttackScript;
-use crate::script::death::DeathScript;
-use crate::script::defend::DefendScript;
-use crate::script::kill::KillScript;
-use crate::script::terrain::TerrainScript;
-use crate::script::unit::UnitScript;
+use crate::script::executor::Executor;
+use crate::script::*;
 use crate::terrain::terrain::Terrain;
-use crate::terrain::AmphibiousTyping;
-use crate::terrain::ExtraMovementOptions;
-use crate::terrain::TerrainType;
+use crate::terrain::*;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::combat::*;
-use crate::units::movement::MovementType;
-use crate::units::movement::TBallast;
+use crate::units::movement::*;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::units::attributes::*;
@@ -46,6 +39,7 @@ use super::commander_type_config::CommanderTypeConfig;
 use super::commander_unit_config::CommanderPowerUnitConfig;
 use super::movement_type_config::MovementPattern;
 use super::number_modification::NumberMod;
+use super::table_config::{CustomTable, TableValue};
 use super::terrain_powered::TerrainPoweredConfig;
 use super::terrain_type_config::TerrainTypeConfig;
 use super::unit_filter::*;
@@ -82,7 +76,7 @@ pub struct Config {
     pub(super) movement_cost: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
     pub(super) attack_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
     pub(super) defense_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    pub(super) build_or_repair: HashMap<TerrainType, Vec<UnitType>>,
+    //pub(super) build_or_repair: HashMap<TerrainType, Vec<UnitType>>,
     pub(super) max_capture_resistance: u8,
     pub(super) terrain_max_anger: u8,
     pub(super) terrain_max_built_this_turn: u8,
@@ -92,12 +86,17 @@ pub struct Config {
     pub(super) commander_types: Vec<CommanderType>,
     pub(super) commanders: HashMap<CommanderType, CommanderTypeConfig>,
     pub(super) commander_powers: HashMap<CommanderType, Vec<CommanderPowerConfig>>,
-    pub(super) default_terrain_overrides: Vec<TerrainPoweredConfig>,
-    pub(super) commander_terrain: HashMap<CommanderType, HashMap<Option<u8>, Vec<TerrainPoweredConfig>>>,
-    pub(super) default_unit_overrides: Vec<CommanderPowerUnitConfig>,
-    pub(super) commander_units: HashMap<CommanderType, HashMap<Option<u8>, Vec<CommanderPowerUnitConfig>>>,
+    pub(super) terrain_overrides: Vec<TerrainPoweredConfig>,
+    pub(super) unit_overrides: Vec<CommanderPowerUnitConfig>,
     pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
     pub(super) max_commander_charge: u32,
+    // rhai
+    pub(super) global_ast: AST,
+    pub(super) global_module: Shared<Module>,
+    pub(super) global_constants: Scope<'static>,
+    pub(super) asts: Vec<AST>,
+    pub(super) functions: Vec<(usize, String)>,
+    pub(super) custom_tables: HashMap<String, (TableValue, CustomTable)>,
 }
 
 impl ConfigInterface for Config {
@@ -107,8 +106,8 @@ impl ConfigInterface for Config {
 
     fn parse_map(self: Arc<Self>, bytes: Vec<u8>) -> Result<Box<dyn MapInterface>, Box<dyn Error>> {
         match import_map(&self, bytes, Version::parse(VERSION)?)? {
-            MapType::Hex(map) => Ok(Box::new(map)),
-            MapType::Square(map) => Ok(Box::new(map)),
+            MapType::Hex(map) => Ok(Box::new(Handle::new(map))),
+            MapType::Square(map) => Ok(Box::new(Handle::new(map))),
         }
     }
 
@@ -118,15 +117,15 @@ impl ConfigInterface for Config {
 
     fn parse_server(self: Arc<Self>, data: ExportedGame) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
         match import_server(&self, data, Version::parse(VERSION)?)? {
-            GameType::Hex(game) => Ok(Box::new(game)),
-            GameType::Square(game) => Ok(Box::new(game)),
+            GameType::Hex(game) => Ok(Box::new(Handle::new(game))),
+            GameType::Square(game) => Ok(Box::new(Handle::new(game))),
         }
     }
 
     fn parse_client(self: Arc<Self>, public: Vec<u8>, secret: Option<(Team, Vec<u8>)>) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
         match import_client(&self, public, secret, Version::parse(VERSION)?)? {
-            GameType::Hex(game) => Ok(Box::new(game)),
-            GameType::Square(game) => Ok(Box::new(game)),
+            GameType::Hex(game) => Ok(Box::new(Handle::new(game))),
+            GameType::Square(game) => Ok(Box::new(Handle::new(game))),
         }
     }
 }
@@ -304,11 +303,47 @@ impl Config {
         &self.hero_config(typ).name
     }
 
-    pub fn hero_price(&self, typ: HeroType, unit: UnitType) -> Option<i32> {
-        if self.hero_units.get(&typ)?.contains(&unit) {
-            Some(self.hero_config(typ).price.update_value(self.base_cost(unit)))
-        } else {
+    pub fn hero_unit_compatible(&self, typ: HeroType, unit: UnitType) -> bool {
+        self.hero_units.get(&typ)
+        .map(|units| units.contains(&unit))
+        .unwrap_or(false)
+    }
+
+    pub fn hero_price<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        hero: HeroType,
+        unit: Unit<D>,
+        path: Path<D>,
+        unit_pos: Point,
+        // when moving out of a transporter, or start_turn for transported units
+        transporter: Option<(&Unit<D>, usize)>,
+        // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
+        _heroes: &[HeroInfluence<D>],
+        // empty if the unit hasn't moved
+        _temporary_ballast: &[TBallast<D>],
+    ) -> Option<i32> {
+        let unit_type = unit.typ();
+        if !self.hero_unit_compatible(hero, unit_type) {
+            return None
+        }
+        let engine = game.environment().get_engine();
+        let mut scope = Scope::new();
+        game.add_self_to_scope(&mut scope);
+        // build scope
+        scope.push_constant("transporter", transporter.map(|(t, _)| t.clone()));
+        scope.push_constant("transporter_position", path.start);
+        scope.push_constant("transporter_index", transporter.map(|(_, i)| i));
+        scope.push_constant("path", path);
+        scope.push_constant("unit", unit);
+        scope.push_constant("unit_position", unit_pos);
+        // TODO: heroes and ballast (put them into Arc<Vec<>> instead of &[])
+        let executor = Executor::new(engine, scope, game.environment());
+        let cost = self.hero_config(hero).price.update_value(self.base_cost(unit_type), &executor);
+        if cost < 0 {
             None
+        } else {
+            Some(cost)
         }
     }
 
@@ -347,7 +382,7 @@ impl Config {
         transporter: Option<(&Unit<D>, usize)>,
     ) -> Option<usize> {
         let hero = unit.get_hero();
-        let iter = self.unit_power_configs(
+        let result = self.unit_power_configs(
             map,
             unit,
             (unit_pos, transporter.map(|u| u.1)),
@@ -356,20 +391,24 @@ impl Config {
             &[],
             &[],
             false,
-        );
-        let result = if transporter.is_none() {
-            let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range;
-            NumberMod::update_value_repeatedly(
-                aura_range,
-                iter.map(|c| &c.aura_range)
-            )
-        } else {
-            let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range_transported;
-            NumberMod::update_value_repeatedly(
-                aura_range,
-                iter.map(|c| &c.aura_range_transported)
-            )
-        };
+            |iter, executor| -> Option<i8> {
+                Some(if transporter.is_none() {
+                    let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range;
+                    NumberMod::update_value_repeatedly(
+                        aura_range,
+                        iter.map(|c| &c.aura_range),
+                        executor,
+                    )
+                } else {
+                    let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range_transported;
+                    NumberMod::update_value_repeatedly(
+                        aura_range,
+                        iter.map(|c| &c.aura_range_transported),
+                        executor,
+                    )
+                })
+            }
+        )?;
         if result < 0 {
             None
         } else {
@@ -433,34 +472,41 @@ impl Config {
 
     /**
      * this function could indirectly call itself!
-     * checking another terrain's config from game may cause infinite recursion!
-     * -> get_terrain has to replace the returned terrain with a "dummy" terrain that doesn't have access to any configs
+     * avoids infinite recursion using "terrain_config_limit"
      */
-    pub(super) fn terrain_power_configs<'a, D: Direction>(
+    pub(super) fn terrain_power_configs<'a, D: Direction, R>(
         &'a self,
-        map: &'a impl GameView<D>,
+        game: &'a impl GameView<D>,
         pos: Point,
         terrain: &'a Terrain,
         is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &'a [HeroInfluence<D>],
-    ) -> impl DoubleEndedIterator<Item = &'a TerrainPoweredConfig> {
-        let commander = terrain.get_commander(map);
-        let mut slices = vec![&self.default_terrain_overrides];
-        // should always be true
-        if let Some(configs) = self.commander_terrain.get(&commander.typ()) {
-            if let Some(neutral) = configs.get(&None) {
-                slices.push(neutral);
-            }
-            if let Some(power) = configs.get(&Some(commander.get_active_power() as u8)) {
-                slices.push(power);
-            }
-        }
-        slices.into_iter()
-        .flatten()
-        .filter(move |config| {
-            config.affects.iter().all(|filter| filter.check(map, pos, terrain, is_bubble, heroes))
+        f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a TerrainPoweredConfig> + 'a>, &Executor) -> R,
+    ) -> R {
+        let engine = game.environment().get_engine();
+        let mut scope = Scope::new();
+        game.add_self_to_scope(&mut scope);
+        // build scope
+        scope.push_constant(CONST_NAME_POSITION, pos);
+        scope.push_constant(CONST_NAME_TERRAIN, terrain.clone());
+        scope.push_constant(CONST_NAME_IS_BUBBLE, is_bubble);
+        // TODO: heroes (put them into Arc<Vec<>> instead of &[])
+        let executor = Arc::new(Executor::new(engine, scope, game.environment()));
+        let executor_ = executor.clone();
+        let max_len = self.terrain_overrides.len();
+        let limit = game.get_terrain_config_limit();
+        let it = self.terrain_overrides.iter()
+        .take(limit.unwrap_or(max_len))
+        .enumerate()
+        .filter(move |(i, config)| {
+            game.set_terrain_config_limit(Some(*i));
+            config.affects.iter().all(|filter| filter.check(game, pos, terrain, is_bubble, heroes, &executor))
         })
+        .map(|(_, config)| config);
+        let r = f(Box::new(it), &executor_);
+        game.set_terrain_config_limit(limit);
+        r
     }
 
     pub fn terrain_path_extra(&self, typ: TerrainType) -> ExtraMovementOptions {
@@ -504,12 +550,20 @@ impl Config {
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
     ) -> Option<usize> {
-        let iter = self.terrain_power_configs(map, pos, terrain, false, heroes)
-        .map(|c| &c.vision);
-        let mut result = NumberMod::update_value_repeatedly(
-            self.terrain_config(terrain.typ()).vision_range,
-            iter,
-        ) as i8;
+        let mut result = self.terrain_power_configs(
+            map,
+            pos,
+            terrain,
+            false,
+            heroes,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    self.terrain_config(terrain.typ()).vision_range,
+                    iter.map(|c| &c.vision),
+                    executor,
+                ) as i8
+            }
+        );
         if result < 0 && self.terrain_can_build(map, pos, terrain, heroes) {
             result = 0;
         }
@@ -536,11 +590,21 @@ impl Config {
         heroes: &[HeroInfluence<D>],
     ) -> bool {
         let mut result = self.terrain_can_build_base(terrain.typ());
-        for config in self.terrain_power_configs(map, pos, terrain, false, heroes) {
-            if let Some(can_build) = config.build {
-                result = can_build;
+        self.terrain_power_configs(
+            map,
+            pos,
+            terrain,
+            false,
+            heroes,
+            |iter, _executor| {
+                for config in iter.rev() {
+                    if let Some(can_build) = config.build {
+                        result = can_build;
+                        break;
+                    }
+                }
             }
-        }
+        );
         result
     }
 
@@ -553,11 +617,12 @@ impl Config {
     }
 
     pub fn terrain_build_or_repair(&self, typ: TerrainType) -> &[UnitType] {
-        if let Some(units) = self.build_or_repair.get(&typ) {
+        /*if let Some(units) = self.build_or_repair.get(&typ) {
             &units
         } else {
             &[]
-        }
+        }*/
+        &[]
     }
 
     pub fn terrain_specific_attributes(&self, typ: TerrainType) -> &[TerrainAttributeKey] {
@@ -575,7 +640,7 @@ impl Config {
         _pos: Point,
         _heroes: &[HeroInfluence<D>],
     ) -> HashMap<AttributeKey, AttributeOverride> {
-        let mut result = HashMap::new();
+        let mut result = HashMap::default();
         for ov in &self.terrain_config(terrain.typ()).build_overrides {
             result.insert(ov.key(), ov.clone());
         }
@@ -589,11 +654,20 @@ impl Config {
         terrain: &Terrain,
         is_bubble: bool,
         heroes: &[HeroInfluence<D>],
-    ) -> Vec<TerrainScript> {
+    ) -> Vec<usize> {
         let mut result = Vec::new();
-        for config in self.terrain_power_configs(map, pos, terrain, is_bubble, heroes) {
-            result.extend(config.on_build.iter().cloned())
-        }
+        self.terrain_power_configs(
+            map,
+            pos,
+            terrain,
+            is_bubble,
+            heroes,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_build.iter().cloned())
+                }
+            }
+        );
         result
     }
 
@@ -676,12 +750,11 @@ impl Config {
      * this function can indirectly call itself, if
      *      - some config of other_unit, transporter or a hero is filtered for
      *      - the filter takes a unit from game and wants to check one of its configs
-     * checking a unit config from game may cause infinite recursion!
-     * -> get_unit has to replace the returned unit with a "dummy" unit that doesn't have access to any configs (not through its hero either)
+     * avoids infinite recursion using "unit_config_limit"
      */
-    pub(super) fn unit_power_configs<'a, D: Direction>(
+    fn unit_power_configs<'a, D: Direction, R>(
         &'a self,
-        map: &'a impl GameView<D>,
+        game: &'a impl GameView<D>,
         unit: &'a Unit<D>,
         unit_pos: (Point, Option<usize>),
         // when moving out of a transporter, or start_turn for transported units
@@ -693,23 +766,37 @@ impl Config {
         // empty if the unit hasn't moved
         temporary_ballast: &'a [TBallast<D>],
         is_counter: bool,
-    ) -> impl DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> {
-        let commander = unit.get_commander(map);
-        let mut slices = vec![&self.default_unit_overrides];
-        // should always be true
-        if let Some(configs) = self.commander_units.get(&commander.typ()) {
-            if let Some(neutral) = configs.get(&None) {
-                slices.push(neutral);
-            }
-            if let Some(power) = configs.get(&Some(commander.get_active_power() as u8)) {
-                slices.push(power);
-            }
-        }
-        slices.into_iter()
-        .flatten()
-        .filter(move |config| {
-            config.affects.iter().all(|filter| filter.check(map, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast, is_counter))
+        f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> + 'a>, &Executor) -> R,
+    ) -> R {
+        // get engine...
+        let engine = game.environment().get_engine();
+        let mut scope = Scope::new();
+        game.add_self_to_scope(&mut scope);
+        // build scope
+        scope.push_constant(CONST_NAME_UNIT, unit.clone());
+        scope.push_constant(CONST_NAME_POSITION, unit_pos.0);
+        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, unit_pos.1.map(|i| i as i32));
+        scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
+        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.map(|(_, p)| p));
+        scope.push_constant(CONST_NAME_OTHER_UNIT, other_unit.map(|(t, _)| t.clone()));
+        scope.push_constant(CONST_NAME_OTHER_POSITION, other_unit.map(|(_, p)| p));
+        // TODO: heroes and ballast (put them into Arc<>s)
+        scope.push_constant(CONST_NAME_IS_COUNTER,is_counter);
+        let executor = Arc::new(Executor::new(engine, scope, game.environment()));
+        let executor_ = executor.clone();
+        let max_len = self.unit_overrides.len();
+        let limit = game.get_unit_config_limit();
+        let it = self.unit_overrides.iter()
+        .take(limit.unwrap_or(max_len))
+        .enumerate()
+        .filter(move |(i, config)| {
+            game.set_unit_config_limit(Some(*i));
+            config.affects.iter().all(|filter| filter.check(game, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast, is_counter, &executor))
         })
+        .map(|(_, config)| config);
+        let r = f(Box::new(it), &executor_);
+        game.set_unit_config_limit(limit);
+        r
     }
 
     pub fn unit_cost<D: Direction>(
@@ -720,10 +807,22 @@ impl Config {
         factory_unit: Option<&Unit<D>>, // if built by a unit
         heroes: &[HeroInfluence<D>],
     ) -> i32 {
-        let iter = self.unit_power_configs(game, unit, (unit_pos, None), factory_unit.map(|u| (u, unit_pos)), None, heroes, &[], false);
-        NumberMod::update_value_repeatedly(
-            self.base_cost(unit.typ()),
-            iter.map(|c| &c.cost)
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            factory_unit.map(|u| (u, unit_pos)),
+            None,
+            heroes,
+            &[],
+            false,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    self.base_cost(unit.typ()),
+                    iter.map(|c| &c.cost),
+                    executor,
+                )
+            }
         )
     }
 
@@ -736,11 +835,24 @@ impl Config {
         heroes: &[HeroInfluence<D>],
     ) -> UnitVisibility {
         let mut result = self.unit_config(unit.typ()).visibility;
-        for config in self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[], false) {
-            if let Some(visibility) = config.visibility {
-                result = visibility;
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            None,
+            None,
+            heroes,
+            &[],
+            false,
+            |iter, _executor| {
+                for config in iter.rev() {
+                    if let Some(visibility) = config.visibility {
+                        result = visibility;
+                        break;
+                    }
+                }
             }
-        }
+        );
         result
     }
 
@@ -751,11 +863,22 @@ impl Config {
         unit_pos: Point,
         heroes: &[HeroInfluence<D>],
     ) -> usize {
-        let iter = self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[], false)
-        .map(|c| &c.vision);
-        NumberMod::update_value_repeatedly(
-            self.base_vision_range(unit.typ()) as u8,
-            iter,
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            None,
+            None,
+            heroes,
+            &[],
+            false,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    self.base_vision_range(unit.typ()) as u8,
+                    iter.map(|c| &c.vision),
+                    executor,
+                )
+            }
         ) as usize
     }
 
@@ -766,11 +889,22 @@ impl Config {
         unit_pos: Point,
         heroes: &[HeroInfluence<D>],
     ) -> usize {
-        let iter = self.unit_power_configs(game, unit, (unit_pos, None), None, None, heroes, &[], false)
-        .map(|c| &c.true_vision);
-        NumberMod::update_value_repeatedly(
-            self.base_true_vision_range(unit.typ()) as u8,
-            iter,
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            None,
+            None,
+            heroes,
+            &[],
+            false,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    self.base_true_vision_range(unit.typ()) as u8,
+                    iter.map(|c| &c.true_vision),
+                    executor,
+                )
+            }
         ) as usize
     }
 
@@ -783,12 +917,23 @@ impl Config {
         heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
     ) -> HashMap<AttributeKey, AttributeOverride> {
-        let mut result = HashMap::new();
-        for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, None, heroes, temporary_ballast, false) {
-            for ov in &config.build_overrides {
-                result.insert(ov.key(), ov.clone());
+        let mut result = HashMap::default();
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            transporter,
+            None, heroes,
+            temporary_ballast,
+            false,
+            |iter, _executor| {
+                for config in iter {
+                    for ov in &config.build_overrides {
+                        result.insert(ov.key(), ov.clone());
+                    }
+                }
             }
-        }
+        );
         result
     }
 
@@ -799,11 +944,23 @@ impl Config {
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
         heroes: &[HeroInfluence<D>],
-    ) -> Vec<UnitScript> {
+    ) -> Vec<usize> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[], false) {
-            result.extend(config.on_start_turn.iter().cloned())
-        }
+        self.unit_power_configs(
+            game,
+            unit,
+            unit_pos,
+            transporter,
+            None,
+            heroes,
+            &[],
+            false,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_start_turn.iter().cloned())
+                }
+            }
+        );
         result
     }
 
@@ -814,11 +971,23 @@ impl Config {
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
         heroes: &[HeroInfluence<D>],
-    ) -> Vec<UnitScript> {
+    ) -> Vec<usize> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[], false) {
-            result.extend(config.on_end_turn.iter().cloned())
-        }
+        self.unit_power_configs(
+            game,
+            unit,
+            unit_pos,
+            transporter,
+            None,
+            heroes,
+            &[],
+            false,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_end_turn.iter().cloned())
+                }
+            }
+        );
         result
     }
 
@@ -833,11 +1002,23 @@ impl Config {
         heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
-    ) -> Vec<AttackScript> {
+    ) -> Vec<usize> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, Some((defender, defender_pos)), heroes, temporary_ballast, is_counter) {
-            result.extend(config.on_attack.iter().cloned())
-        }
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            transporter,
+            Some((defender, defender_pos)),
+            heroes,
+            temporary_ballast,
+            is_counter,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_attack.iter().cloned())
+                }
+            }
+        );
         result
     }
 
@@ -852,12 +1033,23 @@ impl Config {
         heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool
-    ) -> Vec<DefendScript> {
-        let is_counter = temporary_ballast.len() > 0;
+    ) -> Vec<usize> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, Some((attacker, attacker_pos)), heroes, temporary_ballast, is_counter) {
-            result.extend(config.on_defend.iter().cloned())
-        }
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            transporter,
+            Some((attacker, attacker_pos)),
+            heroes,
+            temporary_ballast,
+            is_counter,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_defend.iter().cloned())
+                }
+            }
+        );
         result
     }
 
@@ -872,11 +1064,23 @@ impl Config {
         heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
-    ) -> Vec<KillScript> {
+    ) -> Vec<usize> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(game, unit, (unit_pos, None), transporter, Some((defender, defender_pos)), heroes, temporary_ballast, is_counter) {
-            result.extend(config.on_kill.iter().cloned())
-        }
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            transporter,
+            Some((defender, defender_pos)),
+            heroes,
+            temporary_ballast,
+            is_counter,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_kill.iter().cloned())
+                }
+            }
+        );
         result
     }
 
@@ -889,11 +1093,23 @@ impl Config {
         attacker: Option<(&Unit<D>, Point)>,
         heroes: &[HeroInfluence<D>],
         temporary_ballast: &[TBallast<D>],
-    ) -> Vec<DeathScript> {
+    ) -> Vec<usize> {
         let mut result = Vec::new();
-        for config in self.unit_power_configs(game, unit, unit_pos, transporter, attacker, heroes, temporary_ballast, false) {
-            result.extend(config.on_death.iter().cloned())
-        }
+        self.unit_power_configs(
+            game,
+            unit,
+            unit_pos,
+            transporter,
+            attacker,
+            heroes,
+            temporary_ballast,
+            false,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_death.iter().cloned())
+                }
+            }
+        );
         result
     }
 
@@ -905,11 +1121,22 @@ impl Config {
         transporter: Option<(&Unit<D>, Point)>,
         heroes: &[HeroInfluence<D>],
     ) -> Rational32 {
-        let iter = self.unit_power_configs(game, unit, unit_pos, transporter, None, heroes, &[], false)
-        .map(|c| &c.movement_points);
-        NumberMod::update_value_repeatedly(
-            self.base_movement_points(unit.typ()),
-            iter,
+        self.unit_power_configs(
+            game,
+            unit,
+            unit_pos,
+            transporter,
+            None,
+            heroes,
+            &[],
+            false,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    self.base_movement_points(unit.typ()),
+                    iter.map(|c| &c.movement_points),
+                    executor,
+                )
+            }
         )
     }
 
@@ -923,7 +1150,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
     ) -> AttackType {
         let mut result = self.default_attack_pattern(unit.typ());
-        for conf in self.unit_power_configs(
+        self.unit_power_configs(
             game,
             unit,
             (unit_pos, None),
@@ -932,11 +1159,14 @@ impl Config {
             heroes,
             temporary_ballast,
             counter.is_counter(),
-        ) {
-            if let Some(pattern) = conf.attack_pattern {
-                result = pattern;
+            |iter, _executor| {
+                for conf in iter {
+                    if let Some(pattern) = conf.attack_pattern {
+                        result = pattern;
+                    }
+                }
             }
-        }
+        );
         result
     }
 
@@ -951,7 +1181,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Rational32 {
-        let iter = || self.unit_power_configs(
+        let iter_gen = |f: Box<dyn Fn(Box<dyn DoubleEndedIterator<Item = &CommanderPowerUnitConfig>>, &Executor) -> num_rational::Ratio<i32>>| self.unit_power_configs(
             game,
             unit,
             (unit_pos, None),
@@ -960,16 +1190,23 @@ impl Config {
             heroes,
             temporary_ballast,
             is_counter,
+            f,
         );
-        let factor = NumberMod::update_value_repeatedly(
-            Rational32::from_integer(1),
-            iter().map(|c| &c.attack)
-        );
+        let factor = iter_gen(Box::new(|iter: Box<dyn DoubleEndedIterator<Item = &CommanderPowerUnitConfig>>, executor| {
+            NumberMod::update_value_repeatedly(
+                Rational32::from_integer(1),
+                iter.map(|c| &c.attack),
+                executor,
+            )
+        }));
         // attack is reduced by the damage the attacker has already taken
-        let damage_factor = NumberMod::update_value_repeatedly(
-            Rational32::from_integer(1),
-            iter().map(|c| &c.attack_reduced_by_damage)
-        );
+        let damage_factor = iter_gen(Box::new(|iter: Box<dyn DoubleEndedIterator<Item = &CommanderPowerUnitConfig>>, executor| {
+            NumberMod::update_value_repeatedly(
+                Rational32::from_integer(1),
+                iter.map(|c| &c.attack_reduced_by_damage),
+                executor,
+            )
+        }));
         let damage = Rational32::from_integer(100 - unit.get_hp() as i32);
         let hp_factor = (Rational32::from_integer(100) - damage * damage_factor) / 100;
         hp_factor * factor
@@ -985,7 +1222,7 @@ impl Config {
         heroes: &[HeroInfluence<D>],
         is_counter: bool,
     ) -> Rational32 {
-        let iter = self.unit_power_configs(
+        self.unit_power_configs(
             game,
             unit,
             (unit_pos, None),
@@ -994,10 +1231,13 @@ impl Config {
             heroes,
             &[],
             is_counter,
-        );
-        NumberMod::update_value_repeatedly(
-            Rational32::from_integer(1),
-            iter.map(|c| &c.defense)
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    Rational32::from_integer(1),
+                    iter.map(|c| &c.defense),
+                    executor,
+                )
+            }
         )
     }
 
@@ -1013,7 +1253,7 @@ impl Config {
         base_range: u8,
         is_counter: bool,
     ) -> u8 {
-        let iter = self.unit_power_configs(
+        self.unit_power_configs(
             game,
             unit,
             (unit_pos, None),
@@ -1022,18 +1262,22 @@ impl Config {
             heroes,
             temporary_ballast,
             is_counter,
-        );
-        if min_range {
-            NumberMod::update_value_repeatedly(
-                base_range,
-                iter.map(|c| &c.min_range)
-            )
-        } else {
-            NumberMod::update_value_repeatedly(
-                base_range,
-                iter.map(|c| &c.max_range)
-            )
-        }
+            |iter, executor| {
+                if min_range {
+                    NumberMod::update_value_repeatedly(
+                        base_range,
+                        iter.map(|c| &c.min_range),
+                        executor,
+                    )
+                } else {
+                    NumberMod::update_value_repeatedly(
+                        base_range,
+                        iter.map(|c| &c.max_range),
+                        executor,
+                    )
+                }
+            }
+        )
     }
 
     pub fn unit_displacement_distance<D: Direction>(
@@ -1046,16 +1290,6 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> i8 {
-        let iter = self.unit_power_configs(
-            game,
-            unit,
-            (unit_pos, None),
-            transporter,
-            None,
-            heroes,
-            temporary_ballast,
-            is_counter,
-        );
         let base_displacement = self.base_displacement_distance(unit.typ());
         // manipulating the absolute value is more intuitive
         // but that means the sign has to be multiplied with at the end
@@ -1064,9 +1298,22 @@ impl Config {
         } else {
             1
         };
-        NumberMod::update_value_repeatedly(
-            base_displacement.abs(),
-            iter.map(|c| &c.displacement_distance)
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            transporter,
+            None,
+            heroes,
+            temporary_ballast,
+            is_counter,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    base_displacement.abs(),
+                    iter.map(|c| &c.displacement_distance),
+                    executor,
+                )
+            }
         ) * sign
     }
 
@@ -1080,7 +1327,7 @@ impl Config {
         is_counter: bool,
     ) -> Vec<Rational32> {
         let mut result: &[Rational32] = &[];
-        for config in self.unit_power_configs(
+        self.unit_power_configs(
             game,
             unit,
             (unit_pos, None),
@@ -1089,11 +1336,15 @@ impl Config {
             heroes,
             temporary_ballast,
             is_counter,
-        ) {
-            if config.splash_damage.len() > 0 {
-                result = config.splash_damage.as_slice();
+            |iter, _executor| {
+                for config in iter.rev() {
+                    if config.splash_damage.len() > 0 {
+                        result = config.splash_damage.as_slice();
+                        break;
+                    }
+                }
             }
-        }
+        );
         if result.len() == 0 {
             result = &self.unit_config(unit.typ()).splash_damage;
         }

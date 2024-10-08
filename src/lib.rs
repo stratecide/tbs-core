@@ -1,3 +1,4 @@
+#![feature(mapped_lock_guards)]
 pub mod map;
 pub mod player;
 pub mod terrain;
@@ -8,6 +9,7 @@ pub mod game;
 pub mod commander;
 pub mod config;
 pub mod script;
+pub mod handle;
 
 pub use zipper;
 pub use interfaces;
@@ -36,7 +38,7 @@ macro_rules! listable_enum {(
         }
 
         impl crate::config::parse::FromConfig for $name {
-            fn from_conf(s: &str) -> Result<(Self, &str), crate::config::ConfigParseError> {
+            fn from_conf<'a>(s: &'a str, _: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
                 let (base, s) = crate::config::parse::string_base(s);
                 match base {
                     $(stringify!($member) => Ok((Self::$member, s)),)*
@@ -93,7 +95,7 @@ macro_rules! enum_with_custom {(
         }
 
         impl crate::config::parse::FromConfig for $name {
-            fn from_conf(s: &str) -> Result<(Self, &str), crate::config::ConfigParseError> {
+            fn from_conf<'a>(s: &'a str, _: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
                 if let Some(index) = s.find(|c| !char::is_numeric(c)).or(Some(s.len())).filter(|i| *i > 0) {
                     let (number, remainder) = s.split_at(index);
                     if let Ok(custom) = number.parse() {

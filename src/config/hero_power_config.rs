@@ -1,9 +1,12 @@
-use std::collections::HashMap;
+use std::error::Error;
+
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
 use crate::script::custom_action::CustomAction;
 use crate::units::hero::HeroType;
 
+use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
 
 #[derive(Debug)]
@@ -15,45 +18,59 @@ pub struct HeroPowerConfig {
     pub(crate) required_charge: u8,
     pub(super) aura_range: i8,
     pub(super) aura_range_transported: i8,
-    pub(crate) script: CustomAction,
+    pub(crate) script: Option<CustomAction>,
     pub(super) prevents_charging: bool,
 }
 
-impl HeroPowerConfig {
-    pub fn parse(data: &HashMap<HeroPowerConfigHeader, &str>) -> Result<Self, ConfigParseError> {
+impl TableLine for HeroPowerConfig {
+    type Header = HeroPowerConfigHeader;
+    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
         use HeroPowerConfigHeader as H;
         use ConfigParseError as E;
         let get = |key| {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
-        let result = Self {
-            hero: parse(data, H::Hero)?,
-            name: get(H::Name)?.trim().to_string(),
-            usable_from_power: parse_vec_def(data, H::UsableFromPowers, Vec::new())?,
-            next_power: parse_def(data, H::NextPower, 0)?,
-            required_charge: parse_def(data, H::RequiredCharge, 0)?,
-            aura_range: parse_def(data, H::AuraRange, 0)?,
-            aura_range_transported: parse_def(data, H::AuraRange, -9)?,
-            script: parse_def(data, H::Script, CustomAction::None)?,
-            prevents_charging: parse_def(data, H::PreventsCharging, false)?,
+        let script = match data.get(&H::Script) {
+            Some(s) if s.len() > 0 => {
+                let exe = loader.rhai_function(s, 0..=1)?;
+                let input = if exe.parameter_count > 0 {
+                    Some(loader.rhai_function(&format!("{s}_input"), 0..=0)?.index)
+                } else {
+                    None
+                };
+                Some((input, exe.index))
+            }
+            _ => None,
         };
-        result.simple_validation()?;
+        let result = Self {
+            hero: parse(data, H::Hero, loader)?,
+            name: get(H::Name)?.trim().to_string(),
+            usable_from_power: parse_vec_def(data, H::UsableFromPowers, Vec::new(), loader)?,
+            next_power: parse_def(data, H::NextPower, 0, loader)?,
+            required_charge: parse_def(data, H::RequiredCharge, 0, loader)?,
+            aura_range: parse_def(data, H::AuraRange, 0, loader)?,
+            aura_range_transported: parse_def(data, H::AuraRange, -9, loader)?,
+            script,
+            prevents_charging: parse_def(data, H::PreventsCharging, false, loader)?,
+        };
         Ok(result)
     }
 
-    pub fn simple_validation(&self) -> Result<(), ConfigParseError> {
+    fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
         /*if self.name.len() == 0 {
             return Err(ConfigParseError::NameTooShort);
         }*/
         Ok(())
     }
-    
+}
+
+impl HeroPowerConfig {
     pub fn get_name(&self) -> &str {
         &self.name
     }
 
-    pub fn get_script(&self) -> &CustomAction {
-        &self.script
+    pub fn get_script(&self) -> Option<CustomAction> {
+        self.script
     }
 }
 
