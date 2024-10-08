@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use interfaces::ClientPerspective;
 use rhai::Scope;
@@ -367,3 +368,11 @@ impl<'a, D: Direction> ModifiedView<'a, D> for MovingHeroView<'a, D> {
 }
 
 impl_game_view!(MovingHeroView<'a, D>);
+
+impl<'a, D: Direction> ModifiedView<'a, D> for Arc<dyn GameView<D>> {
+    fn get_inner_view(&'a self) -> &'a dyn GameView<D> {
+        &**self
+    }
+}
+
+impl_game_view!(Arc<dyn GameView<D>>);

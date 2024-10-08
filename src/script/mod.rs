@@ -3,6 +3,7 @@ use rhai::packages::*;
 
 pub mod executor;
 pub mod custom_action;
+mod rhai_environment;
 //pub mod custom_power;
 /*pub mod defend;
 pub mod unit;
@@ -12,6 +13,7 @@ pub mod kill;
 pub mod terrain;
 pub mod death;*/
 
+pub const CONST_NAME_CONFIG: &'static str = "CONFIG";
 pub const CONST_NAME_BOARD: &'static str = "BOARD";
 pub const CONST_NAME_EVENT_HANDLER: &'static str = "EVENT_HANDLER";
 pub const CONST_NAME_POSITION: &'static str = "POSITION";
@@ -36,13 +38,14 @@ pub fn create_base_engine() -> Engine {
     let mut engine = Engine::new_raw();
     // add built-in packages
     CorePackage::new().register_into_engine(&mut engine);
-    CorePackage::new().register_into_engine(&mut engine);
+    LogicPackage::new().register_into_engine(&mut engine);
     BasicArrayPackage::new().register_into_engine(&mut engine);
     BasicMapPackage::new().register_into_engine(&mut engine);
     // maybe add MoreStringPackage or BitFieldPackage
     // my packages
     crate::map::rhai_point::PositionPackage::new().register_into_engine(&mut engine);
     crate::map::rhai_direction::DirectionPackage::new().register_into_engine(&mut engine);
+    rhai_environment::EnvironmentPackage::new().register_into_engine(&mut engine);
     crate::game::rhai_board::BoardPackage::new().register_into_engine(&mut engine);
     crate::terrain::rhai_terrain::TerrainPackage::new().register_into_engine(&mut engine);
     crate::units::rhai_unit::UnitPackage::new().register_into_engine(&mut engine);

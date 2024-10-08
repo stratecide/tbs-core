@@ -19,7 +19,7 @@ use crate::game::fog::*;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
 use crate::map::wrapping_map::{Distortion, OrientedPoint};
-use crate::script::CONST_NAME_BOARD;
+use crate::script::{CONST_NAME_BOARD, CONST_NAME_CONFIG};
 use crate::terrain::terrain::Terrain;
 use crate::{player::*, VERSION};
 use crate::units::unit::*;
@@ -27,6 +27,7 @@ use crate::units::unit::*;
 use super::commands::{Command, CommandError};
 use super::events::Event;
 use super::game_view::GameView;
+use super::rhai_board::SharedGameView;
 use super::settings::GameSettings;
 use super::event_handler;
 
@@ -442,7 +443,8 @@ impl<D: Direction> GameView<D> for Handle<Game<D>> {
     }
 
     fn add_self_to_scope(&self, scope: &mut Scope<'_>) {
-        self.clone_into_scope(CONST_NAME_BOARD, scope);
+        scope.push_constant(CONST_NAME_CONFIG, self.environment());
+        scope.push_constant(CONST_NAME_BOARD, SharedGameView(Arc::new(self.cloned())));
     }
 
     fn wrapping_logic(&self) -> BorrowedHandle<crate::map::wrapping_map::WrappingMap<D>> {

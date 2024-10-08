@@ -331,12 +331,12 @@ impl Config {
         let mut scope = Scope::new();
         game.add_self_to_scope(&mut scope);
         // build scope
-        scope.push_constant("transporter", transporter.map(|(t, _)| t.clone()));
-        scope.push_constant("transporter_position", path.start);
-        scope.push_constant("transporter_index", transporter.map(|(_, i)| i));
-        scope.push_constant("path", path);
-        scope.push_constant("unit", unit);
-        scope.push_constant("unit_position", unit_pos);
+        scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
+        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
+        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transporter.map(|(_, i)| i));
+        scope.push_constant(CONST_NAME_PATH, path);
+        scope.push_constant(CONST_NAME_UNIT, unit);
+        scope.push_constant(CONST_NAME_POSITION, unit_pos);
         // TODO: heroes and ballast (put them into Arc<Vec<>> instead of &[])
         let executor = Executor::new(engine, scope, game.environment());
         let cost = self.hero_config(hero).price.update_value(self.base_cost(unit_type), &executor);

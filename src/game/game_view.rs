@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use interfaces::ClientPerspective;
-use rhai::{Engine, Scope};
+use rhai::Scope;
 
 use crate::config::environment::Environment;
 use crate::details::Detail;
@@ -18,7 +18,7 @@ use super::fog::{FogIntensity, FogSetting};
 use super::Direction;
 
 
-pub trait GameView<D: Direction> {
+pub trait GameView<D: Direction>: Send + Sync {
     fn environment(&self) -> Environment;
     fn all_points(&self) -> Vec<Point>;
     fn get_terrain(&self, p: Point) -> Option<Terrain>;

@@ -245,8 +245,9 @@ impl UnitFilter {
             Self::Rhai(function_index) => {
                 match executor.run(*function_index, ()) {
                     Ok(result) => result,
-                    Err(_e) => {
+                    Err(e) => {
                         // TODO: log error
+                        println!("UnitFilter error: {e:?}");
                         false
                     }
                 }

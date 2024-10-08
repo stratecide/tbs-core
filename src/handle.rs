@@ -63,13 +63,6 @@ impl<T> Handle<T> {
     }
 }
 
-impl<T: Send + Sync + 'static> Handle<T> {
-    pub(crate) fn clone_into_scope(&self, name: &str, scope: &mut Scope<'_>) {
-        scope.push_constant(name, Arc::new(self.cloned()));
-    }
-}
-
-
 impl<T: Debug> Debug for Handle<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.with(|t| t.fmt(f))

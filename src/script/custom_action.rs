@@ -74,13 +74,13 @@ pub fn is_unit_script_input_valid<D: Direction>(
     data: &[CustomActionData<D>],
 ) -> bool {
     let mut scope = Scope::new();
-    scope.push_constant("transporter", transporter.map(|(t, _)| t.clone()));
-    scope.push_constant("transporter_position", path.start);
-    scope.push_constant("transporter_index", transporter.map(|(_, i)| i));
-    scope.push_constant("path", path.clone());
-    scope.push_constant("unit", unit.clone());
-    scope.push_constant("unit_position", unit_pos);
-    is_script_input_valid(script, game, scope, data)
+    scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
+    scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
+    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transporter.map(|(_, i)| i));
+    scope.push_constant(CONST_NAME_PATH, path.clone());
+    scope.push_constant(CONST_NAME_UNIT, unit.clone());
+    scope.push_constant(CONST_NAME_POSITION, unit_pos);
+is_script_input_valid(script, game, scope, data)
 }
 
 pub fn is_commander_script_input_valid<D: Direction>(
@@ -157,12 +157,12 @@ pub fn execute_unit_script<D: Direction>(
     data: Option<&[CustomActionData<D>]>,
 ) {
     let mut scope = Scope::new();
-    scope.push_constant("transporter", transporter.map(|(t, _)| t.clone()));
-    scope.push_constant("transporter_position", path.start);
-    scope.push_constant("transporter_index", transporter.map(|(_, i)| i));
-    scope.push_constant("path", path.clone());
-    scope.push_constant("unit", unit.clone());
-    scope.push_constant("unit_position", unit_pos);
+    scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
+    scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
+    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transporter.map(|(_, i)| i));
+    scope.push_constant(CONST_NAME_PATH, path.clone());
+    scope.push_constant(CONST_NAME_UNIT, unit.clone());
+    scope.push_constant(CONST_NAME_POSITION, unit_pos);
     execute_script(script, handler, scope, data)
 }
 

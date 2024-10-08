@@ -2,15 +2,25 @@ use rhai::*;
 use rhai::plugin::*;
 
 use crate::map::direction::*;
+use crate::map::point::*;
 use crate::units::unit_types::UnitType;
+use crate::units::hero::HeroInfluence;
+use crate::game::rhai_board::SharedGameView;
+use super::attributes::ActionStatus;
 
 #[export_module]
 mod unit_type_module {
+
+
     pub type UnitType = crate::units::unit_types::UnitType;
 
     #[rhai_fn(pure, name = "==")]
     pub fn eq(p1: &mut UnitType, p2: UnitType) -> bool {
         *p1 == p2
+    }
+
+    pub fn status_repairing() -> ActionStatus {
+        ActionStatus::Repairing
     }
 }
 
@@ -38,6 +48,15 @@ macro_rules! board_module {
             #[rhai_fn(pure, get = "hp")]
             pub fn get_hp(unit: &mut Unit) -> i32 {
                 unit.get_hp() as i32
+            }
+
+            #[rhai_fn(pure, name = "full_price")]
+            pub fn full_price1(unit: &mut Unit, game: SharedGameView<$d>, position: Point) -> i32 {
+                unit.full_price(&*game, position, None, &[])
+            }
+            #[rhai_fn(pure, name = "full_price")]
+            pub fn full_price2(unit: &mut Unit, game: SharedGameView<$d>, position: Point, factory: Unit) -> i32 {
+                unit.full_price(&*game, position, Some(&factory), &[])
             }
         }
     };

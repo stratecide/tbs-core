@@ -1,27 +1,29 @@
+use std::ops::Deref;
+
 use rhai::*;
 use rhai::plugin::*;
 
-use crate::config::table_config::TableAxisKey;
 use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::point::*;
-use crate::map::wrapping_map::OrientedPoint;
 use crate::units::unit::Unit;
 use crate::terrain::terrain::Terrain;
+
+#[derive(Clone)]
+pub struct SharedGameView<D: Direction>(pub Shared<dyn GameView<D>>);
+
+impl<D: Direction> Deref for SharedGameView<D> {
+    type Target = Shared<dyn GameView<D>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 macro_rules! board_module {
     ($name: ident, $d: ty) => {
         #[export_module]
         mod $name {
-            pub type Board = Shared<dyn GameView<$d>>;
-
-            #[rhai_fn(pure)]
-            pub fn table_entry(board: &mut Board, name: &str, x: Dynamic, y: Dynamic) -> Option<Dynamic> {
-                let x = TableAxisKey::from_dynamic(x)?;
-                let y = TableAxisKey::from_dynamic(y)?;
-                board.environment().table_entry(name, x, y)
-                    .map(|value| value.into())
-            }
+            pub type Board = SharedGameView<$d>;
 
             #[rhai_fn(pure)]
             pub fn get_neighbor(board: &mut Board, p: Point, d: $d) -> Option<Point> {
@@ -33,9 +35,19 @@ macro_rules! board_module {
                 board.get_unit(p)
             }
 
-            #[rhai_fn(pure)]
-            pub fn get_terrain(board: &mut Board, p: Point) -> Terrain {
+            #[rhai_fn()]
+            pub fn get_terrain(board: Board, p: Point) -> Terrain {
                 board.get_terrain(p).expect("script requested terrain at {p:?}, but that point is invalid")
+            }
+
+            #[rhai_fn(pure)]
+            pub fn player_funds(board: &mut Board, owner_id: i32) -> i32 {
+                if owner_id < 0 || owner_id > i8::MAX as i32 {
+                    return 0;
+                }
+                board.get_owning_player(owner_id as i8)
+                .map(|player| *player.funds)
+                .unwrap_or(0)
             }
         }
     };
