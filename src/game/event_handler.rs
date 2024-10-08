@@ -1,6 +1,6 @@
 
 use std::collections::HashMap;
-use std::sync::{Arc, MappedMutexGuard, Mutex, MutexGuard};
+use std::sync::{Arc, MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 
 use interfaces::{ClientPerspective, Perspective as IPerspective, RandomFn};
 use rhai::packages::Package;
@@ -137,32 +137,32 @@ impl<D: Direction> EventHandlerInner<D> {
 
 #[derive(Clone)]
 pub struct EventHandler<D: Direction> {
-    inner: Arc<Mutex<EventHandlerInner<D>>>,
+    inner: Arc<RwLock<EventHandlerInner<D>>>,
 }
 
 impl<D: Direction> EventHandler<D> {
     pub fn new(game: Handle<Game<D>>, random: RandomFn) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(EventHandlerInner::new(game, random))),
+            inner: Arc::new(RwLock::new(EventHandlerInner::new(game, random))),
         }
     }
 
     fn with<R>(&self, f: impl FnOnce(&EventHandlerInner<D>) -> R) -> R {
-        let t = self.inner.lock().expect("Unable to read EventHandler");
+        let t = self.inner.read().expect("Unable to read EventHandler");
         f(&*t)
     }
 
     fn with_mut<R>(&self, f: impl FnOnce(&mut EventHandlerInner<D>) -> R) -> R {
-        let mut t = self.inner.lock().expect("Unable to write EventHandler");
+        let mut t = self.inner.write().expect("Unable to write EventHandler");
         f(&mut *t)
     }
 
-    fn borrow<'a>(&'a self) -> MutexGuard<'a, EventHandlerInner<D>> {
-        self.inner.lock().expect("Unable to borrow EventHandler")
+    fn borrow<'a>(&'a self) -> RwLockReadGuard<'a, EventHandlerInner<D>> {
+        self.inner.read().expect("Unable to borrow EventHandler")
     }
 
-    pub fn get_game<'a>(&'a self) -> MappedMutexGuard<'a, Handle<Game<D>>> {
-        MutexGuard::map(self.borrow(), |eh| &mut eh.game)
+    pub fn get_game<'a>(&'a self) -> MappedRwLockReadGuard<'a, Handle<Game<D>>> {
+        RwLockReadGuard::map(self.borrow(), |eh| &eh.game)
     }
 
     pub fn with_map<R>(&self, f: impl FnOnce(&Map<D>) -> R) -> R {
@@ -1086,11 +1086,11 @@ impl<D: Direction> EventHandler<D> {
 
 
     pub fn accept(self) -> EventsMap<D> {
-        Mutex::into_inner(Arc::into_inner(self.inner).unwrap()).unwrap().accept()
+        RwLock::into_inner(Arc::into_inner(self.inner).unwrap()).unwrap().accept()
     }
 
     pub fn cancel(self) {
-        Mutex::into_inner(Arc::into_inner(self.inner).unwrap()).unwrap().cancel()
+        RwLock::into_inner(Arc::into_inner(self.inner).unwrap()).unwrap().cancel()
     }
 }
 
