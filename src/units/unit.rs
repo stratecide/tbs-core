@@ -924,10 +924,9 @@ impl<D: Direction> Unit<D> {
             // custom actions
             let custom_actions = self.environment.config.custom_actions();
             if custom_actions.len() > 0 {
-                let engine = game.environment().get_engine();
+                let engine = game.environment().get_engine(game);
                 // build scope
                 let mut scope = Scope::new();
-                game.add_self_to_scope(&mut scope);
                 scope.push_constant(CONST_NAME_UNIT, self.clone());
                 scope.push_constant(CONST_NAME_PATH, path.clone());
                 scope.push_constant(CONST_NAME_POSITION, destination);

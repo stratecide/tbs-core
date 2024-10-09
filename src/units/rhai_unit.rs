@@ -6,6 +6,7 @@ use crate::map::point::*;
 use crate::units::unit_types::UnitType;
 use crate::units::hero::HeroInfluence;
 use crate::game::rhai_board::SharedGameView;
+use crate::script::with_board;
 use super::attributes::ActionStatus;
 
 #[export_module]
@@ -51,12 +52,12 @@ macro_rules! board_module {
             }
 
             #[rhai_fn(pure, name = "full_price")]
-            pub fn full_price1(unit: &mut Unit, game: SharedGameView<$d>, position: Point) -> i32 {
-                unit.full_price(&*game, position, None, &[])
+            pub fn full_price1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {
+                with_board(context, |game| unit.full_price(game, position, None, &[]))
             }
             #[rhai_fn(pure, name = "full_price")]
-            pub fn full_price2(unit: &mut Unit, game: SharedGameView<$d>, position: Point, factory: Unit) -> i32 {
-                unit.full_price(&*game, position, Some(&factory), &[])
+            pub fn full_price2(context: NativeCallContext, unit: &mut Unit, position: Point, factory: Unit) -> i32 {
+                with_board(context, |game| unit.full_price(game, position, Some(&factory), &[]))
             }
         }
     };

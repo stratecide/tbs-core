@@ -7,7 +7,6 @@ use interfaces::*;
 use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
-use rhai::Scope;
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;
@@ -21,7 +20,6 @@ use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::player::Player;
-use crate::script::{CONST_NAME_BOARD, CONST_NAME_CONFIG};
 use crate::{details::*, VERSION};
 use crate::details;
 use crate::terrain::terrain::Terrain;
@@ -549,9 +547,8 @@ impl<D: Direction> GameView<D> for Handle<Map<D>> {
         self.with(|map| map.get_unit(p).cloned())
     }
 
-    fn add_self_to_scope(&self, scope: &mut Scope<'_>) {
-        scope.push_constant(CONST_NAME_CONFIG, self.environment());
-        scope.push_constant(CONST_NAME_BOARD, SharedGameView(Arc::new(self.cloned())));
+    fn as_shared(&self) -> SharedGameView<D> {
+        SharedGameView(Arc::new(self.cloned()))
     }
 
     fn wrapping_logic(&self) -> crate::handle::BorrowedHandle<WrappingMap<D>> {

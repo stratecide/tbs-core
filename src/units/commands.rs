@@ -136,10 +136,9 @@ impl<D: Direction> UnitAction<D> {
                                 scope.push_constant(CONST_NAME_UNIT, unit.clone());
                                 scope.push_constant(CONST_NAME_OTHER_POSITION, end);
                                 scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
-                                handler.get_game().add_self_to_scope(&mut scope);
                                 scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                                 let environment = handler.get_game().environment();
-                                let mut engine = environment.get_engine();
+                                let mut engine = environment.get_engine(&*handler.get_game());
                                 EventHandlerPackage::new().register_into_engine(&mut engine);
                                 let executor = Executor::new(engine, scope, environment);
                                 for function_index in scripts {

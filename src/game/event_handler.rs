@@ -251,10 +251,9 @@ impl<D: Direction> EventHandler<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, unit_pos);
                     scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    handler.get_game().add_self_to_scope(&mut scope);
                     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
-                    let mut engine = environment.get_engine();
+                    let mut engine = environment.get_engine(&*handler.get_game());
                     EventHandlerPackage::new().register_into_engine(&mut engine);
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {
@@ -450,10 +449,9 @@ impl<D: Direction> EventHandler<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, unit_pos);
                     scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    handler.get_game().add_self_to_scope(&mut scope);
                     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
-                    let mut engine = environment.get_engine();
+                    let mut engine = environment.get_engine(&*handler.get_game());
                     EventHandlerPackage::new().register_into_engine(&mut engine);
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {
@@ -501,10 +499,9 @@ impl<D: Direction> EventHandler<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, unit_pos);
                     scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    handler.get_game().add_self_to_scope(&mut scope);
                     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
-                    let mut engine = environment.get_engine();
+                    let mut engine = environment.get_engine(&*handler.get_game());
                     EventHandlerPackage::new().register_into_engine(&mut engine);
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {

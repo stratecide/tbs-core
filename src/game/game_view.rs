@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
 use interfaces::ClientPerspective;
-use rhai::Scope;
 
 use crate::config::environment::Environment;
 use crate::details::Detail;
@@ -15,6 +14,7 @@ use crate::units::hero::{HeroInfluence, HeroType};
 use crate::units::unit::Unit;
 
 use super::fog::{FogIntensity, FogSetting};
+use super::rhai_board::SharedGameView;
 use super::Direction;
 
 
@@ -25,7 +25,11 @@ pub trait GameView<D: Direction>: Send + Sync {
     fn get_details(&self, p: Point) -> Vec<Detail<D>>;
     fn get_unit(&self, p: Point) -> Option<Unit<D>>;
 
-    fn add_self_to_scope(&self, scope: &mut Scope<'_>);
+    /**
+     * DANGEROUS METHOD!
+     * using this method creates the possibility for deadlocks if both clones want competing locks at the same time
+     */
+    fn as_shared(&self) -> SharedGameView<D>;
 
     fn wrapping_logic(&self) -> BorrowedHandle<WrappingMap<D>>;
 

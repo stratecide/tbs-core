@@ -3,8 +3,6 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
 use std::sync::MappedRwLockReadGuard;
 
-use rhai::Scope;
-
 
 
 pub struct Handle<T: ?Sized> {

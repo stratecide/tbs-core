@@ -97,7 +97,6 @@ fn is_script_input_valid<D: Direction>(
     mut scope: Scope<'static>,
     data: &[CustomActionData<D>],
 ) -> bool {
-    game.add_self_to_scope(&mut scope);
     let index = Arc::new(Mutex::new(0));
     let success = Arc::new(Mutex::new(false));
     let success_ = success.clone();
@@ -105,7 +104,7 @@ fn is_script_input_valid<D: Direction>(
     let invalid_data_ = invalid_data.clone();
     let data = data.to_vec();
     let environment = game.environment();
-    let mut engine = environment.get_engine();
+    let mut engine = environment.get_engine(game);
     engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<CustomActionData<D>, Box<EvalAltResult>> {
         let mut index = index.lock().unwrap();
         let i = *index;
@@ -180,10 +179,9 @@ fn execute_script<D: Direction>(
     mut scope: Scope<'static>,
     data: Option<&[CustomActionData<D>]>,
 ) {
-    handler.get_game().add_self_to_scope(&mut scope);
     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
     let environment = handler.get_game().environment();
-    let mut engine = environment.get_engine();
+    let mut engine = environment.get_engine(&*handler.get_game());
     EventHandlerPackage::new().register_into_engine(&mut engine);
     let executor = Executor::new(engine, scope, environment);
     let result: Result<(), Box<EvalAltResult>> = if let Some(data) = data {

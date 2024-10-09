@@ -327,9 +327,8 @@ impl Config {
         if !self.hero_unit_compatible(hero, unit_type) {
             return None
         }
-        let engine = game.environment().get_engine();
+        let engine = game.environment().get_engine(game);
         let mut scope = Scope::new();
-        game.add_self_to_scope(&mut scope);
         // build scope
         scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
         scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
@@ -484,9 +483,8 @@ impl Config {
         heroes: &'a [HeroInfluence<D>],
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a TerrainPoweredConfig> + 'a>, &Executor) -> R,
     ) -> R {
-        let engine = game.environment().get_engine();
+        let engine = game.environment().get_engine(game);
         let mut scope = Scope::new();
-        game.add_self_to_scope(&mut scope);
         // build scope
         scope.push_constant(CONST_NAME_POSITION, pos);
         scope.push_constant(CONST_NAME_TERRAIN, terrain.clone());
@@ -769,9 +767,8 @@ impl Config {
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> + 'a>, &Executor) -> R,
     ) -> R {
         // get engine...
-        let engine = game.environment().get_engine();
+        let engine = game.environment().get_engine(game);
         let mut scope = Scope::new();
-        game.add_self_to_scope(&mut scope);
         // build scope
         scope.push_constant(CONST_NAME_UNIT, unit.clone());
         scope.push_constant(CONST_NAME_POSITION, unit_pos.0);

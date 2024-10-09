@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use interfaces::ClientPerspective;
-use rhai::Scope;
+use rhai::Engine;
 
 use crate::config::environment::Environment;
 use crate::details::Detail;
@@ -15,76 +15,78 @@ use crate::terrain::terrain::Terrain;
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::{Path, PermanentBallast};
 use crate::units::unit::Unit;
+use crate::script::FUNCTION_NAME_BOARD;
 
 use super::fog::{FogIntensity, FogSetting};
 use super::game_view::GameView;
 use super::Direction;
+use super::rhai_board::SharedGameView;
 
 
-trait ModifiedView<'a, D: Direction> {
-    fn get_inner_view(&'a self) -> &'a dyn GameView<D>;
+trait ModifiedView<D: Direction> {
+    fn get_inner_view(&self) -> &dyn GameView<D>;
 
-    fn environment(&'a self) -> Environment {
+    fn environment(&self) -> Environment {
         self.get_inner_view().environment()
     }
-    fn all_points(&'a self) -> Vec<Point> {
+    fn all_points(&self) -> Vec<Point> {
         self.get_inner_view().all_points()
     }
-    fn get_terrain(&'a self, p: Point) -> Option<Terrain> {
+    fn get_terrain(&self, p: Point) -> Option<Terrain> {
         self.get_inner_view().get_terrain(p)
     }
-    fn get_details(&'a self, p: Point) -> Vec<Detail<D>> {
+    fn get_details(&self, p: Point) -> Vec<Detail<D>> {
         self.get_inner_view().get_details(p)
     }
-    fn get_unit(&'a self, p: Point) -> Option<Unit<D>> {
+    fn get_unit(&self, p: Point) -> Option<Unit<D>> {
         self.get_inner_view().get_unit(p)
     }
 
-    fn next_pipe_tile(&'a self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
+    fn next_pipe_tile(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
         self.get_inner_view().next_pipe_tile(point, direction)
     }
 
-    fn get_neighbor(&'a self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
+    fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
         self.get_inner_view().get_neighbor(p, d)
     }
-    fn get_neighbors(&'a self, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+    fn get_neighbors(&self, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
         self.get_inner_view().get_neighbors(p, mode)
     }
-    fn width_search(&'a self, start: Point, f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
+    fn width_search(&self, start: Point, f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
         self.get_inner_view().width_search(start, f)
     }
-    fn range_in_layers(&'a self, center: Point, range: usize) -> Vec<HashSet<Point>> {
+    fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<Point>> {
         self.get_inner_view().range_in_layers(center, range)
     }
 
-    fn get_line(&'a self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+    fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
         self.get_inner_view().get_line(start, d, length, mode)
     }
 
-    fn get_owning_player(&'a self, owner: i8) -> Option<Player> {
+    fn get_owning_player(&self, owner: i8) -> Option<Player> {
         self.get_inner_view().get_owning_player(owner)
     }
-    fn get_fog_setting(&'a self) -> FogSetting {
+    fn get_fog_setting(&self) -> FogSetting {
         self.get_inner_view().get_fog_setting()
     }
-    fn get_fog_at(&'a self, team: ClientPerspective, position: Point) -> FogIntensity {
+    fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
         self.get_inner_view().get_fog_at(team, position)
     }
 
-    fn get_visible_unit(&'a self, team: ClientPerspective, p: Point) -> Option<Unit<D>> {
+    fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>> {
         self.get_inner_view().get_visible_unit(team, p)
     }
-    fn additional_hero_influence_at(&'a self, point: Point, only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
+    fn additional_hero_influence_at(&self, point: Point, only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
         self.get_inner_view().additional_hero_influence_at(point, only_owner_id)
     }
-    fn additional_hero_influence_map(&'a self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
+    fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
         self.get_inner_view().additional_hero_influence_map(only_owner_id)
     }
 }
 
 macro_rules! impl_game_view {
     ($name: ty) => {
-        impl<'a, D: Direction> GameView<D> for $name {
+        impl<D: Direction> GameView<D> for $name {
             fn environment(&self) -> Environment {
                 ModifiedView::environment(self)
             }
@@ -101,10 +103,10 @@ macro_rules! impl_game_view {
                 ModifiedView::get_unit(self, p)
             }
 
-            fn add_self_to_scope(&self, scope: &mut Scope<'_>) {
-                self.get_inner_view().add_self_to_scope(scope)
+            fn as_shared(&self) -> SharedGameView<D> {
+                SharedGameView(Arc::new(self.clone()))
             }
-                    
+                            
             fn wrapping_logic(&self) -> BorrowedHandle<WrappingMap<D>> {
                 self.get_inner_view().wrapping_logic()
             }
@@ -170,18 +172,18 @@ macro_rules! impl_game_view {
     };
 }
 
+#[derive(Clone)]
+pub(crate) struct IgnoreUnits<D: Direction>(SharedGameView<D>);
 
-pub(crate) struct IgnoreUnits<'a, D: Direction>(Box<&'a dyn GameView<D>>);
-
-impl<'a, D: Direction> IgnoreUnits<'a, D> {
-    pub fn new(base: &'a impl GameView<D>) -> Self {
-        Self (Box::new(base))
+impl<D: Direction> IgnoreUnits<D> {
+    pub fn new(base: &impl GameView<D>) -> Self {
+        Self (base.as_shared())
     }
 }
 
-impl<'a, D: Direction> ModifiedView<'a, D> for IgnoreUnits<'a, D> {
-    fn get_inner_view(&'a self) -> &'a dyn GameView<D> {
-        *self.0
+impl<D: Direction> ModifiedView<D> for IgnoreUnits<D> {
+    fn get_inner_view(&self) -> &dyn GameView<D> {
+        &*self.0.0
     }
 
     fn get_unit(&self, _: Point) -> Option<Unit<D>> {
@@ -192,23 +194,23 @@ impl<'a, D: Direction> ModifiedView<'a, D> for IgnoreUnits<'a, D> {
     }
 }
 
-impl_game_view!(IgnoreUnits<'a, D>);
+impl_game_view!(IgnoreUnits<D>);
 
 /**
  * allows removing, adding, moving of units
  * used in movement planning, finding attack-vectors
  */
 #[derive(Clone)]
-pub struct UnitMovementView<'a, D: Direction> {
-    base: Box<&'a dyn GameView<D>>,
+pub struct UnitMovementView<D: Direction> {
+    base: SharedGameView<D>,
     units: HashMap<Point, Option<Unit<D>>>,
     players: HashMap<i8, Player>,
 }
 
-impl<'a, D: Direction> UnitMovementView<'a, D> {
-    pub fn new(base: &'a impl GameView<D>) -> Self {
+impl<D: Direction> UnitMovementView<D> {
+    pub fn new(base: &impl GameView<D>) -> Self {
         Self {
-            base: Box::new(base),
+            base: base.as_shared(),
             units: HashMap::new(),
             players: HashMap::new(),
         }
@@ -259,18 +261,18 @@ impl<'a, D: Direction> UnitMovementView<'a, D> {
     }
 }
 
-impl<'a, D: Direction> ModifiedView<'a, D> for UnitMovementView<'a, D> {
-    fn get_inner_view(&'a self) -> &'a dyn GameView<D> {
-        *self.base
+impl<D: Direction> ModifiedView<D> for UnitMovementView<D> {
+    fn get_inner_view(&self) -> &dyn GameView<D> {
+        &**self.base
     }
 
     fn get_unit(&self, p: Point) -> Option<Unit<D>> {
         self.units.get(&p).map(|u| u.clone())
-        .unwrap_or(self.base.get_unit(p))
+        .unwrap_or(self.get_inner_view().get_unit(p))
     }
 
     fn get_owning_player(&self, owner: i8) -> Option<Player> {
-        self.players.get(&owner).cloned().or(self.base.get_owning_player(owner))
+        self.players.get(&owner).cloned().or(self.get_inner_view().get_owning_player(owner))
     }
 
     fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>> {
@@ -280,24 +282,24 @@ impl<'a, D: Direction> ModifiedView<'a, D> for UnitMovementView<'a, D> {
             // maybe it should be possible to predict the fog (i.e. modify fog in this view)
             // but that shouldn't influence the output of this method because
             // while it can be predicted where fog will be lifted, it can't be predicted which units are revealed
-            u.fog_replacement(self, p, self.base.get_fog_at(team, p))
+            u.fog_replacement(self, p, self.get_inner_view().get_fog_at(team, p))
         })
     }
 }
 
-impl_game_view!(UnitMovementView<'a, D>);
+impl_game_view!(UnitMovementView<D>);
 
 #[derive(Clone)]
-pub(crate) struct MovingHeroView<'a, D: Direction> {
-    map: UnitMovementView<'a, D>,
+pub(crate) struct MovingHeroView<D: Direction> {
+    map: UnitMovementView<D>,
     hero_pos: Option<Point>,
     hero_unit: Unit<D>,
     transporter: Option<(Unit<D>, usize)>,
     round: usize,
 }
 
-impl<'a, D: Direction> MovingHeroView<'a, D> {
-    pub fn new(map: &'a impl GameView<D>, unit: &Unit<D>, unit_origin: Option<(Point, Option<usize>)>) -> Self {
+impl<D: Direction> MovingHeroView<D> {
+    pub fn new(map: &impl GameView<D>, unit: &Unit<D>, unit_origin: Option<(Point, Option<usize>)>) -> Self {
         let mut map = UnitMovementView::new(map);
         let mut transporter = None;
         if let Some((pos, unload_index)) = unit_origin {
@@ -332,8 +334,8 @@ impl<'a, D: Direction> MovingHeroView<'a, D> {
     }
 }
 
-impl<'a, D: Direction> ModifiedView<'a, D> for MovingHeroView<'a, D> {
-    fn get_inner_view(&'a self) -> &'a dyn GameView<D> {
+impl<D: Direction> ModifiedView<D> for MovingHeroView<D> {
+    fn get_inner_view(&self) -> &dyn GameView<D> {
         &self.map
     }
 
@@ -367,10 +369,10 @@ impl<'a, D: Direction> ModifiedView<'a, D> for MovingHeroView<'a, D> {
     }
 }
 
-impl_game_view!(MovingHeroView<'a, D>);
+impl_game_view!(MovingHeroView<D>);
 
-impl<'a, D: Direction> ModifiedView<'a, D> for Arc<dyn GameView<D>> {
-    fn get_inner_view(&'a self) -> &'a dyn GameView<D> {
+impl<D: Direction> ModifiedView<D> for Arc<dyn GameView<D>> {
+    fn get_inner_view(&self) -> &dyn GameView<D> {
         &**self
     }
 }

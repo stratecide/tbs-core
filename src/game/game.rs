@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::sync::Arc;
 
-use rhai::Scope;
 use zipper::*;
 use interfaces::*;
 use semver::Version;
@@ -19,7 +18,6 @@ use crate::game::fog::*;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
 use crate::map::wrapping_map::{Distortion, OrientedPoint};
-use crate::script::{CONST_NAME_BOARD, CONST_NAME_CONFIG};
 use crate::terrain::terrain::Terrain;
 use crate::{player::*, VERSION};
 use crate::units::unit::*;
@@ -442,9 +440,8 @@ impl<D: Direction> GameView<D> for Handle<Game<D>> {
         self.with(|game| game.map.get_unit(p).cloned())
     }
 
-    fn add_self_to_scope(&self, scope: &mut Scope<'_>) {
-        scope.push_constant(CONST_NAME_CONFIG, self.environment());
-        scope.push_constant(CONST_NAME_BOARD, SharedGameView(Arc::new(self.cloned())));
+    fn as_shared(&self) -> SharedGameView<D> {
+        SharedGameView(Arc::new(self.cloned()))
     }
 
     fn wrapping_logic(&self) -> BorrowedHandle<crate::map::wrapping_map::WrappingMap<D>> {

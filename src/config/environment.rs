@@ -1,24 +1,25 @@
 use std::fmt::Debug;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use interfaces::ClientPerspective;
 use rhai::*;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::commander::commander_type::CommanderType;
+use crate::game::game_view::GameView;
+use crate::game::rhai_board::SharedGameView;
+use crate::game::settings::GameSettings;
+use crate::map::direction::Direction;
 use crate::map::point_map::MapSize;
-use crate::script::create_base_engine;
+use crate::script::*;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::*;
 use crate::terrain::TerrainType;
 use crate::units::unit_types::UnitType;
 use crate::units::attributes::*;
 use crate::units::hero::*;
-use crate::game::settings::GameSettings;
 
 use super::config::Config;
-use super::table_config::TableAxisKey;
-use super::table_config::TableValue;
+use super::table_config::*;
 
 #[derive(Clone)]
 pub struct Environment {
@@ -65,9 +66,17 @@ impl Environment {
         10
     }
 
-    pub fn get_engine(&self) -> Engine {
+    pub fn get_engine<D: Direction>(&self, game: &impl GameView<D>) -> Engine {
         let mut engine = create_base_engine();
         engine.register_global_module(self.config.global_module.clone());
+        let this = self.clone();
+        engine.register_fn(FUNCTION_NAME_CONFIG, move || -> Self {
+            this.clone()
+        });
+        let game = game.as_shared();
+        engine.register_fn(FUNCTION_NAME_BOARD, move || -> SharedGameView<D> {
+            game.clone()
+        });
         engine
     }
 

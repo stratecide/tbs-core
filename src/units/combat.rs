@@ -585,10 +585,9 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
             scope.push_constant(CONST_NAME_OTHER_UNIT_ID, attacker_id);
             scope.push_constant(CONST_NAME_DAMAGE, damage as i32);
-            handler.get_game().add_self_to_scope(&mut scope);
             scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
-            let mut engine = environment.get_engine();
+            let mut engine = environment.get_engine(&*handler.get_game());
             EventHandlerPackage::new().register_into_engine(&mut engine);
             let ricochet_directions = ricochet_directions.clone();
             let handler = handler.clone();
@@ -629,10 +628,9 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             scope.push_constant(CONST_NAME_OTHER_UNIT, defender.clone());
             scope.push_constant(CONST_NAME_OTHER_UNIT_ID, defender_id);
             scope.push_constant(CONST_NAME_DAMAGE, damage as i32);
-            handler.get_game().add_self_to_scope(&mut scope);
             scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
-            let mut engine = environment.get_engine();
+            let mut engine = environment.get_engine(&*handler.get_game());
             EventHandlerPackage::new().register_into_engine(&mut engine);
             let executor = Executor::new(engine, scope, environment);
             for function_index in scripts {
@@ -660,10 +658,9 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             scope.push_constant(CONST_NAME_UNIT_ID, attacker_id);
             scope.push_constant(CONST_NAME_OTHER_POSITION, defender_pos);
             scope.push_constant(CONST_NAME_OTHER_UNIT, defender.clone());
-            handler.get_game().add_self_to_scope(&mut scope);
             scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
-            let mut engine = environment.get_engine();
+            let mut engine = environment.get_engine(&*handler.get_game());
             EventHandlerPackage::new().register_into_engine(&mut engine);
             let executor = Executor::new(engine, scope, environment);
             for function_index in scripts {
@@ -765,10 +762,9 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
                 scope.push_constant(CONST_NAME_UNIT, unit.clone());
                 scope.push_constant(CONST_NAME_OTHER_POSITION, attacker_pos);
                 scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
-                handler.get_game().add_self_to_scope(&mut scope);
                 scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                 let environment = handler.get_game().environment();
-                let mut engine = environment.get_engine();
+                let mut engine = environment.get_engine(&*handler.get_game());
                 EventHandlerPackage::new().register_into_engine(&mut engine);
                 let executor = Executor::new(engine, scope, environment);
                 for function_index in scripts {

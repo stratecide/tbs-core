@@ -1,6 +1,10 @@
 use rhai::*;
 use rhai::packages::*;
 
+use crate::game::game_view::GameView;
+use crate::game::rhai_board::SharedGameView;
+use crate::map::direction::Direction;
+
 pub mod executor;
 pub mod custom_action;
 mod rhai_environment;
@@ -13,8 +17,6 @@ pub mod kill;
 pub mod terrain;
 pub mod death;*/
 
-pub const CONST_NAME_CONFIG: &'static str = "CONFIG";
-pub const CONST_NAME_BOARD: &'static str = "BOARD";
 pub const CONST_NAME_EVENT_HANDLER: &'static str = "EVENT_HANDLER";
 pub const CONST_NAME_POSITION: &'static str = "POSITION";
 pub const CONST_NAME_OTHER_POSITION: &'static str = "OTHER_POSITION";
@@ -31,6 +33,8 @@ pub const CONST_NAME_TRANSPORTER_POSITION: &'static str = "TRANSPORTER_POSITION"
 pub const CONST_NAME_IS_COUNTER: &'static str = "IS_COUNTER";
 pub const CONST_NAME_DAMAGE: &'static str = "DAMAGE";
 
+pub const FUNCTION_NAME_CONFIG: &'static str = "CONFIG";
+pub const FUNCTION_NAME_BOARD: &'static str = "BOARD";
 pub const FUNCTION_NAME_INPUT_CHOICE: &'static str = "user_selection";
 pub const FUNCTION_NAME_BLAST_DIRECTION: &'static str = "get_blast_direction";
 
@@ -50,4 +54,9 @@ pub fn create_base_engine() -> Engine {
     crate::terrain::rhai_terrain::TerrainPackage::new().register_into_engine(&mut engine);
     crate::units::rhai_unit::UnitPackage::new().register_into_engine(&mut engine);
     engine
+}
+
+pub fn with_board<D: Direction, R>(context: NativeCallContext, f: impl FnOnce(&Shared<dyn GameView<D>>) -> R) -> R {
+    let board = context.call_native_fn::<SharedGameView<D>>(FUNCTION_NAME_BOARD, ()).expect("BOARD should be in context!");
+    f(&board.0)
 }
