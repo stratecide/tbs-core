@@ -15,7 +15,7 @@ mod tile_position_module {
 }
 
 macro_rules! oriented_point_module {
-    ($name: ident, $d: ty) => {
+    ($pack: ident, $name: ident, $d: ty) => {
         #[export_module]
         mod $name {
             pub type OrientedPosition = OrientedPoint<$d>;
@@ -30,18 +30,17 @@ macro_rules! oriented_point_module {
                 OrientedPosition::new(*p, false, <$d>::angle_0())
             }
         }
+
+        def_package! {
+            pub $pack(module)
+            {
+                combine_with_exported_module!(module, "tile_position_module", tile_position_module);
+                combine_with_exported_module!(module, stringify!($name), $name);
+            } |> |_engine| {
+            }
+        }
     };
 }
 
-oriented_point_module!(oriented_point_module4, Direction4);
-oriented_point_module!(oriented_point_module6, Direction6);
-
-def_package! {
-    pub PositionPackage(module)
-    {
-        combine_with_exported_module!(module, "tile_position_module", tile_position_module);
-        combine_with_exported_module!(module, "oriented_point_module4", oriented_point_module4);
-        combine_with_exported_module!(module, "oriented_point_module6", oriented_point_module6);
-    } |> |_engine| {
-    }
-}
+oriented_point_module!(PositionPackage4, oriented_point_module4, Direction4);
+oriented_point_module!(PositionPackage6, oriented_point_module6, Direction6);

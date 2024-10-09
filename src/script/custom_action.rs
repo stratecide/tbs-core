@@ -1,13 +1,14 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
+use rhai_action_data::*;
 use zipper_derive::Zippable;
 use zipper::*;
 
 use crate::config::environment::Environment;
 use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
-use crate::game::rhai_event_handler::EventHandlerPackage;
+use crate::game::rhai_event_handler::*;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::units::hero::HeroInfluence;
@@ -32,6 +33,16 @@ pub enum CustomActionData<D: Direction> {
     Point(Point),
     Direction(D),
     UnitType(UnitType),
+}
+
+impl<D: Direction> From<&CustomActionData<D>> for Dynamic {
+    fn from(value: &CustomActionData<D>) -> Self {
+        match value {
+            CustomActionData::Point(value) => Dynamic::from(*value),
+            CustomActionData::Direction(value) => Dynamic::from(*value),
+            CustomActionData::UnitType(value) => Dynamic::from(*value),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,7 +105,7 @@ pub fn is_commander_script_input_valid<D: Direction>(
 fn is_script_input_valid<D: Direction>(
     script: usize,
     game: &impl GameView<D>,
-    mut scope: Scope<'static>,
+    scope: Scope<'static>,
     data: &[CustomActionData<D>],
 ) -> bool {
     let index = Arc::new(Mutex::new(0));
@@ -105,7 +116,12 @@ fn is_script_input_valid<D: Direction>(
     let data = data.to_vec();
     let environment = game.environment();
     let mut engine = environment.get_engine(game);
-    engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<CustomActionData<D>, Box<EvalAltResult>> {
+    if D::is_hex() {
+        ActionDataPackage6::new().register_into_engine(&mut engine);
+    } else {
+        ActionDataPackage4::new().register_into_engine(&mut engine);
+    }
+    engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<Dynamic, Box<EvalAltResult>> {
         let mut index = index.lock().unwrap();
         let i = *index;
         *index += 1;
@@ -122,12 +138,12 @@ fn is_script_input_valid<D: Direction>(
             *invalid_data.lock().unwrap() = true;
             return Err(format!("script {script} asks for ({i}) {options:?} but received {:?}", data[i]).into());
         }
-        Ok(data[i].clone())
+        Ok((&data[i]).into())
     });
     let executor = Executor::new(engine, scope, environment);
     match executor.run(script, ()) {
         Ok(b) => b,
-        Err(_e) => {
+        Err(e) => {
             if !*success_.lock().unwrap() {
                 // early success
                 true
@@ -138,6 +154,7 @@ fn is_script_input_valid<D: Direction>(
             } else {
                 // script had an error
                 // TODO: log error
+                println!("is_script_input_valid: {e:?}");
                 false
             }
         }
@@ -182,10 +199,17 @@ fn execute_script<D: Direction>(
     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
     let environment = handler.get_game().environment();
     let mut engine = environment.get_engine(&*handler.get_game());
-    EventHandlerPackage::new().register_into_engine(&mut engine);
+    if D::is_hex() {
+        EventHandlerPackage6::new().register_into_engine(&mut engine);
+    } else {
+        EventHandlerPackage4::new().register_into_engine(&mut engine);
+    }
     let executor = Executor::new(engine, scope, environment);
     let result: Result<(), Box<EvalAltResult>> = if let Some(data) = data {
-        executor.run(script, (data.to_vec(), ))
+        let data = data.iter()
+        .map(|cad| cad.into())
+        .collect::<Array>();
+        executor.run(script, (data, ))
     } else {
         executor.run(script, ())
     };

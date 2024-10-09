@@ -13,7 +13,7 @@ use crate::game::events::Effect;
 use crate::game::fog::can_see_unit_at;
 use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
-use crate::game::rhai_event_handler::EventHandlerPackage;
+use crate::game::rhai_event_handler::*;
 use crate::map::point::Point;
 use crate::config::environment::Environment;
 use crate::map::direction::Direction;
@@ -588,7 +588,11 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
             let mut engine = environment.get_engine(&*handler.get_game());
-            EventHandlerPackage::new().register_into_engine(&mut engine);
+            if D::is_hex() {
+                EventHandlerPackage6::new().register_into_engine(&mut engine);
+            } else {
+                EventHandlerPackage4::new().register_into_engine(&mut engine);
+            }
             let ricochet_directions = ricochet_directions.clone();
             let handler = handler.clone();
             engine.register_fn(FUNCTION_NAME_BLAST_DIRECTION, move || {
@@ -631,7 +635,11 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
             let mut engine = environment.get_engine(&*handler.get_game());
-            EventHandlerPackage::new().register_into_engine(&mut engine);
+            if D::is_hex() {
+                EventHandlerPackage6::new().register_into_engine(&mut engine);
+            } else {
+                EventHandlerPackage4::new().register_into_engine(&mut engine);
+            }
             let executor = Executor::new(engine, scope, environment);
             for function_index in scripts {
                 match executor.run(function_index, ()) {
@@ -661,7 +669,11 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
             let mut engine = environment.get_engine(&*handler.get_game());
-            EventHandlerPackage::new().register_into_engine(&mut engine);
+            if D::is_hex() {
+                EventHandlerPackage6::new().register_into_engine(&mut engine);
+            } else {
+                EventHandlerPackage4::new().register_into_engine(&mut engine);
+            }
             let executor = Executor::new(engine, scope, environment);
             for function_index in scripts {
                 match executor.run(function_index, ()) {
@@ -765,7 +777,11 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
                 scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                 let environment = handler.get_game().environment();
                 let mut engine = environment.get_engine(&*handler.get_game());
-                EventHandlerPackage::new().register_into_engine(&mut engine);
+                if D::is_hex() {
+                    EventHandlerPackage6::new().register_into_engine(&mut engine);
+                } else {
+                    EventHandlerPackage4::new().register_into_engine(&mut engine);
+                }
                 let executor = Executor::new(engine, scope, environment);
                 for function_index in scripts {
                     match executor.run(function_index, ()) {

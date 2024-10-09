@@ -67,7 +67,7 @@ impl Environment {
     }
 
     pub fn get_engine<D: Direction>(&self, game: &impl GameView<D>) -> Engine {
-        let mut engine = create_base_engine();
+        let mut engine = create_d_engine::<D>();
         engine.register_global_module(self.config.global_module.clone());
         let this = self.clone();
         engine.register_fn(FUNCTION_NAME_CONFIG, move || -> Self {
@@ -139,6 +139,15 @@ impl Environment {
         CommanderType::None
     }
 
+    pub fn find_unit_by_name(&self, name: &str) -> Option<UnitType> {
+        for (unit_type, conf) in &self.config.units {
+            if conf.name.as_str() == name {
+                return Some(*unit_type)
+            }
+        }
+        None
+    }
+
     pub fn unit_attributes(&self, typ: UnitType, owner: i8) -> impl Iterator<Item = &AttributeKey> {
         // order has to be preserved here
         // because this method is used for exporting, while
@@ -179,6 +188,16 @@ impl Environment {
         // TODO: when validating the config, make sure this unwrap won't panic
         .unwrap()
     }
+
+    pub fn find_hero_by_name(&self, name: &str) -> Option<HeroType> {
+        for (hero_type, conf) in &self.config.heroes {
+            if conf.name.as_str() == name {
+                return Some(*hero_type)
+            }
+        }
+        None
+    }
+
 }
 
 impl PartialEq for Environment {

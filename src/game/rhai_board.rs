@@ -5,6 +5,7 @@ use rhai::plugin::*;
 
 use crate::game::game_view::GameView;
 use crate::map::direction::*;
+use crate::map::map::NeighborMode;
 use crate::map::point::*;
 use crate::units::unit::Unit;
 use crate::terrain::terrain::Terrain;
@@ -20,19 +21,29 @@ impl<D: Direction> Deref for SharedGameView<D> {
 }
 
 macro_rules! board_module {
-    ($name: ident, $d: ty) => {
+    ($pack: ident, $name: ident, $d: ty) => {
         #[export_module]
         mod $name {
             pub type Board = SharedGameView<$d>;
 
             #[rhai_fn(pure)]
-            pub fn get_neighbor(board: &mut Board, p: Point, d: $d) -> Option<Point> {
-                board.get_neighbor(p, d).map(|(p, _)| p)
+            pub fn get_neighbor(board: &mut Board, p: Point, d: $d) -> Dynamic {
+                board.get_neighbor(p, d).map(|(p, _)| Dynamic::from(p))
+                .unwrap_or(().into())
             }
 
             #[rhai_fn(pure)]
-            pub fn get_unit(board: &mut Board, p: Point) -> Option<Unit<$d>> {
+            pub fn get_neighbors(board: &mut Board, p: Point) -> Array {
+                board.get_neighbors(p, NeighborMode::FollowPipes).into_iter()
+                .map(|p| Dynamic::from(p.point))
+                .collect()
+            }
+
+            #[rhai_fn(pure)]
+            pub fn get_unit(board: &mut Board, p: Point) -> Dynamic {
                 board.get_unit(p)
+                .map(|u| Dynamic::from(u))
+                .unwrap_or(().into())
             }
 
             #[rhai_fn()]
@@ -50,17 +61,16 @@ macro_rules! board_module {
                 .unwrap_or(0)
             }
         }
+
+        def_package! {
+            pub $pack(module)
+            {
+                combine_with_exported_module!(module, stringify!($name), $name);
+            } |> |_engine| {
+            }
+        }
     };
 }
 
-board_module!(board_module4, Direction4);
-board_module!(board_module6, Direction6);
-
-def_package! {
-    pub BoardPackage(module)
-    {
-        combine_with_exported_module!(module, "board_module4", board_module4);
-        combine_with_exported_module!(module, "board_module6", board_module6);
-    } |> |_engine| {
-    }
-}
+board_module!(BoardPackage4, board_module4, Direction4);
+board_module!(BoardPackage6, board_module6, Direction6);

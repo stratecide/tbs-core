@@ -1,6 +1,6 @@
 
 fn heal_10() {
-    // TODO: heal_unit(POSITION, TRANSPORT_INDEX, 10)
+    EVENT_HANDLER.heal_unit(POSITION, 10);
 }
 
 fn earn_income() {
@@ -8,9 +8,9 @@ fn earn_income() {
 }
 
 fn damage_10() {
-    // TODO: take 10 damage
+    EVENT_HANDLER.damage_unit(POSITION, 10);
 }
 
 fn damage_20() {
-    // TODO: take 20 damage
+    EVENT_HANDLER.damage_unit(POSITION, 20);
 }

@@ -1,6 +1,7 @@
 use rhai::*;
 use rhai::packages::*;
 
+use crate::config::environment::Environment;
 use crate::game::game_view::GameView;
 use crate::game::rhai_board::SharedGameView;
 use crate::map::direction::Direction;
@@ -8,6 +9,7 @@ use crate::map::direction::Direction;
 pub mod executor;
 pub mod custom_action;
 mod rhai_environment;
+mod rhai_action_data;
 //pub mod custom_power;
 /*pub mod defend;
 pub mod unit;
@@ -47,16 +49,32 @@ pub fn create_base_engine() -> Engine {
     BasicMapPackage::new().register_into_engine(&mut engine);
     // maybe add MoreStringPackage or BitFieldPackage
     // my packages
-    crate::map::rhai_point::PositionPackage::new().register_into_engine(&mut engine);
-    crate::map::rhai_direction::DirectionPackage::new().register_into_engine(&mut engine);
     rhai_environment::EnvironmentPackage::new().register_into_engine(&mut engine);
-    crate::game::rhai_board::BoardPackage::new().register_into_engine(&mut engine);
     crate::terrain::rhai_terrain::TerrainPackage::new().register_into_engine(&mut engine);
-    crate::units::rhai_unit::UnitPackage::new().register_into_engine(&mut engine);
+    engine
+}
+
+pub fn create_d_engine<D: Direction>() -> Engine {
+    let mut engine = create_base_engine();
+    if D::is_hex() {
+        crate::map::rhai_point::PositionPackage6::new().register_into_engine(&mut engine);
+        crate::map::rhai_direction::DirectionPackage6::new().register_into_engine(&mut engine);
+        crate::game::rhai_board::BoardPackage6::new().register_into_engine(&mut engine);
+        crate::units::rhai_unit::UnitPackage6::new().register_into_engine(&mut engine);
+    } else {
+        crate::map::rhai_point::PositionPackage4::new().register_into_engine(&mut engine);
+        crate::map::rhai_direction::DirectionPackage4::new().register_into_engine(&mut engine);
+        crate::game::rhai_board::BoardPackage4::new().register_into_engine(&mut engine);
+        crate::units::rhai_unit::UnitPackage4::new().register_into_engine(&mut engine);
+    }
     engine
 }
 
 pub fn with_board<D: Direction, R>(context: NativeCallContext, f: impl FnOnce(&Shared<dyn GameView<D>>) -> R) -> R {
     let board = context.call_native_fn::<SharedGameView<D>>(FUNCTION_NAME_BOARD, ()).expect("BOARD should be in context!");
     f(&board.0)
+}
+
+pub fn get_environment(context: NativeCallContext) -> Environment {
+    context.call_native_fn::<Environment>(FUNCTION_NAME_CONFIG, ()).expect("CONFIG should be in context!")
 }

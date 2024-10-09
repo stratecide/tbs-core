@@ -23,7 +23,7 @@ use crate::units::unit_types::UnitType;
 use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
 use super::game_view::GameView;
-use super::rhai_event_handler::EventHandlerPackage;
+use super::rhai_event_handler::*;
 
 #[derive(Debug, Clone, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
@@ -111,7 +111,11 @@ impl<D: Direction> Command<D> {
                     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
                     let mut engine = environment.get_engine(&*handler.get_game());
-                    EventHandlerPackage::new().register_into_engine(&mut engine);
+                    if D::is_hex() {
+                        EventHandlerPackage6::new().register_into_engine(&mut engine);
+                    } else {
+                        EventHandlerPackage4::new().register_into_engine(&mut engine);
+                    }
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in function_indices {
                         match executor.run(function_index, ()) {

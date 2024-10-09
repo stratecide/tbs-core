@@ -9,7 +9,7 @@ use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::terrain::terrain::Terrain;
 
 macro_rules! event_handler_module {
-    ($name: ident, $d: ty) => {
+    ($pack: ident, $name: ident, $d: ty) => {
         #[export_module]
         mod $name {
             pub type Handler = EventHandler<$d>;
@@ -33,6 +33,13 @@ macro_rules! event_handler_module {
             }
 
             #[rhai_fn()]
+            pub fn damage_unit(mut handler: Handler, position: Point, amount: i32) {
+                if amount > 0 && handler.with_map(|map| map.get_unit(position).is_some()) {
+                    handler.unit_damage(position, amount.min(999) as u16);
+                }
+            }
+
+            #[rhai_fn()]
             pub fn set_unit_status(mut handler: Handler, position: Point, status: ActionStatus) {
                 if handler.with_map(|map| map.get_unit(position).is_some()) {
                     handler.unit_status(position, status);
@@ -46,18 +53,22 @@ macro_rules! event_handler_module {
                 }
                 handler.player_dies(owner_id as i8)
             }
+
+            #[rhai_fn()]
+            pub fn place_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
+                handler.unit_creation(position, unit);
+            }
+        }
+
+        def_package! {
+            pub $pack(module)
+            {
+                combine_with_exported_module!(module, stringify!($name), $name);
+            } |> |_engine| {
+            }
         }
     };
 }
 
-event_handler_module!(event_handler_module4, Direction4);
-event_handler_module!(event_handler_module6, Direction6);
-
-def_package! {
-    pub EventHandlerPackage(module)
-    {
-        combine_with_exported_module!(module, "event_handler_module4", event_handler_module4);
-        combine_with_exported_module!(module, "event_handler_module6", event_handler_module6);
-    } |> |_engine| {
-    }
-}
+event_handler_module!(EventHandlerPackage4, event_handler_module4, Direction4);
+event_handler_module!(EventHandlerPackage6, event_handler_module6, Direction6);

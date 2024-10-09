@@ -1105,6 +1105,10 @@ impl<D: Direction> UnitBuilder<D> {
         }
     }
 
+    pub fn environment(&self) -> &Environment {
+        &self.unit.environment
+    }
+
     pub fn copy_from(mut self, other: &Unit<D>) -> Self {
         if self.unit.environment != other.environment {
             panic!("Can't copy from unit from different environment");
@@ -1125,8 +1129,9 @@ impl<D: Direction> UnitBuilder<D> {
         self
     }
 
-    pub fn set_owner_id(mut self, id: i8) -> Self {
-        self.unit.set_owner_id(id);
+    pub fn set_owner_id(mut self, owner_id: i8) -> Self {
+        let owner_id = owner_id.min((self.unit.environment.config.max_player_count() - 1) as i8);
+        self.unit.set_owner_id(owner_id);
         self
     }
 

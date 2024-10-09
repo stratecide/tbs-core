@@ -32,7 +32,7 @@ use crate::units::unit_types::UnitType;
 use super::commands::Command;
 use super::events::{Event, Effect, UnitStep};
 use super::game_view::GameView;
-use super::rhai_event_handler::EventHandlerPackage;
+use super::rhai_event_handler::*;
 
 struct EventHandlerInner<D: Direction> {
     game: Handle<Game<D>>,
@@ -254,7 +254,11 @@ impl<D: Direction> EventHandler<D> {
                     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
                     let mut engine = environment.get_engine(&*handler.get_game());
-                    EventHandlerPackage::new().register_into_engine(&mut engine);
+                    if D::is_hex() {
+                        EventHandlerPackage6::new().register_into_engine(&mut engine);
+                    } else {
+                        EventHandlerPackage4::new().register_into_engine(&mut engine);
+                    }
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {
                         match executor.run(function_index, ()) {
@@ -452,7 +456,11 @@ impl<D: Direction> EventHandler<D> {
                     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
                     let mut engine = environment.get_engine(&*handler.get_game());
-                    EventHandlerPackage::new().register_into_engine(&mut engine);
+                    if D::is_hex() {
+                        EventHandlerPackage6::new().register_into_engine(&mut engine);
+                    } else {
+                        EventHandlerPackage4::new().register_into_engine(&mut engine);
+                    }
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {
                         match executor.run(function_index, ()) {
@@ -502,7 +510,11 @@ impl<D: Direction> EventHandler<D> {
                     scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
                     let mut engine = environment.get_engine(&*handler.get_game());
-                    EventHandlerPackage::new().register_into_engine(&mut engine);
+                    if D::is_hex() {
+                        EventHandlerPackage6::new().register_into_engine(&mut engine);
+                    } else {
+                        EventHandlerPackage4::new().register_into_engine(&mut engine);
+                    }
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {
                         match executor.run(function_index, ()) {
