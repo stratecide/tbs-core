@@ -7,7 +7,6 @@ use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::map::NeighborMode;
 use crate::map::point::*;
-use crate::units::unit::Unit;
 use crate::terrain::terrain::Terrain;
 
 #[derive(Clone)]
@@ -27,6 +26,13 @@ macro_rules! board_module {
             pub type Board = SharedGameView<$d>;
 
             #[rhai_fn(pure)]
+            pub fn all_points(board: &mut Board) -> Array {
+                board.all_points().into_iter()
+                .map(|p| Dynamic::from(p))
+                .collect()
+            }
+
+            #[rhai_fn(pure)]
             pub fn get_neighbor(board: &mut Board, p: Point, d: $d) -> Dynamic {
                 board.get_neighbor(p, d).map(|(p, _)| Dynamic::from(p))
                 .unwrap_or(().into())
@@ -36,6 +42,34 @@ macro_rules! board_module {
             pub fn get_neighbors(board: &mut Board, p: Point) -> Array {
                 board.get_neighbors(p, NeighborMode::FollowPipes).into_iter()
                 .map(|p| Dynamic::from(p.point))
+                .collect()
+            }
+
+            #[rhai_fn(pure)]
+            pub fn all_positions(board: &mut Board) -> Array {
+                board.all_points().into_iter()
+                .map(|p| Dynamic::from(p))
+                .collect()
+            }
+
+            #[rhai_fn(pure)]
+            pub fn positions_in_range(board: &mut Board, p: Point, range: i32) -> Array {
+                if range < 0 {
+                    return Vec::new();
+                }
+                board.range_in_layers(p, range as usize).into_iter()
+                .flatten()
+                .map(|p| Dynamic::from(p))
+                .collect()
+            }
+
+            #[rhai_fn(pure)]
+            pub fn positions_in_range_layers(board: &mut Board, p: Point, range: i32) -> Array {
+                if range < 0 {
+                    return Vec::new();
+                }
+                board.range_in_layers(p, range as usize).into_iter()
+                .map(|p| Dynamic::from(p))
                 .collect()
             }
 

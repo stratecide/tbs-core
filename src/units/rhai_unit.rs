@@ -16,8 +16,12 @@ mod unit_type_module {
     pub type UnitType = crate::units::unit_types::UnitType;
 
     #[rhai_fn(pure, name = "==")]
-    pub fn eq(p1: &mut UnitType, p2: UnitType) -> bool {
-        *p1 == p2
+    pub fn eq(u1: &mut UnitType, u2: UnitType) -> bool {
+        *u1 == u2
+    }
+    #[rhai_fn(pure, name = "!=")]
+    pub fn neq(u1: &mut UnitType, u2: UnitType) -> bool {
+        *u1 != u2
     }
 
     pub fn status_repairing() -> ActionStatus {
@@ -36,7 +40,11 @@ macro_rules! board_module {
             pub fn eq(p1: &mut Unit, p2: Unit) -> bool {
                 *p1 == p2
             }
-
+            #[rhai_fn(pure, name = "!=")]
+            pub fn neq(u1: &mut Unit, u2: Unit) -> bool {
+                *u1 != u2
+            }
+        
             #[rhai_fn(pure, get = "type")]
             pub fn get_type(unit: &mut Unit) -> UnitType {
                 unit.typ()

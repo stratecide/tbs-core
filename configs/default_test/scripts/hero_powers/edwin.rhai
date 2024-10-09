@@ -9,11 +9,9 @@ fn ua_power_input() {
     }
     let target1 = user_selection(options, false);
     let options = new_point_selection();
-    for points in BOARD().range_in_layers(POSITION, 5) {
-        for point in points {
-            if point != target1 && point != POSITION && BOARD().get_unit(point) != () {
-                options += point;
-            }
+    for point in BOARD().positions_in_range(POSITION, 5) {
+        if point != target1 && point != POSITION && BOARD().get_unit(point) != () {
+            options += point;
         }
     }
     user_selection(options, false);

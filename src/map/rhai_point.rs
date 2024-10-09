@@ -12,6 +12,10 @@ mod tile_position_module {
     pub fn eq(p1: &mut Position, p2: Position) -> bool {
         *p1 == p2
     }
+    #[rhai_fn(pure, name = "!=")]
+    pub fn neq(p1: &mut Position, p2: Position) -> bool {
+        *p1 != p2
+    }
 }
 
 macro_rules! oriented_point_module {
@@ -24,7 +28,11 @@ macro_rules! oriented_point_module {
             pub fn eq(d1: &mut OrientedPosition, d2: OrientedPosition) -> bool {
                 *d1 == d2
             }
-
+            #[rhai_fn(pure, name = "!=")]
+            pub fn neq(p1: &mut OrientedPosition, p2: OrientedPosition) -> bool {
+                *p1 != p2
+            }
+        
             #[rhai_fn(pure)]
             pub fn with_orientation(p: &mut Point) -> OrientedPosition {
                 OrientedPosition::new(*p, false, <$d>::angle_0())

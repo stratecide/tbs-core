@@ -11,12 +11,16 @@ macro_rules! direction_module {
             pub type Direction = $d;
 
             #[rhai_fn(pure, name = "==")]
-            pub fn eq(d1: &mut $d, d2: $d) -> bool {
+            pub fn eq(d1: &mut Direction, d2: Direction) -> bool {
                 *d1 == d2
+            }
+            #[rhai_fn(pure, name = "!=")]
+            pub fn neq(d1: &mut Direction, d2: Direction) -> bool {
+                *d1 != d2
             }
 
             #[rhai_fn(pure)]
-            pub fn opposite(d: &mut $d) -> $d {
+            pub fn opposite(d: &mut Direction) -> Direction {
                 d.opposite_direction()
             }
         }

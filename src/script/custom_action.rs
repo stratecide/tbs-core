@@ -144,10 +144,10 @@ fn is_script_input_valid<D: Direction>(
     match executor.run(script, ()) {
         Ok(b) => b,
         Err(e) => {
-            if !*success_.lock().unwrap() {
+            if *success_.lock().unwrap() {
                 // early success
                 true
-            } else if !*invalid_data_.lock().unwrap() {
+            } else if *invalid_data_.lock().unwrap() {
                 // wrong data supplied
                 // TODO: log error
                 false
