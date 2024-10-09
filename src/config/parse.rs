@@ -49,7 +49,7 @@ const TERRAIN_ATTRIBUTES: &'static str = "terrain_attributes.csv";
 const MOVEMENT_CONFIG: &'static str = "movement.csv";
 const TERRAIN_ATTACK: &'static str = "terrain_attack.csv";
 const TERRAIN_DEFENSE: &'static str = "terrain_defense.csv";
-//const TERRAIN_BUILD_REPAIR: &'static str = "terrain_build_repair.csv";
+const TERRAIN_BUILD: &'static str = "terrain_build.csv";
 const COMMANDER_CONFIG: &'static str = "commanders.csv";
 const COMMANDER_POWERS: &'static str = "commander_powers.csv";
 const COMMANDER_ATTRIBUTES: &'static str = "commander_attributes.csv";
@@ -104,7 +104,7 @@ impl Config {
             movement_cost: HashMap::default(),
             attack_bonus: HashMap::default(),
             defense_bonus: HashMap::default(),
-            //build_or_repair: HashMap::default(),
+            build: HashMap::default(),
             max_capture_resistance: 0,
             terrain_max_anger: 0,
             terrain_max_built_this_turn: 0,
@@ -503,7 +503,7 @@ impl Config {
         }
 
         // terrain building / repairing
-        /*let data = file_loader.load_config(TERRAIN_BUILD_REPAIR)?;
+        let data = file_loader.load_config(TERRAIN_BUILD)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         // TODO: ensure uniqueness of column and row IDs
         let mut units: Vec<UnitType> = Vec::new();
@@ -528,9 +528,9 @@ impl Config {
                 }
             }
             if units.len() > 0 {
-                result.build_or_repair.insert(typ, values);
+                result.build.insert(typ, values);
             }
-        }*/
+        }
 
         // commanders
         let mut bonus_transported = 0;

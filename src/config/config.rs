@@ -76,7 +76,7 @@ pub struct Config {
     pub(super) movement_cost: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
     pub(super) attack_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
     pub(super) defense_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    //pub(super) build_or_repair: HashMap<TerrainType, Vec<UnitType>>,
+    pub(super) build: HashMap<TerrainType, Vec<UnitType>>,
     pub(super) max_capture_resistance: u8,
     pub(super) terrain_max_anger: u8,
     pub(super) terrain_max_built_this_turn: u8,
@@ -606,21 +606,20 @@ impl Config {
         result
     }
 
-    pub fn terrain_can_repair(&self, typ: TerrainType) -> bool {
+    /*pub fn terrain_can_repair(&self, typ: TerrainType) -> bool {
         self.terrain_config(typ).can_repair
-    }
+    }*/
 
     pub fn terrain_sells_hero(&self, typ: TerrainType) -> bool {
         self.terrain_config(typ).can_sell_hero
     }
 
-    pub fn terrain_build_or_repair(&self, typ: TerrainType) -> &[UnitType] {
-        /*if let Some(units) = self.build_or_repair.get(&typ) {
+    pub fn terrain_build(&self, typ: TerrainType) -> &[UnitType] {
+        if let Some(units) = self.build.get(&typ) {
             &units
         } else {
             &[]
-        }*/
-        &[]
+        }
     }
 
     pub fn terrain_specific_attributes(&self, typ: TerrainType) -> &[TerrainAttributeKey] {

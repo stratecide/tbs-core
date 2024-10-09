@@ -143,20 +143,20 @@ impl Terrain {
         heroes: &[HeroInfluence<D>],
     ) -> &[UnitType] {
         if self.can_build(game, pos, heroes) {
-            self.environment.config.terrain_build_or_repair(self.typ)
+            self.environment.config.terrain_build(self.typ)
         } else {
             &[]
         }
     }
 
-    pub fn can_repair(&self) -> bool {
+    /*pub fn can_repair(&self) -> bool {
         self.environment.config.terrain_can_repair(self.typ)
     }
 
     pub fn can_repair_unit(&self, unit: UnitType) -> bool {
         self.environment.config.terrain_can_repair(self.typ)
         && self.environment.config.terrain_build_or_repair(self.typ).contains(&unit)
-    }
+    }*/
 
     pub fn could_sell_hero(&self) -> bool {
         self.environment.config.terrain_sells_hero(self.typ)
