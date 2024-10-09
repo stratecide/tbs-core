@@ -28,11 +28,23 @@ fn lose_game() {
 }
 
 fn revive_neutral() {
-    // TODO: set owner to neutral and revive with 50HP
+    let new_unit = CONFIG().build_unit(UNIT.type)
+        .copy_from(UNIT)
+        .owner_id(-1)
+        .hp(50)
+        .build();
+    // TODO: show effect?
+    EVENT_HANDLER.place_unit(POSITION, new_unit);
 }
 
 fn revive_converted() {
-    // TODO: revive with 50HP, owned by the killer
+    let new_unit = CONFIG().build_unit(UNIT.type)
+        .copy_from(UNIT)
+        .owner_id(OTHER_UNIT?.owner_id ?? -1)
+        .hp(50)
+        .build();
+    // TODO: show effect?
+    EVENT_HANDLER.place_unit(POSITION, new_unit);
 }
 
 fn sludge_1() {

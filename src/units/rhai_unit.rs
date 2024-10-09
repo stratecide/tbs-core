@@ -69,13 +69,18 @@ macro_rules! board_module {
                 with_board(context, |game| unit.full_price(game, position, Some(&factory), &[]))
             }
 
-            #[rhai_fn(pure)]
-            pub fn build_unit(environment: &mut Environment, name: &str) -> Dynamic {
+            #[rhai_fn(pure, name = "build_unit")]
+            pub fn build_unit_name(environment: &mut Environment, name: &str) -> Dynamic {
                 if let Some(unit_type) = environment.find_unit_by_name(name) {
-                    Dynamic::from(unit_type.instance::<$d>(environment))
+                    build_unit(environment, unit_type)
                 } else {
                     ().into()
                 }
+            }
+
+            #[rhai_fn(pure)]
+            pub fn build_unit(environment: &mut Environment, unit_type: UnitType) -> Dynamic {
+                Dynamic::from(unit_type.instance::<$d>(environment))
             }
 
             #[rhai_fn(name = "copy_from")]
@@ -95,6 +100,11 @@ macro_rules! board_module {
                 } else {
                     builder
                 }
+            }
+
+            #[rhai_fn(name = "hp")]
+            pub fn builder_hp(builder: UnitBuilder, hp: i32) -> UnitBuilder {
+                builder.set_hp(hp.max(0).min(100) as u8)
             }
 
             #[rhai_fn(name = "build")]
