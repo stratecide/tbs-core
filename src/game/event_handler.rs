@@ -1022,6 +1022,12 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
+    pub fn unit_remove(&mut self, position: Point) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        self.remove_observed_units_at(position);
+        self.add_event(Event::UnitRemove(position, unit.clone()));
+    }
+
     pub fn unit_death(&mut self, position: Point) {
         self.add_event(Event::Effect(Effect::Explode(position)));
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());

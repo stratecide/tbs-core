@@ -2,6 +2,7 @@ use rhai::*;
 use rhai::plugin::*;
 
 use super::event_handler::EventHandler;
+use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit::Unit;
@@ -57,6 +58,16 @@ macro_rules! event_handler_module {
             #[rhai_fn()]
             pub fn place_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
                 handler.unit_creation(position, unit);
+            }
+
+            #[rhai_fn()]
+            pub fn take_unit(mut handler: Handler, position: Point) -> Dynamic {
+                if let Some(unit) = handler.with_map(|map| map.get_unit(position).cloned()) {
+                    handler.unit_remove(position);
+                    Dynamic::from(unit)
+                } else {
+                    ().into()
+                }
             }
         }
 
