@@ -38,6 +38,14 @@ macro_rules! event_handler_module {
                     handler.unit_status(position, status);
                 }
             }
+
+            #[rhai_fn()]
+            pub fn make_player_lose(mut handler: Handler, owner_id: i32) {
+                if owner_id < 0 || owner_id > i8::MAX as i32 {
+                    return;
+                }
+                handler.player_dies(owner_id as i8)
+            }
         }
     };
 }

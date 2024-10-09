@@ -4,7 +4,7 @@ fn kraken() {
 }
 
 fn lose_game() {
-    // TODO
+    EVENT_HANDLER.make_player_lose(UNIT.owner_id)
 }
 
 fn revive_neutral() {
