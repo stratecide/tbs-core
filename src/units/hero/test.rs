@@ -6,6 +6,7 @@ mod tests {
 
     use crate::config::config::Config;
     use crate::game::commands::Command;
+    use crate::game::commands::CommandError;
     use crate::game::fog::*;
     use crate::game::game::Game;
     use crate::game::game_view::GameView;
@@ -176,9 +177,12 @@ mod tests {
         // hero power shouldn't be available if the hero moves
         let mut path = Path::new(Point::new(1, 1));
         path.steps.push(PathStep::Dir(Direction4::D90));
-        let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
-        println!("options: {:?}", options);
-        assert!(!options.contains(&UnitAction::hero_power(1, Vec::new())));
+        let error = server.handle_command(Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path,
+            action: UnitAction::hero_power(1, Vec::new()),
+        }), Arc::new(|| 0.)).unwrap_err();
+        assert_eq!(error, CommandError::InvalidAction);
         // use power
         let path = Path::new(Point::new(1, 1));
         let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
