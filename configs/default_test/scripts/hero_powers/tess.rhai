@@ -1,8 +1,8 @@
 
 fn ua_power_input() {
-    // TODO
+    build_unit_input(UNIT, POSITION)
 }
 
 fn ua_power(data) {
-    // TODO
+    build_unit(EVENT_HANDLER, UNIT, POSITION, false, data)
 }
