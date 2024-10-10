@@ -1,12 +1,15 @@
 use rhai::*;
 use rhai::plugin::*;
 use rustc_hash::FxHashMap;
+use num_rational::Rational32;
 
 use super::event_handler::EventHandler;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit::Unit;
 use crate::units::attributes::ActionStatus;
+use crate::units::combat::*;
+use crate::units::movement::*;
 use crate::terrain::attributes::TerrainAttributeKey;
 
 macro_rules! event_handler_module {
@@ -14,6 +17,38 @@ macro_rules! event_handler_module {
         #[export_module]
         mod $name {
             pub type Handler = EventHandler<$d>;
+
+            #[rhai_fn(pure)]
+            pub fn get_unit_position(handler: &mut Handler, id: usize) -> Dynamic {
+                handler.get_observed_unit_pos(id)
+                .map(|(p, _)| Dynamic::from(p))
+                .unwrap_or(().into())
+            }
+
+            #[rhai_fn(pure)]
+            pub fn get_unit_transport_index(handler: &mut Handler, id: usize) -> Dynamic {
+                handler.get_observed_unit_pos(id)
+                .and_then(|(_, index)| index)
+                .map(|index| Dynamic::from(index as i32))
+                .unwrap_or(().into())
+            }
+
+            pub fn make_player_lose(mut handler: Handler, owner_id: i32) {
+                if owner_id < 0 || owner_id > i8::MAX as i32 {
+                    return;
+                }
+                handler.player_dies(owner_id as i8)
+            }
+
+            pub fn gain_money(mut handler: Handler, owner_id: i32, amount: i32) {
+                if owner_id < 0 || owner_id > i8::MAX as i32 || amount <= 0 {
+                    return;
+                }
+                let owner_id = owner_id as i8;
+                if handler.with_game(|game| game.get_owning_player(owner_id).map(|player| !player.dead).unwrap_or(false)) {
+                    handler.money_income(owner_id, amount)
+                }
+            }
 
             pub fn spend_money(mut handler: Handler, owner_id: i32, amount: i32) {
                 if owner_id < 0 || owner_id > i8::MAX as i32 {
@@ -45,26 +80,48 @@ macro_rules! event_handler_module {
                 handler.unit_mass_damage(&map);
             }
 
+            #[rhai_fn(name = "sneak_attack")]
+            pub fn sneak_attack(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32, attacker_id: usize) {
+                vector.execute(
+                    &mut handler,
+                    p,
+                    attacker,
+                    Some(attacker_id),
+                    None,
+                    false,
+                    false,
+                    true,
+                    factor,
+                    Counter::NoCounter,
+                );
+            }
+            #[rhai_fn(name = "sneak_attack")]
+            pub fn sneak_attack2(handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: i32, attacker_id: usize) {
+                sneak_attack(handler, vector, p, attacker, Rational32::from_integer(factor), attacker_id)
+            }
+            #[rhai_fn(name = "sneak_attack")]
+            pub fn sneak_attack3(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32) {
+                vector.execute(
+                    &mut handler,
+                    p,
+                    attacker,
+                    None,
+                    None,
+                    false,
+                    false,
+                    true,
+                    factor,
+                    Counter::NoCounter,
+                );
+            }
+            #[rhai_fn(name = "sneak_attack")]
+            pub fn sneak_attack4(handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: i32) {
+                sneak_attack3(handler, vector, p, attacker, Rational32::from_integer(factor))
+            }
+
             pub fn set_unit_status(mut handler: Handler, position: Point, status: ActionStatus) {
                 if handler.with_map(|map| map.get_unit(position).is_some()) {
                     handler.unit_status(position, status);
-                }
-            }
-
-            pub fn make_player_lose(mut handler: Handler, owner_id: i32) {
-                if owner_id < 0 || owner_id > i8::MAX as i32 {
-                    return;
-                }
-                handler.player_dies(owner_id as i8)
-            }
-
-            pub fn gain_money(mut handler: Handler, owner_id: i32, amount: i32) {
-                if owner_id < 0 || owner_id > i8::MAX as i32 || amount <= 0 {
-                    return;
-                }
-                let owner_id = owner_id as i8;
-                if handler.with_game(|game| game.get_owning_player(owner_id).map(|player| !player.dead).unwrap_or(false)) {
-                    handler.money_income(owner_id, amount)
                 }
             }
 
@@ -87,6 +144,24 @@ macro_rules! event_handler_module {
                 .unwrap_or(false)) {
                     handler.unit_add_transported(position, unit);
                 }
+            }
+
+            #[rhai_fn(name = "move_unit")]
+            pub fn move_unit(mut handler: Handler, path: Path<$d>, involuntary: bool) {
+                if handler.with_map(|map| map.get_unit(path.start).is_none()) {
+                    return;
+                }
+                let Ok(end) = path.end(&*handler.get_game()) else {
+                    return;
+                };
+                if handler.with_map(|map| map.get_unit(end.0).is_some()) {
+                    return;
+                }
+                handler.unit_path(None, &path, false, involuntary);
+            }
+            #[rhai_fn(name = "move_unit")]
+            pub fn move_unit2(handler: Handler, path: Path<$d>) {
+                move_unit(handler, path, false);
             }
 
             pub fn set_terrain_anger(mut handler: Handler, position: Point, anger: i32) {

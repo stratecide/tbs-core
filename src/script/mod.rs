@@ -10,6 +10,7 @@ pub mod executor;
 pub mod custom_action;
 mod rhai_environment;
 mod rhai_action_data;
+mod rhai_fraction;
 //pub mod custom_power;
 /*pub mod defend;
 pub mod unit;
@@ -51,6 +52,7 @@ pub fn create_base_engine() -> Engine {
     // my packages
     rhai_environment::EnvironmentPackage::new().register_into_engine(&mut engine);
     crate::terrain::rhai_terrain::TerrainPackage::new().register_into_engine(&mut engine);
+    rhai_fraction::FractionPackage::new().register_into_engine(&mut engine);
     // https://rhai.rs/book/safety/max-stmt-depth.html
     // ran into problems with the debug-build defaults 32, 16
     engine.set_max_expr_depths(64, 32);
@@ -67,11 +69,15 @@ pub fn create_d_engine<D: Direction>() -> Engine {
         crate::map::rhai_direction::DirectionPackage6::new().register_into_engine(&mut engine);
         crate::game::rhai_board::BoardPackage6::new().register_into_engine(&mut engine);
         crate::units::rhai_unit::UnitPackage6::new().register_into_engine(&mut engine);
+        crate::units::rhai_combat::CombatPackage6::new().register_into_engine(&mut engine);
+        crate::units::rhai_movement::MovementPackage6::new().register_into_engine(&mut engine);
     } else {
         crate::map::rhai_point::PositionPackage4::new().register_into_engine(&mut engine);
         crate::map::rhai_direction::DirectionPackage4::new().register_into_engine(&mut engine);
         crate::game::rhai_board::BoardPackage4::new().register_into_engine(&mut engine);
         crate::units::rhai_unit::UnitPackage4::new().register_into_engine(&mut engine);
+        crate::units::rhai_combat::CombatPackage4::new().register_into_engine(&mut engine);
+        crate::units::rhai_movement::MovementPackage4::new().register_into_engine(&mut engine);
     }
     engine
 }

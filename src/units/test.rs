@@ -227,6 +227,7 @@ fn puffer_fish() {
         path: Path::new(Point::new(0, 1)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
     }), Arc::new(|| 0.)).unwrap();
+    assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().typ(), UnitType::PufferFish);
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_hp(), 100);
     assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().get_hp(), 100);
     let hp = game.get_unit(Point::new(2, 0)).unwrap().get_hp();

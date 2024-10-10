@@ -3,11 +3,10 @@ use rhai::plugin::*;
 
 use crate::config::environment::Environment;
 use crate::config::table_config::TableAxisKey;
+use crate::config::table_config::TableValue;
 
 #[export_module]
 mod environment_module {
-    use crate::config::table_config::TableValue;
-
     pub type Config = Environment;
 
     #[rhai_fn(pure)]

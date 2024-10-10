@@ -9,6 +9,7 @@ macro_rules! direction_module {
         #[export_module]
         mod $name {
             pub type Direction = $d;
+            pub type Distortion = crate::map::wrapping_map::Distortion<$d>;
 
             #[rhai_fn(pure, name = "==")]
             pub fn eq(d1: &mut Direction, d2: Direction) -> bool {
@@ -22,6 +23,11 @@ macro_rules! direction_module {
             #[rhai_fn(pure)]
             pub fn opposite(d: &mut Direction) -> Direction {
                 d.opposite_direction()
+            }
+
+            #[rhai_fn(pure)]
+            pub fn update_straight_direction(distortion: &mut Distortion, d: Direction) -> Direction {
+                distortion.update_direction(d)
             }
         }
 

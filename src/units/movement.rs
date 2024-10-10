@@ -15,8 +15,6 @@ use crate::game::game_view::GameView;
 use crate::game::modified_view::*;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
-use crate::game::game::Game;
-use crate::map::map::*;
 use crate::map::wrapping_map::Distortion;
 use crate::terrain::AmphibiousTyping;
 use crate::terrain::terrain::Terrain;

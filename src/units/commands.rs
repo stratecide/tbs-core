@@ -180,8 +180,21 @@ impl<D: Direction> UnitAction<D> {
                 false
             }
             Self::Attack(attack_vector) => {
+                let attacker = handler.get_game().get_unit(end).unwrap();
+                let (attacker_id, _) = handler.observe_unit(end, None);
                 let transporter = transporter.map(|(u, _)| (u, path.start));
-                attack_vector.execute(handler, end, Some((path, transporter, ballast)), true, true, true, Rational32::from_integer(1), Counter::AllowCounter);
+                attack_vector.execute(
+                    handler,
+                    end,
+                    attacker,
+                    Some(attacker_id),
+                    Some((path, transporter, ballast)),
+                    true,
+                    true,
+                    true,
+                    Rational32::from_integer(1),
+                    Counter::AllowCounter,
+                );
                 false
             }
             Self::BuyHero(hero_type) => {

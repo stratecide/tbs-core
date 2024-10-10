@@ -1,5 +1,5 @@
 use executor::Executor;
-use rhai::Scope;
+use rhai::{Dynamic, Scope};
 use rhai::packages::Package;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use num_rational::Rational32;
@@ -410,9 +410,19 @@ impl<D: Direction> AttackVector<D> {
     /**
      * returns the new position of the attacker or None if the attacker died
      */
-    pub fn execute(&self, handler: &mut EventHandler<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, exhaust_after_attacking: bool, execute_scripts: bool, charge_powers: bool, input_factor: Rational32, counter: Counter<D>) -> Option<(Point, Option<usize>)> {
-        let (attacker_id, _) = handler.observe_unit(attacker_pos, None);
-        let attacker = handler.get_game().get_unit(attacker_pos).unwrap();
+    pub fn execute(
+        &self,
+        handler: &mut EventHandler<D>,
+        attacker_pos: Point,
+        attacker: Unit<D>,
+        attacker_id: Option<usize>,
+        path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>,
+        exhaust_after_attacking: bool,
+        execute_scripts: bool,
+        charge_powers: bool,
+        input_factor: Rational32,
+        counter: Counter<D>,
+    ) -> Option<(Point, Option<usize>)> {
         let mut after_battle_displacements = Vec::new();
         if attacker.displacement() == Displacement::AfterCounter {
             after_battle_displacements.push((self.clone(), attacker.clone(), attacker_pos, path.clone(), counter.clone()));
@@ -428,17 +438,15 @@ impl<D: Direction> AttackVector<D> {
             mut hero_charge,
             counter_attackers,
             mut commander_charge,
-        ) = self.execute_attack(handler, &attacker, attacker_pos, path, counter.clone(), &attacker_heroes, exhaust_after_attacking, execute_scripts, input_factor);
+        ) = self.execute_attack(handler, &attacker, attacker_pos, attacker_id, path, counter.clone(), &attacker_heroes, exhaust_after_attacking, execute_scripts, input_factor);
         // counter attack
         if counter.allows_counter() {
             for unit_id in counter_attackers {
-                let attacker_pos = match handler.get_observed_unit_pos(attacker_id) {
-                    Some((p, _)) => p,
-                    _ => break,
+                let Some((attacker_pos, _)) = attacker_id.and_then(|id| handler.get_observed_unit_pos(id)) else {
+                    break;
                 };
-                let unit_pos = match handler.get_observed_unit_pos(unit_id) {
-                    Some((p, None)) => p,
-                    _ => continue,
+                let Some((unit_pos, None)) = handler.get_observed_unit_pos(unit_id) else {
+                    continue;
                 };
                 let unit = handler.get_game().get_unit(unit_pos).expect(&format!("didn't find counter attacker at {unit_pos:?}"));
                 if !can_see_unit_at(&*handler.get_game(), unit.get_team(), attacker_pos, &attacker, true)
@@ -461,7 +469,7 @@ impl<D: Direction> AttackVector<D> {
                     }
                     // unit doesn't move, so drag_along is None
                     let heroes: Vec<_> = Hero::hero_influence_at(&*handler.get_game(), unit_pos, unit.get_owner_id());
-                    let (_, _, d2) = attack_vector.execute_attack(handler, &unit, unit_pos, None, Counter::RealCounter(attacker.clone(), attacker_pos), &heroes, false, execute_scripts, Rational32::from_integer(1),);
+                    let (_, _, d2) = attack_vector.execute_attack(handler, &unit, unit_pos, Some(unit_id), None, Counter::RealCounter(attacker.clone(), attacker_pos), &heroes, false, execute_scripts, Rational32::from_integer(1),);
                     commander_charge.extend(d2.into_iter());
                 }
             }
@@ -479,22 +487,44 @@ impl<D: Direction> AttackVector<D> {
             commander_charge = Vec::new();
         }
         after_attacking(handler, attacker_id, hero_charge, attacker_hero_ids, commander_charge);
-        handler.get_observed_unit_pos(attacker_id)
+        attacker_id.and_then(|id| handler.get_observed_unit_pos(id))
     }
 
     // set path to None if this is a counter-attack
-    fn execute_attack(&self, handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, counter: Counter<D>, attacker_heroes: &[HeroInfluence<D>], exhaust_after_attacking: bool, execute_scripts: bool, input_factor: Rational32) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
+    fn execute_attack(
+        &self, handler:
+        &mut EventHandler<D>,
+        attacker: &Unit<D>,
+        attacker_pos: Point,
+        attacker_id: Option<usize>,
+        path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>,
+        counter: Counter<D>,
+        attacker_heroes: &[HeroInfluence<D>],
+        exhaust_after_attacking: bool,
+        execute_scripts: bool,
+        input_factor: Rational32,
+    ) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
         let temporary_ballast = path.map(|(_, _, t)| t).unwrap_or(&[]);
         let mut defenders = self.get_splash(attacker, &*handler.get_game(), attacker_pos, attacker_heroes, temporary_ballast, counter.clone());
         for (_, _, f) in defenders.iter_mut() {
             *f = *f * input_factor;
         }
-        attack_targets(handler, attacker, attacker_pos, path, counter, defenders, attacker_heroes, exhaust_after_attacking, execute_scripts)
+        attack_targets(handler, attacker, attacker_pos, attacker_id, path, counter, defenders, attacker_heroes, exhaust_after_attacking, execute_scripts)
     }
 }
 
-pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, counter: Counter<D>, targets: Vec<(Point, Option<D>, Rational32)>, attacker_heroes: &[HeroInfluence<D>], exhaust_after_attacking: bool, execute_scripts: bool) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
-    let (attacker_id, _) = handler.observe_unit(attacker_pos, None);
+fn attack_targets<D: Direction>(
+    handler: &mut EventHandler<D>,
+    attacker: &Unit<D>,
+    attacker_pos: Point,
+    attacker_id: Option<usize>,
+    path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>,
+    counter: Counter<D>,
+    targets: Vec<(Point, Option<D>, Rational32)>,
+    attacker_heroes: &[HeroInfluence<D>],
+    exhaust_after_attacking: bool,
+    execute_scripts: bool,
+) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
     let mut defenders = filter_attack_targets(&*handler.get_game(), attacker, targets);
     let ricochet_directions: HashMap<usize, (D, Distortion<D>)> = defenders.iter()
     .filter_map(|(pos, dir, _)| {
@@ -539,7 +569,7 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
     let mut defenders = Vec::new();
 
     if exhaust_after_attacking {
-        match handler.get_observed_unit_pos(attacker_id) {
+        match attacker_id.and_then(|id| handler.get_observed_unit_pos(id)) {
             Some((p, None)) => handler.unit_status(p, ActionStatus::Exhausted),
             Some((p, Some(index))) => handler.unit_status_boarded(p, index, ActionStatus::Exhausted),
             None => (),
@@ -559,7 +589,9 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             }
         }
     }
-    if execute_scripts {
+    // attacker_id should be Some(_) unless called by a script anyway
+    // may remove "execute_scripts" flag in the future
+    if execute_scripts && attacker_id.is_some() {
         let temporary_ballast = path.map(|(_, _, t)| t).unwrap_or(&[]);
         let transporter = path.and_then(|(_, t, _)| t);
         let mut defend_script_users = Vec::new();
@@ -583,7 +615,7 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             scope.push_constant(CONST_NAME_UNIT_ID, defender_id);
             scope.push_constant(CONST_NAME_OTHER_POSITION, attacker_pos);
             scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
-            scope.push_constant(CONST_NAME_OTHER_UNIT_ID, attacker_id);
+            scope.push_constant(CONST_NAME_OTHER_UNIT_ID, attacker_id.unwrap());
             scope.push_constant(CONST_NAME_DAMAGE, damage as i32);
             scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
@@ -595,14 +627,14 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             }
             let ricochet_directions = ricochet_directions.clone();
             let handler = handler.clone();
-            engine.register_fn(FUNCTION_NAME_BLAST_DIRECTION, move || {
-                if let Some((_, _, distortion)) = handler.get_observed_unit(defender_id) {
-                    ricochet_directions.get(&defender_id).map(|(d, disto)| {
-                        (*disto - distortion).update_direction(*d)
-                    })
-                } else {
-                    None
-                }
+            engine.register_fn(FUNCTION_NAME_BLAST_DIRECTION, move || -> Dynamic {
+                let Some((_, _, distortion)) = handler.get_observed_unit(defender_id) else {
+                    return ().into();
+                };
+                let Some((d, disto)) = ricochet_directions.get(&defender_id) else {
+                    return ().into();
+                };
+                Dynamic::from((*disto - distortion).update_direction(*d))
             });
             let executor = Executor::new(engine, scope, environment);
             for function_index in scripts {
@@ -627,7 +659,7 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             let mut scope = Scope::new();
             scope.push_constant(CONST_NAME_POSITION, attacker_pos);
             scope.push_constant(CONST_NAME_UNIT, attacker.clone());
-            scope.push_constant(CONST_NAME_UNIT_ID, attacker_id);
+            scope.push_constant(CONST_NAME_UNIT_ID, attacker_id.unwrap());
             scope.push_constant(CONST_NAME_OTHER_POSITION, defender_pos);
             scope.push_constant(CONST_NAME_OTHER_UNIT, defender.clone());
             scope.push_constant(CONST_NAME_OTHER_UNIT_ID, defender_id);
@@ -663,7 +695,7 @@ pub(crate) fn attack_targets<D: Direction>(handler: &mut EventHandler<D>, attack
             let mut scope = Scope::new();
             scope.push_constant(CONST_NAME_POSITION, attacker_pos);
             scope.push_constant(CONST_NAME_UNIT, attacker.clone());
-            scope.push_constant(CONST_NAME_UNIT_ID, attacker_id);
+            scope.push_constant(CONST_NAME_UNIT_ID, attacker_id.unwrap());
             scope.push_constant(CONST_NAME_OTHER_POSITION, defender_pos);
             scope.push_constant(CONST_NAME_OTHER_UNIT, defender.clone());
             scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
@@ -868,12 +900,12 @@ fn displace<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, att
     filter_attack_targets(&*handler.get_game(), attacker, targets)
 }
 
-pub(crate) fn after_attacking<D: Direction>(handler: &mut EventHandler<D>, attacker_id: usize, hero_charge: u32, hero_ids: Vec<usize>, commander_charge: Vec<(i8, i8, u32)>) {
+pub(crate) fn after_attacking<D: Direction>(handler: &mut EventHandler<D>, attacker_id: Option<usize>, hero_charge: u32, hero_ids: Vec<usize>, commander_charge: Vec<(i8, i8, u32)>) {
     // add charge to heroes
     if hero_charge > 0 {
         for id in hero_ids {
             if let Some((p, unload_index)) = handler.get_observed_unit_pos(id) {
-                let change = if id == attacker_id {
+                let change = if Some(id) == attacker_id {
                     3
                 } else {
                     1
