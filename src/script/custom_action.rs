@@ -7,8 +7,10 @@ use zipper::*;
 
 use crate::config::environment::Environment;
 use crate::game::event_handler::EventHandler;
+use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::game::rhai_event_handler::*;
+use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::units::hero::HeroInfluence;
@@ -90,15 +92,18 @@ pub fn is_unit_script_input_valid<D: Direction>(
     scope.push_constant(CONST_NAME_PATH, path.clone());
     scope.push_constant(CONST_NAME_UNIT, unit.clone());
     scope.push_constant(CONST_NAME_POSITION, unit_pos);
-is_script_input_valid(script, game, scope, data)
+    is_script_input_valid(script, game, scope, data)
 }
 
 pub fn is_commander_script_input_valid<D: Direction>(
     script: usize,
-    game: &impl GameView<D>,
+    game: &Handle<Game<D>>,
     data: &[CustomActionData<D>],
 ) -> bool {
-    is_script_input_valid(script, game, Scope::new(), data)
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner() as i32);
+    scope.push_constant(CONST_NAME_TEAM, game.current_team().to_i16() as i32);
+    is_script_input_valid(script, game, scope, data)
 }
 
 fn is_script_input_valid<D: Direction>(
@@ -186,7 +191,10 @@ pub fn execute_commander_script<D: Direction>(
     handler: &mut EventHandler<D>,
     data: Option<&[CustomActionData<D>]>,
 ) {
-    execute_script(script, handler, Scope::new(), data)
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_OWNER_ID, handler.get_game().current_owner() as i32);
+    scope.push_constant(CONST_NAME_TEAM, handler.get_game().current_team().to_i16() as i32);
+    execute_script(script, handler, scope, data)
 }
 
 fn execute_script<D: Direction>(

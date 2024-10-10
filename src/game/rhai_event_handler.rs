@@ -79,6 +79,13 @@ macro_rules! event_handler_module {
                     .collect();
                 handler.unit_mass_damage(&map);
             }
+            pub fn heal_units(mut handler: Handler, map: FxHashMap<Point, i32>) {
+                let map = map.into_iter()
+                    .filter(|(_, heal)| *heal > 0)
+                    .map(|(p, heal)| (p, heal.min(100) as u8))
+                    .collect();
+                handler.unit_mass_heal(map);
+            }
 
             #[rhai_fn(name = "sneak_attack")]
             pub fn sneak_attack(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32, attacker_id: usize) {
@@ -197,10 +204,19 @@ mod mass_damage{
     pub fn new_mass_damage() -> FxHashMap<Point, i32> {
         FxHashMap::default()
     }
+    #[rhai_fn()]
+    pub fn new_mass_heal() -> FxHashMap<Point, i32> {
+        FxHashMap::default()
+    }
 
     #[rhai_fn(pure)]
     pub fn len(map: &mut FxHashMap<Point, i32>) -> i32 {
         map.len() as i32
+    }
+
+    #[rhai_fn(pure)]
+    pub fn contains(map: &mut FxHashMap<Point, i32>, p: Point) -> bool {
+        map.contains_key(&p)
     }
 
     #[rhai_fn(name = "add")]

@@ -80,6 +80,11 @@ macro_rules! board_module {
                 unit.get_owner_id() as i32
             }
 
+            #[rhai_fn(pure, get = "team")]
+            pub fn get_team(unit: &mut Unit) -> i32 {
+                unit.get_team().to_i16() as i32
+            }
+
             #[rhai_fn(pure, get = "hp")]
             pub fn get_hp(unit: &mut Unit) -> i32 {
                 unit.get_hp() as i32
