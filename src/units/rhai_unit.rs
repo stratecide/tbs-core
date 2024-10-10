@@ -40,6 +40,18 @@ mod unit_type_module {
     pub fn status_exhausted() -> ActionStatus {
         ActionStatus::Exhausted
     }
+    pub fn status_ready() -> ActionStatus {
+        ActionStatus::Ready
+    }
+
+    #[rhai_fn(pure, name = "==")]
+    pub fn as_eq(u1: &mut ActionStatus, u2: ActionStatus) -> bool {
+        *u1 == u2
+    }
+    #[rhai_fn(pure, name = "!=")]
+    pub fn as_neq(u1: &mut ActionStatus, u2: ActionStatus) -> bool {
+        *u1 != u2
+    }
 }
 
 macro_rules! board_module {
