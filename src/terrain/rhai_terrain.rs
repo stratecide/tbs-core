@@ -5,6 +5,8 @@ use crate::terrain::attributes::TerrainAttributeKey;
 
 #[export_module]
 mod terrain_module {
+    use crate::units::movement::MovementType;
+
 
     pub type TerrainType = crate::terrain::TerrainType;
 
@@ -45,6 +47,13 @@ mod terrain_module {
         } else {
             ().into()
         }
+    }
+
+    #[rhai_fn(pure, name = "movement_cost")]
+    pub fn get_movement_cost(terrain: &mut Terrain, movement_type: MovementType) -> Dynamic {
+        terrain.movement_cost(movement_type)
+            .map(|mc| Dynamic::from(mc))
+            .unwrap_or(().into())
     }
 }
 

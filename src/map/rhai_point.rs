@@ -37,6 +37,19 @@ macro_rules! oriented_point_module {
             pub fn with_orientation(p: &mut Point) -> OrientedPosition {
                 OrientedPosition::new(*p, false, <$d>::angle_0())
             }
+        
+            #[rhai_fn(pure, get = "point")]
+            pub fn get_point(p: &mut OrientedPosition) -> Point {
+                p.point
+            }
+            #[rhai_fn(pure, get = "direction")]
+            pub fn get_direction(p: &mut OrientedPosition) -> $d {
+                p.direction
+            }
+            #[rhai_fn(pure, get = "mirrored")]
+            pub fn get_mirrored(p: &mut OrientedPosition) -> bool {
+                p.mirrored
+            }
         }
 
         def_package! {

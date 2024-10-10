@@ -1,14 +1,12 @@
 use rhai::*;
 use rhai::plugin::*;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use super::event_handler::EventHandler;
-use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit::Unit;
-use crate::units::attributes::{AttributeKey, ActionStatus};
-use crate::terrain::terrain::Terrain;
+use crate::units::attributes::ActionStatus;
 use crate::terrain::attributes::TerrainAttributeKey;
 
 macro_rules! event_handler_module {
@@ -17,7 +15,6 @@ macro_rules! event_handler_module {
         mod $name {
             pub type Handler = EventHandler<$d>;
 
-            #[rhai_fn()]
             pub fn spend_money(mut handler: Handler, owner_id: i32, amount: i32) {
                 if owner_id < 0 || owner_id > i8::MAX as i32 {
                     return;
@@ -28,21 +25,18 @@ macro_rules! event_handler_module {
                 }
             }
 
-            #[rhai_fn()]
             pub fn heal_unit(mut handler: Handler, position: Point, amount: i32) {
                 if amount > 0 && handler.with_map(|map| map.get_unit(position).is_some()) {
                     handler.unit_heal(position, amount.min(100) as u8);
                 }
             }
 
-            #[rhai_fn()]
             pub fn damage_unit(mut handler: Handler, position: Point, amount: i32) {
                 if amount > 0 && handler.with_map(|map| map.get_unit(position).is_some()) {
                     handler.unit_damage(position, amount.min(999) as u16);
                 }
             }
 
-            #[rhai_fn()]
             pub fn damage_units(mut handler: Handler, map: FxHashMap<Point, i32>) {
                 let map = map.into_iter()
                     .filter(|(_, damage)| *damage > 0)
@@ -51,14 +45,12 @@ macro_rules! event_handler_module {
                 handler.unit_mass_damage(&map);
             }
 
-            #[rhai_fn()]
             pub fn set_unit_status(mut handler: Handler, position: Point, status: ActionStatus) {
                 if handler.with_map(|map| map.get_unit(position).is_some()) {
                     handler.unit_status(position, status);
                 }
             }
 
-            #[rhai_fn()]
             pub fn make_player_lose(mut handler: Handler, owner_id: i32) {
                 if owner_id < 0 || owner_id > i8::MAX as i32 {
                     return;
@@ -66,12 +58,20 @@ macro_rules! event_handler_module {
                 handler.player_dies(owner_id as i8)
             }
 
-            #[rhai_fn()]
+            pub fn gain_money(mut handler: Handler, owner_id: i32, amount: i32) {
+                if owner_id < 0 || owner_id > i8::MAX as i32 || amount <= 0 {
+                    return;
+                }
+                let owner_id = owner_id as i8;
+                if handler.with_game(|game| game.get_owning_player(owner_id).map(|player| !player.dead).unwrap_or(false)) {
+                    handler.money_income(owner_id, amount)
+                }
+            }
+
             pub fn place_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
                 handler.unit_creation(position, unit);
             }
 
-            #[rhai_fn()]
             pub fn take_unit(mut handler: Handler, position: Point) -> Dynamic {
                 if let Some(unit) = handler.with_map(|map| map.get_unit(position).cloned()) {
                     handler.unit_remove(position);
@@ -81,7 +81,14 @@ macro_rules! event_handler_module {
                 }
             }
 
-            #[rhai_fn()]
+            pub fn transport_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
+                if handler.with_map(|map| map.get_unit(position)
+                .map(|transporter| transporter.can_transport(&unit))
+                .unwrap_or(false)) {
+                    handler.unit_add_transported(position, unit);
+                }
+            }
+
             pub fn set_terrain_anger(mut handler: Handler, position: Point, anger: i32) {
                 let anger = anger.max(0).min(handler.environment().config.terrain_max_anger() as i32) as u8;
                 let has_attribute = handler.with_map(|map| {

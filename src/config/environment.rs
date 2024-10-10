@@ -95,15 +95,28 @@ impl Environment {
     }
 
     pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
-        for (key, (default_value, map)) in &self.config.custom_tables {
-            if key.as_str() == name {
-                let value = map.get(&(x, y))
-                    .unwrap_or(default_value)
-                    .clone();
-                return Some(value);
+        self.config.custom_tables.iter()
+        .find(|(key, _)| key.as_str() == name)
+        .map(|(_, table)| {
+            table.values.get(&y)
+            .and_then(|map| map.get(&x))
+            .unwrap_or(&table.default_value)
+            .clone()
+        })
+    }
+
+    pub fn table_row(&self, name: &str, y: TableAxisKey, value: TableValue) -> Vec<TableAxisKey> {
+        let mut result = Vec::new();
+        if let Some((_, table)) = self.config.custom_tables.iter()
+        .find(|(key, _)| key.as_str() == name) {
+            let map = table.values.get(&y);
+            for header in &table.column_keys {
+                if value == *map.and_then(|map| map.get(header)).unwrap_or(&table.default_value) {
+                    result.push(*header);
+                }
             }
         }
-        None
+        result
     }
 
     pub fn get_team(&self, owner_id: i8) -> ClientPerspective {

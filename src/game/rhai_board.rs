@@ -7,6 +7,7 @@ use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::map::NeighborMode;
 use crate::map::point::*;
+use crate::map::wrapping_map::OrientedPoint;
 use crate::terrain::terrain::Terrain;
 
 #[derive(Clone)]
@@ -42,6 +43,13 @@ macro_rules! board_module {
             pub fn get_neighbors(board: &mut Board, p: Point) -> Array {
                 board.get_neighbors(p, NeighborMode::FollowPipes).into_iter()
                 .map(|p| Dynamic::from(p.point))
+                .collect()
+            }
+
+            #[rhai_fn(pure)]
+            pub fn get_neighbors_with_direction(board: &mut Board, p: Point) -> Array {
+                <$d>::list().into_iter()
+                .filter_map(|d| board.get_neighbor(p, d).map(|(p, _)| Dynamic::from(OrientedPoint::simple(p, d))))
                 .collect()
             }
 

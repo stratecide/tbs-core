@@ -14,7 +14,6 @@ use crate::map::point::Point;
 use crate::units::hero::HeroInfluence;
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
-use crate::units::unit_types::UnitType;
 
 use super::executor::Executor;
 use super::*;
@@ -32,15 +31,15 @@ pub type CustomAction = (Option<usize>, usize);
 pub enum CustomActionData<D: Direction> {
     Point(Point),
     Direction(D),
-    UnitType(UnitType),
+    Unit(Unit<D>),
 }
 
-impl<D: Direction> From<&CustomActionData<D>> for Dynamic {
-    fn from(value: &CustomActionData<D>) -> Self {
-        match value {
-            CustomActionData::Point(value) => Dynamic::from(*value),
-            CustomActionData::Direction(value) => Dynamic::from(*value),
-            CustomActionData::UnitType(value) => Dynamic::from(*value),
+impl<D: Direction> CustomActionData<D> {
+    fn into_dynamic(&self) -> Dynamic {
+        match self {
+            Self::Point(value) => Dynamic::from(*value),
+            Self::Direction(value) => Dynamic::from(*value),
+            Self::Unit(value) => Dynamic::from(value.clone()),
         }
     }
 }
@@ -57,7 +56,7 @@ impl<D: Direction> CustomActionDataOptions<D> {
         match (self, data) {
             (Self::Point(options), CustomActionData::Point(option)) => options.contains(option),
             (Self::Direction(_visual_center, options), CustomActionData::Direction(option)) => options.contains(option),
-            (Self::UnitShop(options), CustomActionData::UnitType(option)) => options.iter().any(|o| o.0.typ() == *option),
+            (Self::UnitShop(options), CustomActionData::Unit(option)) => options.iter().any(|o| o.0 == *option),
             _ => false
         }
     }
@@ -138,7 +137,7 @@ fn is_script_input_valid<D: Direction>(
             *invalid_data.lock().unwrap() = true;
             return Err(format!("script {script} asks for ({i}) {options:?} but received {:?}", data[i]).into());
         }
-        Ok((&data[i]).into())
+        Ok(data[i].into_dynamic())
     });
     let executor = Executor::new(engine, scope, environment);
     match executor.run(script, ()) {
@@ -207,7 +206,7 @@ fn execute_script<D: Direction>(
     let executor = Executor::new(engine, scope, environment);
     let result: Result<(), Box<EvalAltResult>> = if let Some(data) = data {
         let data = data.iter()
-        .map(|cad| cad.into())
+        .map(CustomActionData::into_dynamic)
         .collect::<Array>();
         executor.run(script, (data, ))
     } else {

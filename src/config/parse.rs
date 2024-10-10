@@ -615,7 +615,7 @@ impl Config {
         })?;
         for conf in table_configs {
             let table = conf.build_table(&mut file_loader)?;
-            result.custom_tables.insert(conf.id, (conf.default_value, table));
+            result.custom_tables.insert(conf.id, table);
         }
 
         let (asts, functions) = file_loader.finish();

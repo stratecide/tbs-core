@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use rhai::Dynamic;
-use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
 use crate::terrain::*;
@@ -10,7 +10,13 @@ use crate::units::unit_types::UnitType;
 use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
 
-pub type CustomTable = HashMap<(TableAxisKey, TableAxisKey), TableValue>;
+pub struct CustomTable {
+    pub default_value: TableValue,
+    // first y, then x
+    pub values: HashMap<TableAxisKey, HashMap<TableAxisKey,  TableValue>>,
+    pub row_keys: Vec<TableAxisKey>,
+    pub column_keys: Vec<TableAxisKey>,
+}
 
 #[derive(Debug)]
 pub struct TableConfig {
@@ -64,8 +70,8 @@ impl TableConfig {
             }
             headers.push(header);
         }
-        let mut rows: HashSet<TableAxisKey> = HashSet::default();
-        let mut result = HashMap::default();
+        let mut row_keys: Vec<TableAxisKey> = Vec::new();
+        let mut values = HashMap::default();
         for line in reader.records() {
             let line = line?;
             let mut line = line.into_iter();
@@ -73,9 +79,11 @@ impl TableConfig {
                 Some(t) => TableAxisKey::from_conf(self.left, t, loader)?,
                 _ => continue,
             };
-            if !rows.insert(left) {
+            if row_keys.contains(&left) {
                 return Err(Box::new(ConfigParseError::DuplicateHeader(format!("{left:?}"))))
             }
+            row_keys.push(left);
+            let mut map = HashMap::default();
             for (i, value) in line.enumerate() {
                 let value = value.trim();
                 if value.len() == 0 {
@@ -83,11 +91,19 @@ impl TableConfig {
                 }
                 let value = TableValue::from_conf(self.typ, value, loader)?;
                 if value != self.default_value {
-                    result.insert((headers[i], left), value);
+                    map.insert(headers[i], value);
                 }
             }
+            if map.len() > 0 {
+                values.insert(left, map);
+            }
         }
-        Ok(result)
+        Ok(CustomTable {
+            values,
+            default_value: self.default_value,
+            column_keys: headers,
+            row_keys,
+        })
     }
 }
 
@@ -129,13 +145,18 @@ impl TableValue {
             }
         }
     }
-}
 
-impl From<TableValue> for Dynamic {
-    fn from(value: TableValue) -> Self {
-        match value {
-            TableValue::Bool(v) => v.into(),
-            TableValue::Int(v) => v.into(),
+    pub fn from_dynamic(value: Dynamic) -> Option<Self> {
+        match value.type_name().split("::").last()? {
+            "bool" => Some(Self::Bool(value.try_cast()?)),
+            "i32" => Some(Self::Int(value.try_cast()?)),
+            _ => None
+        }
+    }
+    pub fn into_dynamic(self) -> Dynamic {
+        match self {
+            Self::Bool(v) => v.into(),
+            Self::Int(v) => v.into(),
         }
     }
 }
@@ -172,6 +193,12 @@ impl TableAxisKey {
             "UnitType" => Some(Self::Unit(value.try_cast()?)),
             "TerrainType" => Some(Self::Terrain(value.try_cast()?)),
             _ => None
+        }
+    }
+    pub fn into_dynamic(self) -> Dynamic {
+        match self {
+            Self::Unit(value) => Dynamic::from(value),
+            Self::Terrain(value) => Dynamic::from(value),
         }
     }
 }

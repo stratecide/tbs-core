@@ -5,6 +5,7 @@ use rhai::plugin::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use super::custom_action::*;
+use crate::units::unit::Unit;
 
 macro_rules! action_data_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -51,6 +52,10 @@ macro_rules! action_data_module {
                 ActionDataOptions::Direction(center, set)
             }
 
+            pub fn new_unit_shop() -> ActionDataOptions {
+                ActionDataOptions::UnitShop(Vec::new())
+            }
+
             #[rhai_fn(pure, name = "len", get = "len")]
             pub fn len(options: &mut ActionDataOptions) -> i32 {
                 match options {
@@ -61,21 +66,32 @@ macro_rules! action_data_module {
             }
 
             #[rhai_fn(name = "add", name = "+=")]
-            pub fn add(options: &mut ActionDataOptions, value: Dynamic) {
+            pub fn add_point(options: &mut ActionDataOptions, value: Point) {
                 match options {
                     ActionDataOptions::Point(set) => {
-                        if let Some(p) = value.try_cast::<Point>() {
-                            set.insert(p);
-                        }
+                        set.insert(value);
                     }
+                    _ => (),
+                }
+            }
+
+            #[rhai_fn(name = "add", name = "+=")]
+            pub fn add_direction(options: &mut ActionDataOptions, value: $d) {
+                match options {
                     ActionDataOptions::Direction(_, set) => {
-                        if let Some(d) = value.try_cast::<$d>() {
-                            set.insert(d);
-                        }
+                        set.insert(value);
                     }
-                    ActionDataOptions::UnitShop(_list) => {
-                        // TODO
+                    _ => (),
+                }
+            }
+
+            #[rhai_fn(name = "add")]
+            pub fn add_unit_shop(options: &mut ActionDataOptions, unit: Unit<$d>, cost: i32) {
+                match options {
+                    ActionDataOptions::UnitShop(list) => {
+                        list.push((unit, cost));
                     },
+                    _ => (),
                 }
             }
         }

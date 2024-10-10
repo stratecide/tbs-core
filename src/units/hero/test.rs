@@ -260,10 +260,13 @@ mod tests {
         let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
         println!("options: {:?}", options);
         assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
+        let to_build = UnitType::SmallTank.instance(&server.environment())
+            .set_owner_id(0)
+            .build_with_defaults();
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path,
-            action: UnitAction::hero_power(1, vec![CustomActionData::UnitType(UnitType::SmallTank), CustomActionData::Direction(Direction4::D0)]),
+            action: UnitAction::hero_power(1, vec![CustomActionData::Unit(to_build), CustomActionData::Direction(Direction4::D0)]),
         }), Arc::new(|| 0.)).unwrap();
         assert_eq!(server.get_unit(Point::new(2, 1)).unwrap().get_status(), ActionStatus::Ready);
         assert!(*server.get_owning_player(0).unwrap().funds < 9999);

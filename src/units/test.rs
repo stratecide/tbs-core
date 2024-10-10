@@ -69,10 +69,13 @@ fn build_drone() {
     settings.players[0].set_funds(1000);
     let (mut server, events) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
     let mut client = Game::new_client(map, settings.build_default(), events.get(&Perspective::Team(0)).unwrap());
+    let to_build = UnitType::LightDrone.instance(&server.environment())
+        .set_owner_id(0)
+        .build_with_defaults();
     let events = server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
-        action: UnitAction::custom(0, vec![CustomActionData::UnitType(UnitType::LightDrone)]),
+        action: UnitAction::custom(0, vec![CustomActionData::Unit(to_build)]),
     }), Arc::new(|| 0.)).unwrap();
     client.with_mut(|client| {
         for ev in events.get(&Perspective::Team(0)).unwrap() {
@@ -282,10 +285,13 @@ fn s_factory() {
         assert_eq!(*game.current_player().funds, game.current_player().get_income() * 2);
     });
     assert_ne!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);
+    let to_build = UnitType::Marine.instance(&game.environment())
+        .set_owner_id(0)
+        .build_with_defaults();
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
-        action: UnitAction::custom(0, vec![CustomActionData::UnitType(UnitType::Marine), CustomActionData::Direction(Direction6::D180)]),
+        action: UnitAction::custom(0, vec![CustomActionData::Unit(to_build), CustomActionData::Direction(Direction6::D180)]),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), UnitType::Marine.instance(&environment).set_owner_id(0). set_status(ActionStatus::Exhausted).build_with_defaults());
     assert_eq!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);

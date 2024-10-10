@@ -96,7 +96,7 @@ pub struct Config {
     pub(super) global_constants: Scope<'static>,
     pub(super) asts: Vec<AST>,
     pub(super) functions: Vec<(usize, String)>,
-    pub(super) custom_tables: HashMap<String, (TableValue, CustomTable)>,
+    pub(super) custom_tables: HashMap<String, CustomTable>,
 }
 
 impl ConfigInterface for Config {

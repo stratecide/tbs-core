@@ -51,6 +51,12 @@ pub fn create_base_engine() -> Engine {
     // my packages
     rhai_environment::EnvironmentPackage::new().register_into_engine(&mut engine);
     crate::terrain::rhai_terrain::TerrainPackage::new().register_into_engine(&mut engine);
+    // https://rhai.rs/book/safety/max-stmt-depth.html
+    // ran into problems with the debug-build defaults 32, 16
+    engine.set_max_expr_depths(64, 32);
+    // https://rhai.rs/book/safety/max-call-stack.html
+    // 8 should be enough
+    engine.set_max_call_levels(8);
     engine
 }
 

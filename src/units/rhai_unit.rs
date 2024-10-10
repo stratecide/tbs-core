@@ -7,13 +7,14 @@ use crate::map::point::*;
 use crate::units::unit_types::UnitType;
 use crate::units::hero::*;
 use crate::script::with_board;
-use super::attributes::ActionStatus;
+use super::attributes::*;
+use crate::units::movement::MovementType;
 
 #[export_module]
 mod unit_type_module {
 
-
     pub type UnitType = crate::units::unit_types::UnitType;
+    pub type MovementType = crate::units::movement::MovementType;
 
     #[rhai_fn(pure, name = "==")]
     pub fn eq(u1: &mut UnitType, u2: UnitType) -> bool {
@@ -24,8 +25,20 @@ mod unit_type_module {
         *u1 != u2
     }
 
+    #[rhai_fn(pure, name = "==")]
+    pub fn mt_eq(u1: &mut MovementType, u2: MovementType) -> bool {
+        *u1 == u2
+    }
+    #[rhai_fn(pure, name = "!=")]
+    pub fn mt_neq(u1: &mut MovementType, u2: MovementType) -> bool {
+        *u1 != u2
+    }
+
     pub fn status_repairing() -> ActionStatus {
         ActionStatus::Repairing
+    }
+    pub fn status_exhausted() -> ActionStatus {
+        ActionStatus::Exhausted
     }
 }
 
@@ -60,6 +73,15 @@ macro_rules! board_module {
                 unit.get_hp() as i32
             }
 
+            #[rhai_fn(pure, get = "status")]
+            pub fn get_status(unit: &mut Unit) -> ActionStatus {
+                unit.get_status()
+            }
+            #[rhai_fn(set = "status")]
+            pub fn set_status(unit: &mut Unit, status: ActionStatus) {
+                unit.set_status(status)
+            }
+
             #[rhai_fn(pure, name = "full_price")]
             pub fn full_price1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {
                 with_board(context, |game| unit.full_price(game, position, None, &[]))
@@ -67,6 +89,28 @@ macro_rules! board_module {
             #[rhai_fn(pure, name = "full_price")]
             pub fn full_price2(context: NativeCallContext, unit: &mut Unit, position: Point, factory: Unit) -> i32 {
                 with_board(context, |game| unit.full_price(game, position, Some(&factory), &[]))
+            }
+
+            #[rhai_fn(pure, get = "transported")]
+            pub fn get_transported(unit: &mut Unit) -> Dynamic {
+                if unit.has_attribute(AttributeKey::Transported) {
+                    unit.get_transported().to_vec().into()
+                } else {
+                    ().into()
+                }
+            }
+            #[rhai_fn(pure, get = "transported_len")]
+            pub fn get_transported_len(unit: &mut Unit) -> i32 {
+                unit.get_transported().len() as i32
+            }
+            #[rhai_fn(pure, get = "transport_capacity")]
+            pub fn get_transport_capacity(unit: &mut Unit) -> i32 {
+                unit.transport_capacity() as i32
+            }
+
+            #[rhai_fn(pure, get = "movement_type")]
+            pub fn get_movement_type(unit: &mut Unit) -> MovementType {
+                unit.default_movement_type()
             }
 
             #[rhai_fn(pure, name = "build_unit")]
