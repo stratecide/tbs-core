@@ -113,10 +113,12 @@ fn is_script_input_valid<D: Direction>(
     data: &[CustomActionData<D>],
 ) -> bool {
     let index = Arc::new(Mutex::new(0));
+    let index_ = index.clone();
     let success = Arc::new(Mutex::new(false));
     let success_ = success.clone();
     let invalid_data = Arc::new(Mutex::new(false));
     let invalid_data_ = invalid_data.clone();
+    let data_len = data.len();
     let data = data.to_vec();
     let environment = game.environment();
     let mut engine = environment.get_engine(game);
@@ -129,6 +131,7 @@ fn is_script_input_valid<D: Direction>(
         let mut index = index.lock().unwrap();
         let i = *index;
         *index += 1;
+        drop(index);
         if i >= data.len() {
             if or_succeed {
                 // early success
@@ -146,7 +149,7 @@ fn is_script_input_valid<D: Direction>(
     });
     let executor = Executor::new(engine, scope, environment);
     match executor.run(script, ()) {
-        Ok(b) => b,
+        Ok(b) => b && *index_.lock().unwrap() == data_len,
         Err(e) => {
             if *success_.lock().unwrap() {
                 // early success

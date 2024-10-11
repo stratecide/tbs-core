@@ -600,3 +600,95 @@ fn celerity() {
         UnitType::Sniper.instance(&environment).set_hp(69).build_with_defaults(),
     ]).set_hp(89).build_with_defaults()));
 }
+
+#[test]
+fn lageos() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(8, 5, false);
+    let map = WMBuilder::<Direction4>::new(map);
+    let mut map = Map::new(map.build(), &config);
+    let map_env = map.environment().clone();
+    map.set_unit(Point::new(0, 0), Some(UnitType::AttackHeli.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::AttackHeli.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 0), Some(UnitType::AttackHeli.instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
+
+    let settings = map.settings().unwrap();
+    for player in &settings.players {
+        assert!(player.get_commander_options().contains(&CommanderType::Lageos));
+    }
+    // get some default values without using Lageos
+    let mut settings = map.settings().unwrap().build_default();
+    settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
+    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 0)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 1)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+    }), Arc::new(|| 0.)).unwrap();
+    let damage_to_neutral_heli = 100 - server.get_unit(Point::new(1, 0)).unwrap().get_hp();
+    let damage_to_neutral_tank = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
+    let neutral_vision_range = (0..map.width()).find(|x| server.get_fog_at(ClientPerspective::Team(0), Point::new(*x, 0)) == FogIntensity::Dark).unwrap();
+
+    let mut settings = map.settings().unwrap().build_default();
+    settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
+    settings.players[0].set_commander(CommanderType::Lageos);
+    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    server.with_mut(|server| {
+        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
+    });
+    let unchanged = server.clone();
+
+    // Lageos' air-units have have higher defense, Lageos has +1 vision
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 0)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 1)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+    }), Arc::new(|| 0.)).unwrap();
+    let damage_to_lageos_heli = 100 - server.get_unit(Point::new(1, 0)).unwrap().get_hp();
+    assert!(damage_to_neutral_heli > damage_to_lageos_heli, "{damage_to_neutral_heli} > {damage_to_lageos_heli}");
+    assert_eq!(damage_to_neutral_tank, 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp());
+    assert!(neutral_vision_range < (0..map.width()).find(|x| server.get_fog_at(ClientPerspective::Team(0), Point::new(*x, 0)) == FogIntensity::Dark).unwrap());
+
+    // small power
+    let mut server = unchanged.clone();
+    server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap_err();
+    server.handle_command(Command::commander_power(1, vec![
+        CustomActionData::Point(Point::new(0, 1)),
+        CustomActionData::Point(Point::new(0, 1)),
+        CustomActionData::Point(Point::new(2, 1)),
+    ]), Arc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_unit(Point::new(1, 0)).unwrap().get_hp(), 100);
+    assert!(server.get_unit(Point::new(0, 1)).unwrap().get_hp() < 100);
+    assert!(server.get_unit(Point::new(0, 0)).unwrap().get_hp() < 100);
+    assert_eq!(3 * (100 - server.get_unit(Point::new(0, 1)).unwrap().get_hp()), 2 * (100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp()));
+    assert!(!server.get_unit(Point::new(0, 1)).unwrap().is_exhausted());
+
+    // big power
+    let mut server = unchanged.clone();
+    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap_err();
+    server.handle_command(Command::commander_power(2, vec![
+        CustomActionData::Point(Point::new(0, 1)),
+        CustomActionData::Point(Point::new(0, 1)),
+    ]), Arc::new(|| 0.)).unwrap_err();
+    server.handle_command(Command::commander_power(2, vec![
+        CustomActionData::Point(Point::new(0, 1)),
+    ]), Arc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_unit(Point::new(1, 0)).unwrap().get_hp(), 100);
+    for i in 0..=1 {
+        assert!(server.get_unit(Point::new(i, 1)).unwrap().get_hp() < 100);
+        assert!(server.get_unit(Point::new(i, 1)).unwrap().is_exhausted());
+    }
+}

@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use rustc_hash::FxHashSet;
 
 use rhai::*;
 use rhai::plugin::*;
@@ -66,10 +67,11 @@ macro_rules! board_module {
                 if range < 0 {
                     return Vec::new();
                 }
-                board.range_in_layers(p, range as usize).into_iter()
-                .flatten()
-                .map(|p| Dynamic::from(p))
-                .collect()
+                let mut set: FxHashSet<Point> = board.range_in_layers(p, range as usize).into_iter()
+                    .flatten()
+                    .collect();
+                set.insert(p);
+                set.into_iter().map(|p| Dynamic::from(p)).collect()
             }
 
             #[rhai_fn(pure)]
