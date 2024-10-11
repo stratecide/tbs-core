@@ -48,5 +48,5 @@ fn revive_converted() {
 }
 
 fn sludge_1() {
-    // TODO
+    EVENT_HANDLER.place_sludge(POSITION, UNIT.owner_id, 0);
 }

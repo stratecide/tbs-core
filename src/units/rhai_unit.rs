@@ -108,6 +108,20 @@ macro_rules! board_module {
                 }
             }
 
+            #[rhai_fn(pure, get = "drone_station_id")]
+            pub fn get_drone_station_id(unit: &mut Unit) -> Dynamic {
+                unit.get_drone_station_id()
+                .map(|id| (id as i32).into())
+                .unwrap_or(().into())
+            }
+
+            #[rhai_fn(pure, get = "drone_id")]
+            pub fn get_drone_id(unit: &mut Unit) -> Dynamic {
+                unit.get_drone_id()
+                .map(|id| (id as i32).into())
+                .unwrap_or(().into())
+            }
+
             #[rhai_fn(pure, name = "full_price")]
             pub fn full_price1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {
                 with_board(context, |game| unit.full_price(game, position, None, &[]))

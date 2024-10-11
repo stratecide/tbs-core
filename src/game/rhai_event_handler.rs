@@ -221,6 +221,27 @@ macro_rules! event_handler_module {
                     handler.detail_remove(position, i);
                 }
             }
+
+            pub fn place_sludge(mut handler: Handler, position: Point, owner_id: i32, counter: i32) {
+                let environment = handler.environment();
+                if owner_id < 0 || owner_id >= environment.config.max_player_count() as i32 {
+                    return;
+                }
+                let owner_id = owner_id as i8;
+                let counter = counter.max(0).min(environment.config.max_sludge() as i32) as u8;
+                handler.detail_add(position, Detail::SludgeToken(SludgeToken::new(&environment.config, owner_id, counter)));
+            }
+            pub fn remove_sludge(mut handler: Handler, position: Point, owner_id: i32) {
+                if let Some(i) = handler.with_map(|map| {
+                    map.get_details(position).iter()
+                    .enumerate()
+                    .find(|(_, detail)| {
+                        matches!(detail, Detail::SludgeToken(token) if token.get_owner_id() as i32 == owner_id)
+                    }).map(|(i, _)| i)
+                }) {
+                    handler.detail_remove(position, i);
+                }
+            }
         }
 
         def_package! {

@@ -2,7 +2,7 @@ const KRAKEN_MAX_ANGER = 8;
 const KRAKEN_ATTACK_RANGE = 3;
 const KRAKEN_DAMAGE = 40;
 
-fn uf_can_build() {
+fn unit_can_build(UNIT, POSITION) {
     if UNIT.transported != () {
         // build inside
         let capacity = UNIT.transport_capacity;

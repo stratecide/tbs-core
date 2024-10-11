@@ -1,3 +1,3 @@
 Name;Script;UnitFilter
-Build Unit;unit_actions/build_unit > ua_exhausted;Unit(DroneBoat, BattleShip, SwimmingFactory, DroneTower, Factory)
-Repair;unit_actions/repair > ua_self_30;Rhai(unit_actions/repair > uf_can_repair)
+Build Unit;unit_actions/build_unit > ua_exhausted;Unit(DroneBoat, BattleShip, SwimmingFactory, DroneTower, Factory), Rhai(unit_actions/build_unit > uf_can_build)
+Repair;unit_actions/repair > ua_self_30;Not(Co(SludgeMonster)), Rhai(unit_actions/repair > uf_can_repair)
