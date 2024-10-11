@@ -153,18 +153,17 @@ macro_rules! board_module {
                 unit.default_movement_type()
             }
 
-            #[rhai_fn(pure, name = "build_unit")]
-            pub fn build_unit_name(environment: &mut Environment, name: &str) -> Dynamic {
-                if let Some(unit_type) = environment.find_unit_by_name(name) {
-                    build_unit(environment, unit_type)
-                } else {
-                    ().into()
-                }
-            }
-
             #[rhai_fn(pure)]
-            pub fn build_unit(environment: &mut Environment, unit_type: UnitType) -> Dynamic {
-                Dynamic::from(unit_type.instance::<$d>(environment))
+            pub fn build_unit(environment: &mut Environment, unit_type: UnitType) -> UnitBuilder {
+                unit_type.instance::<$d>(environment)
+            }
+            #[rhai_fn(return_raw, pure, name = "build_unit")]
+            pub fn build_unit_name(environment: &mut Environment, name: &str) -> Result<UnitBuilder, Box<EvalAltResult>> {
+                if let Some(unit_type) = environment.find_unit_by_name(name) {
+                    Ok(build_unit(environment, unit_type))
+                } else {
+                    Err(format!("Unknown unit type '{name}'").into())
+                }
             }
 
             #[rhai_fn(name = "copy_from")]
@@ -177,12 +176,12 @@ macro_rules! board_module {
                 builder.set_owner_id(owner_id.max(-1).min(i8::MAX as i32) as i8)
             }
 
-            #[rhai_fn(name = "hero")]
-            pub fn builder_hero_type(builder: UnitBuilder, name: &str) -> UnitBuilder {
+            #[rhai_fn(return_raw, name = "hero")]
+            pub fn builder_hero_type(builder: UnitBuilder, name: &str) -> Result<UnitBuilder, Box<EvalAltResult>> {
                 if let Some(hero_type) = builder.environment().find_hero_by_name(name) {
-                    builder.set_hero(Hero::new(hero_type, None))
+                    Ok(builder.set_hero(Hero::new(hero_type, None)))
                 } else {
-                    builder
+                    Err(format!("Unknown hero type '{name}'").into())
                 }
             }
 

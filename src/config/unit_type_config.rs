@@ -58,7 +58,7 @@ impl TableLine for UnitTypeConfig {
         };
         let result = Self {
             id: parse(data, H::Id, loader)?,
-            name: get(H::Name)?.to_string(),
+            name: get(H::Id)?.to_string(),
             visibility: match data.get(&H::Visibility) {
                 Some(s) => UnitVisibility::from_conf(s, loader)?.0,
                 None => UnitVisibility::Normal,

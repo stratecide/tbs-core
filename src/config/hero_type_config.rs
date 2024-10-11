@@ -31,7 +31,7 @@ impl TableLine for HeroTypeConfig {
         };
         let result = Self {
             id: parse(data, H::Id, loader)?,
-            name: get(H::Name)?.to_string(),
+            name: get(H::Id)?.to_string(),
             price: parse_def(data, H::Price, NumberMod::Keep, loader)?,
             charge: parse_def(data, H::Charge, 0, loader)?,
             transport_capacity: parse_def(data, H::TransportCapacity, 0, loader)?,

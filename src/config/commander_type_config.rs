@@ -29,7 +29,7 @@ impl TableLine for CommanderTypeConfig {
         };
         let result = Self {
             id: parse(data, H::Id, loader)?,
-            name: get(H::Name)?.to_string(),
+            name: get(H::Id)?.to_string(),
             transport_capacity: parse_def(data, H::TransportCapacity, 0, loader)?,
             max_charge: parse(data, H::Charge, loader)?,
         };

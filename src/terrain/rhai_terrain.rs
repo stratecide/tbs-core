@@ -78,15 +78,15 @@ mod terrain_module {
     }
 
     #[rhai_fn(pure, name="build_terrain")]
-    pub fn build_terrain(environment: &mut Environment, terrain_type: TerrainType) -> Dynamic {
-        Dynamic::from(terrain_type.instance(environment))
+    pub fn build_terrain(environment: &mut Environment, terrain_type: TerrainType) -> TerrainBuilder {
+        terrain_type.instance(environment)
     }
-    #[rhai_fn(pure, name="build_terrain")]
-    pub fn build_terrain2(environment: &mut Environment, terrain_type: &str) -> Dynamic {
+    #[rhai_fn(return_raw, pure, name="build_terrain")]
+    pub fn build_terrain2(environment: &mut Environment, terrain_type: &str) -> Result<TerrainBuilder, Box<EvalAltResult>> {
         if let Some(terrain_type) = environment.find_terrain_by_name(terrain_type) {
-            build_terrain(environment, terrain_type)
+            Ok(build_terrain(environment, terrain_type))
         } else {
-            ().into()
+            Err(format!("Unknown terrain type '{terrain_type}'").into())
         }
     }
 

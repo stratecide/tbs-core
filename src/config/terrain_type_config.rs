@@ -41,7 +41,7 @@ impl TableLine for TerrainTypeConfig {
         };
         let result = Self {
             id: parse(data, H::Id, loader)?,
-            name: get(H::Name)?.to_string(),
+            name: get(H::Id)?.to_string(),
             needs_owner: parse_def(data, H::NeedsOwner, false, loader)?,
             capture_resistance: parse_def(data, H::CaptureResistance, 0, loader)?,
             update_amphibious: match data.get(&H::UpdateAmphibious) {
