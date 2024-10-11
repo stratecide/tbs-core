@@ -99,6 +99,15 @@ macro_rules! board_module {
                 unit.set_status(status)
             }
 
+            #[rhai_fn(pure, get = "level")]
+            pub fn get_level(unit: &mut Unit) -> Dynamic {
+                if unit.has_attribute(AttributeKey::Level) {
+                    (unit.get_level() as i32).into()
+                } else {
+                    ().into()
+                }
+            }
+
             #[rhai_fn(pure, name = "full_price")]
             pub fn full_price1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {
                 with_board(context, |game| unit.full_price(game, position, None, &[]))

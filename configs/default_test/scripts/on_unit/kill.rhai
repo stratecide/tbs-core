@@ -8,5 +8,7 @@ fn resurrect() {
 }
 
 fn level_up() {
-    // TODO: increase level attribute
+    if UNIT.level != () {
+        EVENT_HANDLER.set_unit_level(POSITION, UNIT.level + 1);
+    }
 }

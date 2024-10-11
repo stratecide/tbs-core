@@ -7,7 +7,7 @@ use super::event_handler::EventHandler;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit::Unit;
-use crate::units::attributes::ActionStatus;
+use crate::units::attributes::*;
 use crate::units::combat::*;
 use crate::units::movement::*;
 use crate::terrain::attributes::TerrainAttributeKey;
@@ -169,6 +169,18 @@ macro_rules! event_handler_module {
             #[rhai_fn(name = "move_unit")]
             pub fn move_unit2(handler: Handler, path: Path<$d>) {
                 move_unit(handler, path, false);
+            }
+
+            pub fn set_unit_level(mut handler: Handler, position: Point, level: i32) {
+                let level = level.max(0).min(handler.environment().config.max_unit_level() as i32) as u8;
+                let has_attribute = handler.with_map(|map| {
+                    map.get_unit(position)
+                    .map(|unit| unit.has_attribute(AttributeKey::Level))
+                    .unwrap_or(false)
+                });
+                if has_attribute {
+                    handler.unit_level(position, level);
+                }
             }
 
             pub fn set_terrain_anger(mut handler: Handler, position: Point, anger: i32) {
