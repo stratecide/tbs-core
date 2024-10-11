@@ -39,7 +39,7 @@ use super::commander_type_config::CommanderTypeConfig;
 use super::commander_unit_config::CommanderPowerUnitConfig;
 use super::movement_type_config::MovementPattern;
 use super::number_modification::NumberMod;
-use super::table_config::{CustomTable, TableValue};
+use super::table_config::CustomTable;
 use super::terrain_powered::TerrainPoweredConfig;
 use super::terrain_type_config::TerrainTypeConfig;
 use super::unit_filter::*;
@@ -178,6 +178,15 @@ impl Config {
         &self.unit_config(typ).name
     }
 
+    pub fn find_unit_by_name(&self, name: &str) -> Option<UnitType> {
+        for (unit_type, conf) in &self.units {
+            if conf.name.as_str() == name {
+                return Some(*unit_type)
+            }
+        }
+        None
+    }
+
     pub fn unit_needs_owner(&self, typ: UnitType) -> bool {
         self.unit_config(typ).needs_owner
     }
@@ -301,6 +310,15 @@ impl Config {
 
     pub fn hero_name(&self, typ: HeroType) -> &str {
         &self.hero_config(typ).name
+    }
+
+    pub fn find_hero_by_name(&self, name: &str) -> Option<HeroType> {
+        for (hero_type, conf) in &self.heroes {
+            if conf.name.as_str() == name {
+                return Some(*hero_type)
+            }
+        }
+        None
     }
 
     pub fn hero_unit_compatible(&self, typ: HeroType, unit: UnitType) -> bool {
@@ -431,6 +449,15 @@ impl Config {
 
     pub fn terrain_name(&self, typ: TerrainType) -> &str {
         &self.terrain_config(typ).name
+    }
+
+    pub fn find_terrain_by_name(&self, name: &str) -> Option<TerrainType> {
+        for (terrain_type, conf) in &self.terrains {
+            if conf.name.as_str() == name {
+                return Some(*terrain_type)
+            }
+        }
+        None
     }
 
     pub fn terrain_needs_owner(&self, typ: TerrainType) -> bool {

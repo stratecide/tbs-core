@@ -152,15 +152,6 @@ impl Environment {
         CommanderType::None
     }
 
-    pub fn find_unit_by_name(&self, name: &str) -> Option<UnitType> {
-        for (unit_type, conf) in &self.config.units {
-            if conf.name.as_str() == name {
-                return Some(*unit_type)
-            }
-        }
-        None
-    }
-
     pub fn unit_attributes(&self, typ: UnitType, owner: i8) -> impl Iterator<Item = &AttributeKey> {
         // order has to be preserved here
         // because this method is used for exporting, while
@@ -200,24 +191,6 @@ impl Environment {
         .build()
         // TODO: when validating the config, make sure this unwrap won't panic
         .unwrap()
-    }
-
-    pub fn find_terrain_by_name(&self, name: &str) -> Option<TerrainType> {
-        for (terrain_type, conf) in &self.config.terrains {
-            if conf.name.as_str() == name {
-                return Some(*terrain_type)
-            }
-        }
-        None
-    }
-
-    pub fn find_hero_by_name(&self, name: &str) -> Option<HeroType> {
-        for (hero_type, conf) in &self.config.heroes {
-            if conf.name.as_str() == name {
-                return Some(*hero_type)
-            }
-        }
-        None
     }
 
 }

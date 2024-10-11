@@ -22,22 +22,22 @@ mod terrain_module {
     #[rhai_fn(pure, name = "==")]
     pub fn eq_tt_s(context: NativeCallContext, t1: &mut TerrainType, t2: &str) -> bool {
         let environment = get_environment(context);
-        Some(*t1) == environment.find_terrain_by_name(t2)
+        Some(*t1) == environment.config.find_terrain_by_name(t2)
     }
     #[rhai_fn(pure, name = "!=")]
     pub fn neq_tt_s(context: NativeCallContext, t1: &mut TerrainType, t2: &str) -> bool {
         let environment = get_environment(context);
-        Some(*t1) != environment.find_terrain_by_name(t2)
+        Some(*t1) != environment.config.find_terrain_by_name(t2)
     }
     #[rhai_fn(name = "==")]
     pub fn eq_s_tt(context: NativeCallContext, t1: &str, t2: TerrainType) -> bool {
         let environment = get_environment(context);
-        environment.find_terrain_by_name(t1) == Some(t2)
+        environment.config.find_terrain_by_name(t1) == Some(t2)
     }
     #[rhai_fn(name = "!=")]
     pub fn neq_s_tt(context: NativeCallContext, t1: &str, t2: TerrainType) -> bool {
         let environment = get_environment(context);
-        environment.find_terrain_by_name(t1) != Some(t2)
+        environment.config.find_terrain_by_name(t1) != Some(t2)
     }
 
     pub type Terrain = crate::terrain::terrain::Terrain;
@@ -83,7 +83,7 @@ mod terrain_module {
     }
     #[rhai_fn(return_raw, pure, name="build_terrain")]
     pub fn build_terrain2(environment: &mut Environment, terrain_type: &str) -> Result<TerrainBuilder, Box<EvalAltResult>> {
-        if let Some(terrain_type) = environment.find_terrain_by_name(terrain_type) {
+        if let Some(terrain_type) = environment.config.find_terrain_by_name(terrain_type) {
             Ok(build_terrain(environment, terrain_type))
         } else {
             Err(format!("Unknown terrain type '{terrain_type}'").into())

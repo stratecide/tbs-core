@@ -159,7 +159,7 @@ macro_rules! board_module {
             }
             #[rhai_fn(return_raw, pure, name = "build_unit")]
             pub fn build_unit_name(environment: &mut Environment, name: &str) -> Result<UnitBuilder, Box<EvalAltResult>> {
-                if let Some(unit_type) = environment.find_unit_by_name(name) {
+                if let Some(unit_type) = environment.config.find_unit_by_name(name) {
                     Ok(build_unit(environment, unit_type))
                 } else {
                     Err(format!("Unknown unit type '{name}'").into())
@@ -178,7 +178,7 @@ macro_rules! board_module {
 
             #[rhai_fn(return_raw, name = "hero")]
             pub fn builder_hero_type(builder: UnitBuilder, name: &str) -> Result<UnitBuilder, Box<EvalAltResult>> {
-                if let Some(hero_type) = builder.environment().find_hero_by_name(name) {
+                if let Some(hero_type) = builder.environment().config.find_hero_by_name(name) {
                     Ok(builder.set_hero(Hero::new(hero_type, None)))
                 } else {
                     Err(format!("Unknown hero type '{name}'").into())
