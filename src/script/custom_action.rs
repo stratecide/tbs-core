@@ -9,6 +9,7 @@ use crate::config::environment::Environment;
 use crate::game::event_handler::EventHandler;
 use crate::game::game::Game;
 use crate::game::game_view::GameView;
+use crate::game::modified_view::UnitMovementView;
 use crate::game::rhai_event_handler::*;
 use crate::handle::Handle;
 use crate::map::direction::Direction;
@@ -67,32 +68,123 @@ impl<D: Direction> CustomActionDataOptions<D> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum CustomActionTestResult<D: Direction> {
     Success,
-    // ideally only returned in the first iteration.
+    // ideally only returned in the first iteration or if server received invalid data.
     // but if the script returns an error, that's also a failure (and should be logged somewhere)
     Failure,
     Next(CustomActionDataOptions<D>),
     NextOrSuccess(CustomActionDataOptions<D>),
 }
 
-pub fn is_unit_script_input_valid<D: Direction>(
+
+pub fn run_unit_input_script<D: Direction>(
     script: usize,
     game: &impl GameView<D>,
-    unit: &Unit<D>,
     path: &Path<D>,
-    unit_pos: Point,
-    transporter: Option<(&Unit<D>, usize)>,
-    _heroes: &[HeroInfluence<D>],
-    _ballast: &[TBallast<D>],
+    transport_index: Option<usize>,
+    data: &[CustomActionData<D>],
+) -> CustomActionTestResult<D> {
+    let mut game = UnitMovementView::new(game);
+    if let Some((unit_pos, unit)) = game.unit_path_without_placing(transport_index, path) {
+        game.put_unit(unit_pos, unit.clone());
+        let mut scope = Scope::new();
+        scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u)).unwrap_or(().into()));
+        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
+        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
+        scope.push_constant(CONST_NAME_PATH, path.clone());
+        scope.push_constant(CONST_NAME_UNIT, unit);
+        scope.push_constant(CONST_NAME_POSITION, unit_pos);
+        run_input_script(script, &game, scope, data)
+    } else {
+        CustomActionTestResult::Failure
+    }
+}
+
+pub fn run_commander_input_script<D: Direction>(
+    script: usize,
+    game: &Handle<Game<D>>,
+    data: &[CustomActionData<D>],
+) -> CustomActionTestResult<D> {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner() as i32);
+    scope.push_constant(CONST_NAME_TEAM, game.current_team().to_i16() as i32);
+    run_input_script(script, game, scope, data)
+}
+
+fn run_input_script<D: Direction>(
+    script: usize,
+    game: &impl GameView<D>,
+    scope: Scope<'static>,
+    data: &[CustomActionData<D>],
+) -> CustomActionTestResult<D> {
+    let index = Arc::new(Mutex::new(0));
+    let result = Arc::new(Mutex::new(None));
+    let result_ = result.clone();
+    let invalid_data = Arc::new(Mutex::new(false));
+    let data = data.to_vec();
+    let environment = game.environment();
+    let mut engine = environment.get_engine(game);
+    if D::is_hex() {
+        ActionDataPackage6::new().register_into_engine(&mut engine);
+    } else {
+        ActionDataPackage4::new().register_into_engine(&mut engine);
+    }
+    engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<Dynamic, Box<EvalAltResult>> {
+        let mut index = index.lock().unwrap();
+        let i = *index;
+        *index += 1;
+        drop(index);
+        if i >= data.len() {
+            if or_succeed {
+                *result.lock().unwrap() = Some(CustomActionTestResult::NextOrSuccess(options.clone()));
+            } else {
+                *result.lock().unwrap() = Some(CustomActionTestResult::Next(options.clone()));
+            }
+            return Err("Script requests Input".into());
+        }
+        if !options.contains(&data[i]) {
+            *invalid_data.lock().unwrap() = true;
+            return Err(format!("script {script} asks for ({i}) {options:?} but received {:?}", data[i]).into());
+        }
+        Ok(data[i].into_dynamic())
+    });
+    let executor = Executor::new(engine, scope, environment);
+    match executor.run(script, ()) {
+        Ok(true) => CustomActionTestResult::Success,
+        Ok(false) => CustomActionTestResult::Failure,
+        Err(e) => {
+            if let Some(result) = result_.lock().unwrap().take() {
+                result
+            } else {
+                // script had an error
+                // TODO: log error
+                println!("is_script_input_valid: {e:?}");
+                CustomActionTestResult::Failure
+            }
+        }
+    }
+}
+
+pub fn is_unit_script_input_valid<D: Direction>(
+    script: usize,
+    game: &Handle<Game<D>>,
+    path: &Path<D>,
+    transport_index: Option<usize>,
     data: &[CustomActionData<D>],
 ) -> bool {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
-    scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
-    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transporter.map(|(_, i)| i));
-    scope.push_constant(CONST_NAME_PATH, path.clone());
-    scope.push_constant(CONST_NAME_UNIT, unit.clone());
-    scope.push_constant(CONST_NAME_POSITION, unit_pos);
-    is_script_input_valid(script, game, scope, data)
+    let mut game = UnitMovementView::new(game);
+    if let Some((unit_pos, unit)) = game.unit_path_without_placing(transport_index, path) {
+        game.put_unit(unit_pos, unit.clone());
+        let mut scope = Scope::new();
+        scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u)).unwrap_or(().into()));
+        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
+        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
+        scope.push_constant(CONST_NAME_PATH, path.clone());
+        scope.push_constant(CONST_NAME_UNIT, unit);
+        scope.push_constant(CONST_NAME_POSITION, unit_pos);
+        is_script_input_valid(script, &game, scope, data)
+    } else {
+        false
+    }
 }
 
 pub fn is_commander_script_input_valid<D: Direction>(

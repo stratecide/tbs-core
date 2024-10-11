@@ -60,6 +60,10 @@ impl<D: Direction> Debug for Map<D> {
 }
 
 impl<D: Direction> Map<D> {
+    pub fn new_handled(wrapping_logic: WrappingMap<D>, config: &Arc<Config>) -> Handle<Self> {
+        Handle::new(Self::new(wrapping_logic, config))
+    }
+
     pub fn new(wrapping_logic: WrappingMap<D>, config: &Arc<Config>) -> Self {
         let environment = Environment::new_map(config.clone(), wrapping_logic.pointmap().size());
         let mut terrain = HashMap::new();

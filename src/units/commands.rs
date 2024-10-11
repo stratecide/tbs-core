@@ -72,7 +72,7 @@ impl<D: Direction> UnitAction<D> {
         Self::HeroPower(HeroPowerIndex(index), custom_action_data.try_into().unwrap())
     }
 
-    pub fn is_valid_option(&self, game: &impl GameView<D>, unit: &Unit<D>, path: &Path<D>, destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> bool {
+    pub fn is_valid_option(&self, game: &Handle<Game<D>>, unit: &Unit<D>, path: &Path<D>, _destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> bool {
         let options = unit.options_after_path(game, path, transporter, ballast);
         match self {
             Self::HeroPower(index, data) => {
@@ -83,8 +83,7 @@ impl<D: Direction> UnitAction<D> {
                 let hero = unit.get_hero();
                 let power = &environment.config.hero_powers(hero.typ())[index.0];
                 if let Some((Some(input_script), _)) = power.script {
-                    let heroes = Hero::hero_influence_at(game, destination, unit.get_owner_id());
-                    is_unit_script_input_valid(input_script, game, unit, path, destination, transporter, &heroes, ballast, data)
+                    is_unit_script_input_valid(input_script, game, path, transporter.map(|(_, i)| i), data)
                 } else {
                     data.len() == 0
                 }
@@ -96,8 +95,7 @@ impl<D: Direction> UnitAction<D> {
                 let environment = game.environment();
                 let custom_action = &environment.config.custom_actions()[index.0];
                 if let Some(input_script) = custom_action.script.0 {
-                    let heroes = Hero::hero_influence_at(game, destination, unit.get_owner_id());
-                    is_unit_script_input_valid(input_script, game, unit, path, destination, transporter, &heroes, ballast, data)
+                    is_unit_script_input_valid(input_script, game, path, transporter.map(|(_, i)| i), data)
                 } else {
                     data.len() == 0
                 }
@@ -200,10 +198,9 @@ impl<D: Direction> UnitAction<D> {
             Self::BuyHero(hero_type) => {
                 let unit = handler.get_game().get_unit(end).unwrap();
                 let owner_id = unit.get_owner_id();
-                let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
                 // TODO: cost could be put into the enum so it doesn't have to be re-calculated here
                 // the move's validity has already been tested after all
-                let cost = handler.environment().config.hero_price(&*handler.get_game(), *hero_type, unit, path.clone(), end, transporter, &heroes, ballast);
+                let cost = handler.environment().config.hero_price_after_moving(&*handler.get_game(), *hero_type, &path, end, unit, transporter.map(|(_, i)| i));
                 if let Some(cost) = cost {
                     handler.money_change(owner_id, -cost);
                     handler.unit_set_hero(end, Hero::new(*hero_type, Some(end)));

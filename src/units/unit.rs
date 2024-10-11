@@ -914,7 +914,7 @@ impl<D: Direction> Unit<D> {
             // buy hero
             if !self.is_hero() && terrain.can_sell_hero(game, destination, self.get_owner_id()) {
                 for hero in game.available_heroes(&self.get_player(game).unwrap()) {
-                    if let Some(cost) = game.environment().config.hero_price(game, hero, self.clone(), path.clone(), destination, transporter, &heroes, ballast) {
+                    if let Some(cost) = game.environment().config.hero_price_after_moving(game, hero, &path, destination, self.clone(), transporter.map(|(_, i)| i)) {
                         if cost <= funds_after_path {
                             result.push(UnitAction::BuyHero(hero));
                         }

@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use interfaces::ClientPerspective;
-use rhai::Engine;
 
 use crate::config::environment::Environment;
 use crate::details::Detail;
@@ -15,7 +14,6 @@ use crate::terrain::terrain::Terrain;
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::{Path, PermanentBallast};
 use crate::units::unit::Unit;
-use crate::script::FUNCTION_NAME_BOARD;
 
 use super::fog::{FogIntensity, FogSetting};
 use super::game_view::GameView;

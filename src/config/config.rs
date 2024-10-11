@@ -9,7 +9,9 @@ use semver::Version;
 
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
+use crate::game::game::Game;
 use crate::game::game_view::GameView;
+use crate::game::modified_view::UnitMovementView;
 use crate::game::{import_client, import_server};
 use crate::game::settings::GameConfig;
 use crate::game::GameType;
@@ -329,32 +331,39 @@ impl Config {
 
     pub fn hero_price<D: Direction>(
         &self,
+        game: &Handle<Game<D>>,
+        hero: HeroType,
+        path: &Path<D>,
+        // when moving out of a transporter
+        transport_index: Option<usize>,
+    ) -> Option<i32> {
+        let mut game = UnitMovementView::new(game);
+        let (unit_pos, unit) = game.unit_path_without_placing(transport_index, &path)?;
+        game.put_unit(unit_pos, unit.clone());
+        self.hero_price_after_moving(&game, hero, path, unit_pos, unit, transport_index)
+    }
+    pub fn hero_price_after_moving<D: Direction>(
+        &self,
         game: &impl GameView<D>,
         hero: HeroType,
-        unit: Unit<D>,
-        path: Path<D>,
+        path: &Path<D>,
         unit_pos: Point,
-        // when moving out of a transporter, or start_turn for transported units
-        transporter: Option<(&Unit<D>, usize)>,
-        // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
-        _heroes: &[HeroInfluence<D>],
-        // empty if the unit hasn't moved
-        _temporary_ballast: &[TBallast<D>],
+        unit: Unit<D>,
+        // when moving out of a transporter
+        transport_index: Option<usize>,
     ) -> Option<i32> {
         let unit_type = unit.typ();
         if !self.hero_unit_compatible(hero, unit_type) {
             return None
         }
-        let engine = game.environment().get_engine(game);
         let mut scope = Scope::new();
-        // build scope
-        scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
+        scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u)).unwrap_or(().into()));
         scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
-        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transporter.map(|(_, i)| i));
-        scope.push_constant(CONST_NAME_PATH, path);
+        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
+        scope.push_constant(CONST_NAME_PATH, path.clone());
         scope.push_constant(CONST_NAME_UNIT, unit);
         scope.push_constant(CONST_NAME_POSITION, unit_pos);
-        // TODO: heroes and ballast (put them into Arc<Vec<>> instead of &[])
+        let engine = game.environment().get_engine(game);
         let executor = Executor::new(engine, scope, game.environment());
         let cost = self.hero_config(hero).price.update_value(self.base_cost(unit_type), &executor);
         if cost < 0 {

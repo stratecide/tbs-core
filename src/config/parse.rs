@@ -71,6 +71,7 @@ impl Config {
         for (name, _, value) in global_ast.iter_literal_variables(true, false) {
             global_constants.push_constant(name, value);
         }
+        // TODO: FileLoader also creates a base engine. no need to create two
         let engine = create_base_engine();
         let global_module = engine.optimize_ast(&global_constants, global_ast.clone(), OptimizationLevel::Simple);
         let global_module = Module::eval_ast_as_new(Scope::new(), &global_module, &engine)?.into();

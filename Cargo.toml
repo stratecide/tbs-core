@@ -16,4 +16,4 @@ zipper_derive = { path = "../../zipper/zipper_derive" }
 semver = "1.0"
 csv = "1.3"
 num-rational = { version = "0.4", features = ["serde"] }
-rhai = { version = "1.19", features = ["sync", "only_i32", "f32_float", "no_custom_syntax"] }
+rhai = { version = "1.19", features = ["sync", "only_i32", "no_float", "no_custom_syntax"] }
