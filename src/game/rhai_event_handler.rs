@@ -11,6 +11,7 @@ use crate::units::attributes::*;
 use crate::units::combat::*;
 use crate::units::movement::*;
 use crate::terrain::attributes::TerrainAttributeKey;
+use crate::details::*;
 
 macro_rules! event_handler_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -191,6 +192,28 @@ macro_rules! event_handler_module {
                 });
                 if has_attribute {
                     handler.terrain_anger(position, anger);
+                }
+            }
+
+            pub fn place_skull(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {
+                let environment = handler.environment();
+                if owner_id < 0 || owner_id >= environment.config.max_player_count() as i32 {
+                    return;
+                }
+                let owner_id = owner_id as i8;
+                if environment.unit_attributes(of_unit.typ(), owner_id).any(|a| *a == AttributeKey::Zombified) {
+                    handler.detail_add(position, Detail::Skull(SkullData::new(&of_unit, owner_id)));
+                }
+            }
+            pub fn remove_skull(mut handler: Handler, position: Point, owner_id: i32) {
+                if let Some(i) = handler.with_map(|map| {
+                    map.get_details(position).iter()
+                    .enumerate()
+                    .find(|(_, detail)| {
+                        matches!(detail, Detail::Skull(skull) if skull.get_owner_id() as i32 == owner_id)
+                    }).map(|(i, _)| i)
+                }) {
+                    handler.detail_remove(position, i);
                 }
             }
         }

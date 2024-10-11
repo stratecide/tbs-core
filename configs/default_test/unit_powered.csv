@@ -14,7 +14,7 @@ Power;Affects;Attack;Defense;AttackReducedByDamage;MinRange;MaxRange;Visibility;
 ;U(Pyramid, Factory), Counter, Not(Unowned);;;;;;;;;;;;;;;;;;Adjacent;;;;;;;;;;;;;;;;
 ;T(FairyForest);;;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/start_turn > heal_10;;;;;
 ;Sludge;;;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/start_turn > damage_10;;;;;
-Co(Zombie);MovementPattern(Standard);-1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/kill > leave_skull;;
+Co(Zombie), Not(Co(Zombie,2));MovementPattern(Standard);-1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/kill > leave_skull;;
 Co(Zombie);Counter;+2/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Co(Zombie,1);MovementPattern(Standard);+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 Co(Zombie,2);MovementPattern(Standard);+1/10;+1/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/kill > resurrect;;

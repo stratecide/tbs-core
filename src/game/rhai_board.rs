@@ -9,6 +9,7 @@ use crate::map::map::NeighborMode;
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::terrain::terrain::Terrain;
+use crate::details::*;
 
 #[derive(Clone)]
 pub struct SharedGameView<D: Direction>(pub Shared<dyn GameView<D>>);
@@ -88,9 +89,24 @@ macro_rules! board_module {
                 .unwrap_or(().into())
             }
 
-            #[rhai_fn()]
-            pub fn get_terrain(board: Board, p: Point) -> Terrain {
+            #[rhai_fn(pure)]
+            pub fn get_terrain(board: &mut Board, p: Point) -> Terrain {
                 board.get_terrain(p).expect("script requested terrain at {p:?}, but that point is invalid")
+            }
+
+            #[rhai_fn(pure)]
+            pub fn get_skull(board: &mut Board, p: Point, owner_id: i32) -> Dynamic {
+                for detail in board.get_details(p) {
+                    match detail {
+                        Detail::Skull(skull) => {
+                            if skull.get_owner_id() as i32 == owner_id {
+                                return Dynamic::from(skull);
+                            }
+                        }
+                        _ => ()
+                    }
+                }
+                ().into()
             }
 
             #[rhai_fn(pure)]

@@ -73,6 +73,7 @@ pub fn create_d_engine<D: Direction>() -> Engine {
         crate::units::rhai_unit::UnitPackage6::new().register_into_engine(&mut engine);
         crate::units::rhai_combat::CombatPackage6::new().register_into_engine(&mut engine);
         crate::units::rhai_movement::MovementPackage6::new().register_into_engine(&mut engine);
+        crate::details::rhai_details::DetailPackage6::new().register_into_engine(&mut engine);
     } else {
         crate::map::rhai_point::PositionPackage4::new().register_into_engine(&mut engine);
         crate::map::rhai_direction::DirectionPackage4::new().register_into_engine(&mut engine);
@@ -80,6 +81,7 @@ pub fn create_d_engine<D: Direction>() -> Engine {
         crate::units::rhai_unit::UnitPackage4::new().register_into_engine(&mut engine);
         crate::units::rhai_combat::CombatPackage4::new().register_into_engine(&mut engine);
         crate::units::rhai_movement::MovementPackage4::new().register_into_engine(&mut engine);
+        crate::details::rhai_details::DetailPackage4::new().register_into_engine(&mut engine);
     }
     engine
 }

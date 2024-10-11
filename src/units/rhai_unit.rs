@@ -177,6 +177,15 @@ macro_rules! board_module {
                 builder.set_hp(hp.max(0).min(100) as u8)
             }
 
+            #[rhai_fn(name = "zombified")]
+            pub fn builder_zombified(builder: UnitBuilder, zombified: bool) -> UnitBuilder {
+                builder.set_zombified(zombified)
+            }
+            #[rhai_fn(name = "zombified")]
+            pub fn builder_zombified2(builder: UnitBuilder) -> UnitBuilder {
+                builder_zombified(builder, true)
+            }
+
             #[rhai_fn(name = "build")]
             pub fn builder_build(builder: UnitBuilder) -> Unit {
                 builder.build_with_defaults()

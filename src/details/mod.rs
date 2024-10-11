@@ -1,3 +1,5 @@
+pub mod rhai_details;
+
 use std::collections::{HashMap, HashSet};
 
 use interfaces::ClientPerspective;
@@ -7,7 +9,6 @@ use zipper::{bits_needed_for_max_value, Exportable, SupportedZippable};
 use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::game::fog::FogIntensity;
-use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
