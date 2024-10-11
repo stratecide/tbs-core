@@ -11,6 +11,7 @@ use crate::units::attributes::*;
 use crate::units::combat::*;
 use crate::units::movement::*;
 use crate::terrain::attributes::TerrainAttributeKey;
+use crate::terrain::terrain::Terrain;
 use crate::details::*;
 
 macro_rules! event_handler_module {
@@ -193,6 +194,10 @@ macro_rules! event_handler_module {
                 if has_attribute {
                     handler.terrain_anger(position, anger);
                 }
+            }
+
+            pub fn replace_terrain(mut handler: Handler, position: Point, terrain: Terrain) {
+                handler.terrain_replace(position, terrain);
             }
 
             pub fn place_skull(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {

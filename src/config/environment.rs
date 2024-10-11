@@ -202,6 +202,15 @@ impl Environment {
         .unwrap()
     }
 
+    pub fn find_terrain_by_name(&self, name: &str) -> Option<TerrainType> {
+        for (terrain_type, conf) in &self.config.terrains {
+            if conf.name.as_str() == name {
+                return Some(*terrain_type)
+            }
+        }
+        None
+    }
+
     pub fn find_hero_by_name(&self, name: &str) -> Option<HeroType> {
         for (hero_type, conf) in &self.config.heroes {
             if conf.name.as_str() == name {
