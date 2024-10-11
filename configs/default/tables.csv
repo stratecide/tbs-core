@@ -1,0 +1,3 @@
+Id;Path;Type;DefaultValue;Left;Top
+TERRAIN_REPAIR;terrain_repair.csv;Boolean;false;Terrain;Unit
+UNIT_BUILD;unit_build.csv;Boolean;false;Unit;Unit
