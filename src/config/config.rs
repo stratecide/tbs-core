@@ -93,7 +93,9 @@ pub struct Config {
     pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
     pub(super) max_commander_charge: u32,
     // rhai
-    pub(super) global_ast: AST,
+    //pub(super) global_ast: AST,
+    pub(super) my_package_4: MyPackage4,
+    pub(super) my_package_6: MyPackage6,
     pub(super) global_module: Shared<Module>,
     pub(super) global_constants: Scope<'static>,
     pub(super) asts: Vec<AST>,

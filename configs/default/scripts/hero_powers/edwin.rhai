@@ -1,16 +1,16 @@
 
 fn ua_power_input() {
-    let points = BOARD().get_neighbors(POSITION);
+    let points = BOARD.get_neighbors(POSITION);
     let options = new_point_selection();
     for point in points {
-        if point != POSITION && BOARD().get_unit(point) != () {
+        if point != POSITION && BOARD.get_unit(point) != () {
             options += point;
         }
     }
     let target1 = user_selection(options, false);
     let options = new_point_selection();
-    for point in BOARD().positions_in_range(POSITION, 5) {
-        if point != target1 && point != POSITION && BOARD().get_unit(point) != () {
+    for point in BOARD.positions_in_range(POSITION, 5) {
+        if point != target1 && point != POSITION && BOARD.get_unit(point) != () {
             options += point;
         }
     }

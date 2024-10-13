@@ -1,7 +1,7 @@
 
 fn kraken() {
-    for p in BOARD().all_positions() {
-        let terrain = BOARD().get_terrain(p);
+    for p in BOARD.all_positions() {
+        let terrain = BOARD.get_terrain(p);
         if terrain.anger == () {
             continue;
         }
@@ -12,8 +12,8 @@ fn kraken() {
         }
         // TODO: show effect
         let damages = new_mass_damage();
-        for point in BOARD().positions_in_range(p, KRAKEN_ATTACK_RANGE) {
-            let unit = BOARD().get_unit(point);
+        for point in BOARD.positions_in_range(p, KRAKEN_ATTACK_RANGE) {
+            let unit = BOARD.get_unit(point);
             if unit?.owner_id >= 0 {
                 damages.add(point, KRAKEN_DAMAGE);
             }
@@ -28,7 +28,7 @@ fn lose_game() {
 }
 
 fn revive_neutral() {
-    let new_unit = CONFIG().build_unit(UNIT.type)
+    let new_unit = CONFIG.build_unit(UNIT.type)
         .copy_from(UNIT)
         .owner_id(-1)
         .hp(50)
@@ -38,7 +38,7 @@ fn revive_neutral() {
 }
 
 fn revive_converted() {
-    let new_unit = CONFIG().build_unit(UNIT.type)
+    let new_unit = CONFIG.build_unit(UNIT.type)
         .copy_from(UNIT)
         .owner_id(OTHER_UNIT?.owner_id ?? -1)
         .hp(50)

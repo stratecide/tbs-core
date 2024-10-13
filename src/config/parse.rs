@@ -11,7 +11,7 @@ use num_rational::Rational32;
 use rhai::*;
 
 use crate::commander::commander_type::CommanderType;
-use crate::script::create_base_engine;
+use crate::script::{create_base_engine, MyPackage4, MyPackage6};
 use crate::terrain::TerrainType;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::movement::MovementType;
@@ -120,7 +120,9 @@ impl Config {
             commander_unit_attributes: HashMap::default(),
             max_commander_charge: 0,
             // rhai
-            global_ast,
+            //global_ast,
+            my_package_4: MyPackage4::new(),
+            my_package_6: MyPackage6::new(),
             global_module,
             global_constants,
             asts: Vec::new(),

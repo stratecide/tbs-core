@@ -11,8 +11,8 @@ fn puffer_fish() {
     if direction != () {
         let path = Path(position);
         while DAMAGE > 10 * path.len && path.add(path.distortion.update_straight_direction(direction)) {
-            let terrain = BOARD().get_terrain(path.end);
-            let obstacle = BOARD().get_unit(path.end);
+            let terrain = BOARD.get_terrain(path.end);
+            let obstacle = BOARD.get_unit(path.end);
             if obstacle != () || terrain.movement_cost(UNIT.movement_type) == () {
                 path.pop();
                 break;

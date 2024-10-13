@@ -1,12 +1,13 @@
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use interfaces::ClientPerspective;
+use packages::Package;
 use rhai::*;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::commander::commander_type::CommanderType;
+use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
-use crate::game::rhai_board::SharedGameView;
 use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::point_map::MapSize;
@@ -66,16 +67,45 @@ impl Environment {
         10
     }
 
-    pub fn get_engine<D: Direction>(&self, game: &impl GameView<D>) -> Engine {
-        let mut engine = create_d_engine::<D>();
+    fn get_engine_base(&self, is_hex: bool) -> Engine {
+        let mut engine = Engine::new_raw();
+        if is_hex {
+            self.config.my_package_6.register_into_engine(&mut engine);
+        } else {
+            self.config.my_package_4.register_into_engine(&mut engine);
+        }
         engine.register_global_module(self.config.global_module.clone());
+        engine
+    }
+
+    pub fn get_engine<D: Direction>(&self, game: &impl GameView<D>) -> Engine {
+        let mut engine = self.get_engine_base(D::is_hex());
         let this = self.clone();
-        engine.register_fn(FUNCTION_NAME_CONFIG, move || -> Self {
-            this.clone()
-        });
         let game = game.as_shared();
-        engine.register_fn(FUNCTION_NAME_BOARD, move || -> SharedGameView<D> {
-            game.clone()
+        #[allow(deprecated)]
+        engine.on_var(move |name, _index, _context| {
+            match name {
+                CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
+                CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
+                _ => Ok(None)
+            }
+        });
+        engine
+    }
+
+    pub fn get_engine_handler<D: Direction>(&self, handler: &EventHandler<D>) -> Engine {
+        let mut engine = self.get_engine_base(D::is_hex());
+        let this = self.clone();
+        let game = handler.get_game().as_shared();
+        let handler = handler.clone();
+        #[allow(deprecated)]
+        engine.on_var(move |name, _index, _context| {
+            match name {
+                CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
+                CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
+                CONST_NAME_EVENT_HANDLER => Ok(Some(Dynamic::from(handler.clone()))),
+                _ => Ok(None)
+            }
         });
         engine
     }

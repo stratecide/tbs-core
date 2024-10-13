@@ -4,7 +4,7 @@ fn leave_skull() {
 }
 
 fn resurrect() {
-    let unit = CONFIG().build_unit(OTHER_UNIT.type)
+    let unit = CONFIG.build_unit(OTHER_UNIT.type)
         .owner_id(UNIT.owner_id)
         .hp(50)
         .zombified()

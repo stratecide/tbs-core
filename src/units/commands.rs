@@ -1,7 +1,6 @@
 use executor::Executor;
 use interfaces::GameInterface;
 use rhai::Scope;
-use rhai::packages::Package;
 use rustc_hash::FxHashSet as HashSet;
 use std::fmt;
 
@@ -14,7 +13,6 @@ use crate::config::environment::Environment;
 use crate::game::commands::*;
 use crate::game::event_handler::*;
 use crate::game::game_view::GameView;
-use crate::game::rhai_event_handler::*;
 use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -134,14 +132,8 @@ impl<D: Direction> UnitAction<D> {
                                 scope.push_constant(CONST_NAME_UNIT, unit.clone());
                                 scope.push_constant(CONST_NAME_OTHER_POSITION, end);
                                 scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
-                                scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                                 let environment = handler.get_game().environment();
-                                let mut engine = environment.get_engine(&*handler.get_game());
-                                if D::is_hex() {
-                                    EventHandlerPackage6::new().register_into_engine(&mut engine);
-                                } else {
-                                    EventHandlerPackage4::new().register_into_engine(&mut engine);
-                                }
+                                let engine = environment.get_engine_handler(handler);
                                 let executor = Executor::new(engine, scope, environment);
                                 for function_index in scripts {
                                     match executor.run(function_index, ()) {

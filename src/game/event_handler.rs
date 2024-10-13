@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 
 use interfaces::{ClientPerspective, Perspective as IPerspective, RandomFn};
-use rhai::packages::Package;
 use rhai::Scope;
 use rustc_hash::{FxHashMap, FxHashSet as HashSet};
 
@@ -14,7 +13,7 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::script::custom_action::execute_commander_script;
 use crate::script::executor::Executor;
-use crate::script::{CONST_NAME_EVENT_HANDLER, CONST_NAME_POSITION, CONST_NAME_UNIT};
+use crate::script::{CONST_NAME_POSITION, CONST_NAME_UNIT};
 use crate::terrain::attributes::{CaptureProgress, TerrainAttributeKey};
 use crate::terrain::terrain::*;
 use crate::terrain::TerrainType;
@@ -32,7 +31,6 @@ use crate::units::unit_types::UnitType;
 use super::commands::Command;
 use super::events::{Event, Effect, UnitStep};
 use super::game_view::GameView;
-use super::rhai_event_handler::*;
 
 struct EventHandlerInner<D: Direction> {
     game: Handle<Game<D>>,
@@ -251,14 +249,8 @@ impl<D: Direction> EventHandler<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, unit_pos);
                     scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
-                    let mut engine = environment.get_engine(&*handler.get_game());
-                    if D::is_hex() {
-                        EventHandlerPackage6::new().register_into_engine(&mut engine);
-                    } else {
-                        EventHandlerPackage4::new().register_into_engine(&mut engine);
-                    }
+                    let engine = environment.get_engine_handler(&handler);
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {
                         match executor.run(function_index, ()) {
@@ -453,14 +445,8 @@ impl<D: Direction> EventHandler<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, unit_pos);
                     scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
-                    let mut engine = environment.get_engine(&*handler.get_game());
-                    if D::is_hex() {
-                        EventHandlerPackage6::new().register_into_engine(&mut engine);
-                    } else {
-                        EventHandlerPackage4::new().register_into_engine(&mut engine);
-                    }
+                    let engine = environment.get_engine_handler(handler);
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {
                         match executor.run(function_index, ()) {
@@ -507,14 +493,8 @@ impl<D: Direction> EventHandler<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, unit_pos);
                     scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
-                    let mut engine = environment.get_engine(&*handler.get_game());
-                    if D::is_hex() {
-                        EventHandlerPackage6::new().register_into_engine(&mut engine);
-                    } else {
-                        EventHandlerPackage4::new().register_into_engine(&mut engine);
-                    }
+                    let engine = environment.get_engine_handler(handler);
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in scripts {
                         match executor.run(function_index, ()) {

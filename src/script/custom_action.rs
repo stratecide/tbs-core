@@ -10,7 +10,6 @@ use crate::game::event_handler::EventHandler;
 use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::game::modified_view::UnitMovementView;
-use crate::game::rhai_event_handler::*;
 use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -295,17 +294,11 @@ pub fn execute_commander_script<D: Direction>(
 fn execute_script<D: Direction>(
     script: usize,
     handler: &mut EventHandler<D>,
-    mut scope: Scope<'static>,
+    scope: Scope<'static>,
     data: Option<&[CustomActionData<D>]>,
 ) {
-    scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
     let environment = handler.get_game().environment();
-    let mut engine = environment.get_engine(&*handler.get_game());
-    if D::is_hex() {
-        EventHandlerPackage6::new().register_into_engine(&mut engine);
-    } else {
-        EventHandlerPackage4::new().register_into_engine(&mut engine);
-    }
+    let engine = environment.get_engine_handler(handler);
     let executor = Executor::new(engine, scope, environment);
     let result: Result<(), Box<EvalAltResult>> = if let Some(data) = data {
         let data = data.iter()

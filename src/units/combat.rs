@@ -1,6 +1,5 @@
 use executor::Executor;
 use rhai::{Dynamic, Scope};
-use rhai::packages::Package;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use num_rational::Rational32;
 use zipper_derive::Zippable;
@@ -13,7 +12,6 @@ use crate::game::events::Effect;
 use crate::game::fog::can_see_unit_at;
 use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
-use crate::game::rhai_event_handler::*;
 use crate::map::point::Point;
 use crate::config::environment::Environment;
 use crate::map::direction::Direction;
@@ -617,14 +615,8 @@ fn attack_targets<D: Direction>(
             scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
             scope.push_constant(CONST_NAME_OTHER_UNIT_ID, attacker_id.unwrap());
             scope.push_constant(CONST_NAME_DAMAGE, damage as i32);
-            scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
-            let mut engine = environment.get_engine(&*handler.get_game());
-            if D::is_hex() {
-                EventHandlerPackage6::new().register_into_engine(&mut engine);
-            } else {
-                EventHandlerPackage4::new().register_into_engine(&mut engine);
-            }
+            let mut engine = environment.get_engine_handler(handler);
             let ricochet_directions = ricochet_directions.clone();
             let handler = handler.clone();
             engine.register_fn(FUNCTION_NAME_BLAST_DIRECTION, move || -> Dynamic {
@@ -664,14 +656,8 @@ fn attack_targets<D: Direction>(
             scope.push_constant(CONST_NAME_OTHER_UNIT, defender.clone());
             scope.push_constant(CONST_NAME_OTHER_UNIT_ID, defender_id);
             scope.push_constant(CONST_NAME_DAMAGE, damage as i32);
-            scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
-            let mut engine = environment.get_engine(&*handler.get_game());
-            if D::is_hex() {
-                EventHandlerPackage6::new().register_into_engine(&mut engine);
-            } else {
-                EventHandlerPackage4::new().register_into_engine(&mut engine);
-            }
+            let engine = environment.get_engine_handler(handler);
             let executor = Executor::new(engine, scope, environment);
             for function_index in scripts {
                 match executor.run(function_index, ()) {
@@ -698,14 +684,8 @@ fn attack_targets<D: Direction>(
             scope.push_constant(CONST_NAME_UNIT_ID, attacker_id.unwrap());
             scope.push_constant(CONST_NAME_OTHER_POSITION, defender_pos);
             scope.push_constant(CONST_NAME_OTHER_UNIT, defender.clone());
-            scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
             let environment = handler.get_game().environment();
-            let mut engine = environment.get_engine(&*handler.get_game());
-            if D::is_hex() {
-                EventHandlerPackage6::new().register_into_engine(&mut engine);
-            } else {
-                EventHandlerPackage4::new().register_into_engine(&mut engine);
-            }
+            let engine = environment.get_engine_handler(handler);
             let executor = Executor::new(engine, scope, environment);
             for function_index in scripts {
                 match executor.run(function_index, ()) {
@@ -806,14 +786,8 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
                 scope.push_constant(CONST_NAME_UNIT, unit.clone());
                 scope.push_constant(CONST_NAME_OTHER_POSITION, attacker_pos);
                 scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
-                scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                 let environment = handler.get_game().environment();
-                let mut engine = environment.get_engine(&*handler.get_game());
-                if D::is_hex() {
-                    EventHandlerPackage6::new().register_into_engine(&mut engine);
-                } else {
-                    EventHandlerPackage4::new().register_into_engine(&mut engine);
-                }
+                let engine = environment.get_engine_handler(handler);
                 let executor = Executor::new(engine, scope, environment);
                 for function_index in scripts {
                     match executor.run(function_index, ()) {

@@ -8,8 +8,8 @@ fn co_decay() {
 }
 
 fn place_sludge_tokens(EVENT_HANDLER, OWNER_ID, counter) {
-    for point in BOARD().all_positions() {
-        let unit = BOARD().get_unit(point);
+    for point in BOARD.all_positions() {
+        let unit = BOARD.get_unit(point);
         if unit?.owner_id != () {
             EVENT_HANDLER.place_sludge(point, OWNER_ID, counter);
         }

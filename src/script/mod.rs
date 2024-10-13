@@ -20,6 +20,8 @@ pub mod kill;
 pub mod terrain;
 pub mod death;*/
 
+pub const CONST_NAME_CONFIG: &'static str = "CONFIG";
+pub const CONST_NAME_BOARD: &'static str = "BOARD";
 pub const CONST_NAME_EVENT_HANDLER: &'static str = "EVENT_HANDLER";
 pub const CONST_NAME_OWNER_ID: &'static str = "OWNER_ID";
 pub const CONST_NAME_TEAM: &'static str = "TEAM";
@@ -38,8 +40,6 @@ pub const CONST_NAME_TRANSPORTER_POSITION: &'static str = "TRANSPORTER_POSITION"
 pub const CONST_NAME_IS_COUNTER: &'static str = "IS_COUNTER";
 pub const CONST_NAME_DAMAGE: &'static str = "DAMAGE";
 
-pub const FUNCTION_NAME_CONFIG: &'static str = "CONFIG";
-pub const FUNCTION_NAME_BOARD: &'static str = "BOARD";
 pub const FUNCTION_NAME_INPUT_CHOICE: &'static str = "user_selection";
 pub const FUNCTION_NAME_BLAST_DIRECTION: &'static str = "get_blast_direction";
 
@@ -52,8 +52,6 @@ pub fn create_base_engine() -> Engine {
     BasicMapPackage::new().register_into_engine(&mut engine);
     // maybe add MoreStringPackage or BitFieldPackage
     // my packages
-    rhai_environment::EnvironmentPackage::new().register_into_engine(&mut engine);
-    crate::terrain::rhai_terrain::TerrainPackage::new().register_into_engine(&mut engine);
     rhai_fraction::FractionPackage::new().register_into_engine(&mut engine);
     // https://rhai.rs/book/safety/max-stmt-depth.html
     // ran into problems with the debug-build defaults 32, 16
@@ -64,33 +62,49 @@ pub fn create_base_engine() -> Engine {
     engine
 }
 
-pub fn create_d_engine<D: Direction>() -> Engine {
-    let mut engine = create_base_engine();
-    if D::is_hex() {
-        crate::map::rhai_point::PositionPackage6::new().register_into_engine(&mut engine);
-        crate::map::rhai_direction::DirectionPackage6::new().register_into_engine(&mut engine);
-        crate::game::rhai_board::BoardPackage6::new().register_into_engine(&mut engine);
-        crate::units::rhai_unit::UnitPackage6::new().register_into_engine(&mut engine);
-        crate::units::rhai_combat::CombatPackage6::new().register_into_engine(&mut engine);
-        crate::units::rhai_movement::MovementPackage6::new().register_into_engine(&mut engine);
-        crate::details::rhai_details::DetailPackage6::new().register_into_engine(&mut engine);
-    } else {
-        crate::map::rhai_point::PositionPackage4::new().register_into_engine(&mut engine);
-        crate::map::rhai_direction::DirectionPackage4::new().register_into_engine(&mut engine);
-        crate::game::rhai_board::BoardPackage4::new().register_into_engine(&mut engine);
-        crate::units::rhai_unit::UnitPackage4::new().register_into_engine(&mut engine);
-        crate::units::rhai_combat::CombatPackage4::new().register_into_engine(&mut engine);
-        crate::units::rhai_movement::MovementPackage4::new().register_into_engine(&mut engine);
-        crate::details::rhai_details::DetailPackage4::new().register_into_engine(&mut engine);
-    }
-    engine
+def_package! {
+    pub MyPackage4(module):
+        CorePackage,
+        LogicPackage,
+        BasicArrayPackage,
+        BasicMapPackage,
+        rhai_environment::EnvironmentPackage,
+        rhai_fraction::FractionPackage,
+        crate::terrain::rhai_terrain::TerrainPackage,
+        crate::map::rhai_point::PositionPackage4,
+        crate::map::rhai_direction::DirectionPackage4,
+        crate::game::rhai_board::BoardPackage4,
+        crate::units::rhai_unit::UnitPackage4,
+        crate::units::rhai_combat::CombatPackage4,
+        crate::units::rhai_movement::MovementPackage4,
+        crate::details::rhai_details::DetailPackage4,
+        crate::game::rhai_event_handler::EventHandlerPackage4 {}
+}
+
+def_package! {
+    pub MyPackage6(module):
+        CorePackage,
+        LogicPackage,
+        BasicArrayPackage,
+        BasicMapPackage,
+        rhai_environment::EnvironmentPackage,
+        rhai_fraction::FractionPackage,
+        crate::terrain::rhai_terrain::TerrainPackage,
+        crate::map::rhai_point::PositionPackage6,
+        crate::map::rhai_direction::DirectionPackage6,
+        crate::game::rhai_board::BoardPackage6,
+        crate::units::rhai_unit::UnitPackage6,
+        crate::units::rhai_combat::CombatPackage6,
+        crate::units::rhai_movement::MovementPackage6,
+        crate::details::rhai_details::DetailPackage6,
+        crate::game::rhai_event_handler::EventHandlerPackage6 {}
 }
 
 pub fn with_board<D: Direction, R>(context: NativeCallContext, f: impl FnOnce(&Shared<dyn GameView<D>>) -> R) -> R {
-    let board = context.call_native_fn::<SharedGameView<D>>(FUNCTION_NAME_BOARD, ()).expect("BOARD should be in context!");
+    let board: SharedGameView<D> = context.engine().eval_expression(CONST_NAME_BOARD).expect("BOARD should be in context!");
     f(&board.0)
 }
 
 pub fn get_environment(context: NativeCallContext) -> Environment {
-    context.call_native_fn::<Environment>(FUNCTION_NAME_CONFIG, ()).expect("CONFIG should be in context!")
+    context.engine().eval_expression::<Environment>(CONST_NAME_CONFIG).expect("CONFIG should be in context!")
 }

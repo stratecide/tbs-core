@@ -2,7 +2,6 @@ use std::error::Error;
 use std::fmt::Display;
 
 use interfaces::GameInterface;
-use rhai::packages::Package;
 use rhai::Scope;
 use zipper_derive::Zippable;
 use zipper::*;
@@ -12,7 +11,7 @@ use crate::map::point::Point;
 use crate::details::Detail;
 use crate::script::custom_action::{execute_commander_script, is_commander_script_input_valid, CustomActionData};
 use crate::script::executor::Executor;
-use crate::script::{CONST_NAME_EVENT_HANDLER, CONST_NAME_POSITION, CONST_NAME_TERRAIN};
+use crate::script::{CONST_NAME_POSITION, CONST_NAME_TERRAIN};
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::TerrainBuilder;
 use crate::map::direction::Direction;
@@ -23,7 +22,6 @@ use crate::units::unit_types::UnitType;
 use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
 use super::game_view::GameView;
-use super::rhai_event_handler::*;
 
 #[derive(Debug, Clone, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
@@ -108,14 +106,8 @@ impl<D: Direction> Command<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, pos);
                     scope.push_constant(CONST_NAME_TERRAIN, terrain);
-                    scope.push_constant(CONST_NAME_EVENT_HANDLER, handler.clone());
                     let environment = handler.get_game().environment();
-                    let mut engine = environment.get_engine(&*handler.get_game());
-                    if D::is_hex() {
-                        EventHandlerPackage6::new().register_into_engine(&mut engine);
-                    } else {
-                        EventHandlerPackage4::new().register_into_engine(&mut engine);
-                    }
+                    let engine = environment.get_engine_handler(handler);
                     let executor = Executor::new(engine, scope, environment);
                     for function_index in function_indices {
                         match executor.run(function_index, ()) {
