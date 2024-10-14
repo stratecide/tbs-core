@@ -12,7 +12,6 @@ use crate::units::attributes::AttributeKey;
 use crate::units::hero::Hero;
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
-use crate::units::unit_types::UnitType;
 
 use super::game_view::GameView;
 use super::Direction;
@@ -275,7 +274,7 @@ pub fn recalculate_fog<D: Direction>(game: &impl GameView<D>, perspective: Clien
 pub fn can_see_unit_at<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {
     match unit.fog_replacement(game, position, game.get_fog_at(team, position)) {
         None => false,
-        Some(unit) => accept_unknowns || unit.typ() != UnitType::Unknown,
+        Some(unit) => accept_unknowns || unit.typ() != unit.environment().config.unknown_unit(),
     }
 }
 

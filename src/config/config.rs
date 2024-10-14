@@ -53,8 +53,8 @@ pub struct Config {
     pub(super) name: String,
     pub(super) owner_colors: Vec<[u8; 4]>,
     // units
-    pub(super) unit_types: Vec<UnitType>,
-    pub(super) units: HashMap<UnitType, UnitTypeConfig>,
+    pub(super) units: Vec<UnitTypeConfig>,
+    pub(super) unknown_unit: UnitType,
     pub(super) unit_transports: HashMap<UnitType, Vec<UnitType>>,
     pub(super) unit_attributes: HashMap<UnitType, Vec<AttributeKey>>,
     pub(super) unit_hidden_attributes: HashMap<UnitType, Vec<AttributeKey>>,
@@ -158,8 +158,8 @@ impl Config {
         self.units.len()
     }
 
-    pub fn unit_types(&self) -> &[UnitType] {
-        &self.unit_types
+    pub fn unknown_unit(&self) -> UnitType {
+        self.unknown_unit
     }
 
     pub fn max_transported(&self) -> usize {
@@ -175,7 +175,7 @@ impl Config {
     }
 
     pub(super) fn unit_config(&self, typ: UnitType) -> &UnitTypeConfig {
-        self.units.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
+        &self.units[typ.0]
     }
 
     pub fn unit_name(&self, typ: UnitType) -> &str {
@@ -183,9 +183,9 @@ impl Config {
     }
 
     pub fn find_unit_by_name(&self, name: &str) -> Option<UnitType> {
-        for (unit_type, conf) in &self.units {
+        for (unit_type, conf) in self.units.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(*unit_type)
+                return Some(UnitType(unit_type))
             }
         }
         None
@@ -679,6 +679,30 @@ impl Config {
         for ov in &self.terrain_config(terrain.typ()).build_overrides {
             result.insert(ov.key(), ov.clone());
         }
+        result
+    }
+
+    pub fn terrain_on_start_turn<D: Direction>(
+        &self,
+        map: &impl GameView<D>,
+        pos: Point,
+        terrain: &Terrain,
+        is_bubble: bool,
+        heroes: &[HeroInfluence<D>],
+    ) -> Vec<usize> {
+        let mut result = Vec::new();
+        self.terrain_power_configs(
+            map,
+            pos,
+            terrain,
+            is_bubble,
+            heroes,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_start_turn.iter().cloned())
+                }
+            }
+        );
         result
     }
 

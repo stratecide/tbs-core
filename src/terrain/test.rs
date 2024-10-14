@@ -24,8 +24,8 @@ fn capture_city() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build_with_defaults());
-    map.set_unit(Point::new(0, 0), Some(UnitType::Sniper.instance(&environment).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(3, 3), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap().build_default();
     let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -49,12 +49,12 @@ fn build_unit() {
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build_with_defaults());
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build_with_defaults());
-    map.set_unit(Point::new(3, 3), Some(UnitType::Sniper.instance(&environment).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build_with_defaults()));
     let mut settings = map.settings().unwrap();
     settings.players[0].set_income(1000);
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     assert_eq!(1000, game.with(|game| *game.current_player().funds));
-    game.handle_command(Command::BuyUnit(Point::new(0, 0), UnitType::Marine, Direction4::D0), Arc::new(|| 0.)).unwrap();
+    game.handle_command(Command::BuyUnit(Point::new(0, 0), UnitType::marine(), Direction4::D0), Arc::new(|| 0.)).unwrap();
     assert!(game.with(|game| *game.current_player().funds) < 1000);
     assert_eq!(0, game.get_unit(Point::new(0, 0)).unwrap().get_owner_id());
     assert!(game.get_unit(Point::new(0, 0)).unwrap().is_exhausted());
@@ -73,13 +73,13 @@ fn kraken() {
         }
     }
     map.set_terrain(Point::new(2, 2), TerrainType::Kraken.instance(&map_env).set_anger(7).build_with_defaults());
-    map.set_unit(Point::new(2, 1), Some(UnitType::WarShip.instance(&map_env).set_owner_id(1).build_with_defaults()));
-    map.set_unit(Point::new(1, 2), Some(UnitType::WarShip.instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(3, 2), Some(UnitType::WarShip.instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(3, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     let environment = game.environment();
-    assert_eq!(game.get_unit(Point::new(0, 0)), Some(UnitType::Tentacle.instance(&environment).build_with_defaults()));
+    assert_eq!(game.get_unit(Point::new(0, 0)), Some(UnitType::tentacle().instance(&environment).build_with_defaults()));
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_anger(), 7);
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,

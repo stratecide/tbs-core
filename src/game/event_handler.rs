@@ -13,10 +13,9 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::script::custom_action::execute_commander_script;
 use crate::script::executor::Executor;
-use crate::script::{CONST_NAME_POSITION, CONST_NAME_UNIT};
+use crate::script::*;
 use crate::terrain::attributes::{CaptureProgress, TerrainAttributeKey};
 use crate::terrain::terrain::*;
-use crate::terrain::TerrainType;
 use crate::units::attributes::{AttributeKey, ActionStatus};
 use crate::units::combat::WeaponType;
 use crate::player::*;
@@ -27,8 +26,6 @@ use crate::game::fog::*;
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
-use crate::units::unit_types::UnitType;
-use super::commands::Command;
 use super::events::{Event, Effect, UnitStep};
 use super::game_view::GameView;
 
@@ -462,12 +459,38 @@ impl<D: Direction> EventHandler<D> {
         );
 
         // release the kraken
-        for p in self.with_map(|map| map.all_points()) {
+        /*for p in self.with_map(|map| map.all_points()) {
             if self.with_map(|map| map.get_terrain(p).unwrap().typ() == TerrainType::TentacleDepths && map.get_unit(p) == None) {
                 // TODO: configure which unit is created here
-                self.unit_creation(p, UnitType::Tentacle.instance(&self.environment()).build_with_defaults());
+                self.unit_creation(p, UnitType::tentacle().instance(&self.environment()).build_with_defaults());
             }
-        }
+        }*/
+
+        self.trigger_all_terrain_scripts(
+            |game, p, terrain, heroes| {
+                terrain.on_start_turn(game, p, heroes)
+            },
+            |_| {},
+            |handler, scripts, p, terrain| {
+                if scripts.len() > 0 {
+                    let mut scope = Scope::new();
+                    scope.push_constant(CONST_NAME_POSITION, p);
+                    scope.push_constant(CONST_NAME_TERRAIN, terrain);
+                    let environment = handler.get_game().environment();
+                    let engine = environment.get_engine_handler(handler);
+                    let executor = Executor::new(engine, scope, environment);
+                    for function_index in scripts {
+                        match executor.run(function_index, ()) {
+                            Ok(()) => (),
+                            Err(e) => {
+                                // TODO: log error
+                                println!("terrain OnStartTurn {function_index}: {e:?}");
+                            }
+                        }
+                    }
+                }
+            }
+        );
 
         // has to be recalculated before structures, because the effects of some structures on
         // other players should maybe not be visible
@@ -1046,6 +1069,29 @@ impl<D: Direction> EventHandler<D> {
         self.add_event(Event::Effect(Effect::KrakenRage(position)))
     }
 
+
+    pub fn trigger_all_terrain_scripts(
+        &mut self,
+        get_script: impl Fn(&Handle<Game<D>>, Point, &Terrain, &[HeroInfluence<D>]) -> Vec<usize>,
+        before_executing: impl FnOnce(&mut Self),
+        execute_script: impl Fn(&mut Self, Vec<usize>, Point, Terrain),
+    ) {
+        let hero_auras = Hero::map_influence(&*self.get_game(), -1);
+        let mut scripts = Vec::new();
+        for p in self.with_map(|map| map.all_points()) {
+            let terrain = self.get_game().get_terrain(p).unwrap();
+            let heroes = hero_auras.get(&(p, terrain.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
+            let script = get_script(&*self.get_game(), p, &terrain, heroes);
+            if script.len() > 0 {
+                scripts.push((script, p, terrain));
+            }
+        }
+        before_executing(self);
+        for (scripts, p, terrain) in scripts {
+            // the unit may not be at unit_pos anymore
+            execute_script(self, scripts, p, terrain);
+        }
+    }
 
     pub fn trigger_all_unit_scripts(
         &mut self,

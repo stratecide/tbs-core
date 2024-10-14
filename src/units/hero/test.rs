@@ -36,8 +36,8 @@ mod tests {
         let mut map = Map::new(map.build(), &config);
         let map_env = map.environment().clone();
         map.set_terrain(Point::new(1, 1), TerrainType::StatueLand.instance(&map_env).set_owner_id(0).build_with_defaults());
-        map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(4, 4), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -56,7 +56,7 @@ mod tests {
             path,
             action: UnitAction::BuyHero(HeroType::Crystal),
         }), Arc::new(|| 0.)).unwrap();
-        assert_eq!(server.get_unit(Point::new(1, 1)), Some(UnitType::SmallTank.instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::Crystal, Some(Point::new(1, 1)))).set_status(ActionStatus::Exhausted).build_with_defaults()));
+        assert_eq!(server.get_unit(Point::new(1, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::Crystal, Some(Point::new(1, 1)))).set_status(ActionStatus::Exhausted).build_with_defaults()));
         assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
     }
 
@@ -70,12 +70,12 @@ mod tests {
         let map_env = map.environment().clone();
         let mut crystal = Hero::new(HeroType::Crystal, None);
         crystal.set_charge(&map_env, crystal.max_charge(&map_env));
-        //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(crystal).set_hp(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        //map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(crystal).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
 
-        map.set_unit(Point::new(4, 4), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -96,7 +96,7 @@ mod tests {
             path,
             action: UnitAction::hero_power(1, vec![CustomActionData::Point(Point::new(0, 1))]),
         }), Arc::new(|| 0.)).unwrap();
-        assert_eq!(server.get_unit(Point::new(0, 1)), Some(UnitType::HeroCrystal.instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        assert_eq!(server.get_unit(Point::new(0, 1)), Some(UnitType::hero_crystal().instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
         assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
         assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
         server.handle_command(Command::UnitCommand(UnitCommand {
@@ -156,12 +156,12 @@ mod tests {
         let map_env = map.environment().clone();
         let mut earl_grey = Hero::new(HeroType::EarlGrey, None);
         earl_grey.set_charge(&map_env, earl_grey.max_charge(&map_env));
-        //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hero(earl_grey).set_hp(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        //map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(0).set_hero(earl_grey).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(1).build_with_defaults()));
 
-        map.set_unit(Point::new(4, 4), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(4, 4), Some(UnitType::marine().instance(&map_env).set_owner_id(0).build_with_defaults()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -212,12 +212,12 @@ mod tests {
         let map_env = map.environment().clone();
         let mut blue_berry = Hero::new(HeroType::BlueBerry, None);
         blue_berry.set_charge(&map_env, blue_berry.max_charge(&map_env));
-        //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hero(blue_berry).set_hp(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hp(50).set_status(ActionStatus::Exhausted).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        //map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(0).set_hero(blue_berry).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(0).set_hp(50).set_status(ActionStatus::Exhausted).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(1).build_with_defaults()));
 
-        map.set_unit(Point::new(4, 4), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hp(50).set_status(ActionStatus::Exhausted).build_with_defaults()));
+        map.set_unit(Point::new(4, 4), Some(UnitType::marine().instance(&map_env).set_owner_id(0).set_hp(50).set_status(ActionStatus::Exhausted).build_with_defaults()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -249,9 +249,9 @@ mod tests {
         let map_env = map.environment().clone();
         let mut tess = Hero::new(HeroType::Tess, None);
         tess.set_charge(&map_env, tess.max_charge(&map_env));
-        //map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hero(tess).set_hp(1).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults()));
+        //map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(0).set_hero(tess).set_hp(1).build_with_defaults()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(1).build_with_defaults()));
 
         let settings = map.settings().unwrap();
         let mut settings = settings.clone();
@@ -264,7 +264,7 @@ mod tests {
         let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
         println!("options: {:?}", options);
         assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
-        let to_build = UnitType::SmallTank.instance(&server.environment())
+        let to_build = UnitType::small_tank().instance(&server.environment())
             .set_owner_id(0)
             .build_with_defaults();
         server.handle_command(Command::UnitCommand(UnitCommand {
@@ -285,10 +285,10 @@ mod tests {
         let map_env = map.environment().clone();
         let mut edwin = Hero::new(HeroType::Edwin, None);
         edwin.set_charge(&map_env, edwin.max_charge(&map_env));
-        map.set_unit(Point::new(1, 1), Some(UnitType::Marine.instance(&map_env).set_owner_id(0).set_hero(edwin).build_with_defaults()));
-        let enemy = UnitType::Marine.instance(&map_env).set_owner_id(1).build_with_defaults();
+        map.set_unit(Point::new(1, 1), Some(UnitType::marine().instance(&map_env).set_owner_id(0).set_hero(edwin).build_with_defaults()));
+        let enemy = UnitType::marine().instance(&map_env).set_owner_id(1).build_with_defaults();
         map.set_unit(Point::new(2, 1), Some(enemy.clone()));
-        let friend = UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults();
+        let friend = UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults();
         map.set_unit(Point::new(0, 4), Some(friend.clone()));
         map.set_unit(Point::new(2, 2), Some(enemy.clone()));
 

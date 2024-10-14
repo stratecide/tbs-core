@@ -28,8 +28,8 @@ fn unit_builder_transported() {
     let map = WMBuilder::<Direction4>::new(PointMap::new(5, 5, false));
     let map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    let unit: Unit<Direction4> = UnitType::TransportHeli.instance(&map_env).set_owner_id(0).set_transported(vec![
-        UnitType::Marine.instance(&map_env).set_hp(34).build_with_defaults(),
+    let unit: Unit<Direction4> = UnitType::transport_heli().instance(&map_env).set_owner_id(0).set_transported(vec![
+        UnitType::marine().instance(&map_env).set_hp(34).build_with_defaults(),
     ]).build_with_defaults();
     assert_eq!(unit.get_transported().len(), 1);
 }
@@ -42,11 +42,11 @@ fn fog_replacement() {
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&map_env).build_with_defaults());
-    let unit = UnitType::Sniper.instance(&map_env).set_owner_id(0).set_status(ActionStatus::Capturing).build_with_defaults();
+    let unit = UnitType::sniper().instance(&map_env).set_owner_id(0).set_status(ActionStatus::Capturing).build_with_defaults();
     let map_view = Handle::new(map);
     assert_eq!(
         unit.fog_replacement(&map_view, Point::new(1, 1), FogIntensity::Light),
-        Some(UnitType::Unknown.instance(&map_env).build_with_defaults())
+        Some(map_env.config.unknown_unit().instance(&map_env).build_with_defaults())
     );
 }
 
@@ -62,14 +62,14 @@ fn build_drone() {
             map.set_terrain(Point::new(x, y), TerrainType::Sea.instance(&map_env).build_with_defaults());
         }
     }
-    map.set_unit(Point::new(3, 4), Some(UnitType::DroneBoat.instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(1, 6), Some(UnitType::WarShip.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(3, 4), Some(UnitType::drone_boat().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(1, 6), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].set_funds(1000);
     let (mut server, events) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
     let mut client = Game::new_client(map, settings.build_default(), events.get(&Perspective::Team(0)).unwrap());
-    let to_build = UnitType::LightDrone.instance(&server.environment())
+    let to_build = UnitType::light_drone().instance(&server.environment())
         .set_owner_id(0)
         .build_with_defaults();
     let events = server.handle_command(Command::UnitCommand(UnitCommand {
@@ -105,8 +105,8 @@ fn repair_unit() {
         }
     }
     map.set_terrain(Point::new(3, 4), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
-    map.set_unit(Point::new(3, 4), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(1, 6), Some(UnitType::WarShip.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(3, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 6), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].set_funds(1000);
@@ -132,8 +132,8 @@ fn end_game() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -156,9 +156,9 @@ fn defeat_player_of_3() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
-    map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(2).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(2).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -186,10 +186,10 @@ fn on_death_lose_game() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(0, 1), Some(UnitType::LifeCrystal.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
-    map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::life_crystal().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -216,10 +216,10 @@ fn puffer_fish() {
     // experiment
     map.set_terrain(Point::new(1, 1), sea.clone());
     map.set_terrain(Point::new(2, 1), sea.clone());
-    map.set_unit(Point::new(0, 1), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(0, 2), Some(UnitType::Artillery.instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(1, 1), Some(UnitType::PufferFish.instance(&map_env).build_with_defaults()));
-    map.set_unit(Point::new(2, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 2), Some(UnitType::artillery().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::puffer_fish().instance(&map_env).build_with_defaults()));
+    map.set_unit(Point::new(2, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -227,7 +227,7 @@ fn puffer_fish() {
         path: Path::new(Point::new(0, 1)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().typ(), UnitType::PufferFish);
+    assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().typ(), UnitType::puffer_fish());
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_hp(), 100);
     assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().get_hp(), 100);
     let hp = game.get_unit(Point::new(2, 0)).unwrap().get_hp();
@@ -249,10 +249,10 @@ fn capture_pyramid() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(0, 1), Some(UnitType::Pyramid.instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(0, 2), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::pyramid().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -276,9 +276,9 @@ fn s_factory() {
     let wmap: WrappingMap<Direction6> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(1, 1), Some(UnitType::Factory.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(1, 3), Some(UnitType::Pyramid.instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(0, 3), Some(UnitType::SmallTank.instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::factory().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 3), Some(UnitType::pyramid().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     let environment = game.environment().clone();
@@ -286,7 +286,7 @@ fn s_factory() {
         assert_eq!(*game.current_player().funds, game.current_player().get_income() * 2);
     });
     assert_ne!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);
-    let to_build = UnitType::Marine.instance(&game.environment())
+    let to_build = UnitType::marine().instance(&game.environment())
         .set_owner_id(0)
         .build_with_defaults();
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -294,6 +294,6 @@ fn s_factory() {
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::custom(0, vec![CustomActionData::Unit(to_build), CustomActionData::Direction(Direction6::D180)]),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), UnitType::Marine.instance(&environment).set_owner_id(0). set_status(ActionStatus::Exhausted).build_with_defaults());
+    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), UnitType::marine().instance(&environment).set_owner_id(0). set_status(ActionStatus::Exhausted).build_with_defaults());
     assert_eq!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);
 }

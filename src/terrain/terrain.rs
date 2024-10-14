@@ -375,6 +375,16 @@ impl Terrain {
         }).collect()
     }
 
+    pub fn on_start_turn<D: Direction>(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> Vec<usize> {
+        self.environment.config.terrain_on_start_turn(
+            game,
+            pos,
+            self,
+            false,
+            &heroes,
+        )
+    }
+
     pub fn on_build<D: Direction>(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<usize> {
         let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         self.environment.config.terrain_on_build(

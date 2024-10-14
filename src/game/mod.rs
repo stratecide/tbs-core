@@ -78,29 +78,29 @@ mod tests {
                 map.set_terrain(p, TerrainType::ChessTile.instance(&environment).build_with_defaults());
             }
         }
-        map.set_unit(Point::new(0, 0), Some(UnitType::Rook.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(7, 0), Some(UnitType::Rook.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(0, 7), Some(UnitType::Rook.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(7, 7), Some(UnitType::Rook.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(0, 0), Some(UnitType::rook().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(7, 0), Some(UnitType::rook().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(0, 7), Some(UnitType::rook().instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(7, 7), Some(UnitType::rook().instance(&environment).set_owner_id(0).build_with_defaults()));
         
-        map.set_unit(Point::new(1, 0), Some(UnitType::Knight.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(6, 0), Some(UnitType::Knight.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(1, 7), Some(UnitType::Knight.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(6, 7), Some(UnitType::Knight.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(1, 0), Some(UnitType::knight().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(6, 0), Some(UnitType::knight().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 7), Some(UnitType::knight().instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(6, 7), Some(UnitType::knight().instance(&environment).set_owner_id(0).build_with_defaults()));
         
-        map.set_unit(Point::new(2, 0), Some(UnitType::Bishop.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(5, 0), Some(UnitType::Bishop.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 7), Some(UnitType::Bishop.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(5, 7), Some(UnitType::Bishop.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(2, 0), Some(UnitType::bishop().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(5, 0), Some(UnitType::bishop().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(2, 7), Some(UnitType::bishop().instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(5, 7), Some(UnitType::bishop().instance(&environment).set_owner_id(0).build_with_defaults()));
 
-        map.set_unit(Point::new(3, 0), Some(UnitType::Queen.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(4, 0), Some(UnitType::King.instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(3, 7), Some(UnitType::Queen.instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(4, 7), Some(UnitType::King.instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(3, 0), Some(UnitType::queen().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(4, 0), Some(UnitType::king().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(3, 7), Some(UnitType::queen().instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(4, 7), Some(UnitType::king().instance(&environment).set_owner_id(0).build_with_defaults()));
         
         for x in 0..8 {
-            map.set_unit(Point::new(x, 1), Some(UnitType::Pawn.instance(&environment).set_direction(Direction4::D270).set_owner_id(1).build_with_defaults()));
-            map.set_unit(Point::new(x, 6), Some(UnitType::Pawn.instance(&environment).set_direction(Direction4::D90).set_owner_id(0).build_with_defaults()));
+            map.set_unit(Point::new(x, 1), Some(UnitType::pawn().instance(&environment).set_direction(Direction4::D270).set_owner_id(1).build_with_defaults()));
+            map.set_unit(Point::new(x, 6), Some(UnitType::pawn().instance(&environment).set_direction(Direction4::D90).set_owner_id(0).build_with_defaults()));
         }
 
         let settings = map.settings().unwrap();

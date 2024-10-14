@@ -6,6 +6,7 @@ use std::hash::Hash;
 use std::path::{Path, PathBuf};
 #[cfg(not(target_family = "wasm"))]
 use std::fs;
+use std::usize;
 
 use num_rational::Rational32;
 use rhai::*;
@@ -80,8 +81,8 @@ impl Config {
             name,
             owner_colors: Vec::new(),
             // units
-            unit_types: Vec::new(),
-            units: HashMap::default(),
+            units: Vec::new(),
+            unknown_unit: UnitType(usize::MAX),
             unit_transports: HashMap::default(),
             unit_attributes: HashMap::default(),
             unit_hidden_attributes: HashMap::default(),
@@ -132,6 +133,7 @@ impl Config {
 
         // ruleset.csv
         let mut neutral_color = None;
+        let mut unknown_unit = String::new();
         file_loader.table_key_value(RULESET_CONFIG, |key, value, file_loader| {
             match key {
                 "NeutralColor" => {
@@ -141,6 +143,7 @@ impl Config {
                     // owner_colors.len is checked below, so needs_content can be false here
                     result.owner_colors = parse_inner_vec(value, false, file_loader)?.0;
                 }
+                "UnknownUnit" => unknown_unit = value.to_string(),
                 _ => ()
             }
             Ok(())
@@ -155,14 +158,21 @@ impl Config {
 
         // simple unit data
         file_loader.table_with_headers(UNIT_CONFIG, |line: UnitTypeConfig| {
-            if result.units.contains_key(&line.id) {
+            if result.units.iter().any(|conf| conf.name == line.name) {
                 // TODO: error
             }
-            result.unit_types.push(line.id);
             result.max_transported = result.max_transported.max(line.transport_capacity);
-            result.units.insert(line.id, line);
+            result.units.push(line);
             Ok(())
         })?;
+
+        for conf in &result.units {
+            file_loader.unit_types.push(conf.name.clone());
+        }
+        match result.units.iter().position(|conf| conf.name == unknown_unit) {
+            Some(i) => result.unknown_unit = UnitType(i),
+            None => return Err(Box::new(ConfigParseError::MissingUnit("Unknown".to_string())))
+        }
 
         // unit transport
         let data = file_loader.load_config(UNIT_TRANSPORT)?;
@@ -172,9 +182,6 @@ impl Config {
             let header = UnitType::from_conf(h, &mut file_loader)?.0;
             if transported.contains(&header) {
                 return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            if !result.units.contains_key(&header) {
-                return Err(Box::new(ConfigParseError::MissingUnit(h.to_string())))
             }
             transported.push(header);
         }
@@ -337,9 +344,10 @@ impl Config {
             }
             units.push(header);
         }
-        result.hero_units.insert(HeroType::None, result.unit_types.iter()
-        .filter(|u| result.unit_attributes.get(u).unwrap().contains(&AttributeKey::Hero))
-        .cloned().collect());
+        result.hero_units.insert(HeroType::None, (0..result.units.len())
+        .map(|i| UnitType(i))
+        .filter(|i| result.unit_attributes.get(i).unwrap().contains(&AttributeKey::Hero))
+        .collect());
         for line in reader.records() {
             let line = line?;
             let mut line = line.into_iter();

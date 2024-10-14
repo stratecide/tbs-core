@@ -636,13 +636,7 @@ impl<D: Direction> Unit<D> {
     // methods that go beyond getter / setter functionality
 
     pub fn zip(&self, zipper: &mut Zipper, transporter: Option<(UnitType, i8)>) {
-        let units = if let Some((transporter, _)) = transporter {
-            self.environment.config.unit_transportable(transporter)
-        } else {
-            self.environment.config.unit_types()
-        };
-        let bits = bits_needed_for_max_value(units.len() as u32 - 1);
-        zipper.write_u32(units.iter().position(|t| *t == self.typ).unwrap_or(0) as u32, bits);
+        self.typ.export(zipper, &self.environment);
         let owner = transporter.map(|t| t.1).unwrap_or(self.get_owner_id());
         for key in self.environment.unit_attributes(self.typ, owner) {
             if transporter.is_some() && Attribute::<D>::build_from_transporter(*key).is_some() {
@@ -655,17 +649,7 @@ impl<D: Direction> Unit<D> {
     }
 
     pub fn unzip(unzipper: &mut Unzipper, environment: &Environment, transporter: Option<(UnitType, i8)>) -> Result<Self, ZipperError> {
-        let units = if let Some((transporter, _)) = transporter {
-            environment.config.unit_transportable(transporter)
-        } else {
-            environment.config.unit_types()
-        };
-        let bits = bits_needed_for_max_value(units.len() as u32 - 1);
-        let index = unzipper.read_u32(bits)? as usize;
-        if index >= environment.config.unit_count() {
-            return Err(ZipperError::InconsistentData);
-        }
-        let typ = units[index];
+        let typ = UnitType::import(unzipper, environment)?;
         let mut attributes = HashMap::default();
         let mut owner = transporter.map(|t| t.1).unwrap_or(-1);
         let mut hero = HeroType::None;
@@ -724,7 +708,7 @@ impl<D: Direction> Unit<D> {
                 match visibility {
                     UnitVisibility::Stealth => return None,
                     UnitVisibility::Normal => {
-                        return Some(UnitType::Unknown.instance(&self.environment).build_with_defaults())
+                        return Some(self.environment.config.unknown_unit().instance(&self.environment).build_with_defaults())
                     }
                     UnitVisibility::AlwaysVisible => (),
                 }

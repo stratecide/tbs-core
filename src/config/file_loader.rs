@@ -20,6 +20,7 @@ pub struct FileLoader {
     engine: Engine,
     unoptimized_asts: HashMap<String, Shared<AST>>,
     rhai_functions: Vec<(String, String, usize)>,
+    pub unit_types: Vec<String>,
 }
 
 impl FileLoader {
@@ -33,6 +34,7 @@ impl FileLoader {
             engine,
             unoptimized_asts: HashMap::default(),
             rhai_functions: Vec::new(),
+            unit_types: Vec::new(),
         }
     }
 

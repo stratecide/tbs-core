@@ -6,7 +6,6 @@ use crate::game::fog::VisionMode;
 use crate::units::attributes::*;
 use crate::units::combat::*;
 use crate::units::movement::MovementType;
-use crate::units::unit_types::UnitType;
 
 use super::file_loader::FileLoader;
 use super::file_loader::TableLine;
@@ -16,7 +15,6 @@ use super::parse::*;
 
 #[derive(Debug)]
 pub struct UnitTypeConfig {
-    pub(super) id: UnitType,
     pub(super) name: String,
     //pub(super) attribute_keys: Vec<AttributeKey>,
     //pub(super) attribute_keys_hidden_by_fog: Vec<AttributeKey>,
@@ -57,7 +55,6 @@ impl TableLine for UnitTypeConfig {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: parse(data, H::Id, loader)?,
             name: get(H::Id)?.to_string(),
             visibility: match data.get(&H::Visibility) {
                 Some(s) => UnitVisibility::from_conf(s, loader)?.0,

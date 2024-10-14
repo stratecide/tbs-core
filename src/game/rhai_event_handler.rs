@@ -135,7 +135,9 @@ macro_rules! event_handler_module {
             }
 
             pub fn place_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
-                handler.unit_creation(position, unit);
+                if handler.with_map(|map| map.get_unit(position).is_none()) {
+                    handler.unit_creation(position, unit);
+                }
             }
 
             pub fn take_unit(mut handler: Handler, position: Point) -> Dynamic {
