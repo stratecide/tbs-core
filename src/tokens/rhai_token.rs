@@ -7,20 +7,20 @@ use crate::script::get_environment;
 
 use super::*;
 
-macro_rules! detail_module {
+macro_rules! token_module {
     ($pack: ident, $name: ident, $d: ty) => {
         #[export_module]
         mod $name {
-            pub type Skull = SkullData<$d>;
+            pub type Token = super::token::Token<$d>;
 
-            #[rhai_fn(pure, get="unit_type")]
+            /*#[rhai_fn(pure, get="unit_type")]
             pub fn get_unit_type(skull: &mut Skull) -> UnitType {
                 skull.unit_type
-            }
+            }*/
 
             #[rhai_fn(pure, get="owner_id")]
-            pub fn get_owner_id(skull: &mut Skull) -> i32 {
-                skull.owner.0 as i32
+            pub fn get_owner_id(token: &mut Token) -> i32 {
+                token.get_owner_id() as i32
             }
 
             /*#[rhai_fn(pure)]
@@ -44,5 +44,5 @@ macro_rules! detail_module {
     };
 }
 
-detail_module!(DetailPackage4, detail_module4, Direction4);
-detail_module!(DetailPackage6, detail_module6, Direction6);
+token_module!(TokenPackage4, token_module4, Direction4);
+token_module!(TokenPackage6, token_module6, Direction6);

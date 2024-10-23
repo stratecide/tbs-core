@@ -191,7 +191,7 @@ pub fn is_terrain_script_input_valid<D: Direction>(
     script: usize,
     game: &Handle<Game<D>>,
     pos: Point,
-    terrain: Terrain,
+    terrain: Terrain<D>,
     data: &[CustomActionData<D>],
 ) -> bool {
     let mut scope = Scope::new();
@@ -298,7 +298,7 @@ pub fn execute_terrain_script<D: Direction>(
     script: usize,
     handler: &mut EventHandler<D>,
     pos: Point,
-    terrain: Terrain,
+    terrain: Terrain<D>,
     data: &[CustomActionData<D>],
 ) {
     let mut scope = Scope::new();

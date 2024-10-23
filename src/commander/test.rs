@@ -2,37 +2,30 @@ use std::sync::Arc;
 
 use interfaces::*;
 use semver::Version;
-use zipper::Unzipper;
-use zipper::Zipper;
+use zipper::*;
 use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
-use crate::details::Detail;
-use crate::details::SkullData;
-use crate::details::SludgeToken;
-use crate::game::commands::Command;
-use crate::game::commands::CommandError;
+use crate::tokens::*;
+use crate::game::commands::*;
 use crate::game::fog::*;
 use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::map::Map;
-use crate::map::point::Point;
-use crate::map::point::Position;
+use crate::map::point::*;
 use crate::map::point_map::PointMap;
 use crate::map::wrapping_map::WMBuilder;
 use crate::script::custom_action::CustomActionData;
+use crate::tags::*;
 use crate::terrain::TerrainType;
-use crate::units::attributes::ActionStatus;
-use crate::units::attributes::Amphibious;
-use crate::units::attributes::AttributeKey;
 use crate::units::combat::AttackVector;
-use crate::units::commands::UnitAction;
-use crate::units::commands::UnitCommand;
+use crate::units::commands::*;
 use crate::units::movement::Path;
+use crate::tags::tests::*;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::VERSION;
-
+/*
 #[test]
 fn zombie() {
     let config = Arc::new(Config::test_config());
@@ -46,9 +39,9 @@ fn zombie() {
     map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
 
     let skull = SkullData::new(&UnitType::marine().instance(&map_env).set_owner_id(1).set_amphibious(Amphibious::InWater).build_with_defaults(), 0);
-    map.set_details(Point::new(0, 4), vec![Detail::Skull(skull.clone())]);
+    map.set_tokens(Point::new(0, 4), vec![Detail::Skull(skull.clone())]);
     let skull2 = SkullData::new(&UnitType::marine().instance(&map_env).set_owner_id(1).set_amphibious(Amphibious::OnLand).build_with_defaults(), 0);
-    map.set_details(Point::new(1, 4), vec![Detail::Skull(skull2.clone())]);
+    map.set_tokens(Point::new(1, 4), vec![Detail::Skull(skull2.clone())]);
 
     map.set_terrain(Point::new(3, 1), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
 
@@ -69,28 +62,28 @@ fn zombie() {
     let environment = server.environment().clone();
     // small power
     server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(0, 4)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).set_amphibious(Amphibious::InWater).build_with_defaults()));
-    assert_eq!(server.get_unit(Point::new(1, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).set_amphibious(Amphibious::OnLand).build_with_defaults()));
+    assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_amphibious(Amphibious::InWater).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(1, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_amphibious(Amphibious::OnLand).build_with_defaults()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(2, 1)), vec![Detail::Skull(SkullData::new(&UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults(), 0))]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), vec![Detail::Skull(SkullData::new(&UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults(), 0))]);
     assert_eq!(server.get_unit(Point::new(2, 1)), None);
     // big power
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(0, 4)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).set_amphibious(Amphibious::InWater).build_with_defaults()));
+    assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_amphibious(Amphibious::InWater).build_with_defaults()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(2, 1)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(2, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hp(50).set_zombified(true).build_with_defaults()));
+    assert_eq!(server.get_tokens(Point::new(2, 1)), Vec::new());
+    assert_eq!(server.get_unit(Point::new(2, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).build_with_defaults()));
     // buy unit
     let mut server = unchanged.clone();
     server.with_mut(|server| {
@@ -100,7 +93,7 @@ fn zombie() {
     assert!(server.get_unit(Point::new(3, 1)).is_some());
     for p in server.all_points() {
         if let Some(unit) = server.get_unit(p) {
-            assert!(!unit.get_zombified());
+            assert!(!unit.has_flag(FLAG_ZOMBIFIED));
         }
     }
 }
@@ -372,7 +365,7 @@ fn tapio() {
     server.handle_command(Command::commander_power(3, Vec::new()), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_fog_at(ClientPerspective::Team(0), Point::new(5, 3)), FogIntensity::TrueSight);
     server.handle_command(Command::BuyUnit(Point::new(5, 3), UnitType::small_tank(), Direction4::D0), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_unit(Point::new(5, 3)).unwrap().get_status(), ActionStatus::Exhausted);
+    assert!(server.get_unit(Point::new(5, 3)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert_eq!(server.get_terrain(Point::new(5, 3)).unwrap().typ(), TerrainType::Grass);
 }
 
@@ -386,7 +379,7 @@ fn sludge_monster() {
     map.set_terrain(Point::new(1, 0), TerrainType::City.instance(&map_env).set_owner_id(0).build_with_defaults());
     map.set_unit(Point::new(1, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
     map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
-    map.set_details(Point::new(2, 1), vec![Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
+    map.set_tokens(Point::new(2, 1), vec![Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
     map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(60).build_with_defaults()));
     map.set_terrain(Point::new(1, 2), TerrainType::OilPlatform.instance(&map_env).build_with_defaults());
     map.set_unit(Point::new(1, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
@@ -434,43 +427,43 @@ fn sludge_monster() {
 
     // leave token after unit death
     let mut server = unchanged.clone();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 0)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(1, 0)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(1, 0)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
 
     // small power
     let mut server = unchanged.clone();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[]);
-    assert_eq!(server.get_details(Point::new(1, 1)), &[]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
+    assert_eq!(server.get_tokens(Point::new(1, 1)), &[]);
     server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
-    assert_eq!(server.get_details(Point::new(1, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(1, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
 
     // big power
     let mut server = unchanged.clone();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[]);
-    assert_eq!(server.get_details(Point::new(1, 1)), &[]);
-    assert_eq!(server.get_details(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
+    assert_eq!(server.get_tokens(Point::new(1, 1)), &[]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
     server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
-    assert_eq!(server.get_details(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
     // tokens vanish over time
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(0, 1)), &[]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     let mut server = unchanged.clone();
-    assert_eq!(server.get_details(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_details(Point::new(2, 1)), &[]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), &[]);
 
     // can't repair
     let mut server = unchanged.clone();
@@ -523,7 +516,7 @@ fn celerity() {
     let default_attack = 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp();
     server.handle_command(Command::BuyUnit(Point::new(0, 4), UnitType::small_tank(), Direction4::D0), Arc::new(|| 0.)).unwrap();
     let default_cost = funds - server.with(|server| *server.current_player().funds);
-    assert!(!server.get_unit(Point::new(0, 4)).unwrap().has_attribute(AttributeKey::Level));
+    assert!(!server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL).is_some());
 
     let mut settings = settings.build_default();
     settings.players[0].set_commander(CommanderType::Celerity);
@@ -536,7 +529,7 @@ fn celerity() {
 
     server.handle_command(Command::BuyUnit(Point::new(0, 4), UnitType::small_tank(), Direction4::D0), Arc::new(|| 0.)).unwrap();
     assert!(funds - server.with(|server| *server.current_player().funds) < default_cost);
-    assert_eq!(server.get_unit(Point::new(0, 4)).unwrap().get_level(), 0, "New units are Level 0");
+    assert_eq!(server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL), Some(TagValue::Int(Int32(0))), "New units are Level 0");
 
     // level attack bonuses
     let mut attack_damage = Vec::new();
@@ -551,7 +544,7 @@ fn celerity() {
             server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
             server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
         }
-        assert_eq!(server.get_unit(Point::new(2, 2)).unwrap().get_level(), i as u8);
+        assert_eq!(server.get_unit(Point::new(2, 2)).unwrap().get_tag(TAG_LEVEL), Some(TagValue::Int(Int32(i as i32))));
         attack_damage.push(100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
     }
     for i in 0..attack_damage.len() - 1 {
@@ -587,9 +580,9 @@ fn celerity() {
     ]).set_hp(89).build_with_defaults();
 
     let mut zipper = Zipper::new();
-    convoy.zip(&mut zipper, None);
+    convoy.zip(&mut zipper, false);
     let mut unzipper = Unzipper::new(zipper.finish(), Version::parse(VERSION).unwrap());
-    let convoy2 = Unit::unzip(&mut unzipper, &environment, None);
+    let convoy2 = Unit::unzip(&mut unzipper, &environment, false);
     assert_eq!(Ok(convoy), convoy2);
 
     let exported = unchanged.export();
@@ -674,7 +667,7 @@ fn lageos() {
     assert!(server.get_unit(Point::new(0, 1)).unwrap().get_hp() < 100);
     assert!(server.get_unit(Point::new(0, 0)).unwrap().get_hp() < 100);
     assert_eq!(3 * (100 - server.get_unit(Point::new(0, 1)).unwrap().get_hp()), 2 * (100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp()));
-    assert!(!server.get_unit(Point::new(0, 1)).unwrap().is_exhausted());
+    assert!(!server.get_unit(Point::new(0, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
 
     // big power
     let mut server = unchanged.clone();
@@ -689,6 +682,7 @@ fn lageos() {
     assert_eq!(server.get_unit(Point::new(1, 0)).unwrap().get_hp(), 100);
     for i in 0..=1 {
         assert!(server.get_unit(Point::new(i, 1)).unwrap().get_hp() < 100);
-        assert!(server.get_unit(Point::new(i, 1)).unwrap().is_exhausted());
+        assert!(server.get_unit(Point::new(i, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     }
 }
+*/

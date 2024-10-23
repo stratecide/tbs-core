@@ -16,6 +16,7 @@ mod terrain_powered;
 pub mod file_loader;
 pub mod table_config;
 pub mod tag_config;
+pub mod token_typ_config;
 
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -24,15 +25,14 @@ use std::path::PathBuf;
 
 use crate::commander::commander_type::CommanderType;
 use crate::units::hero::HeroType;
-use crate::units::unit_types::UnitType;
 
 #[derive(Debug, Clone)]
 pub enum ConfigParseError {
     CommanderMaxChargeExceeded(u32),
     CustomActionScriptMissing(String),
     DontCallGlobalScriptDirectly(String),
+    DuplicateEntry(String),
     DuplicateHeader(String),
-    MissingUnit(String),
     EmptyList,
     FileMissing(String),
     FolderMissing(PathBuf),
@@ -59,7 +59,9 @@ pub enum ConfigParseError {
     TableAxesShouldDiffer(String),
     TableEmpty,
     NotEnoughPlayerColors,
+    MissingUnit(String),
     MissingNeutralColor,
+    MissingToken(String),
     InvalidColor(String),
     Other(String),
 }

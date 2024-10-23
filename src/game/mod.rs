@@ -60,6 +60,7 @@ mod tests {
     use crate::map::point_map::PointMap;
     use crate::map::wrapping_map::WMBuilder;
     use crate::terrain::TerrainType;
+    use crate::tags::tests::TAG_PAWN_DIRECTION;
     use crate::units::unit_types::UnitType;
     use crate::VERSION;
 
@@ -99,8 +100,8 @@ mod tests {
         map.set_unit(Point::new(4, 7), Some(UnitType::king().instance(&environment).set_owner_id(0).build_with_defaults()));
         
         for x in 0..8 {
-            map.set_unit(Point::new(x, 1), Some(UnitType::pawn().instance(&environment).set_direction(Direction4::D270).set_owner_id(1).build_with_defaults()));
-            map.set_unit(Point::new(x, 6), Some(UnitType::pawn().instance(&environment).set_direction(Direction4::D90).set_owner_id(0).build_with_defaults()));
+            map.set_unit(Point::new(x, 1), Some(UnitType::pawn().instance(&environment).set_tag(TAG_PAWN_DIRECTION, crate::tags::TagValue::Direction(Direction4::D270)).set_owner_id(1).build_with_defaults()));
+            map.set_unit(Point::new(x, 6), Some(UnitType::pawn().instance(&environment).set_tag(TAG_PAWN_DIRECTION, crate::tags::TagValue::Direction(Direction4::D90)).set_owner_id(0).build_with_defaults()));
         }
 
         let settings = map.settings().unwrap();

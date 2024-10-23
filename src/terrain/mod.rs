@@ -1,20 +1,20 @@
-pub mod attributes;
+//pub mod attributes;
 pub mod terrain;
 pub mod rhai_terrain;
 #[cfg(test)]
 mod test;
 
-use std::str::FromStr;
 use zipper::*;
 
 use crate::config::environment::Environment;
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::{string_base, FromConfig};
 use crate::config::ConfigParseError;
+use crate::map::direction::Direction;
 
 use self::terrain::TerrainBuilder;
 
-pub const KRAKEN_ATTACK_RANGE: usize = 3;
+/*pub const KRAKEN_ATTACK_RANGE: usize = 3;
 pub const KRAKEN_MAX_ANGER: usize = 8;
 
 
@@ -72,10 +72,39 @@ impl SupportedZippable<&Environment> for TerrainType {
             Err(ZipperError::EnumOutOfBounds(format!("TerrainType index {}", index)))
         }
     }
+}*/
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TerrainType(pub usize);
+
+impl FromConfig for TerrainType {
+    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+        let (base, s) = crate::config::parse::string_base(s);
+        match loader.terrain_types.iter().position(|name| name.as_str() == base) {
+            Some(i) => Ok((Self(i), s)),
+            None => Err(crate::config::ConfigParseError::MissingUnit(base.to_string()))
+        }
+    }
+}
+
+impl SupportedZippable<&Environment> for TerrainType {
+    fn export(&self, zipper: &mut Zipper, environment: &Environment) {
+        let bits = bits_needed_for_max_value(environment.config.terrain_count() as u32 - 1);
+        zipper.write_u32(self.0 as u32, bits);
+    }
+    fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
+        let bits = bits_needed_for_max_value(environment.config.terrain_count() as u32 - 1);
+        let index = unzipper.read_u32(bits)? as usize;
+        if index >= environment.config.terrain_count() {
+            return Err(ZipperError::EnumOutOfBounds(format!("TerrainType index {}", index)))
+        }
+        Ok(Self(index))
+    }
 }
 
 impl TerrainType {
-    pub fn instance(&self, environment: &Environment) -> TerrainBuilder {
+    pub fn instance<D: Direction>(&self, environment: &Environment) -> TerrainBuilder<D> {
         TerrainBuilder::new(environment, *self)
     }
 }
@@ -99,7 +128,7 @@ impl FromConfig for ExtraMovementOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/*#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AmphibiousTyping {
     Land,
     Sea,
@@ -118,4 +147,4 @@ impl FromStr for AmphibiousTyping {
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         })
     }
-}
+}*/

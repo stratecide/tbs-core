@@ -8,6 +8,7 @@ use crate::units::unit_types::UnitType;
 use crate::units::hero::*;
 use crate::script::with_board;
 use crate::units::movement::MovementType;
+use crate::tags::*;
 
 #[export_module]
 mod unit_type_module {
@@ -120,6 +121,15 @@ macro_rules! board_module {
                 .map(|id| (id as i32).into())
                 .unwrap_or(().into())
             }*/
+
+            #[rhai_fn(pure)]
+            pub fn has_flag(unit: &mut Unit, flag: FlagKey) -> bool {
+                unit.has_flag(flag.0)
+            }
+            #[rhai_fn(pure)]
+            pub fn get_tag(unit: &mut Unit, key: TagKey) -> Dynamic {
+                unit.get_tag(key.0).map(|v| v.into_dynamic()).unwrap_or(().into())
+            }
 
             #[rhai_fn(pure, name = "value")]
             pub fn value1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {

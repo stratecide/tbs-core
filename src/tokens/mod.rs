@@ -1,29 +1,10 @@
-pub mod rhai_details;
-
-use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
-
-use interfaces::ClientPerspective;
-use zipper_derive::Zippable;
-use zipper::{bits_needed_for_max_value, Exportable, SupportedZippable};
-
-use crate::config::config::Config;
-use crate::config::environment::Environment;
-use crate::game::fog::FogIntensity;
-use crate::game::game_view::GameView;
-use crate::map::direction::Direction;
-use crate::map::map::Map;
-use crate::map::point::Point;
-use crate::map::wrapping_map::Distortion;
-use crate::player::Owner;
-use crate::tags::TagBag;
-use crate::terrain::TerrainType;
-use crate::units::movement::MovementType;
-use crate::units::unit_types::UnitType;
+pub mod token_types;
+pub mod token;
+pub mod rhai_token;
 
 pub const MAX_STACK_SIZE: u32 = 31;
 
-crate::listable_enum! {
+/*crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum DetailType {
         Pipe,
@@ -425,3 +406,4 @@ mod tests {
         );
     }
 }
+*/

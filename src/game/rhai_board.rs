@@ -10,7 +10,7 @@ use crate::map::map::NeighborMode;
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::terrain::terrain::Terrain;
-use crate::details::*;
+use crate::tokens::*;
 
 #[derive(Clone)]
 pub struct SharedGameView<D: Direction>(pub Shared<dyn GameView<D>>);
@@ -92,7 +92,7 @@ macro_rules! board_module {
             }
 
             #[rhai_fn(pure)]
-            pub fn get_terrain(board: &mut Board, p: Point) -> Terrain {
+            pub fn get_terrain(board: &mut Board, p: Point) -> Terrain<$d> {
                 board.get_terrain(p).expect("script requested terrain at {p:?}, but that point is invalid")
             }
 

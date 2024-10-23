@@ -5,6 +5,7 @@ pub mod direction;
 pub mod rhai_direction;
 pub mod wrapping_map;
 pub mod map;
+pub mod pipe;
 
 #[cfg(test)]
 mod tests {

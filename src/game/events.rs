@@ -9,14 +9,13 @@ use crate::map::map::FieldData;
 use crate::map::point::Point;
 use crate::map::point_map;
 use crate::tags::*;
-use crate::terrain::attributes::{CaptureProgress, Anger, BuiltThisTurn};
 use crate::units::commands::UnloadIndex;
 use crate::units::hero::{Hero, HeroChargeChange};
 use crate::units::unit::Unit;
 use crate::units::movement::MAX_PATH_LENGTH;
-use crate::{player::*, details};
+use crate::{player::*, tokens};
 use crate::terrain::terrain::*;
-use crate::details::Detail;
+use crate::tokens::token::Token;
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::game::fog::*;
@@ -107,13 +106,13 @@ pub enum Event<D:Direction> {
     UnitDirection(Point, D, D),
     UnitLevel(Point, Level, Level),*/
     // terrain events
-    TerrainChange(Point, Terrain, Terrain),
-    TerrainAnger(Point, Anger, Anger),
+    TerrainChange(Point, Terrain<D>, Terrain<D>),
+    /*TerrainAnger(Point, Anger, Anger),
     CaptureProgress(Point, CaptureProgress, CaptureProgress),
-    UpdateBuiltThisTurn(Point, BuiltThisTurn, BuiltThisTurn),
-    // detail events
-    RemoveDetail(Point, U<{details::MAX_STACK_SIZE as i32 - 1}>, Detail<D>),
-    ReplaceDetail(Point, LVec<Detail<D>, {details::MAX_STACK_SIZE}>, LVec<Detail<D>, {details::MAX_STACK_SIZE}>),
+    UpdateBuiltThisTurn(Point, BuiltThisTurn, BuiltThisTurn),*/
+    // token events
+    RemoveToken(Point, U<{tokens::MAX_STACK_SIZE as i32 - 1}>, Token<D>),
+    ReplaceToken(Point, LVec<Token<D>, {tokens::MAX_STACK_SIZE}>, LVec<Token<D>, {tokens::MAX_STACK_SIZE}>),
     // visual
     Effect(Effect<D>),
     UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
@@ -317,7 +316,7 @@ impl<D: Direction> Event<D> {
             Self::TerrainChange(pos, _, terrain) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
             }
-            Self::TerrainAnger(pos, _, anger) => {
+            /*Self::TerrainAnger(pos, _, anger) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(anger.0);
             }
             Self::CaptureProgress(pos, _, progress) => {
@@ -325,13 +324,13 @@ impl<D: Direction> Event<D> {
             }
             Self::UpdateBuiltThisTurn(pos, _, built_this_turn) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(built_this_turn.0);
+            }*/
+            // token
+            Self::RemoveToken(p, index, _) => {
+                game.get_map_mut().remove_token(*p, **index as usize);
             }
-            // detail
-            Self::RemoveDetail(p, index, _) => {
-                game.get_map_mut().remove_detail(*p, **index as usize);
-            }
-            Self::ReplaceDetail(p, _, list) => {
-                game.get_map_mut().set_details(*p, list.iter().cloned().collect());
+            Self::ReplaceToken(p, _, list) => {
+                game.get_map_mut().set_tokens(*p, list.iter().cloned().collect());
             }
             // visual
             Self::Effect(_) => {}
@@ -515,7 +514,7 @@ impl<D: Direction> Event<D> {
             Self::TerrainChange(pos, terrain, _) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
             }
-            Self::TerrainAnger(pos, anger, _) => {
+            /*Self::TerrainAnger(pos, anger, _) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(anger.0);
             }
             Self::CaptureProgress(pos, progress, _) => {
@@ -523,13 +522,13 @@ impl<D: Direction> Event<D> {
             }
             Self::UpdateBuiltThisTurn(pos, built_this_turn, _) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(built_this_turn.0);
+            }*/
+            // token
+            Self::RemoveToken(p, index, token) => {
+                game.get_map_mut().insert_token(*p, **index as usize, token.clone());
             }
-            // detail
-            Self::RemoveDetail(p, index, detail) => {
-                game.get_map_mut().insert_detail(*p, **index as usize, detail.clone());
-            }
-            Self::ReplaceDetail(p, list, _) => {
-                game.get_map_mut().set_details(*p, list.iter().cloned().collect());
+            Self::ReplaceToken(p, list, _) => {
+                game.get_map_mut().set_tokens(*p, list.iter().cloned().collect());
             }
             // visual
             Self::Effect(_) => {}
@@ -799,7 +798,7 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            Self::TerrainAnger(_, _, _) => {
+            /*Self::TerrainAnger(_, _, _) => {
                 Some(self.clone())
             }
             Self::CaptureProgress(pos, _, _) => {
@@ -819,40 +818,40 @@ impl<D: Direction> Event<D> {
                     FogIntensity::NormalVision => Some(self.clone()),
                     _ => None,
                 }
-            }
-            // detail
-            Self::RemoveDetail(p, index, detail) => {
+            }*/
+            // token
+            Self::RemoveToken(p, index, token) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
                     Some(self.clone())
-                } else if let Some(detail) = detail.fog_replacement(fog_intensity) {
+                } else if let Some(token) = token.fog_replacement(fog_intensity) {
                     let mut new_index = 0;
-                    for (i, detail) in game.get_details(*p).into_iter().enumerate() {
+                    for (i, token) in game.get_tokens(*p).into_iter().enumerate() {
                         if i == **index as usize {
                             break;
                         }
-                        if detail.fog_replacement(fog_intensity).is_some() {
+                        if token.fog_replacement(fog_intensity).is_some() {
                             new_index += 1;
                         }
                     }
-                    Some(Self::RemoveDetail(*p, new_index.into(), detail))
+                    Some(Self::RemoveToken(*p, new_index.into(), token))
                 } else {
                     None
                 }
             }
-            Self::ReplaceDetail(p, old, new) => {
+            Self::ReplaceToken(p, old, new) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
                     Some(self.clone())
                 } else {
-                    let old: Vec<Detail<D>> = old.iter().filter_map(|detail| {
-                        detail.fog_replacement(fog_intensity)
+                    let old: Vec<Token<D>> = old.iter().filter_map(|token| {
+                        token.fog_replacement(fog_intensity)
                     }).collect();
-                    let new: Vec<Detail<D>> = new.iter().filter_map(|detail| {
-                        detail.fog_replacement(fog_intensity)
+                    let new: Vec<Token<D>> = new.iter().filter_map(|token| {
+                        token.fog_replacement(fog_intensity)
                     }).collect();
                     if old != new {
-                        Some(Self::ReplaceDetail(*p, old.try_into().unwrap(), new.try_into().unwrap()))
+                        Some(Self::ReplaceToken(*p, old.try_into().unwrap(), new.try_into().unwrap()))
                     } else {
                         None
                     }
@@ -981,7 +980,7 @@ impl<D: Direction> Effect<D> {
 fn apply_vision_changes<D: Direction>(game: &mut Game<D>, team: ClientPerspective, pos: Point, intensity: FogIntensity, change: &FieldData<D>) {
     game.set_fog(team, pos, intensity);
     game.get_map_mut().set_terrain(pos, change.terrain.clone());
-    game.get_map_mut().set_details(pos, change.details.to_vec());
+    game.get_map_mut().set_tokens(pos, change.tokens.to_vec());
     game.get_map_mut().set_unit(pos, change.unit.clone());
 }
 

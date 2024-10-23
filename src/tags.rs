@@ -1,8 +1,10 @@
+use rhai::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use zipper::*;
 use zipper_derive::Zippable;
 
 use crate::config::environment::Environment;
+use crate::config::parse::FromConfig;
 use crate::config::tag_config::TagType;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -34,7 +36,15 @@ impl<D: Direction> TagBag<D> {
         }
         write!(f, "], TAGS[")?;
         for (key, value) in &self.tags {
-            write!(f, "{}={value:?}", environment.tag_name(*key))?;
+            write!(f, "{}=", environment.tag_name(*key))?;
+            match value {
+                TagValue::Unique(value) => write!(f, "{value:?}")?,
+                TagValue::Int(value) => write!(f, "{}", value.0)?,
+                TagValue::Point(value) => write!(f, "{value:?}")?,
+                TagValue::Direction(value) => write!(f, "{value:?}")?,
+                TagValue::UnitType(value) => write!(f, "{}", environment.config.unit_name(*value))?,
+                TagValue::TerrainType(value) => write!(f, "{}", environment.config.terrain_name(*value))?,
+            }
         }
         write!(f, "]")
     }
@@ -58,7 +68,7 @@ impl<D: Direction> TagBag<D> {
         self.flags.iter()
     }
 
-    pub fn get_flag(&self, flag: usize) -> bool {
+    pub fn has_flag(&self, flag: usize) -> bool {
         self.flags.contains(&flag)
     }
 
@@ -168,7 +178,7 @@ pub enum TagValue<D: Direction> {
 }
 
 impl<D: Direction> TagValue<D> {
-    fn has_valid_type(&self, environment: &Environment, key: usize) -> bool {
+    pub(crate) fn has_valid_type(&self, environment: &Environment, key: usize) -> bool {
         match (self, environment.tag_type(key)) {
             (Self::Unique(_), TagType::Unique { .. }) => true,
             (Self::Point(_), TagType::Point) => true,
@@ -197,6 +207,35 @@ impl<D: Direction> TagValue<D> {
             }
             _ => ()
         }
+    }
+
+    pub fn into_dynamic(&self) -> Dynamic {
+        match self {
+            Self::Direction(value) => Dynamic::from(*value),
+            Self::Int(value) => Dynamic::from(value.0),
+            Self::Point(value) => Dynamic::from(*value),
+            Self::TerrainType(value) => Dynamic::from(*value),
+            Self::Unique(value) => Dynamic::from(*value),
+            Self::UnitType(value) => Dynamic::from(*value),
+        }
+    }
+
+    pub fn from_dynamic(value: Dynamic, key: usize, environment: &Environment) -> Option<Self> {
+        let result = match value.type_name() {
+            "Direction" => Some(Self::Direction(value.cast())),
+            "i32" => {
+                let TagType::Int { min, max } = environment.tag_type(key) else {
+                    return None;
+                };
+                Some(Self::Int(Int32(value.cast::<i32>().max(*min).min(*max))))
+            }
+            "Point" => Some(Self::Point(value.cast())),
+            "TerrainType" => Some(Self::TerrainType(value.try_cast()?)),
+            "UnitType" => Some(Self::UnitType(value.try_cast()?)),
+            "UniqueId" => Some(Self::Unique(value.try_cast()?)),
+            _ => None
+        }?;
+        Some(result)
     }
 }
 
@@ -267,6 +306,16 @@ impl SupportedZippable<&Environment> for FlagKey {
     }
 }
 
+impl FromConfig for FlagKey {
+    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+        let (base, s) = crate::config::parse::string_base(s);
+        match loader.flags.iter().position(|name| name.as_str() == base) {
+            Some(i) => Ok((Self(i), s)),
+            None => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("FlagKey::{}", base.to_string())))
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TagKey(pub usize);
 
@@ -298,4 +347,53 @@ impl<const K: usize, D: Direction> SupportedZippable<&Environment> for TagKeyVal
         }
         Ok(Self(key, values.try_into().unwrap()))
     }
+}
+
+
+#[export_module]
+mod tag_module {
+    pub type UniqueId = super::UniqueId;
+}
+
+def_package! {
+    pub TagPackage(module)
+    {
+        combine_with_exported_module!(module, "tag_module", tag_module);
+    } |> |_engine| {
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use std::sync::Arc;
+
+    use crate::config::config::Config;
+    use crate::config::environment::Environment;
+    use crate::map::point_map::MapSize;
+
+    pub const FLAG_ZOMBIFIED: usize = 0;
+    pub const FLAG_EXHAUSTED: usize = 2;
+    pub const FLAG_REPAIRING: usize = 3;
+    pub const FLAG_CAPTURING: usize = 4;
+    
+    pub const TAG_HP: usize = 0;
+    pub const TAG_LEVEL: usize = 3;
+    pub const TAG_HERO_ORIGIN: usize = 5;
+    pub const TAG_PAWN_DIRECTION: usize = 6;
+    pub const TAG_ANGER: usize = 8;
+    pub const TAG_BUILT_THIS_TURN: usize = 9;
+    #[test]
+    fn verify_tag_test_constants() {
+        let config = Arc::new(Config::test_config());
+        let environment = Environment::new_map(config, MapSize::new(5, 5));
+        assert_eq!(environment.flag_name(FLAG_EXHAUSTED), "Exhausted");
+        assert_eq!(environment.flag_name(FLAG_REPAIRING), "Repairing");
+        assert_eq!(environment.flag_name(FLAG_CAPTURING), "Capturing");
+        assert_eq!(environment.tag_name(TAG_HP), "Hp");
+        assert_eq!(environment.tag_name(TAG_HERO_ORIGIN), "HeroOrigin");
+        assert_eq!(environment.tag_name(TAG_PAWN_DIRECTION), "PawnDirection");
+        assert_eq!(environment.tag_name(TAG_ANGER), "Anger");
+        assert_eq!(environment.tag_name(TAG_BUILT_THIS_TURN), "BuiltThisTurn");
+    }
+
 }

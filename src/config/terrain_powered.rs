@@ -66,7 +66,7 @@ impl TerrainFilter {
         &self,
         game: &impl GameView<D>,
         pos: Point,
-        terrain: &Terrain,
+        terrain: &Terrain<D>,
         is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],

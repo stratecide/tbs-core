@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 
 use crate::commander::commander_type::CommanderType;
-use crate::details::Detail;
 use crate::game::fog::FogIntensity;
 use crate::game::game_view::GameView;
 use crate::map::point::Point;
 use crate::script::executor::Executor;
+use crate::tags::FlagKey;
 use crate::terrain::TerrainType;
+use crate::tokens::token_types::TokenType;
 use crate::units::combat::AttackTypeKey;
 use crate::units::hero::{HeroInfluence, HeroType};
 use crate::units::movement::{MovementType, TBallast};
@@ -71,6 +72,7 @@ pub(crate) enum UnitFilter {
     IsHero(HashSet<(HeroType, Option<u8>)>),
     // this unit
     Unit(HashSet<UnitType>),
+    Flag(HashSet<FlagKey>),
     Movement(HashSet<MovementType>),
     SubMovement(HashSet<MovementType>),
     MovementPattern(HashSet<MovementPattern>),
@@ -79,12 +81,13 @@ pub(crate) enum UnitFilter {
     // situation/environment
     Counter,
     Terrain(HashSet<TerrainType>),
+    Token(HashSet<TokenType>),
     Fog(HashSet<FogIntensity>),
     // recursive
     Not(Vec<Self>),
     // replace with Rhai
-    /*Moved,
-    Hp(u8),
+    Moved,
+    /*Hp(u8),
     Status(HashSet<ActionStatus>),
     Sludge,
     TerrainOwner,
@@ -105,6 +108,11 @@ impl FromConfig for UnitFilter {
                 remainder = r;
                 Self::Unit(list.into_iter().collect())
             }
+            "Flag" | "F" => {
+                let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
+                remainder = r;
+                Self::Flag(list.into_iter().collect())
+            }
             "Movement" | "M" => {
                 let (list, r) = parse_inner_vec::<MovementType>(remainder, true, loader)?;
                 remainder = r;
@@ -119,6 +127,11 @@ impl FromConfig for UnitFilter {
                 let (list, r) = parse_inner_vec::<TerrainType>(remainder, true, loader)?;
                 remainder = r;
                 Self::Terrain(list.into_iter().collect())
+            }
+            "Token" => {
+                let (list, r) = parse_inner_vec::<TokenType>(remainder, true, loader)?;
+                remainder = r;
+                Self::Token(list.into_iter().collect())
             }
             "MP" | "MovementPattern" => {
                 let (list, r) = parse_inner_vec::<MovementPattern>(remainder, true, loader)?;
@@ -155,7 +168,7 @@ impl FromConfig for UnitFilter {
                 remainder = r;
                 Self::Fog(list.into_iter().collect())
             }
-            //"Moved" => Self::Moved,
+            "Moved" => Self::Moved,
             "Unowned" => Self::Unowned,
             /*"S" | "Status" => {
                 let (list, r) = parse_inner_vec::<ActionStatus>(remainder, true, loader)?;
@@ -225,9 +238,18 @@ impl UnitFilter {
                 }
             }
             Self::Unit(u) => u.contains(&unit.typ()),
+            Self::Flag(flags) => flags.iter().any(|flag| unit.has_flag(flag.0)),
             Self::Movement(m) => m.contains(&unit.base_movement_type()),
             Self::SubMovement(m) => m.contains(&unit.sub_movement_type()),
             Self::Terrain(t) => t.contains(&game.get_terrain(unit_pos.0).unwrap().typ()),
+            Self::Token(t) => {
+                for token in game.get_tokens(unit_pos.0) {
+                    if t.contains(&token.typ()) {
+                        return true;
+                    }
+                }
+                false
+            }
             Self::MovementPattern(m) => m.contains(&unit.movement_pattern()),
             Self::Hero(h) => {
                 for (_, hero, _, _, _) in heroes {
@@ -273,9 +295,9 @@ impl UnitFilter {
                 let fog = game.get_fog_setting().intensity();
                 f.iter().any(|f| *f == fog)
             }
-            /*Self::Moved => {
+            Self::Moved => {
                 temporary_ballast.len() > 0
-            }*/
+            }
             Self::Unowned => unit.get_owner_id() < 0,
             /*Self::Status(status) => {
                 let s = unit.get_status();

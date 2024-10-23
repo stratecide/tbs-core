@@ -1,4 +1,4 @@
-use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use rustc_hash::FxHashMap as HashMap;
 use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -11,13 +11,11 @@ use std::usize;
 use num_rational::Rational32;
 use rhai::*;
 
-use crate::commander::commander_type::CommanderType;
 use crate::script::{create_base_engine, MyPackage4, MyPackage6};
+use crate::tags::*;
 use crate::terrain::TerrainType;
-use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
-use crate::units::hero::*;
 
 use super::custom_action_config::*;
 use super::file_loader::FileLoader;
@@ -26,13 +24,13 @@ use super::movement_type_config::MovementTypeConfig;
 use super::table_config::TableConfig;
 use super::tag_config::{TagConfig, TagType};
 use super::terrain_powered::*;
+use super::token_typ_config::TokenTypeConfig;
 use super::ConfigParseError;
 use super::commander_power_config::*;
 use super::commander_type_config::*;
 use super::commander_unit_config::*;
 use super::hero_type_config::*;
 use super::terrain_type_config::*;
-use super::unit_filter::*;
 use super::unit_type_config::*;
 use super::config::Config;
 
@@ -50,6 +48,7 @@ const HERO_CONFIG: &'static str = "heroes.csv";
 const HERO_POWERS: &'static str = "hero_powers.csv";
 const UNIT_HEROES: &'static str = "unit_heroes.csv";
 const TERRAIN_CONFIG: &'static str = "terrain.csv";
+const TOKEN_CONFIG: &'static str = "tokens.csv";
 const TERRAIN_ATTRIBUTES: &'static str = "terrain_attributes.csv";
 const MOVEMENT_CONFIG: &'static str = "movement.csv";
 const TERRAIN_ATTACK: &'static str = "terrain_attack.csv";
@@ -70,12 +69,44 @@ impl Config {
         load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>,
     ) -> Result<Self, Box<dyn Error>> {
         let mut file_loader = FileLoader::new(load_config);
+
+        // tags
+        let mut flags: Vec<TagConfig> = Vec::new();
+        let mut tags: Vec<TagConfig> = Vec::new();
+        file_loader.table_with_headers(TAG_CONFIG, |line: TagConfig| {
+            if line.tag_type == TagType::Flag {
+                if flags.iter().any(|conf| conf.name == line.name) {
+                    // TODO: error
+                }
+                flags.push(line);
+            } else {
+                if tags.iter().any(|conf| conf.name == line.name) {
+                    // TODO: error
+                }
+                tags.push(line);
+            }
+            Ok(())
+        })?;
+        for flag in &flags {
+            file_loader.flags.push(flag.name.clone());
+        }
+        for tag in &tags {
+            file_loader.tags.push(tag.name.clone());
+        }
+
         let global_ast = file_loader.load_rhai_module(&GLOBAL_SCRIPT.to_string())?;
         let global_ast = Shared::into_inner(global_ast).unwrap();
         let mut global_constants = Scope::new();
         for (name, _, value) in global_ast.iter_literal_variables(true, false) {
             global_constants.push_constant(name, value);
         }
+        /*for (i, conf) in flags.iter().enumerate() {
+            global_constants.push_constant(conf.name.as_str(), FlagKey(i));
+        }
+        for (i, conf) in tags.iter().enumerate() {
+            global_constants.push_constant(conf.name.as_str(), TagKey(i));
+        }*/
+        //println!("global constants: {global_constants:?}");
         // TODO: FileLoader also creates a base engine. no need to create two
         let engine = create_base_engine();
         let global_module = engine.optimize_ast(&global_constants, global_ast.clone(), OptimizationLevel::Simple);
@@ -85,8 +116,8 @@ impl Config {
             name,
             owner_colors: Vec::new(),
             // tags
-            flags: Vec::new(),
-            tags: Vec::new(),
+            flags,
+            tags,
             movement_types: Vec::new(),
             movement_type_transformer: HashMap::default(),
             // units
@@ -108,19 +139,20 @@ impl Config {
             max_hero_charge: 0,
             max_aura_range: 0,
             // terrain
-            terrain_types: Vec::new(),
-            terrains: HashMap::default(),
-            terrain_attributes: HashMap::default(),
-            terrain_hidden_attributes: HashMap::default(),
+            terrains: Vec::new(),
+            default_terrain: TerrainType(usize::MAX),
+            /*terrain_attributes: HashMap::default(),
+            terrain_hidden_attributes: HashMap::default(),*/
             movement_cost: HashMap::default(),
             attack_bonus: HashMap::default(),
             defense_bonus: HashMap::default(),
-            build: HashMap::default(),
+            /*build: HashMap::default(),
             max_capture_resistance: 0,
             terrain_max_anger: 0,
-            terrain_max_built_this_turn: 0,
+            terrain_max_built_this_turn: 0,*/
             // detail
-            max_sludge: 1,
+            tokens: Vec::new(),
+            //max_sludge: 1,
             // commanders
             commander_types: Vec::new(),
             commanders: HashMap::default(),
@@ -146,6 +178,7 @@ impl Config {
         // ruleset.csv
         let mut neutral_color = None;
         let mut unknown_unit = String::new();
+        let mut default_terrain = String::new();
         file_loader.table_key_value(RULESET_CONFIG, |key, value, file_loader| {
             match key {
                 "NeutralColor" => {
@@ -156,6 +189,7 @@ impl Config {
                     result.owner_colors = parse_inner_vec(value, false, file_loader)?.0;
                 }
                 "UnknownUnit" => unknown_unit = value.to_string(),
+                "DefaultTerrain" => default_terrain = value.to_string(),
                 "UnitDeathTest" => result.is_unit_dead_rhai = file_loader.rhai_function(value, 2..=2)?.index,
                 "UnitMovableTest" => result.is_unit_movable_rhai = file_loader.rhai_function(value, 0..=0)?.index,
                 "DealDamageToUnit" => result.deal_damage_rhai = file_loader.rhai_function(value, 0..=0)?.index,
@@ -181,7 +215,7 @@ impl Config {
         }
 
         // movement types
-        file_loader.table_with_headers(TAG_CONFIG, |line: MovementTypeConfig| {
+        file_loader.table_with_headers(MOVEMENT_TYPE_CONFIG, |line: MovementTypeConfig| {
             if result.units.iter().any(|conf| conf.name == line.name) {
                 // TODO: error
             }
@@ -189,35 +223,52 @@ impl Config {
             Ok(())
         })?;
 
-        // tags
-        file_loader.table_with_headers(TAG_CONFIG, |line: TagConfig| {
-            if result.units.iter().any(|conf| conf.name == line.name) {
-                // TODO: error
-            }
-            if line.tag_type == TagType::Flag {
-                result.flags.push(line);
-            } else {
-                result.tags.push(line);
-            }
-            Ok(())
-        })?;
-
         // simple unit data
         file_loader.table_with_headers(UNIT_CONFIG, |line: UnitTypeConfig| {
             if result.units.iter().any(|conf| conf.name == line.name) {
-                // TODO: error
+                return Err(ConfigParseError::DuplicateEntry(format!("UnitType::{}", line.name)).into())
             }
             result.max_transported = result.max_transported.max(line.transport_capacity);
             result.units.push(line);
             Ok(())
         })?;
-
         for conf in &result.units {
             file_loader.unit_types.push(conf.name.clone());
         }
         match result.units.iter().position(|conf| conf.name == unknown_unit) {
             Some(i) => result.unknown_unit = UnitType(i),
             None => return Err(Box::new(ConfigParseError::MissingUnit("Unknown".to_string())))
+        }
+
+        // simple terrain data
+        file_loader.table_with_headers(TERRAIN_CONFIG, |line: TerrainTypeConfig| {
+            if result.terrains.iter().any(|conf| conf.name == line.name) {
+                return Err(ConfigParseError::DuplicateEntry(format!("TerrainType::{}", line.name)).into())
+            }
+            /*result.max_capture_resistance = result.max_capture_resistance.max(line.capture_resistance);
+            result.terrain_max_anger = result.terrain_max_anger.max(line.max_anger);
+            result.terrain_max_built_this_turn = result.terrain_max_built_this_turn.max(line.max_builds_per_turn);*/
+            result.terrains.push(line);
+            Ok(())
+        })?;
+        for conf in &result.terrains {
+            file_loader.terrain_types.push(conf.name.clone());
+        }
+        match result.terrains.iter().position(|conf| conf.name == default_terrain) {
+            Some(i) => result.default_terrain = TerrainType(i),
+            None => return Err(format!("missing entry in {RULESET_CONFIG}: 'DefaultTerrain'").into())
+        }
+
+        // simple token data
+        file_loader.table_with_headers(TOKEN_CONFIG, |line: TokenTypeConfig| {
+            if result.tokens.iter().any(|conf| conf.name == line.name) {
+                return Err(ConfigParseError::DuplicateEntry(format!("TokenType::{}", line.name)).into())
+            }
+            result.tokens.push(line);
+            Ok(())
+        })?;
+        for conf in &result.tokens {
+            file_loader.token_types.push(conf.name.clone());
         }
 
         // unit transport
@@ -421,21 +472,8 @@ impl Config {
             Ok(())
         })?;
 
-        // simple terrain data
-        file_loader.table_with_headers(TERRAIN_CONFIG, |line: TerrainTypeConfig| {
-            if result.terrains.contains_key(&line.id) {
-                // TODO: error
-            }
-            result.terrain_types.push(line.id);
-            result.max_capture_resistance = result.max_capture_resistance.max(line.capture_resistance);
-            result.terrain_max_anger = result.terrain_max_anger.max(line.max_anger);
-            result.terrain_max_built_this_turn = result.terrain_max_built_this_turn.max(line.max_builds_per_turn);
-            result.terrains.insert(line.id, line);
-            Ok(())
-        })?;
-
         // terrain attributes
-        let data = file_loader.load_config(TERRAIN_ATTRIBUTES)?;
+        /*let data = file_loader.load_config(TERRAIN_ATTRIBUTES)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         let mut attributes: Vec<TerrainAttributeKey> = Vec::new();
         for h in reader.headers()?.into_iter().skip(1) {
@@ -467,7 +505,7 @@ impl Config {
             }
             result.terrain_attributes.insert(typ, values);
             result.terrain_hidden_attributes.insert(typ, hidden);
-        }
+        }*/
 
         // movement cost
         let data = file_loader.load_config(MOVEMENT_CONFIG)?;
@@ -500,6 +538,9 @@ impl Config {
         }
 
         for (i, conf) in result.movement_types.iter().enumerate() {
+            if conf.sub_types.len() < 2 {
+                continue;
+            }
             let data = file_loader.load_config(&format!("{SUB_MOVEMENT_TYPE_CONFIG}{}.csv", conf.name))?;
             let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
             // TODO: ensure uniqueness of column and row IDs
@@ -595,7 +636,7 @@ impl Config {
         }
 
         // terrain building / repairing
-        let data = file_loader.load_config(TERRAIN_BUILD)?;
+        /*let data = file_loader.load_config(TERRAIN_BUILD)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         // TODO: ensure uniqueness of column and row IDs
         let mut units: Vec<UnitType> = Vec::new();
@@ -622,7 +663,7 @@ impl Config {
             if units.len() > 0 {
                 result.build.insert(typ, values);
             }
-        }
+        }*/
 
         // commanders
         let mut bonus_transported = 0;

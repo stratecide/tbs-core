@@ -1,16 +1,9 @@
-use std::collections::HashSet;
-
 use interfaces::ClientPerspective;
 use zipper::*;
 
 use crate::commander::Commander;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
-use crate::details::Detail;
-use crate::game::game_view::GameView;
-use crate::map::direction::Direction;
-use crate::map::point::Point;
-use crate::units::movement::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Owner(pub i8);
@@ -112,13 +105,13 @@ impl Player {
         self.commander.environment().get_income(self.get_owner_id())
     }
     
-    pub fn funds_after_path<D: Direction>(&self, game: &impl GameView<D>, path: &Path<D>) -> i32 {
+    /*pub fn funds_after_path<D: Direction>(&self, game: &impl GameView<D>, path: &Path<D>) -> i32 {
         let mut funds_after_path = *self.funds;
         let income = self.get_income();
         let path_points: HashSet<Point> = path.points(game).unwrap().into_iter().collect();
         for p in path_points {
-            for detail in game.get_details(p) {
-                match detail.fog_replacement(game.get_fog_at(ClientPerspective::Team(self.owner_id), p)) {
+            for token in game.get_tokens(p) {
+                match token.fog_replacement(game.get_fog_at(ClientPerspective::Team(self.owner_id), p)) {
                     Some(Detail::Coins1) => funds_after_path += income / 2,
                     Some(Detail::Coins2) => funds_after_path += income,
                     Some(Detail::Coins3) => funds_after_path += income * 3 / 2,
@@ -127,7 +120,7 @@ impl Player {
             }
         }
         funds_after_path
-    }
+    }*/
 
     pub fn export(&self, zipper: &mut Zipper, hide_secrets: bool) {
         let environment = self.commander.environment();

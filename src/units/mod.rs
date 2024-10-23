@@ -9,7 +9,7 @@ pub mod unit_types;
 pub mod unit;
 pub mod rhai_unit;
 #[cfg(test)]
-mod test;
+pub(crate) mod test;
 
 use zipper::*;
 

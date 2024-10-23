@@ -60,13 +60,13 @@ impl<D: Direction> PartialEq for Unit<D> {
 impl<D: Direction> Debug for Unit<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.name())?;
-        write!(f, "Owner: {}", self.owner.0)?;
+        write!(f, "Owner: {}, ", self.owner.0)?;
         if let Some(hero) = &self.hero {
-            write!(f, "Hero: {hero:?}")?;
+            write!(f, "Hero: {hero:?}, ")?;
         }
         self.tags.debug(f, &self.environment)?;
         if self.transport.len() > 0 {
-            write!(f, "Transporting: {:?}", self.transport)?;
+            write!(f, ", Transporting: {:?}", self.transport)?;
         }
         write!(f, ")")
     }
@@ -347,8 +347,8 @@ impl<D: Direction> Unit<D> {
         .unwrap_or(Commander::new(&self.environment, CommanderType::None))
     }
 
-    pub fn get_flag(&self, key: usize) -> bool {
-        self.tags.get_flag(key)
+    pub fn has_flag(&self, key: usize) -> bool {
+        self.tags.has_flag(key)
     }
     pub fn set_flag(&mut self, key: usize) {
         self.tags.set_flag(&self.environment, key);
@@ -357,7 +357,7 @@ impl<D: Direction> Unit<D> {
         self.tags.remove_flag(key);
     }
     pub fn flip_flag(&mut self, key: usize) {
-        if self.get_flag(key) {
+        if self.has_flag(key) {
             self.remove_flag(key);
         } else {
             self.set_flag(key);
@@ -954,9 +954,8 @@ impl<D: Direction> Unit<D> {
 
     fn _options_after_path_transformed(&self, game: &impl GameView<D>, path: &Path<D>, destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Vec<UnitAction<D>> {
         let mut result = Vec::new();
-        let funds_after_path = game.get_owning_player(self.get_owner_id()).unwrap().funds_after_path(game, path);
         // terrain has to exist since destination point was found from path
-        let terrain = game.get_terrain(destination).unwrap();
+        //let terrain = game.get_terrain(destination).unwrap();
         let team = self.get_team();
         let blocking_unit = game.get_visible_unit(team, destination);
         let mut takes = PathStepTakes::Allow;
@@ -979,6 +978,7 @@ impl<D: Direction> Unit<D> {
             let mut game = UnitMovementView::new(game);
             game.put_unit(destination, self.clone());
             let game = &game;
+            let funds_after_path = *game.get_owning_player(self.get_owner_id()).unwrap().funds;
             let heroes = Hero::hero_influence_at(game, destination, self.get_owner_id());
             // hero power
             if let Some(hero) = &self.hero {
@@ -1124,18 +1124,22 @@ impl<D: Direction> UnitBuilder<D> {
         self
     }
 
-    pub fn set_flag(&mut self, key: usize) {
+    pub fn set_flag(mut self, key: usize) -> Self {
         self.unit.set_flag(key);
+        self
     }
-    pub fn remove_flag(&mut self, key: usize) {
+    pub fn remove_flag(mut self, key: usize) -> Self {
         self.unit.remove_flag(key);
+        self
     }
 
-    pub fn set_tag(&mut self, key: usize, value: TagValue<D>) {
+    pub fn set_tag(mut self, key: usize, value: TagValue<D>) -> Self {
         self.unit.set_tag(key, value);
+        self
     }
-    pub fn remove_tag(&mut self, key: usize) {
+    pub fn remove_tag(mut self, key: usize) -> Self {
         self.unit.remove_tag(key);
+        self
     }
 
     pub fn set_owner_id(mut self, owner_id: i8) -> Self {

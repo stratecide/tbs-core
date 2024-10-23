@@ -1,45 +1,45 @@
-Id;Name;Visibility;MovementPattern;MovementType;WaterMovementType;MovementPoints;VisionMode;Vision;TrueVision;NeedsOwner;Stealthy;CanBeMovedThrough;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;Cost;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity
-Marine;Marine;Normal;Standard;Foot;Hovercraft;3;Normal;2;1;true;;true;true;MachineGun;true;Adjacent;;;150;BetweenAttacks;;true;
-Sniper;Sniper;Normal;Standard;Bike;;9/2;Normal;3;1;true;;true;true;Rifle;true;Ranged(1,1);;;250;BetweenAttacks;;true;
-Bazooka;Bazooka;Normal;Standard;Foot;;5/2;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;350;BetweenAttacks;;true;
-Magnet;Magnet;Normal;Standard;Wheel;;5;Normal;2;1;true;;true;true;Bonk;true;Straight(2,0);All;;400;InsteadOfAttack;-1;true;
-DragonHead;DragonHead;Normal;Standard;Wheel;;7;Normal;4;1;true;;true;true;Flame;true;Straight(1,0);;1, 1;500;BetweenAttacks;;true;
-Convoy;Convoy;Normal;Standard;Wheel;;6;Normal;2;1;true;;true;true;;;;;;500;;;true;2
-Artillery;Artillery;Normal;Standard;Treads;;5;Normal;2;1;true;;true;true;SurfaceMissiles;;Ranged(2,1);;;600;BetweenAttacks;;true;
-SmallTank;Small Tank;Normal;Standard;Treads;;6;Normal;3;1;true;;true;true;Shells;true;Adjacent;;;700;BetweenAttacks;;true;
-BigTank;Big Tank;Normal;Standard;Treads;;5;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;1600;BetweenAttacks;;true;
-AntiAir;Anti-Air;Normal;Standard;Treads;;6;Normal;2;1;true;;true;true;AntiAir;true;Adjacent;;;700;BetweenAttacks;;true;
-RocketLauncher;Rocket Launcher;Normal;Standard;Wheel;;4;Normal;1;1;true;;true;true;SurfaceMissiles;;Ranged(3,2);;;1500;BetweenAttacks;;true;
-LaserShark;Laser-Shark;Normal;Standard;Boat;;9/2;Normal;3;1;true;;true;true;Rifle;true;Adjacent;;;250;BetweenAttacks;;true;
-TransportBoat;Transport Boat;Normal;Standard;Boat;;6;Normal;1;1;true;;true;true;;true;;;;600;BetweenAttacks;;true;2
-DroneBoat;Drone Boat;Normal;Standard;Boat;;4;Normal;2;1;true;;true;true;;true;;;;500;BetweenAttacks;;true;1
-WaveBreaker;Wave-Breaker;Normal;Standard;Boat;;6;Normal;3;1;true;;true;true;Shells;true;Adjacent;;;700;BetweenAttacks;;true;
-Submarine;Submarine;Stealth;Standard;Ship;;5;Normal;2;1;true;;true;true;SurfaceMissiles;;Ranged(2,1);;;1000;BetweenAttacks;;true;
-AntiAirBoat;Anti-Air Boat;Normal;Standard;Boat;;6;Normal;2;1;true;;true;true;AntiAir;true;Adjacent;;;800;BetweenAttacks;;true;
-Destroyer;Destroyer;Normal;Standard;Ship;;5;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;1200;BetweenAttacks;1;true;
-WarShip;War Ship;Normal;Standard;Ship;;9/2;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;1800;BetweenAttacks;;;
-BattleShip;Battle Ship;Normal;Standard;Ship;;4;Normal;1;1;true;;true;true;SurfaceMissiles;true;Ranged(3,2);;;2300;BetweenAttacks;;true;1
-SwimmingFactory;Swimming Factory;Normal;Standard;Boat;;5;Normal;1;1;true;;true;true;;true;Adjacent;;;700;BetweenAttacks;;true;
-TransportHeli;Transport-Heli;Normal;Standard;Heli;;5;Normal;2;1;true;;true;true;;true;;;;1000;BetweenAttacks;;true;1
-AttackHeli;Attack-Heli;Normal;Standard;Heli;;6;Normal;3;1;true;;true;true;Rocket;true;Adjacent;;;900;BetweenAttacks;;true;
-Blimp;Blimp;Normal;Standard;Plane;;6;Normal;4;1;true;;true;true;Rifle;true;Ranged(1,1);;;800;BetweenAttacks;;true;
-Bomber;Bomber;Normal;Standard;Plane;;6;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;2000;BetweenAttacks;;true;
-Fighter;Fighter;Normal;Standard;Plane;;7;Normal;3;1;true;;true;true;AntiAir;true;Adjacent;;;1800;BetweenAttacks;;true;
-LightDrone;Drone;Normal;Standard;Heli;;5/2;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;100;BetweenAttacks;;true;
-Factory;Factory;AlwaysVisible;None;None;;;Normal;1;1;;;;;MachineGun;;;;;100;;;;
-HeroCrystal;Obelisk;AlwaysVisible;None;None;;;Normal;1;;true;;;;;;;;;0;;;true;
-Pyramid;Pyramid;AlwaysVisible;None;None;;;Normal;;;;;;;MachineGun;;;;;100;;;;
-MegaCannon;Mega-Cannon;AlwaysVisible;None;None;;;Normal;;;;;;;;;Triangle(1,0);;1,1,1,1,1;800;;;;
-LaserCannon;Laser-Cannon;AlwaysVisible;None;None;;;Normal;;;;;;;;;Straight(1,0);;1,1,1,1,1,1,1,1,1,1;800;;;;
-DroneTower;Drone-Tower;AlwaysVisible;None;None;;;Normal;1;1;;;;;;;;;;800;;;;3
-ShockTower;Shock-Tower;AlwaysVisible;None;None;;;Normal;;;;;;;;;;;;800;;;;
-LifeCrystal;Life-Crystal;AlwaysVisible;None;None;;;Normal;;;true;;;;;;;;;0;;;;
-Tentacle;Tentacle;AlwaysVisible;None;None;;;;;;;;;true;;;;;;0;;;;
-PufferFish;PufferFish;AlwaysVisible;None;Ship;;;;;;;;;;Bonk;;Ranged(0,0);;0, 1;0;;;true;
-Pawn;Pawn;Normal;Pawn;Chess2;;1;Movement;;;true;;;true;;;;;;300;;;true;
-Rook;Rook;Normal;Straight;Chess;;8;Movement;;;true;;;true;;true;Adjacent;OwnedBothUnmoved;;800;InsteadOfAttack;-2;true;
-Bishop;Bishop;Normal;Diagonal;Chess;;8;Movement;;;true;;;true;;;;;;800;;;true;
-Knight;Knight;Normal;Knight;Chess2;;1;Movement;;;true;;;true;;;;;;800;;;true;
-Queen;Queen;Normal;Rays;Chess;;8;Movement;;;true;;;true;;;;;;1600;;;true;
-King;King;Normal;Rays;Chess2;;1;Movement;;;true;;;true;;;;;;0;;;true;
-Unknown;???;Normal;None;None;;;;;;;;true;true;;;;;;0;;;true;
+Id;Visibility;MovementPattern;MovementType;MovementPoints;VisionMode;Vision;TrueVision;NeedsOwner;Stealthy;CanBeMovedThrough;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;Value;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity
+Marine;Normal;Standard;Marine;3;Normal;2;1;true;;true;true;MachineGun;true;Adjacent;;;150;BetweenAttacks;;true;
+Sniper;Normal;Standard;Bike;9/2;Normal;3;1;true;;true;true;Rifle;true;Ranged(1,1);;;250;BetweenAttacks;;true;
+Bazooka;Normal;Standard;Foot;5/2;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;350;BetweenAttacks;;true;
+Magnet;Normal;Standard;Wheel;5;Normal;2;1;true;;true;true;Bonk;true;Straight(2,0);All;;400;InsteadOfAttack;-1;true;
+DragonHead;Normal;Standard;Wheel;7;Normal;4;1;true;;true;true;Flame;true;Straight(1,0);;1, 1;500;BetweenAttacks;;true;
+Convoy;Normal;Standard;Wheel;6;Normal;2;1;true;;true;true;;;;;;500;;;true;2
+Artillery;Normal;Standard;Treads;5;Normal;2;1;true;;true;true;SurfaceMissiles;;Ranged(2,1);;;600;BetweenAttacks;;true;
+SmallTank;Normal;Standard;Treads;6;Normal;3;1;true;;true;true;Shells;true;Adjacent;;;700;BetweenAttacks;;true;
+BigTank;Normal;Standard;Treads;5;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;1600;BetweenAttacks;;true;
+AntiAir;Normal;Standard;Treads;6;Normal;2;1;true;;true;true;AntiAir;true;Adjacent;;;700;BetweenAttacks;;true;
+RocketLauncher;Normal;Standard;Wheel;4;Normal;1;1;true;;true;true;SurfaceMissiles;;Ranged(3,2);;;1500;BetweenAttacks;;true;
+LaserShark;Normal;Standard;Boat;9/2;Normal;3;1;true;;true;true;Rifle;true;Adjacent;;;250;BetweenAttacks;;true;
+TransportBoat;Normal;Standard;Boat;6;Normal;1;1;true;;true;true;;true;;;;600;BetweenAttacks;;true;2
+DroneBoat;Normal;Standard;Boat;4;Normal;2;1;true;;true;true;;true;;;;500;BetweenAttacks;;true;1
+WaveBreaker;Normal;Standard;Boat;6;Normal;3;1;true;;true;true;Shells;true;Adjacent;;;700;BetweenAttacks;;true;
+Submarine;Stealth;Standard;Ship;5;Normal;2;1;true;;true;true;SurfaceMissiles;;Ranged(2,1);;;1000;BetweenAttacks;;true;
+AntiAirBoat;Normal;Standard;Boat;6;Normal;2;1;true;;true;true;AntiAir;true;Adjacent;;;800;BetweenAttacks;;true;
+Destroyer;Normal;Standard;Ship;5;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;1200;BetweenAttacks;1;true;
+WarShip;Normal;Standard;Ship;9/2;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;1800;BetweenAttacks;;;
+BattleShip;Normal;Standard;Ship;4;Normal;1;1;true;;true;true;SurfaceMissiles;true;Ranged(3,2);;;2300;BetweenAttacks;;true;1
+SwimmingFactory;Normal;Standard;Boat;5;Normal;1;1;true;;true;true;;true;Adjacent;;;700;BetweenAttacks;;true;
+TransportHeli;Normal;Standard;Heli;5;Normal;2;1;true;;true;true;;true;;;;1000;BetweenAttacks;;true;1
+AttackHeli;Normal;Standard;Heli;6;Normal;3;1;true;;true;true;Rocket;true;Adjacent;;;900;BetweenAttacks;;true;
+Blimp;Normal;Standard;Plane;6;Normal;4;1;true;;true;true;Rifle;true;Ranged(1,1);;;800;BetweenAttacks;;true;
+Bomber;Normal;Standard;Plane;6;Normal;2;1;true;;true;true;Shells;true;Adjacent;;;2000;BetweenAttacks;;true;
+Fighter;Normal;Standard;Plane;7;Normal;3;1;true;;true;true;AntiAir;true;Adjacent;;;1800;BetweenAttacks;;true;
+LightDrone;Normal;Standard;Heli;5/2;Normal;1;1;true;;true;true;Shells;true;Adjacent;;;100;BetweenAttacks;;true;
+Factory;AlwaysVisible;None;None;;Normal;1;1;;;;;MachineGun;;;;;100;;;;
+HeroCrystal;AlwaysVisible;None;None;;Normal;1;;true;;;;;;;;;0;;;true;
+Pyramid;AlwaysVisible;None;None;;Normal;;;;;;;MachineGun;;;;;100;;;;
+MegaCannon;AlwaysVisible;None;None;;Normal;;;;;;;;;Triangle(1,0);;1,1,1,1,1;800;;;;
+LaserCannon;AlwaysVisible;None;None;;Normal;;;;;;;;;Straight(1,0);;1,1,1,1,1,1,1,1,1,1;800;;;;
+DroneTower;AlwaysVisible;None;None;;Normal;1;1;;;;;;;;;;800;;;;3
+ShockTower;AlwaysVisible;None;None;;Normal;;;;;;;;;;;;800;;;;
+LifeCrystal;AlwaysVisible;None;None;;Normal;;;true;;;;;;;;;0;;;;
+Tentacle;AlwaysVisible;None;None;;;;;;;;true;;;;;;0;;;;
+PufferFish;AlwaysVisible;None;Ship;;;;;;;;;Bonk;;Ranged(0,0);;0, 1;0;;;true;
+Pawn;Normal;Pawn;Chess2;1;Movement;;;true;;;true;;;;;;300;;;true;
+Rook;Normal;Straight;Chess;8;Movement;;;true;;;true;;true;Adjacent;;;800;InsteadOfAttack;-2;true;
+Bishop;Normal;Diagonal;Chess;8;Movement;;;true;;;true;;;;;;800;;;true;
+Knight;Normal;Knight;Chess2;1;Movement;;;true;;;true;;;;;;800;;;true;
+Queen;Normal;Rays;Chess;8;Movement;;;true;;;true;;;;;;1600;;;true;
+King;Normal;Rays;Chess2;1;Movement;;;true;;;true;;;;;;0;;;true;
+Unknown;Normal;None;None;;;;;;;true;true;;;;;;0;;;true;

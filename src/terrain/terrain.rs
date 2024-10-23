@@ -1,10 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 
 use interfaces::ClientPerspective;
 use num_rational::Rational32;
-use rustc_hash::FxHashMap;
 use zipper::*;
 
 use crate::commander::commander_type::CommanderType;
@@ -17,39 +16,45 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Owner, Player};
-use crate::units::hero::{Hero, HeroInfluence};
+use crate::tags::*;
+use crate::units::hero::HeroInfluence;
 use crate::units::movement::MovementType;
-use crate::units::unit::{Unit, UnitBuilder};
-use crate::units::unit_types::UnitType;
+use crate::units::unit::Unit;
+use crate::units::UnitVisibility;
 
-use super::{TerrainType, AmphibiousTyping, ExtraMovementOptions};
-use super::attributes::*;
+use super::{TerrainType, ExtraMovementOptions};
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct Terrain {
+pub struct Terrain<D: Direction> {
     environment: Environment,
     typ: TerrainType,
-    attributes: FxHashMap<TerrainAttributeKey, TerrainAttribute>,
+    owner: Owner,
+    tags: TagBag<D>,
+    //attributes: FxHashMap<TerrainAttributeKey, TerrainAttribute>,
 }
 
-impl Debug for Terrain {
+impl<D: Direction> Debug for Terrain<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.name())?;
-        let mut keys: Vec<_> = self.attributes.keys().collect();
+        write!(f, "Owner: {}", self.owner.0)?;
+        self.tags.debug(f, &self.environment)?;
+        /*let mut keys: Vec<_> = self.attributes.keys().collect();
         keys.sort();
         for key in keys {
             write!(f, "{:?}", self.attributes.get(key).unwrap())?;
-        }
+        }*/
         write!(f, ")")
     }
 }
 
-impl Terrain {
+impl<D: Direction> Terrain<D> {
     pub(super) fn new(environment: Environment, typ: TerrainType) -> Self {
         Self {
             environment,
             typ,
-            attributes: FxHashMap::default(),
+            owner: Owner(-1),
+            tags: TagBag::new()
+            //attributes: FxHashMap::default(),
         }
     }
 
@@ -70,24 +75,24 @@ impl Terrain {
         self.environment.config.terrain_name(self.typ)
     }
 
-    pub fn get_capture_resistance(&self) -> u8 {
+    /*pub fn get_capture_resistance(&self) -> u8 {
         self.environment.config.terrain_capture_resistance(self.typ)
     }
 
     pub fn get_amphibious(&self) -> Option<AmphibiousTyping> {
         self.environment.config.terrain_amphibious(self.typ)
-    }
+    }*/
 
     pub fn is_chess(&self) -> bool {
         self.environment.config.terrain_chess(self.typ)
     }
 
-    pub fn attack_bonus<D: Direction>(&self, unit: &Unit<D>) -> Rational32 {
+    pub fn attack_bonus(&self, unit: &Unit<D>) -> Rational32 {
         let bonus = self.environment.config.terrain_attack_bonus(self.typ, unit.sub_movement_type());
         bonus
     }
     
-    pub fn defense_bonus<D: Direction>(&self, unit: &Unit<D>) -> Rational32 {
+    pub fn defense_bonus(&self, unit: &Unit<D>) -> Rational32 {
         let bonus = self.environment.config.terrain_defense_bonus(self.typ, unit.sub_movement_type());
         bonus
     }
@@ -96,16 +101,16 @@ impl Terrain {
         self.environment.config.terrain_income_factor(self.typ) as i32
     }
 
-    pub fn vision_range<D: Direction>(
+    pub fn vision_range(
         &self,
         game: &impl GameView<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
     ) -> Option<usize> {
-        if self.has_attribute(TerrainAttributeKey::Owner) && self.get_team() == ClientPerspective::Neutral {
+        /*if self.has_attribute(TerrainAttributeKey::Owner) && self.get_team() == ClientPerspective::Neutral {
             return None;
-        }
+        }*/
         let mut range = self.environment.config.terrain_vision_range(game, pos, self, heroes)?;
         // TODO: add config column for whether fog_setting should increase vision range instead of this check
         if range == 0 {
@@ -122,7 +127,7 @@ impl Terrain {
         Some(range)
     }
 
-    pub fn can_build<D: Direction>(
+    /*pub fn can_build(
         &self,
         game: &impl GameView<D>,
         pos: Point,
@@ -132,7 +137,7 @@ impl Terrain {
         self.environment.config.terrain_can_build(game, pos, self, heroes)
     }
 
-    pub fn buildable_units<D: Direction>(
+    pub fn buildable_units(
         &self,
         game: &impl GameView<D>,
         pos: Point,
@@ -147,18 +152,18 @@ impl Terrain {
         }
     }
 
-    /*pub fn can_repair(&self) -> bool {
+    pub fn can_repair(&self) -> bool {
         self.environment.config.terrain_can_repair(self.typ)
     }
 
     pub fn can_repair_unit(&self, unit: UnitType) -> bool {
         self.environment.config.terrain_can_repair(self.typ)
         && self.environment.config.terrain_build_or_repair(self.typ).contains(&unit)
-    }*/
+    }
 
     pub fn could_sell_hero(&self) -> bool {
         self.environment.config.terrain_sells_hero(self.typ)
-    }
+    }*/
 
     pub fn extra_step_options(&self) -> ExtraMovementOptions {
         self.environment.config.terrain_path_extra(self.typ)
@@ -170,7 +175,7 @@ impl Terrain {
 
     // getters + setters that relate to attributes
 
-    pub fn has_attribute(&self, key: TerrainAttributeKey) -> bool {
+    /*pub fn has_attribute(&self, key: TerrainAttributeKey) -> bool {
         self.environment.config.terrain_specific_attributes(self.typ).contains(&key)
     }
 
@@ -190,14 +195,15 @@ impl Terrain {
         } else {
             false
         }
-    }
+    }*/
 
     pub fn get_owner_id(&self) -> i8 {
-        self.get::<Owner>().0
+        self.owner.0
     }
     pub fn set_owner_id(&mut self, id: i8) {
-        if id >= 0 || !self.environment.config.terrain_needs_owner(self.typ) {
-            let _owner_before = self.get_owner_id();
+        if self.environment.config.terrain_can_have_owner(self.typ) {
+            self.owner = Owner(id);
+            /*let _owner_before = self.get_owner_id();
             self.set(Owner(id.max(-1).min(self.environment.config.max_player_count() - 1)));
             /*let co_before = self.environment.config.commander_attributes(self.typ, owner_before);
             let co_after = self.environment.config.commander_attributes(self.typ, self.get_owner_id());
@@ -206,7 +212,7 @@ impl Terrain {
             }
             for key in co_after.iter().filter(|k| !co_before.contains(k)) {
                 self.attributes.insert(*key, key.default(self.typ, &self.environment));
-            }*/
+            }*/*/
         }
     }
 
@@ -214,17 +220,44 @@ impl Terrain {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_player<D: Direction>(&self, game: &impl GameView<D>) -> Option<Player> {
+    pub fn get_player(&self, game: &impl GameView<D>) -> Option<Player> {
         game.get_owning_player(self.get_owner_id())
     }
 
-    pub fn get_commander<D: Direction>(&self, game: &impl GameView<D>) -> Commander {
+    pub fn get_commander(&self, game: &impl GameView<D>) -> Commander {
         self.get_player(game)
         .and_then(|player| Some(player.commander.clone()))
         .unwrap_or(Commander::new(&self.environment, CommanderType::None))
     }
 
-    pub fn get_capture_progress(&self) -> CaptureProgress {
+    pub fn has_flag(&self, key: usize) -> bool {
+        self.tags.has_flag(key)
+    }
+    pub fn set_flag(&mut self, key: usize) {
+        self.tags.set_flag(&self.environment, key);
+    }
+    pub fn remove_flag(&mut self, key: usize) {
+        self.tags.remove_flag(key);
+    }
+    pub fn flip_flag(&mut self, key: usize) {
+        if self.has_flag(key) {
+            self.remove_flag(key);
+        } else {
+            self.set_flag(key);
+        }
+    }
+
+    pub fn get_tag(&self, key: usize) -> Option<TagValue<D>> {
+        self.tags.get_tag(key)
+    }
+    pub fn set_tag(&mut self, key: usize, value: TagValue<D>) {
+        self.tags.set_tag(&self.environment, key, value);
+    }
+    pub fn remove_tag(&mut self, key: usize) {
+        self.tags.remove_tag(key);
+    }
+
+    /*pub fn get_capture_progress(&self) -> CaptureProgress {
         self.get()
     }
     pub fn set_capture_progress(&mut self, progress: CaptureProgress) {
@@ -253,11 +286,11 @@ impl Terrain {
     }
     pub fn set_exhausted(&mut self, exhausted: bool) {
         self.set(Exhausted(exhausted));
-    }
+    }*/
 
     // methods that go beyond getter / setter functionality
 
-    pub fn get_vision<D: Direction>(
+    pub fn get_vision(
         &self,
         game: &impl GameView<D>,
         pos: Point,
@@ -296,10 +329,22 @@ impl Terrain {
     }
 
     pub fn fog_replacement(&self, intensity: FogIntensity) -> Self {
-        if intensity != FogIntensity::Dark {
+        if intensity == FogIntensity::TrueSight {
             return self.clone();
         }
-        let hidden_attributes = self.environment.config.terrain_specific_hidden_attributes(self.typ);
+        let visibility = match intensity {
+            FogIntensity::TrueSight => return self.clone(),
+            FogIntensity::NormalVision => UnitVisibility::Normal,
+            FogIntensity::Light => UnitVisibility::Normal,
+            FogIntensity::Dark => UnitVisibility::AlwaysVisible,
+        };
+        let mut builder = self.typ.instance(&self.environment)
+            .set_tag_bag(self.tags.fog_replacement(&self.environment, visibility));
+        if self.environment.config.terrain_owner_visibility(self.typ) >= visibility {
+            builder = builder.set_owner_id(self.owner.0);
+        }
+        builder.build_with_defaults()
+        /*let hidden_attributes = self.environment.config.terrain_specific_hidden_attributes(self.typ);
         let attributes = self.attributes.iter()
         .filter(|(key, _)| !hidden_attributes.contains(key))
         .map(|(k, v)| (k.clone(), v.clone()))
@@ -308,10 +353,10 @@ impl Terrain {
             typ: self.typ,
             environment: self.environment.clone(),
             attributes,
-        }
+        }*/
     }
 
-    /*pub fn can_sell_hero<D: Direction>(&self, map: &impl GameView<D>, pos: Point, owner_id: i8) -> bool {
+    /*pub fn can_sell_hero(&self, map: &impl GameView<D>, pos: Point, owner_id: i8) -> bool {
         if !self.could_sell_hero() {
             return false;
         }
@@ -336,7 +381,7 @@ impl Terrain {
         true
     }*/
 
-    /*fn unit_build_overrides<D: Direction>(&self, game: &impl GameView<D>, position: Point, heroes: &[HeroInfluence<D>]) -> HashSet<AttributeOverride> {
+    /*fn unit_build_overrides(&self, game: &impl GameView<D>, position: Point, heroes: &[HeroInfluence<D>]) -> HashSet<AttributeOverride> {
         self.environment.config.terrain_unit_attribute_overrides(
             game,
             self,
@@ -348,7 +393,7 @@ impl Terrain {
         .collect()
     }
 
-    pub(crate) fn unit_shop_option<D: Direction>(&self, game: &impl GameView<D>, pos: Point, unit_type: UnitType, heroes: &[HeroInfluence<D>]) -> (Unit<D>, i32) {
+    pub(crate) fn unit_shop_option(&self, game: &impl GameView<D>, pos: Point, unit_type: UnitType, heroes: &[HeroInfluence<D>]) -> (Unit<D>, i32) {
         let attr_overrides = self.unit_build_overrides(game, pos, heroes);
         let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment)
         .set_status(ActionStatus::Exhausted);
@@ -363,7 +408,7 @@ impl Terrain {
         (unit, cost)
     }
 
-    pub fn unit_shop<D: Direction>(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<(Unit<D>, i32)> {
+    pub fn unit_shop(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<(Unit<D>, i32)> {
         let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         if !self.can_build(game, pos, &heroes) {
             return Vec::new();
@@ -373,7 +418,7 @@ impl Terrain {
         }).collect()
     }*/
 
-    pub fn on_start_turn<D: Direction>(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> Vec<usize> {
+    pub fn on_start_turn(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> Vec<usize> {
         self.environment.config.terrain_on_start_turn(
             game,
             pos,
@@ -383,7 +428,7 @@ impl Terrain {
         )
     }
 
-    /*pub fn on_build<D: Direction>(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<usize> {
+    /*pub fn on_build(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<usize> {
         let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         self.environment.config.terrain_on_build(
             game,
@@ -394,75 +439,110 @@ impl Terrain {
         )
     }*/
 
-    pub fn distort<D: Direction>(&mut self, _distortion: Distortion<D>) {
-        // TODO
+    pub fn distort(&mut self, distortion: Distortion<D>) {
+        self.tags.distort(distortion);
     }
 }
 
-impl SupportedZippable<&Environment> for Terrain {
+impl<D: Direction> SupportedZippable<&Environment> for Terrain<D> {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         self.typ.export(zipper, support);
-        for key in support.config.terrain_specific_attributes(self.typ) {
+        if support.config.terrain_can_have_owner(self.typ) {
+            self.owner.export(zipper, &*self.environment.config);
+        }
+        self.tags.export(zipper, &self.environment);
+        /*for key in support.config.terrain_specific_attributes(self.typ) {
             let value = key.default();
             let value = self.attributes.get(key).unwrap_or(&value);
             value.export(zipper, support, self.typ);
-        }
+        }*/
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let typ = TerrainType::import(unzipper, support)?;
-        let mut attributes = FxHashMap::default();
+        let owner = if support.config.terrain_can_have_owner(typ) {
+            Owner::import(unzipper, &*support.config)?
+        } else {
+            Owner(-1)
+        };
+        let tags = TagBag::import(unzipper, support)?;
+        /*let mut attributes = FxHashMap::default();
         for key in support.config.terrain_specific_attributes(typ) {
             let attr = TerrainAttribute::import(unzipper, support, *key, typ)?;
             attributes.insert(*key, attr);
-        }
+        }*/
         Ok(Self {
             environment: support.clone(),
             typ,
-            attributes,
+            owner,
+            tags,
+            //attributes,
         })
     }
 }
 
 #[derive(Clone)]
-pub struct TerrainBuilder {
-    terrain: Terrain,
+pub struct TerrainBuilder<D: Direction> {
+    terrain: Terrain<D>,
 }
 
-impl TerrainBuilder {
+impl<D: Direction> TerrainBuilder<D> {
     pub fn new(environment: &Environment, typ: TerrainType) -> Self {
-        let mut terrain = Terrain::new(environment.clone(), typ);
-        terrain.set_owner_id(-1);
+        let terrain = Terrain::new(environment.clone(), typ);
         Self {
             terrain,
         }
     }
 
-    pub fn copy_from(mut self, other: &Terrain) -> Self {
+    pub fn copy_from(mut self, other: &Terrain<D>) -> Self {
         if self.terrain.environment != other.environment {
             panic!("Can't copy from terrain from different environment");
         }
-        for (key, value) in &other.attributes {
-            if self.terrain.has_attribute(*key) {
-                self.terrain.attributes.insert(*key, value.clone());
-            }
+        for key in other.tags.flags() {
+            self.terrain.set_flag(*key);
+        }
+        for (key, value) in other.tags.tags() {
+            self.terrain.set_tag(*key, value.clone());
         }
         self
     }
 
-    pub fn set_attribute(mut self, attribute: &TerrainAttribute) -> Self {
+    pub fn set_tag_bag(mut self, bag: TagBag<D>) -> Self {
+        self.terrain.tags = bag;
+        self
+    }
+
+    pub fn set_flag(mut self, key: usize) -> Self {
+        self.terrain.set_flag(key);
+        self
+    }
+    pub fn remove_flag(mut self, key: usize) -> Self {
+        self.terrain.remove_flag(key);
+        self
+    }
+
+    pub fn set_tag(mut self, key: usize, value: TagValue<D>) -> Self {
+        self.terrain.set_tag(key, value);
+        self
+    }
+    pub fn remove_tag(mut self, key: usize) -> Self {
+        self.terrain.remove_tag(key);
+        self
+    }
+
+    /*pub fn set_attribute(mut self, attribute: &TerrainAttribute) -> Self {
         let key = attribute.key();
         if self.terrain.has_attribute(key) {
             self.terrain.attributes.insert(key, attribute.clone());
         }
         self
-    }
+    }*/
 
     pub fn set_owner_id(mut self, id: i8) -> Self {
         self.terrain.set_owner_id(id);
         self
     }
 
-    pub fn set_capture_progress(mut self, progress: CaptureProgress) -> Self {
+    /*pub fn set_capture_progress(mut self, progress: CaptureProgress) -> Self {
         self.terrain.set_capture_progress(progress);
         self
     }
@@ -470,32 +550,16 @@ impl TerrainBuilder {
     pub fn set_anger(mut self, anger: u8) -> Self {
         self.terrain.set_anger(anger);
         self
-    }
+    }*/
 
-    pub fn build(&self) -> Option<Terrain> {
-        for key in self.terrain.environment.config.terrain_specific_attributes(self.terrain.typ()) {
-            if !self.terrain.attributes.contains_key(key) {
-                return None;
-            }
-        }
-        Some(self.terrain.clone())
+    pub fn build(&self) -> Terrain<D> {
+        self.terrain.clone()
     }
 
     /**
-     * Take Care! The following attributes don't have reasonable defaults:
-     *  - owner_id
+     * TODO: call rhai script to get default flags/tag values?
      */
-    pub fn build_with_defaults(&self) -> Terrain {
-        let mut terrain = self.terrain.clone();
-        for key in self.terrain.environment.config.terrain_specific_attributes(self.terrain.typ()) {
-            if !terrain.attributes.contains_key(key) {
-                /*if *key == AttributeKey::DroneId || *key == AttributeKey::DroneStationId || *key == AttributeKey::Owner {
-                    println!("WARNING: building terrain with missing Attribute {key}");
-                    //return Err(AttributeError { requested: *key, received: None });
-                }*/
-                terrain.attributes.insert(*key, key.default());
-            }
-        }
-        terrain
+    pub fn build_with_defaults(&self) -> Terrain<D> {
+        self.terrain.clone()
     }
 }

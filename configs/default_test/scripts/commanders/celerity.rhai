@@ -9,3 +9,7 @@ fn co_recovery() {
     }
     EVENT_HANDLER.heal_units(heals);
 }
+
+fn level_increases_attack(value) {
+    value + Fraction(UNIT.get(TAG_Level) ?? 0, 10)
+}

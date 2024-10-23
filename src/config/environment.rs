@@ -13,7 +13,7 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
 use crate::script::*;
-use crate::terrain::attributes::TerrainAttributeKey;
+use crate::tags::*;
 use crate::terrain::terrain::*;
 use crate::terrain::TerrainType;
 use crate::units::movement::MovementType;
@@ -122,7 +122,15 @@ impl Environment {
             match name {
                 CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
                 CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
-                _ => Ok(None)
+                _ => {
+                    if let Some(key) = this.flag_by_name(name) {
+                        Ok(Some(Dynamic::from(FlagKey(key))))
+                    } else if let Some(key) = this.tag_by_name(name) {
+                        Ok(Some(Dynamic::from(TagKey(key))))
+                    } else {
+                        Ok(None)
+                    }
+                }
             }
         });
         engine
@@ -139,7 +147,15 @@ impl Environment {
                 CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
                 CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
                 CONST_NAME_EVENT_HANDLER => Ok(Some(Dynamic::from(handler.clone()))),
-                _ => Ok(None)
+                _ => {
+                    if let Some(key) = this.flag_by_name(name) {
+                        Ok(Some(Dynamic::from(FlagKey(key))))
+                    } else if let Some(key) = this.tag_by_name(name) {
+                        Ok(Some(Dynamic::from(TagKey(key))))
+                    } else {
+                        Ok(None)
+                    }
+                }
             }
         });
         engine
@@ -274,18 +290,16 @@ impl Environment {
 
     // terrain
 
-    pub fn terrain_attributes(&self, typ: TerrainType, _owner: i8) -> impl Iterator<Item = &TerrainAttributeKey> {
+    /*pub fn terrain_attributes(&self, typ: TerrainType, _owner: i8) -> impl Iterator<Item = &TerrainAttributeKey> {
         // order has to be preserved here
         // because this method is used for exporting, while
         // terrain_specific_attributes and commander_attributes are used for importing
         self.config.terrain_specific_attributes(typ).iter()
-    }
+    }*/
 
-    pub fn default_terrain(&self) -> Terrain {
-        TerrainBuilder::new(self, crate::terrain::TerrainType::Grass)
-        .build()
-        // TODO: when validating the config, make sure this unwrap won't panic
-        .unwrap()
+    pub fn default_terrain<D: Direction>(&self) -> Terrain<D> {
+        TerrainBuilder::new(self, self.config.default_terrain)
+        .build_with_defaults()
     }
 
 }

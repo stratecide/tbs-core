@@ -22,6 +22,10 @@ pub struct FileLoader {
     rhai_functions: Vec<(String, String, usize)>,
     pub movement_types: Vec<String>,
     pub unit_types: Vec<String>,
+    pub terrain_types: Vec<String>,
+    pub token_types: Vec<String>,
+    pub flags: Vec<String>,
+    pub tags: Vec<String>,
 }
 
 impl FileLoader {
@@ -37,6 +41,10 @@ impl FileLoader {
             rhai_functions: Vec::new(),
             movement_types: Vec::new(),
             unit_types: Vec::new(),
+            terrain_types: Vec::new(),
+            token_types: Vec::new(),
+            flags: Vec::new(),
+            tags: Vec::new(),
         }
     }
 

@@ -3,7 +3,7 @@ pub mod map;
 pub mod player;
 pub mod terrain;
 pub mod units;
-pub mod details;
+pub mod tokens;
 pub mod game;
 //pub mod commanders;
 pub mod commander;

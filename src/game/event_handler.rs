@@ -13,11 +13,13 @@ use crate::map::wrapping_map::Distortion;
 use crate::script::custom_action::execute_commander_script;
 use crate::script::executor::Executor;
 use crate::script::*;
-use crate::terrain::attributes::{CaptureProgress, TerrainAttributeKey};
+use crate::tags::TagKey;
+use crate::tags::TagKeyValues;
+use crate::tags::TagValue;
 use crate::terrain::terrain::*;
 use crate::units::combat::WeaponType;
 use crate::player::*;
-use crate::details::{Detail, SludgeToken};
+use crate::tokens::token::Token;
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::game::fog::*;
@@ -254,9 +256,9 @@ impl<D: Direction> EventHandler<D> {
         );
 
         // reset built_this_turn-counter for realties
-        for p in self.with_map(|map| map.all_points()) {
+        /*for p in self.with_map(|map| map.all_points()) {
             self.terrain_built_this_turn(p, 0);
-        }
+        }*/
 
         let fog_before = if self.get_game().is_foggy() {
             let team = self.with_game(|game| {
@@ -514,16 +516,16 @@ impl<D: Direction> EventHandler<D> {
             }
         );
 
-        // tick sludge tokens
+        /*// tick sludge tokens
         for p in self.with_map(|map| map.all_points()) {
-            for (index, d) in self.with_map(|map| map.get_details(p).to_vec().into_iter().enumerate()) {
+            for (index, d) in self.with_map(|map| map.get_tokens(p).to_vec().into_iter().enumerate()) {
                 match d {
-                    Detail::SludgeToken(token) => {
+                    Token::SludgeToken(token) => {
                         if token.get_owner_id() == owner_id {
                             let counter = token.get_counter();
-                            self.detail_remove(p, index);
+                            self.token_remove(p, index);
                             if counter > 0 {
-                                self.detail_add(p, Detail::SludgeToken(SludgeToken::new(&self.environment().config, owner_id, counter - 1)));
+                                self.token_add(p, Token::SludgeToken(SludgeToken::new(&self.environment().config, owner_id, counter - 1)));
                             }
                         }
                         break;
@@ -531,7 +533,7 @@ impl<D: Direction> EventHandler<D> {
                     _ => ()
                 }
             }
-        }
+        }*/
 
         // structures may have destroyed some units, vision may be reduced due to merc powers ending
         self.recalculate_fog();
@@ -608,20 +610,20 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    pub fn detail_add(&mut self, position: Point, detail: Detail<D>) {
-        let old_details = self.with_map(|map| map.get_details(position).to_vec());
-        let mut details = old_details.to_vec();
-        details.push(detail);
-        if old_details != details.as_slice() {
-            self.add_event(Event::ReplaceDetail(position, old_details.try_into().unwrap(), Detail::correct_stack(details, &self.environment()).try_into().unwrap()));
+    pub fn token_add(&mut self, position: Point, token: Token<D>) {
+        let old_tokens = self.with_map(|map| map.get_tokens(position).to_vec());
+        let mut tokens = old_tokens.to_vec();
+        tokens.push(token);
+        if old_tokens != tokens.as_slice() {
+            self.add_event(Event::ReplaceToken(position, old_tokens.try_into().unwrap(), Token::correct_stack(tokens).try_into().unwrap()));
         }
     }
 
-    pub fn detail_remove(&mut self, position: Point, index: usize) {
-        if let Some(detail) = self.with_map(|map| map.get_details(position).get(index).cloned()) {
-            self.add_event(Event::RemoveDetail(position, index.into(), detail));
+    pub fn token_remove(&mut self, position: Point, index: usize) {
+        if let Some(token) = self.with_map(|map| map.get_tokens(position).get(index).cloned()) {
+            self.add_event(Event::RemoveToken(position, index.into(), token));
         } else {
-            panic!("Missing Detail at {position:?}");
+            panic!("Missing Token at {position:?}");
         }
     }
 
@@ -727,12 +729,12 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    pub fn terrain_replace(&mut self, position: Point, terrain: Terrain) {
+    pub fn terrain_replace(&mut self, position: Point, terrain: Terrain<D>) {
         let old_terrain = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone());
         self.add_event(Event::TerrainChange(position, old_terrain.clone(), terrain));
     }
 
-    pub fn terrain_anger(&mut self, position: Point, anger: u8) {
+    /*pub fn terrain_anger(&mut self, position: Point, anger: u8) {
         let old_anger = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).get_anger());
         self.add_event(Event::TerrainAnger(position, old_anger.into(), anger.into()));
     }
@@ -751,7 +753,7 @@ impl<D: Direction> EventHandler<D> {
         if terrain.has_attribute(TerrainAttributeKey::BuiltThisTurn) && old != built_this_turn {
             self.add_event(Event::UpdateBuiltThisTurn(position, old.into(), built_this_turn.into()));
         }
-    }
+    }*/
 
     pub fn unit_creation(&mut self, position: Point, unit: Unit<D>) {
         if let ClientPerspective::Team(team) = unit.get_team() {
@@ -785,62 +787,85 @@ impl<D: Direction> EventHandler<D> {
         } else {
             self.add_event(Event::UnitRemove(path.start, unit.clone()));
         }
+        let (unit_id, disto) = self.observe_unit(path.start, unload_index);
         let transformed_unit = self.animate_unit_path(&unit, path, involuntarily);
         let (path_end, distortion) = path.end(&*self.get_game()).unwrap();
         if board_at_the_end {
-            if let Some((id, disto)) = self.observation_id(path.start, unload_index) {
-                self.move_observed_unit(id, path_end, Some(self.with_map(|map| map.get_unit(path_end).unwrap().get_transported().len())), disto + distortion);
-            }
+            self.move_observed_unit(unit_id, path_end, Some(self.with_map(|map| map.get_unit(path_end).unwrap().get_transported().len())), disto + distortion);
             self.add_event(Event::UnitAddBoarded(path_end, transformed_unit));
         } else {
             if self.with_map(|map| map.get_unit(path_end).is_some()) {
                 // TODO: this shouldn't happen at all
                 panic!("Path would overwrite unit at {path_end:?}");
             }
-            if let Some((id, disto)) = self.observation_id(path.start, unload_index) {
-                self.move_observed_unit(id, path_end, None, disto + distortion);
-            }
+            self.move_observed_unit(unit_id, path_end, None, disto + distortion);
             self.add_event(Event::UnitAdd(path_end, transformed_unit));
         }
         // update fog in case unit influences other units' vision range
         self.recalculate_fog();
-        // remove details that were destroyed by the unit moving over them
-        let income = self.with_game(|game| game.get_owning_player(unit.get_owner_id()).map(|player| player.get_income()))
-            .filter(|income| *income != 0);
+        // remove tokens that were destroyed by the unit moving over them
+        /*let income = self.with_game(|game| game.get_owning_player(unit.get_owner_id()).map(|player| player.get_income()))
+            .filter(|income| *income != 0);*/
+        let mut token_scripts = Vec::new();
         for p in self.with(|eh| path.points(&eh.game)).unwrap() {
-            let old_details = self.get_game().get_details(p);
-            let details: Vec<Detail<D>> = old_details.clone().into_iter().filter(|detail| {
-                match detail {
-                    Detail::Pipe(_) => true,
-                    Detail::Coins1 => {
+            for token in self.get_game().get_tokens(p) {
+                if let Some(function_index) = self.environment().config.token_on_unit_path(token.typ()) {
+                    token_scripts.push((function_index, p, token));
+                }
+            }
+            /*let tokens: Vec<Token<D>> = old_tokens.clone().into_iter().filter(|token| {
+                match token {
+                    Token::Pipe(_) => true,
+                    Token::Coins1 => {
                         if let Some(income) = income {
                             self.money_change(unit.get_owner_id(), income / 2);
                         }
                         false
                     }
-                    Detail::Coins2 => {
+                    Token::Coins2 => {
                         if let Some(income) = income {
                             self.money_change(unit.get_owner_id(), income);
                         }
                         false
                     }
-                    Detail::Coins3 => {
+                    Token::Coins3 => {
                         if let Some(income) = income {
                             self.money_change(unit.get_owner_id(), income * 3 / 2);
                         }
                         false
                     }
-                    Detail::Bubble(owner, _) => {
+                    Token::Bubble(owner, _) => {
                         owner.0 == unit.get_owner_id()
                     }
-                    /*Detail::Skull(skull) => {
+                    /*Token::Skull(skull) => {
                         skull.get_owner_id() == unit.get_owner_id()
                     }*/
-                    Detail::SludgeToken(_) => true,
+                    Token::SludgeToken(_) => true,
                 }
             }).collect();
-            if details != old_details {
-                self.add_event(Event::ReplaceDetail(p, old_details.try_into().unwrap(), details.try_into().unwrap()));
+            if tokens != old_tokens {
+                self.add_event(Event::ReplaceToken(p, old_tokens.try_into().unwrap(), tokens.try_into().unwrap()));
+            }*/
+        }
+        if token_scripts.len() > 0 {
+            let environment = self.environment();
+            let mut scope = Scope::new();
+            //scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.as_ref().map(|_| Dynamic::from(path.start)).unwrap_or(().into()));
+            //scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|u| Dynamic::from(u)).unwrap_or(().into()));
+            //scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
+            scope.push_constant(CONST_NAME_PATH, path.clone());
+            scope.push_constant(CONST_NAME_UNIT, unit);
+            scope.push_constant(CONST_NAME_UNIT_ID, unit_id);
+            let engine = environment.get_engine_handler(self);
+            let executor = Executor::new(engine, scope, environment);
+            for (function_index, p, token) in token_scripts {
+                match executor.run(function_index, (p, token)) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        // TODO: log error
+                        println!("token OnUnitPath {function_index}: {e:?}");
+                    }
+                }
             }
         }
     }
@@ -850,7 +875,7 @@ impl<D: Direction> EventHandler<D> {
         let owner_id = unit.get_owner_id();
         let heroes = Hero::map_influence(&*self.get_game(), owner_id);
         let mut current = path.start;
-        let mut previous = None;
+        //let mut previous = None;
         let mut transformed_unit = unit.clone();
         transformed_unit.set_en_passant(None);
         let mut steps = Vec::new();
@@ -874,7 +899,7 @@ impl<D: Direction> EventHandler<D> {
             } else {
                 steps.push(UnitStep::Simple(current, *step));
             }
-            previous = Some(current);
+            //previous = Some(current);
             current = next;
         }
         if self.get_game().is_foggy() {
@@ -948,6 +973,18 @@ impl<D: Direction> EventHandler<D> {
                     println!("unit OnNormalAction {function_index}: {e:?}");
                 }
             }
+        }
+    }
+
+    pub fn set_unit_tag(&mut self, position: Point, key: usize, value: TagValue<D>) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        if !value.has_valid_type(&self.environment(), key) {
+            return;
+        }
+        if let Some(old) = unit.get_tag(key) {
+            self.add_event(Event::UnitReplaceTag(position, TagKeyValues(TagKey(key), [old, value])));
+        } else {
+            self.add_event(Event::UnitSetTag(position, TagKeyValues(TagKey(key), [value])));
         }
     }
 
@@ -1105,9 +1142,9 @@ impl<D: Direction> EventHandler<D> {
 
     pub fn trigger_all_terrain_scripts(
         &mut self,
-        get_script: impl Fn(&Handle<Game<D>>, Point, &Terrain, &[HeroInfluence<D>]) -> Vec<usize>,
+        get_script: impl Fn(&Handle<Game<D>>, Point, &Terrain<D>, &[HeroInfluence<D>]) -> Vec<usize>,
         before_executing: impl FnOnce(&mut Self),
-        execute_script: impl Fn(&mut Self, Vec<usize>, Point, Terrain),
+        execute_script: impl Fn(&mut Self, Vec<usize>, Point, Terrain<D>),
     ) {
         let hero_auras = Hero::map_influence(&*self.get_game(), -1);
         let mut scripts = Vec::new();

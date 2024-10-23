@@ -54,6 +54,7 @@ pub fn create_base_engine() -> Engine {
     // maybe add MoreStringPackage or BitFieldPackage
     // my packages
     rhai_fraction::FractionPackage::new().register_into_engine(&mut engine);
+    crate::tags::TagPackage::new().register_into_engine(&mut engine);
     // https://rhai.rs/book/safety/max-stmt-depth.html
     // ran into problems with the debug-build defaults 32, 16
     engine.set_max_expr_depths(64, 32);
@@ -71,14 +72,14 @@ def_package! {
         BasicMapPackage,
         rhai_environment::EnvironmentPackage,
         rhai_fraction::FractionPackage,
-        crate::terrain::rhai_terrain::TerrainPackage,
+        crate::terrain::rhai_terrain::TerrainPackage4,
         crate::map::rhai_point::PositionPackage4,
         crate::map::rhai_direction::DirectionPackage4,
         crate::game::rhai_board::BoardPackage4,
         crate::units::rhai_unit::UnitPackage4,
         crate::units::rhai_combat::CombatPackage4,
         crate::units::rhai_movement::MovementPackage4,
-        crate::details::rhai_details::DetailPackage4,
+        crate::tokens::rhai_token::TokenPackage4,
         crate::game::rhai_event_handler::EventHandlerPackage4 {}
 }
 
@@ -90,14 +91,14 @@ def_package! {
         BasicMapPackage,
         rhai_environment::EnvironmentPackage,
         rhai_fraction::FractionPackage,
-        crate::terrain::rhai_terrain::TerrainPackage,
+        crate::terrain::rhai_terrain::TerrainPackage6,
         crate::map::rhai_point::PositionPackage6,
         crate::map::rhai_direction::DirectionPackage6,
         crate::game::rhai_board::BoardPackage6,
         crate::units::rhai_unit::UnitPackage6,
         crate::units::rhai_combat::CombatPackage6,
         crate::units::rhai_movement::MovementPackage6,
-        crate::details::rhai_details::DetailPackage6,
+        crate::tokens::rhai_token::TokenPackage6,
         crate::game::rhai_event_handler::EventHandlerPackage6 {}
 }
 

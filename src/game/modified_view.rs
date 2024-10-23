@@ -4,8 +4,9 @@ use std::sync::Arc;
 use interfaces::ClientPerspective;
 
 use crate::config::environment::Environment;
-use crate::details::Detail;
+use crate::tokens::token::Token;
 use crate::map::map::NeighborMode;
+use crate::map::pipe::PipeState;
 use crate::map::point::Point;
 use crate::map::wrapping_map::*;
 use crate::handle::BorrowedHandle;
@@ -30,11 +31,11 @@ trait ModifiedView<D: Direction> {
     fn all_points(&self) -> Vec<Point> {
         self.get_inner_view().all_points()
     }
-    fn get_terrain(&self, p: Point) -> Option<Terrain> {
+    fn get_terrain(&self, p: Point) -> Option<Terrain<D>> {
         self.get_inner_view().get_terrain(p)
     }
-    fn get_details(&self, p: Point) -> Vec<Detail<D>> {
-        self.get_inner_view().get_details(p)
+    fn get_tokens(&self, p: Point) -> Vec<Token<D>> {
+        self.get_inner_view().get_tokens(p)
     }
     fn get_unit(&self, p: Point) -> Option<Unit<D>> {
         self.get_inner_view().get_unit(p)
@@ -91,11 +92,14 @@ macro_rules! impl_game_view {
             fn all_points(&self) -> Vec<Point> {
                 ModifiedView::all_points(self)
             }
-            fn get_terrain(&self, p: Point) -> Option<Terrain> {
+            fn get_pipes(&self, p: Point) -> Vec<PipeState<D>> {
+                self.get_inner_view().get_pipes(p)
+            }
+            fn get_terrain(&self, p: Point) -> Option<Terrain<D>> {
                 ModifiedView::get_terrain(self, p)
             }
-            fn get_details(&self, p: Point) -> Vec<Detail<D>> {
-                ModifiedView::get_details(self, p)
+            fn get_tokens(&self, p: Point) -> Vec<Token<D>> {
+                ModifiedView::get_tokens(self, p)
             }
             fn get_unit(&self, p: Point) -> Option<Unit<D>> {
                 ModifiedView::get_unit(self, p)
@@ -241,15 +245,16 @@ impl<D: Direction> UnitMovementView<D> {
 
     pub fn unit_path_without_placing(&mut self, unload_index: Option<usize>, path: &Path<D>) -> Option<(Point, Unit<D>)> {
         if let Some(mut unit) = self.remove_unit(path.start, unload_index) {
-            // TODO: update fog
-            if let Some(player) = unit.get_player(self) {
+            // TODO: update fog, funds after path, ...
+            // would be better to somehow wrap EventHandler, i guess?
+            /*if let Some(player) = unit.get_player(self) {
                 let funds = player.funds_after_path(self, path);
                 if funds != *player.funds {
                     let mut player = player.clone();
                     player.funds = funds.into();
                     self.players.insert(player.get_owner_id(), player);
                 }
-            }
+            }*/
             let (end, _) = path.end(self).unwrap();
             unit.transformed_by_path(self, path);
             Some((end, unit))

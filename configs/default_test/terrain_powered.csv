@@ -1,3 +1,3 @@
-Power;Affects;Vision;Income;Repair;Build;SellsHero;BuildOverrides;OnStartTurn;OnEndTurn;OnBuild
-Co(Tapio, 3);T(FairyForest);;;;true;;;;;on_terrain/build > replace_with_grass
-;T(TentacleDepths);;;;;;;on_terrain/start_turn > spawn_tentacle;;
+Power;Affects;Vision;Income;Repair;Build;SellsHero;OnStartTurn;OnEndTurn;ActionScript
+Co(Tapio, 3);T(FairyForest);;;;true;;;;
+;T(TentacleDepths);;;;;;on_terrain/start_turn > spawn_tentacle;;

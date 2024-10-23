@@ -36,7 +36,7 @@ pub struct MovementType(pub usize);
 impl FromConfig for MovementType {
     fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
-        match loader.unit_types.iter().position(|name| name.as_str() == base) {
+        match loader.movement_types.iter().position(|name| name.as_str() == base) {
             Some(i) => Ok((Self(i), s)),
             None => Err(crate::config::ConfigParseError::UnknownEnumMember(base.to_string()))
         }
@@ -480,7 +480,7 @@ impl<D: Direction> PermanentBallast<D> {
         true
     }
 
-    fn movement_cost(&self, terrain: &Terrain, unit: &Unit<D>) -> Option<Rational32> {
+    fn movement_cost(&self, terrain: &Terrain<D>, unit: &Unit<D>) -> Option<Rational32> {
         let mut movement_type = unit.sub_movement_type();
         for e in &self.entries {
             if let PbEntry::SubMovementType{ sub, .. } = e {
@@ -490,7 +490,7 @@ impl<D: Direction> PermanentBallast<D> {
         terrain.movement_cost(movement_type)
     }
 
-    pub(crate) fn step(&self, distortion: Distortion<D>, terrain: &Terrain) -> Self {
+    pub(crate) fn step(&self, distortion: Distortion<D>, terrain: &Terrain<D>) -> Self {
         let mut permanent = Vec::new();
         for p in &self.entries {
             permanent.push(match p {

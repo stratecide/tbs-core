@@ -8,13 +8,14 @@ use semver::Version;
 
 use crate::config::environment::Environment;
 use crate::config::config::Config;
-use crate::details::Detail;
+use crate::tokens::token::Token;
 use crate::handle::{BorrowedHandle, Handle};
 use crate::map::map::*;
 use crate::map::direction::*;
 use crate::game::settings;
 use crate::game::events;
 use crate::game::fog::*;
+use crate::map::pipe::PipeState;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
 use crate::map::wrapping_map::{Distortion, OrientedPoint};
@@ -113,7 +114,7 @@ impl<D: Direction> Game<D> {
                 if fog.get(p).cloned().unwrap_or(FogIntensity::TrueSight) < neutral_fog.get(p).cloned().unwrap_or(FogIntensity::TrueSight) {
                     let field_data = FieldData::import(&mut unzipper, &game.environment)?;
                     game.map.set_terrain(p.clone(), field_data.terrain);
-                    game.map.set_details(p.clone(), field_data.details.to_vec());
+                    game.map.set_tokens(p.clone(), field_data.tokens.to_vec());
                     game.map.set_unit(p.clone(), field_data.unit);
                 }
             }
@@ -194,7 +195,7 @@ impl<D: Direction> Game<D> {
                     }
                 }
             }
-            for det in self.get_map().get_details(p) {
+            for det in self.get_map().get_tokens(p) {
                 for (p, v) in det.get_vision(self, p, perspective) {
                     fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
                 }
@@ -428,12 +429,16 @@ impl<D: Direction> GameView<D> for Handle<Game<D>> {
         self.with(|game| game.map.all_points())
     }
 
-    fn get_terrain(&self, p: Point) -> Option<Terrain> {
+    fn get_pipes(&self, p: Point) -> Vec<PipeState<D>> {
+        self.with(|game| game.map.get_pipes(p).to_vec())
+    }
+
+    fn get_terrain(&self, p: Point) -> Option<Terrain<D>> {
         self.with(|game| game.map.get_terrain(p).cloned())
     }
 
-    fn get_details(&self, p: Point) -> Vec<Detail<D>> {
-        self.with(|game| game.map.get_details(p).to_vec())
+    fn get_tokens(&self, p: Point) -> Vec<Token<D>> {
+        self.with(|game| game.map.get_tokens(p).to_vec())
     }
 
     fn get_unit(&self, p: Point) -> Option<Unit<D>> {

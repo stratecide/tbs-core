@@ -3,9 +3,10 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use interfaces::ClientPerspective;
 
 use crate::config::environment::Environment;
-use crate::details::Detail;
+use crate::tokens::token::Token;
 use crate::handle::BorrowedHandle;
 use crate::map::map::NeighborMode;
+use crate::map::pipe::PipeState;
 use crate::map::point::Point;
 use crate::map::wrapping_map::{Distortion, OrientedPoint, WrappingMap};
 use crate::player::Player;
@@ -21,8 +22,9 @@ use super::Direction;
 pub trait GameView<D: Direction>: Send + Sync {
     fn environment(&self) -> Environment;
     fn all_points(&self) -> Vec<Point>;
-    fn get_terrain(&self, p: Point) -> Option<Terrain>;
-    fn get_details(&self, p: Point) -> Vec<Detail<D>>;
+    fn get_pipes(&self, p: Point) -> Vec<PipeState<D>>;
+    fn get_terrain(&self, p: Point) -> Option<Terrain<D>>;
+    fn get_tokens(&self, p: Point) -> Vec<Token<D>>;
     fn get_unit(&self, p: Point) -> Option<Unit<D>>;
 
     /**

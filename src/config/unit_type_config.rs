@@ -103,7 +103,6 @@ crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum UnitTypeConfigHeader {
         Id,
-        Name,
         Visibility,
         MovementPattern,
         MovementType,

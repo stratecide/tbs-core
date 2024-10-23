@@ -7,7 +7,7 @@ use num_rational::Rational32;
 use rhai::*;
 use semver::Version;
 
-use crate::details::Detail;
+use crate::tokens::token_types::TokenType;
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
 use crate::game::game::Game;
@@ -25,7 +25,6 @@ use crate::script::executor::Executor;
 use crate::script::*;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::*;
-use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::{combat::*, UnitVisibility};
 use crate::units::movement::*;
 use crate::units::unit::Unit;
@@ -45,6 +44,7 @@ use super::table_config::CustomTable;
 use super::tag_config::TagConfig;
 use super::terrain_powered::TerrainPoweredConfig;
 use super::terrain_type_config::TerrainTypeConfig;
+use super::token_typ_config::TokenTypeConfig;
 use super::unit_type_config::UnitTypeConfig;
 
 const DEFAULT_SPLASH: [Rational32; 1] = [Rational32::new_raw(1, 1)];
@@ -76,19 +76,20 @@ pub struct Config {
     pub(super) max_hero_charge: u8,
     pub(super) max_aura_range: i8,
     // terrain
-    pub(super) terrain_types: Vec<TerrainType>,
-    pub(super) terrains: HashMap<TerrainType, TerrainTypeConfig>,
-    pub(super) terrain_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
-    pub(super) terrain_hidden_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
+    pub(super) terrains: Vec<TerrainTypeConfig>,
+    pub(super) default_terrain: TerrainType,
+    /*pub(super) terrain_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
+    pub(super) terrain_hidden_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,*/
     pub(super) movement_cost: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
     pub(super) attack_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
     pub(super) defense_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    pub(super) build: HashMap<TerrainType, Vec<UnitType>>,
+    /*pub(super) build: HashMap<TerrainType, Vec<UnitType>>,
     pub(super) max_capture_resistance: u8,
     pub(super) terrain_max_anger: u8,
-    pub(super) terrain_max_built_this_turn: u8,
+    pub(super) terrain_max_built_this_turn: u8,*/
     // detail
-    pub(super) max_sludge: u8,
+    pub(super) tokens: Vec<TokenTypeConfig>,
+    //pub(super) max_sludge: u8,
     // commanders
     pub(super) commander_types: Vec<CommanderType>,
     pub(super) commanders: HashMap<CommanderType, CommanderTypeConfig>,
@@ -147,14 +148,14 @@ impl Config {
         16
     }
 
-    pub fn max_sludge(&self) -> u8 {
+    /*pub fn max_sludge(&self) -> u8 {
         // TODO: parse from config. currently is just set to a fixed value
         self.max_sludge
     }
 
     pub fn max_unit_level(&self) -> u8 {
         3
-    }
+    }*/
 
     pub fn max_aura_range(&self) -> i8 {
         self.max_aura_range
@@ -460,12 +461,8 @@ impl Config {
         self.terrains.len()
     }
 
-    pub fn terrain_types(&self) -> &[TerrainType] {
-        &self.terrain_types
-    }
-
     pub(super) fn terrain_config(&self, typ: TerrainType) -> &TerrainTypeConfig {
-        self.terrains.get(&typ).expect(&format!("Environment doesn't contain terrain type {typ:?}"))
+        &self.terrains[typ.0]
     }
 
     pub fn terrain_name(&self, typ: TerrainType) -> &str {
@@ -473,19 +470,27 @@ impl Config {
     }
 
     pub fn find_terrain_by_name(&self, name: &str) -> Option<TerrainType> {
-        for (terrain_type, conf) in &self.terrains {
+        for (terrain_type, conf) in self.terrains.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(*terrain_type)
+                return Some(TerrainType(terrain_type))
             }
         }
         None
     }
 
-    pub fn terrain_needs_owner(&self, typ: TerrainType) -> bool {
-        self.terrain_config(typ).needs_owner
+    pub fn terrain_can_have_owner(&self, typ: TerrainType) -> bool {
+        self.terrain_config(typ).can_have_owner
     }
 
-    pub fn max_capture_resistance(&self) -> u8 {
+    pub fn terrain_owner_is_playable(&self, typ: TerrainType) -> bool {
+        self.terrain_config(typ).owner_is_playable
+    }
+
+    /*pub fn terrain_needs_owner(&self, typ: TerrainType) -> bool {
+        self.terrain_config(typ).needs_owner
+    }*/
+
+    /*pub fn max_capture_resistance(&self) -> u8 {
         self.max_capture_resistance
     }
 
@@ -495,13 +500,13 @@ impl Config {
 
     pub fn terrain_amphibious(&self, typ: TerrainType) -> Option<AmphibiousTyping> {
         self.terrain_config(typ).update_amphibious
-    }
+    }*/
 
     pub fn terrain_chess(&self, typ: TerrainType) -> bool {
         self.terrain_config(typ).chess
     }
 
-    pub fn terrain_max_built_this_turn(&self) -> u8 {
+    /*pub fn terrain_max_built_this_turn(&self) -> u8 {
         self.terrain_max_built_this_turn
     }
 
@@ -515,7 +520,7 @@ impl Config {
 
     pub fn terrain_anger(&self, typ: TerrainType) -> u8 {
         self.terrain_config(typ).max_anger
-    }
+    }*/
 
     /**
      * this function could indirectly call itself!
@@ -525,7 +530,7 @@ impl Config {
         &'a self,
         game: &'a impl GameView<D>,
         pos: Point,
-        terrain: &'a Terrain,
+        terrain: &'a Terrain<D>,
         is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &'a [HeroInfluence<D>],
@@ -579,6 +584,11 @@ impl Config {
         .unwrap_or(Rational32::from_integer(0))
     }
 
+    pub fn terrain_owner_visibility(&self, _typ: TerrainType) -> UnitVisibility {
+        // TODO
+        UnitVisibility::Normal
+    }
+
     pub fn terrain_vision_range_base(&self, typ: TerrainType) -> Option<usize> {
         let range = self.terrain_config(typ).vision_range;
         if range < 0 {
@@ -592,11 +602,11 @@ impl Config {
         &self,
         map: &impl GameView<D>,
         pos: Point,
-        terrain: &Terrain,
+        terrain: &Terrain<D>,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
     ) -> Option<usize> {
-        let mut result = self.terrain_power_configs(
+        let result = self.terrain_power_configs(
             map,
             pos,
             terrain,
@@ -610,9 +620,9 @@ impl Config {
                 ) as i8
             }
         );
-        if result < 0 && self.terrain_can_build(map, pos, terrain, heroes) {
+        /*if result < 0 && self.terrain_can_build(map, pos, terrain, heroes) {
             result = 0;
-        }
+        }*/
         if result < 0 {
             None
         } else {
@@ -624,7 +634,7 @@ impl Config {
         self.terrain_config(typ).income_factor
     }
 
-    pub fn terrain_can_build_base(&self, typ: TerrainType) -> bool {
+    /*pub fn terrain_can_build_base(&self, typ: TerrainType) -> bool {
         self.terrain_config(typ).can_build
     }
 
@@ -632,7 +642,7 @@ impl Config {
         &self,
         map: &impl GameView<D>,
         pos: Point,
-        terrain: &Terrain,
+        terrain: &Terrain<D>,
         heroes: &[HeroInfluence<D>],
     ) -> bool {
         let mut result = self.terrain_can_build_base(terrain.typ());
@@ -676,12 +686,12 @@ impl Config {
 
     pub(crate) fn terrain_specific_hidden_attributes(&self, typ: TerrainType) -> &[TerrainAttributeKey] {
         self.terrain_hidden_attributes.get(&typ).expect(&format!("Environment doesn't contain terrain type {typ:?}"))
-    }
+    }*/
 
     /*pub fn terrain_unit_attribute_overrides<D: Direction>(
         &self,
         _game: &impl GameView<D>,
-        terrain: &Terrain,
+        terrain: &Terrain<D>,
         _pos: Point,
         _heroes: &[HeroInfluence<D>],
     ) -> HashMap<AttributeKey, AttributeOverride> {
@@ -696,7 +706,7 @@ impl Config {
         &self,
         map: &impl GameView<D>,
         pos: Point,
-        terrain: &Terrain,
+        terrain: &Terrain<D>,
         is_bubble: bool,
         heroes: &[HeroInfluence<D>],
     ) -> Vec<usize> {
@@ -720,7 +730,7 @@ impl Config {
         &self,
         map: &impl GameView<D>,
         pos: Point,
-        terrain: &Terrain,
+        terrain: &Terrain<D>,
         is_bubble: bool,
         heroes: &[HeroInfluence<D>],
     ) -> Vec<usize> {
@@ -743,7 +753,7 @@ impl Config {
         &self,
         map: &impl GameView<D>,
         pos: Point,
-        terrain: &Terrain,
+        terrain: &Terrain<D>,
         heroes: &[HeroInfluence<D>],
     ) -> Option<(usize, usize)> {
         let mut result = None;
@@ -774,17 +784,61 @@ impl Config {
         }).collect()
     }
 
-    // details
+    // tokens
 
-    pub fn detail_action_script<D: Direction>(
-        &self,
-        map: &impl GameView<D>,
-        pos: Point,
-        detail: &Detail<D>,
-        heroes: &[HeroInfluence<D>],
-    ) -> Option<(usize, usize)> {
-        // TODO
+    pub fn token_count(&self) -> usize {
+        self.tokens.len()
+    }
+
+    pub(super) fn token_config(&self, typ: TokenType) -> &TokenTypeConfig {
+        &self.tokens[typ.0]
+    }
+
+    pub fn token_name(&self, typ: TokenType) -> &str {
+        &self.token_config(typ).name
+    }
+
+    pub fn find_token_by_name(&self, name: &str) -> Option<TokenType> {
+        for (token_type, conf) in self.tokens.iter().enumerate() {
+            if conf.name.as_str() == name {
+                return Some(TokenType(token_type))
+            }
+        }
         None
+    }
+
+    pub fn token_can_have_owner(&self, typ: TokenType) -> bool {
+        self.token_config(typ).can_have_owner
+    }
+
+    pub fn token_owner_is_playable(&self, typ: TokenType) -> bool {
+        self.token_config(typ).owner_is_playable
+    }
+
+    pub fn token_visibility(&self, typ: TokenType) -> UnitVisibility {
+        self.token_config(typ).visibility
+    }
+
+    pub fn token_owner_visibility(&self, _typ: TokenType) -> UnitVisibility {
+        // TODO
+        UnitVisibility::Normal
+    }
+
+    pub fn token_vision_range(&self, typ: TokenType) -> Option<usize> {
+        let range = self.token_config(typ).vision_range;
+        if range < 0 {
+            None
+        } else {
+            Some(range as usize)
+        }
+    }
+
+    pub fn token_action_script(&self, typ: TokenType) -> Option<(usize, usize)> {
+        self.token_config(typ).action_script
+    }
+
+    pub fn token_on_unit_path(&self, typ: TokenType) -> Option<usize> {
+        self.token_config(typ).on_unit_path
     }
 
     // commanders

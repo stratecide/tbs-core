@@ -84,8 +84,8 @@ impl<D: Direction> Command<D> {
                     let handler = ();
                     let heroes = Hero::hero_influence_at(client, pos, client.current_owner());
                     let (input_script, script) = client.with(|game| {
-                        for d in game.get_map().get_details(pos) {
-                            if game.environment().config.detail_action_script(client, pos, d, &heroes).is_some() {
+                        for token in game.get_map().get_tokens(pos) {
+                            if game.environment().config.token_action_script(token.typ()).is_some() {
                                 return Err(CommandError::Blocked(pos));
                             }
                         }
@@ -112,7 +112,7 @@ impl<D: Direction> Command<D> {
                 }
                 let mut bubble_index = None;
                 let mut terrain = handler.get_game().get_terrain(pos).unwrap();
-                for (index, det) in handler.get_game().get_details(pos).into_iter().enumerate() {
+                for (index, det) in handler.get_game().get_tokens(pos).into_iter().enumerate() {
                     match det {
                         Detail::Bubble(owner, terrain_type) => {
                             bubble_index = Some(index);
@@ -154,7 +154,7 @@ impl<D: Direction> Command<D> {
                 }
                 handler.unit_creation(pos, unit);
                 if let Some(bubble_index) = bubble_index {
-                    handler.detail_remove(pos, bubble_index);
+                    handler.token_remove(pos, bubble_index);
                 } else if terrain.has_attribute(TerrainAttributeKey::BuiltThisTurn) {
                     handler.terrain_built_this_turn(pos, built_this_turn + 1);
                 }

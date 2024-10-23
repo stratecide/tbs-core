@@ -81,7 +81,7 @@ impl MovementPattern {
         }
     }
 
-    pub fn add_temporary_ballast<D: Direction>(&self, terrain: &Terrain, permanent_ballast: &[PbEntry<D>], temporary_ballast: &mut Vec<TBallast<D>>) {
+    pub fn add_temporary_ballast<D: Direction>(&self, terrain: &Terrain<D>, permanent_ballast: &[PbEntry<D>], temporary_ballast: &mut Vec<TBallast<D>>) {
         match self {
             MovementPattern::Standard |
             MovementPattern::StandardLoopLess => temporary_ballast.push(TBallast::ForbiddenDirection(None)),

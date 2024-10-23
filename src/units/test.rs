@@ -14,13 +14,35 @@ use crate::map::point::*;
 use crate::map::point_map::PointMap;
 use crate::map::wrapping_map::*;
 use crate::script::custom_action::CustomActionData;
+use crate::tags::{Int32, TagValue};
+use crate::tags::tests::*;
 use crate::terrain::TerrainType;
-use crate::units::attributes::ActionStatus;
 use crate::units::combat::AttackVector;
 use crate::units::commands::*;
 use crate::units::movement::Path;
-use crate::units::unit::Unit;
+use crate::units::unit::*;
 use crate::units::unit_types::UnitType;
+
+// helper functions
+impl<D: Direction> Unit<D> {
+    pub fn get_hp(&self) -> u8 {
+        match self.get_tag(TAG_HP) {
+            Some(TagValue::Int(value)) => value.0 as u8,
+            _ => 100
+        }
+    }
+}
+
+impl<D: Direction> UnitBuilder<D> {
+    pub fn set_hp(self, hp: u8) -> Self {
+        self.set_tag(TAG_HP, TagValue::Int(Int32(hp as i32)))
+    }
+    pub fn set_hero_origin(self, p: Point) -> Self {
+        self.set_tag(TAG_HERO_ORIGIN, TagValue::Point(p))
+    }
+}
+
+// actual tests
 
 #[test]
 fn unit_builder_transported() {
@@ -42,7 +64,7 @@ fn fog_replacement() {
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&map_env).build_with_defaults());
-    let unit = UnitType::sniper().instance(&map_env).set_owner_id(0).set_status(ActionStatus::Capturing).build_with_defaults();
+    let unit = UnitType::sniper().instance(&map_env).set_owner_id(0).set_flag(FLAG_CAPTURING).build_with_defaults();
     let map_view = Handle::new(map);
     assert_eq!(
         unit.fog_replacement(&map_view, Point::new(1, 1), FogIntensity::Light),
@@ -119,10 +141,10 @@ fn repair_unit() {
     }), Arc::new(|| 0.)).unwrap();
     assert!(*server.get_owning_player(0).unwrap().funds < 1000);
     assert!(server.get_unit(Point::new(3, 4)).unwrap().get_hp() > 1);
-    assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_status(), ActionStatus::Repairing);
+    assert!(server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_REPAIRING));
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_status(), ActionStatus::Ready);
+    assert!(!server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
 
@@ -133,7 +155,7 @@ fn end_game() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
     map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
@@ -143,6 +165,7 @@ fn end_game() {
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
     }), Arc::new(|| 0.)).unwrap();
     game.with(|game| {
+        assert_eq!(game.get_map().get_unit(Point::new(0, 1)), None);
         assert!(game.has_ended());
         for (i, player) in game.players.iter().enumerate() {
             assert_eq!(player.dead, i != 0);
@@ -286,7 +309,7 @@ fn s_factory() {
     game.with(|game| {
         assert_eq!(*game.current_player().funds, game.current_player().get_income() * 2);
     });
-    assert_ne!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);
+    assert!(!game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     let to_build = UnitType::marine().instance(&game.environment())
         .set_owner_id(0)
         .build_with_defaults();
@@ -295,6 +318,6 @@ fn s_factory() {
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::custom(0, vec![CustomActionData::Unit(to_build), CustomActionData::Direction(Direction6::D180)]),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), UnitType::marine().instance(&environment).set_owner_id(0). set_status(ActionStatus::Exhausted).build_with_defaults());
-    assert_eq!(game.get_unit(Point::new(1, 1)).unwrap().get_status(), ActionStatus::Exhausted);
+    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), UnitType::marine().instance(&environment).set_owner_id(0). set_flag(FLAG_EXHAUSTED).build_with_defaults());
+    assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
 }

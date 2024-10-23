@@ -262,8 +262,8 @@ pub fn recalculate_fog<D: Direction>(game: &impl GameView<D>, perspective: Clien
                 }
             }
         }
-        for det in game.get_details(p) {
-            for (p, v) in det.get_vision(game, p, perspective) {
+        for token in game.get_tokens(p) {
+            for (p, v) in token.get_vision(game, p, perspective) {
                 fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
             }
         }

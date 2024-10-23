@@ -1,0 +1,5 @@
+Id;Ownable;OwnerPlayable;Visibility;VisionRange;ActionScript;OnUnitPath
+CoinPile;;;AlwaysVisible;;;on_token/unit_path > collect_coins
+Bubble;true;true;Normal;0;token_actions/bubble > buy_unit;on_token/unit_path > remove_if_enemy
+Skull;true;;Normal;;;on_token/unit_path > remove_if_enemy
+Sludge;true;;Normal;;;

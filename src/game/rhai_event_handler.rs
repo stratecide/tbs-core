@@ -10,6 +10,7 @@ use crate::units::unit::Unit;
 use crate::units::combat::*;
 use crate::units::movement::*;
 use crate::terrain::terrain::Terrain;
+use crate::tags::*;
 
 macro_rules! event_handler_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -57,6 +58,13 @@ macro_rules! event_handler_module {
                 if handler.with_game(|game| game.get_owning_player(owner_id).is_some()) {
                     handler.money_buy(owner_id, amount);
                 }
+            }
+
+            pub fn set_unit_tag(mut handler: Handler, position: Point, key: TagKey, value: Dynamic) {
+                let Some(value) = TagValue::from_dynamic(value, key.0, &handler.environment()) else {
+                    return;
+                };
+                handler.set_unit_tag(position, key.0, value);
             }
 
             /*pub fn heal_unit(mut handler: Handler, position: Point, amount: i32) {
@@ -195,7 +203,7 @@ macro_rules! event_handler_module {
                 }
             }*/
 
-            pub fn replace_terrain(mut handler: Handler, position: Point, terrain: Terrain) {
+            pub fn replace_terrain(mut handler: Handler, position: Point, terrain: Terrain<$d>) {
                 handler.terrain_replace(position, terrain);
             }
 
