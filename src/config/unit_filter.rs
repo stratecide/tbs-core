@@ -7,7 +7,6 @@ use crate::game::game_view::GameView;
 use crate::map::point::Point;
 use crate::script::executor::Executor;
 use crate::terrain::TerrainType;
-use crate::units::attributes::ActionStatus;
 use crate::units::combat::AttackTypeKey;
 use crate::units::hero::{HeroInfluence, HeroType};
 use crate::units::movement::{MovementType, TBallast};
@@ -73,6 +72,7 @@ pub(crate) enum UnitFilter {
     // this unit
     Unit(HashSet<UnitType>),
     Movement(HashSet<MovementType>),
+    SubMovement(HashSet<MovementType>),
     MovementPattern(HashSet<MovementPattern>),
     AttackType(HashSet<AttackTypeKey>),
     Unowned,
@@ -83,13 +83,12 @@ pub(crate) enum UnitFilter {
     // recursive
     Not(Vec<Self>),
     // replace with Rhai
-    Moved,
+    /*Moved,
     Hp(u8),
     Status(HashSet<ActionStatus>),
     Sludge,
     TerrainOwner,
-    //Table(TableAxis, TableAxis, HashSet<[TableAxisKey; 2]>),
-    Level(u8),
+    Level(u8),*/
 }
 
 impl FromConfig for UnitFilter {
@@ -110,6 +109,11 @@ impl FromConfig for UnitFilter {
                 let (list, r) = parse_inner_vec::<MovementType>(remainder, true, loader)?;
                 remainder = r;
                 Self::Movement(list.into_iter().collect())
+            }
+            "SubMovement" | "SM" => {
+                let (list, r) = parse_inner_vec::<MovementType>(remainder, true, loader)?;
+                remainder = r;
+                Self::SubMovement(list.into_iter().collect())
             }
             "Terrain" | "T" => {
                 let (list, r) = parse_inner_vec::<TerrainType>(remainder, true, loader)?;
@@ -151,14 +155,14 @@ impl FromConfig for UnitFilter {
                 remainder = r;
                 Self::Fog(list.into_iter().collect())
             }
-            "Moved" => Self::Moved,
+            //"Moved" => Self::Moved,
             "Unowned" => Self::Unowned,
-            "S" | "Status" => {
+            /*"S" | "Status" => {
                 let (list, r) = parse_inner_vec::<ActionStatus>(remainder, true, loader)?;
                 remainder = r;
                 Self::Status(list.into_iter().collect())
             }
-            "Sludge" => Self::Sludge,
+            "Sludge" => Self::Sludge,*/
             "Commander" | "Co" => {
                 if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
                     remainder = r;
@@ -169,49 +173,17 @@ impl FromConfig for UnitFilter {
                     Self::Commander(commander, None)
                 }
             }
-            "Hp" => {
+            /*"Hp" => {
                 let (hp, r) = parse_tuple1(remainder, loader)?;
                 remainder = r;
                 Self::Hp(hp)
             }
-            "TerrainOwner" => Self::TerrainOwner,
+            "TerrainOwner" => Self::TerrainOwner,*/
             "Counter" => Self::Counter,
-            "Level" => {
+            /*"Level" => {
                 let (level, r) = parse_tuple1(remainder, loader)?;
                 remainder = r;
                 Self::Level(level)
-            }
-            /*"Table" => {
-                let (y_axis, x_axis, filename, r): (TableAxis, TableAxis, String, &str) = parse_tuple3(remainder)?;
-                remainder = r;
-                if x_axis == y_axis {
-                    return Err(ConfigParseError::TableAxesShouldDiffer(format!("{:?}", x_axis)));
-                }
-                let data = load_config(&filename).map_err(|e| ConfigParseError::Other(e.to_string()))?;
-                let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-                let mut headers = Vec::new();
-                for h in reader.headers().map_err(|e| ConfigParseError::Other(e.to_string()))?.into_iter().skip(1) {
-                    let header = TableAxisKey::from_conf(x_axis, h)?;
-                    if headers.contains(&header) {
-                        return Err(ConfigParseError::DuplicateHeader(h.to_string()))
-                    }
-                    headers.push(header);
-                }
-                let mut set = HashSet::new();
-                for line in reader.records() {
-                    let line = line.map_err(|e| ConfigParseError::Other(e.to_string()))?;
-                    let mut line = line.into_iter();
-                    let y = TableAxisKey::from_conf(y_axis, line.next().unwrap())?;
-                    for (i, val) in line.enumerate() {
-                        if val == "true" {
-                            set.insert([headers[i], y]);
-                        }
-                    }
-                }
-                if set.len() == 0 {
-                    return Err(ConfigParseError::TableEmpty);
-                }
-                Self::Table(x_axis, y_axis, set)
             }*/
             "Not" => {
                 let (list, r) = parse_inner_vec_dyn::<Self>(remainder, true, |s| Self::from_conf(s, loader))?;
@@ -253,7 +225,8 @@ impl UnitFilter {
                 }
             }
             Self::Unit(u) => u.contains(&unit.typ()),
-            Self::Movement(m) => m.contains(&unit.default_movement_type()),
+            Self::Movement(m) => m.contains(&unit.base_movement_type()),
+            Self::SubMovement(m) => m.contains(&unit.sub_movement_type()),
             Self::Terrain(t) => t.contains(&game.get_terrain(unit_pos.0).unwrap().typ()),
             Self::MovementPattern(m) => m.contains(&unit.movement_pattern()),
             Self::Hero(h) => {
@@ -267,25 +240,27 @@ impl UnitFilter {
             }
             Self::HeroGlobal(h) => {
                 for p in game.all_points() {
-                    if let Some(u) = game.get_unit(p) {
-                        if u.get_owner_id() == unit.get_owner_id() && u.is_hero() {
-                            let hero = u.get_hero();
-                            let power = hero.get_active_power() as u8;
-                            let hero = hero.typ();
-                            if h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power) {
-                                return true;
-                            }
+                    if let Some(hero) = game.get_unit(p)
+                    .filter(|u| u.get_owner_id() == unit.get_owner_id())
+                    .and_then(|u| u.get_hero().cloned()) {
+                        let power = hero.get_active_power() as u8;
+                        let hero = hero.typ();
+                        if h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power) {
+                            return true;
                         }
                     }
                 }
                 false
             }
             Self::IsHero(h) => {
-                let hero = unit.get_hero();
-                let power = hero.get_active_power() as u8;
-                let hero = hero.typ();
-                h.len() == 0 && hero != HeroType::None
-                || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
+                if let Some(hero) = unit.get_hero() {
+                    let power = hero.get_active_power() as u8;
+                    let hero = hero.typ();
+                    h.len() == 0 && hero != HeroType::None
+                    || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
+                } else {
+                    false
+                }
             }
             Self::AttackType(a) => {
                 let attack_type = game.environment().config.default_attack_pattern(unit.typ()).key();
@@ -298,11 +273,11 @@ impl UnitFilter {
                 let fog = game.get_fog_setting().intensity();
                 f.iter().any(|f| *f == fog)
             }
-            Self::Moved => {
+            /*Self::Moved => {
                 temporary_ballast.len() > 0
-            }
+            }*/
             Self::Unowned => unit.get_owner_id() < 0,
-            Self::Status(status) => {
+            /*Self::Status(status) => {
                 let s = unit.get_status();
                 status.iter().any(|a| *a == s)
             }
@@ -312,29 +287,18 @@ impl UnitFilter {
                     Detail::SludgeToken(_) => true,
                     _ => false
                 })
-            }
+            }*/
             Self::Commander(commander_type, power) => {
                 let commander = unit.get_commander(game);
                 commander.typ() == *commander_type
                 && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
-            Self::Hp(hp) => unit.get_hp() >= *hp,
+            /*Self::Hp(hp) => unit.get_hp() >= *hp,
             Self::TerrainOwner => {
                 game.get_terrain(unit_pos.0).unwrap().get_owner_id() == unit.get_owner_id()
-            }
-            Self::Counter => is_counter,
-            Self::Level(level) => unit.get_level() >= *level,
-            /*Self::Table(x_axis, y_axis, set) => {
-                if let [Some(x), Some(y)] = [x_axis, y_axis].map(|axis| match axis {
-                    TableAxis::Unit => Some(TableAxisKey::Unit(unit.typ())),
-                    TableAxis::OtherUnit => other_unit.map(|(u, _)| TableAxisKey::Unit(u.typ())),
-                    TableAxis::Terrain => game.get_terrain(unit_pos.0).map(|t| TableAxisKey::Terrain(t.typ())),
-                }) {
-                    set.contains(&[x, y])
-                } else {
-                    false
-                }
             }*/
+            Self::Counter => is_counter,
+            //Self::Level(level) => unit.get_level() >= *level,
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead

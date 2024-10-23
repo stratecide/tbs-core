@@ -2,7 +2,6 @@ use std::fmt;
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Neg, Rem, Sub, SubAssign};
 use crate::map::point::*;
-use crate::units::attributes::{Attribute, AttributeError, AttributeKey, TrAttribute};
 
 use num_rational::Rational32;
 use zipper::*;
@@ -11,7 +10,7 @@ use zipper::zipper_derive::*;
 use super::wrapping_map::Distortion;
 
 
-pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display + TrAttribute<Self> {
+pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display {
     type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + SupportedZippable<u16> + Rem<Output = Self::T>;
     //type P: PipeState<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
     fn is_hex() -> bool;
@@ -83,7 +82,7 @@ pub enum Direction4 {
     D270,
 }
 
-impl TryFrom<Attribute<Direction4>> for Direction4 {
+/*impl TryFrom<Attribute<Direction4>> for Direction4 {
     type Error = AttributeError;
     fn try_from(value: Attribute<Direction4>) -> Result<Self, Self::Error> {
         if let Attribute::Direction(value) = value {
@@ -98,7 +97,7 @@ impl From<Direction4> for Attribute<Direction4> {
     fn from(value: Direction4) -> Self {
         Attribute::Direction(value)
     }
-}
+}*/
 
 impl Direction for Direction4 {
     type T = Translation4;
@@ -156,7 +155,7 @@ pub enum Direction6 {
     D300,
 }
 
-impl TryFrom<Attribute<Direction6>> for Direction6 {
+/*impl TryFrom<Attribute<Direction6>> for Direction6 {
     type Error = AttributeError;
     fn try_from(value: Attribute<Direction6>) -> Result<Self, Self::Error> {
         if let Attribute::Direction(value) = value {
@@ -171,7 +170,7 @@ impl From<Direction6> for Attribute<Direction6> {
     fn from(value: Direction6) -> Self {
         Attribute::Direction(value)
     }
-}
+}*/
 
 impl Direction for Direction6 {
     type T = Translation6;

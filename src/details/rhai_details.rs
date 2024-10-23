@@ -23,7 +23,7 @@ macro_rules! detail_module {
                 skull.owner.0 as i32
             }
 
-            #[rhai_fn(pure)]
+            /*#[rhai_fn(pure)]
             pub fn build_unit(context: NativeCallContext, skull: &mut Skull) -> UnitBuilder<$d> {
                 let environment = get_environment(context);
                 let mut builder = skull.unit_type.instance(&environment).set_owner_id(skull.owner.0);
@@ -31,7 +31,7 @@ macro_rules! detail_module {
                     builder = builder.set_attribute(attribute);
                 }
                 builder
-            }
+            }*/
         }
 
         def_package! {

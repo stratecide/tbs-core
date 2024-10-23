@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use interfaces::ClientPerspective;
 
@@ -64,12 +64,12 @@ pub trait GameView<D: Direction>: Send + Sync {
     //fn get_fog(&self, position: Point) -> FogIntensity;
 
     fn available_heroes(&self, player: &Player) -> Vec<HeroType> {
-        let mut used = HashSet::new();
+        let mut used = HashSet::default();
         used.insert(HeroType::None);
         for p in self.all_points() {
             if let Some(unit) = self.get_unit(p) {
-                if unit.get_owner_id() == player.get_owner_id() {
-                    used.insert(unit.get_hero().typ());
+                if unit.get_owner_id() == player.get_owner_id() && unit.is_hero() {
+                    used.insert(unit.get_hero().unwrap().typ());
                 }
             }
         }

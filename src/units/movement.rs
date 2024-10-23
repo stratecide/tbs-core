@@ -10,16 +10,15 @@ use zipper_derive::*;
 
 use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
+use crate::config::parse::FromConfig;
 use crate::game::commands::CommandError;
 use crate::game::game_view::GameView;
 use crate::game::modified_view::*;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
-use crate::terrain::AmphibiousTyping;
 use crate::terrain::terrain::Terrain;
 
-use super::attributes::{Amphibious, AttributeKey};
 use super::hero::Hero;
 use super::unit::Unit;
 
@@ -31,24 +30,16 @@ pub enum PathSearchFeedback {
     Found,
 }
 
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub enum MovementType {
-        Foot,
-        Bike,
-        Wheel,
-        Treads,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MovementType(pub usize);
 
-        Hovercraft,
-        Boat,
-        Ship,
-
-        Heli,
-        Plane,
-
-        Chess,
-        Chess2,
-        None,
+impl FromConfig for MovementType {
+    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+        let (base, s) = crate::config::parse::string_base(s);
+        match loader.unit_types.iter().position(|name| name.as_str() == base) {
+            Some(i) => Ok((Self(i), s)),
+            None => Err(crate::config::ConfigParseError::UnknownEnumMember(base.to_string()))
+        }
     }
 }
 
@@ -449,23 +440,27 @@ impl<D: Direction> PermanentBallast<D> {
         }
     }
 
-    pub fn from_unit(unit: &Unit<D>, terrain: &Terrain) -> Self {
+    pub fn from_unit(unit: &Unit<D>) -> Self {
         let mut permanents: Vec<PbEntry<D>> = Vec::new();
         match unit.movement_pattern() {
             MovementPattern::Pawn => {
-                permanents.push(PbEntry::PawnDirection(unit.get_direction()));
+                permanents.push(PbEntry::PawnDirection(unit.get_pawn_direction()));
             }
             MovementPattern::None => return Self::new(Vec::new()),
             _ => ()
         }
-        if unit.is_amphibious() {
-            permanents.push(PbEntry::Amphibious(match (terrain.get_amphibious(), unit.get_amphibious()) {
-                (None, Amphibious::InWater) => AmphibiousTyping::Sea,
-                (None, Amphibious::OnLand) => AmphibiousTyping::Land,
-                (Some(AmphibiousTyping::Land), Amphibious::InWater) => AmphibiousTyping::Sea,
-                (Some(AmphibiousTyping::Sea), Amphibious::OnLand) => AmphibiousTyping::Land,
-                (Some(a), _) => a,
-            }));
+        let movement_type = unit.base_movement_type();
+        let sub_movement_types = unit.environment().config.sub_movement_types(movement_type);
+        if sub_movement_types.len() > 1 {
+            let sub = if sub_movement_types.contains(&unit.sub_movement_type()) {
+                unit.sub_movement_type()
+            } else {
+                sub_movement_types[0]
+            };
+            permanents.push(PbEntry::SubMovementType{
+                base: movement_type,
+                sub,
+            });
         }
         Self::new(permanents)
     }
@@ -486,39 +481,25 @@ impl<D: Direction> PermanentBallast<D> {
     }
 
     fn movement_cost(&self, terrain: &Terrain, unit: &Unit<D>) -> Option<Rational32> {
-        let mut amphibious = AmphibiousTyping::Land;
+        let mut movement_type = unit.sub_movement_type();
         for e in &self.entries {
-            if let PbEntry::Amphibious(a) = e {
-                amphibious = *a;
+            if let PbEntry::SubMovementType{ sub, .. } = e {
+                movement_type = *sub;
             }
         }
-        match amphibious {
-            AmphibiousTyping::Land => {
-                terrain.movement_cost(unit.movement_type(Amphibious::OnLand))
-            }
-            AmphibiousTyping::Sea => {
-                terrain.movement_cost(unit.movement_type(Amphibious::InWater))
-            }
-            AmphibiousTyping::Beach => {
-                match (
-                    terrain.movement_cost(unit.movement_type(Amphibious::OnLand)),
-                    terrain.movement_cost(unit.movement_type(Amphibious::InWater))
-                ) {
-                    (Some(c1), Some(c2)) => Some(c1.min(c2)),
-                    (None, None) => None,
-                    (c, None) => c,
-                    (None, c) => c,
-                }
-            }
-        }
+        terrain.movement_cost(movement_type)
     }
 
     pub(crate) fn step(&self, distortion: Distortion<D>, terrain: &Terrain) -> Self {
         let mut permanent = Vec::new();
         for p in &self.entries {
             permanent.push(match p {
-                PbEntry::Amphibious(amph) => {
-                    PbEntry::Amphibious(terrain.get_amphibious().unwrap_or(*amph))
+                PbEntry::SubMovementType{ base, sub } => {
+                    let new_sub = terrain.environment().transform_sub_movement_type(*base, *sub, terrain.typ());
+                    PbEntry::SubMovementType {
+                        base: *base,
+                        sub: new_sub,
+                    }
                 }
                 PbEntry::PawnDirection(dir) => {
                     PbEntry::PawnDirection(distortion.update_direction(*dir))
@@ -531,11 +512,11 @@ impl<D: Direction> PermanentBallast<D> {
     pub(crate) fn update_unit(&self, unit: &mut Unit<D>) {
         for p in &self.entries {
             match p {
-                PbEntry::Amphibious(amph) => {
-                    unit.set_amphibious(amph.into());
+                PbEntry::SubMovementType { sub, .. } => {
+                    unit.set_sub_movement_type(*sub);
                 }
                 PbEntry::PawnDirection(dir) => {
-                    unit.set_direction(*dir);
+                    unit.set_pawn_direction(*dir);
                 }
             };
         }
@@ -545,7 +526,10 @@ impl<D: Direction> PermanentBallast<D> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PbEntry<D: Direction> {
     PawnDirection(D),
-    Amphibious(AmphibiousTyping),
+    SubMovementType {
+        base: MovementType,
+        sub: MovementType,
+    },
 }
 
 impl<D: Direction> PbEntry<D> {
@@ -559,7 +543,7 @@ impl<D: Direction> PbEntry<D> {
                     true
                 }
             }
-            (Self::Amphibious(m1), Self::Amphibious(m2)) => {
+            (Self::SubMovementType{ sub: m1, .. }, Self::SubMovementType{ sub: m2, .. }) => {
                 *m1 == *m2
             }
             _ => panic!("PbEntry have incompatible types: {self:?} - {other:?}")
@@ -781,8 +765,7 @@ fn movement_search_map<D: Direction>(
         return;
     }
     let movement_pattern = unit.movement_pattern();
-    let terrain = map.get_terrain(start).unwrap();
-    let first_permanent = PermanentBallast::from_unit(unit, &terrain);
+    let first_permanent = PermanentBallast::from_unit(unit);
     let base_movement = |pos: Point, permanent: &PermanentBallast<D>, round: usize| {
         let terrain = map.get_terrain(pos).unwrap();
         let mut temps = Vec::new();
@@ -810,22 +793,6 @@ fn movement_search_map<D: Direction>(
                 &permanent_ballast.entries,
                 temporary_ballast.get_entries().get(1..).unwrap_or(&[]),
                 map.get_terrain(point).unwrap().extra_step_options(),
-                /*&get_unit,
-                |p| {
-                    if let Some(u) = get_unit(p) {
-                        return unit.could_take(&u)
-                    }
-                    if unit.has_attribute(super::attributes::AttributeKey::EnPassant) {
-                        for dp in map.all_points() {
-                            if let Some(u) = get_unit(dp) {
-                                if unit.could_take(&u) && u.get_en_passant() == Some(p) {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                    false
-                },*/
             )
         },
         |point, step, permanent_ballast, temporary_ballast, round| {
@@ -948,7 +915,7 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool, &TemporaryBallast<D>) -> PathS
             } else if takes == PathStepTakes::Force {
                 can_continue = false;
                 let mut reject = true;
-                if previous_turns.len() == 0 && unit.has_attribute(AttributeKey::EnPassant) {
+                if previous_turns.len() == 0 {
                     for dp in game.all_points() {
                         if let Some(u) = game.get_unit(dp) {
                             if unit.could_take(&u, takes) && u.get_en_passant() == Some(destination) {

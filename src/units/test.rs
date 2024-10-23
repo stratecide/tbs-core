@@ -111,6 +111,7 @@ fn repair_unit() {
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].set_funds(1000);
     let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_hp(), 1);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),

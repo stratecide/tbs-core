@@ -8,10 +8,7 @@ use crate::config::environment::Environment;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
-use crate::script::custom_action::CustomActionTestResult;
-use super::attributes::*;
 use super::commands::UnitAction;
-use super::movement::{Path, TBallast};
 use super::unit::Unit;
 
 crate::enum_with_custom! {
@@ -60,9 +57,7 @@ pub struct Hero {
     typ: HeroType,
     power: usize,
     charge: u8,
-    origin: Option<Point>,
 }
-attribute!(Hero, Hero);
 
 impl Debug for Hero {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,26 +69,16 @@ impl Debug for Hero {
 }
 
 impl Hero {
-    pub fn new(typ: HeroType, origin: Option<Point>) -> Self {
+    pub fn new(typ: HeroType) -> Self {
         Self {
             typ,
             power: 0,
             charge: 0,
-            origin,
         }
     }
 
     pub fn typ(&self) -> HeroType {
         self.typ
-    }
-
-    pub fn get_origin(&self) -> Option<Point> {
-        self.origin
-    }
-    pub fn translate<D: Direction>(&mut self, translations: [D::T; 2], odd_if_hex: bool) {
-        if let Some(p) = &mut self.origin {
-            *p = p.translate::<D>(&translations[p.y as usize % 2], odd_if_hex)
-        }
     }
 
     pub fn max_charge(&self, environment: &Environment) -> u8 {
@@ -195,15 +180,15 @@ impl Hero {
                 if only_owner_id >= 0 && unit.get_owner_id() != only_owner_id {
                     continue;
                 }
-                if unit.is_hero() {
+                if let Some(hero) = unit.get_hero() {
                     if let Some(strength) = Self::aura(map, &unit, p, None).get(&point) {
-                        result.push((unit.clone(), unit.get_hero(), p, None, *strength as u8));
+                        result.push((unit.clone(), hero.clone(), p, None, *strength as u8));
                     }
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
-                    if unit.is_hero() {
+                    if let Some(hero) = u.get_hero() {
                         if let Some(strength) = Self::aura(map, u, p, Some((&unit, i))).get(&point) {
-                            result.push((unit.clone(), unit.get_hero(), p, Some(i), *strength as u8));
+                            result.push((u.clone(), hero.clone(), p, Some(i), *strength as u8));
                         }
                     }
                 }
@@ -222,12 +207,12 @@ impl Hero {
                 if only_owner_id >= 0 && unit.get_owner_id() != only_owner_id {
                     continue;
                 }
-                if unit.is_hero() {
-                    heroes.push((unit.clone(), unit.get_hero(), p, None));
+                if let Some(hero) = unit.get_hero() {
+                    heroes.push((unit.clone(), hero.clone(), p, None));
                 }
                 for (i, unit) in unit.get_transported().iter().enumerate() {
-                    if unit.is_hero() {
-                        heroes.push((unit.clone(), unit.get_hero(), p, Some(i)));
+                    if let Some(hero) = unit.get_hero() {
+                        heroes.push((unit.clone(), hero.clone(), p, Some(i)));
                     }
                 }
             }
@@ -276,7 +261,6 @@ impl SupportedZippable<&Environment> for Hero {
         if self.typ == HeroType::None {
             return;
         }
-        self.origin.export(zipper, environment);
         zipper.write_u8(self.power as u8, bits_needed_for_max_value(environment.config.hero_powers(self.typ).len() as u32 - 1));
         if self.typ.max_charge(&environment) > 0 {
             let bits = bits_needed_for_max_value(self.typ.max_charge(&environment) as u32);
@@ -286,12 +270,7 @@ impl SupportedZippable<&Environment> for Hero {
 
     fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
         let typ = HeroType::import(unzipper, environment)?;
-        let origin = if typ != HeroType::None {
-            Option::<Point>::import(unzipper, environment)?
-        } else {
-            None
-        };
-        let mut result = Self::new(typ, origin);
+        let mut result = Self::new(typ);
         if typ != HeroType::None {
             result.power = unzipper.read_u8(bits_needed_for_max_value(environment.config.hero_powers(typ).len() as u32 - 1))? as usize;
             if typ.max_charge(environment) > 0 {

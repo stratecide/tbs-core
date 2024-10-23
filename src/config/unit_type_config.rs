@@ -3,9 +3,9 @@ use std::error::Error;
 use num_rational::Rational32;
 
 use crate::game::fog::VisionMode;
-use crate::units::attributes::*;
 use crate::units::combat::*;
 use crate::units::movement::MovementType;
+use crate::units::UnitVisibility;
 
 use super::file_loader::FileLoader;
 use super::file_loader::TableLine;
@@ -39,7 +39,7 @@ pub struct UnitTypeConfig {
     //pub(super) splash_range: usize,
     //pub(super) splash_factor: Rational32,
     pub(super) splash_damage: Vec<Rational32>, // empty if no splash damage. contains factor per additional distance
-    pub(super) cost: i32,
+    pub(super) value: i32,
     pub(super) displacement: Displacement, // implies that attack_pattern is Adjacent or Straight
     pub(super) displacement_distance: i8, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: bool,
@@ -55,7 +55,7 @@ impl TableLine for UnitTypeConfig {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            name: get(H::Id)?.to_string(),
+            name: get(H::Id)?.trim().to_string(),
             visibility: match data.get(&H::Visibility) {
                 Some(s) => UnitVisibility::from_conf(s, loader)?.0,
                 None => UnitVisibility::Normal,
@@ -79,7 +79,7 @@ impl TableLine for UnitTypeConfig {
             attack_pattern: parse_def(data, H::AttackPattern, AttackType::None, loader)?,
             attack_targets: parse_def(data, H::AttackTargets, AttackTargeting::Enemy, loader)?,
             splash_damage: parse_vec_def(data, H::SplashDamage, vec![Rational32::from_integer(1)], loader)?,
-            cost: parse(data, H::Cost, loader)?,
+            value: parse(data, H::Value, loader)?,
             displacement: parse_def(data, H::Displacement, Displacement::None, loader)?,
             displacement_distance: parse_def(data, H::DisplacementDistance, 0, loader)?,
             can_be_displaced: parse_def(data, H::CanBeDisplaced, false, loader)?,
@@ -121,7 +121,7 @@ crate::listable_enum! {
         AttackPattern,
         AttackTargets,
         SplashDamage,
-        Cost,
+        Value,
         Displacement,
         DisplacementDistance,
         CanBeDisplaced,

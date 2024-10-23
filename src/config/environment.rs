@@ -10,17 +10,21 @@ use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
 use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
+use crate::map::point::Point;
 use crate::map::point_map::MapSize;
 use crate::script::*;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::*;
 use crate::terrain::TerrainType;
+use crate::units::movement::MovementType;
+use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
-use crate::units::attributes::*;
+use crate::units::UnitVisibility;
 use crate::units::hero::*;
 
 use super::config::Config;
 use super::table_config::*;
+use super::tag_config::*;
 
 #[derive(Clone)]
 pub struct Environment {
@@ -62,9 +66,40 @@ impl Environment {
         200
     }
 
-    pub fn sludge_damage(&self) -> u16 {
-        // TODO
-        10
+    pub fn flag_count(&self) -> usize {
+        self.config.flags.len()
+    }
+    pub fn flag_visibility(&self, index: usize) -> UnitVisibility {
+        self.config.flags[index].visibility
+    }
+    pub fn flag_name(&self, index: usize) -> &str {
+        &self.config.flags[index].name
+    }
+    pub fn flag_by_name(&self, name: &str) -> Option<usize> {
+        self.config.flags.iter().position(|flag| flag.name.as_str() == name)
+    }
+
+    pub fn tag_count(&self) -> usize {
+        self.config.tags.len()
+    }
+    pub fn tag_type(&self, index: usize) -> &TagType {
+        &self.config.tags[index].tag_type
+    }
+    pub fn tag_visibility(&self, index: usize) -> UnitVisibility {
+        self.config.tags[index].visibility
+    }
+    pub fn tag_name(&self, index: usize) -> &str {
+        &self.config.tags[index].name
+    }
+    pub fn tag_by_name(&self, name: &str) -> Option<usize> {
+        self.config.tags.iter().position(|tag| tag.name.as_str() == name)
+    }
+
+    pub fn unique_tag_keys(&self, pool_name: &str) -> Vec<usize> {
+        self.config.tags.iter().enumerate()
+        .filter(|(_, conf)| matches!(&conf.tag_type, TagType::Unique { pool } if pool.as_str() == pool_name))
+        .map(|(i, _)| i)
+        .collect()
     }
 
     fn get_engine_base(&self, is_hex: bool) -> Engine {
@@ -124,6 +159,18 @@ impl Environment {
         (ast, name)
     }
 
+    pub fn is_unit_dead_rhai(&self) -> usize {
+        self.config.is_unit_dead_rhai
+    }
+
+    pub fn is_unit_movable_rhai(&self) -> usize {
+        self.config.is_unit_movable_rhai
+    }
+
+    pub fn deal_damage_rhai(&self) -> usize {
+        self.config.deal_damage_rhai
+    }
+
     pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
         self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name)
@@ -147,6 +194,14 @@ impl Environment {
             }
         }
         result
+    }
+
+    pub fn transform_sub_movement_type(&self, base: MovementType, sub: MovementType, terrain: TerrainType) -> MovementType {
+        let Some(transformer) = self.config.movement_type_transformer.get(&base) else {
+            return sub;
+        };
+        transformer.get(&(terrain, sub)).cloned()
+        .unwrap_or(sub)
     }
 
     pub fn get_team(&self, owner_id: i8) -> ClientPerspective {
@@ -182,7 +237,7 @@ impl Environment {
         CommanderType::None
     }
 
-    pub fn unit_attributes(&self, typ: UnitType, owner: i8) -> impl Iterator<Item = &AttributeKey> {
+    /*pub fn unit_attributes(&self, typ: UnitType, owner: i8) -> impl Iterator<Item = &AttributeKey> {
         // order has to be preserved here
         // because this method is used for exporting, while
         // unit_specific_attributes and commander_attributes are used for importing
@@ -199,12 +254,22 @@ impl Environment {
 
     pub fn unit_valid_action_status(&self, typ: UnitType, _owner: i8) -> &[ActionStatus] {
         self.config.unit_specific_statuses(typ)
-    }
+    }*/
 
     pub fn unit_transport_capacity(&self, typ: UnitType, owner: i8, hero: HeroType) -> usize {
         self.config.unit_config(typ).transport_capacity
         + self.config.commander_config(self.get_commander(owner)).transport_capacity as usize
         + hero.transport_capacity(self)
+    }
+
+    pub fn unit_transport_visibility<D: Direction>(&self, _game: &impl GameView<D>, _unit: &Unit<D>, _p: Point, _heroes: &[HeroInfluence<D>]) -> UnitVisibility {
+        // TODO
+        UnitVisibility::Normal
+    }
+
+    pub fn hero_visibility<D: Direction>(&self, _game: &impl GameView<D>, _unit: &Unit<D>, _p: Point, _hero: HeroType) -> UnitVisibility {
+        // TODO
+        UnitVisibility::Normal
     }
 
     // terrain

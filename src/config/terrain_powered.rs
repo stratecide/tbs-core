@@ -11,7 +11,6 @@ use crate::map::point::Point;
 use crate::script::executor::Executor;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::TerrainType;
-use crate::units::attributes::*;
 use crate::units::hero::HeroInfluence;
 
 use super::file_loader::{FileLoader, TableLine};
@@ -108,10 +107,11 @@ pub(super) struct TerrainPoweredConfig {
     pub(super) repair: Option<bool>,
     pub(super) build: Option<bool>,
     pub(super) sells_hero: Option<bool>,
-    pub(super) build_overrides: HashSet<AttributeOverride>,
+    //pub(super) build_overrides: HashSet<AttributeOverride>,
     pub(super) on_start_turn: Option<usize>,
     pub(super) on_end_turn: Option<usize>,
-    pub(super) on_build: Option<usize>,
+    //pub(super) on_build: Option<usize>,
+    pub(super) action_script: Option<(usize, usize)>,
 }
 
 impl TableLine for TerrainPoweredConfig {
@@ -136,17 +136,25 @@ impl TableLine for TerrainPoweredConfig {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
             },
-            build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
+            //build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
             on_start_turn: match data.get(&H::OnStartTurn) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
             },
-            on_build: match data.get(&H::OnBuild) {
+            /*on_build: match data.get(&H::OnBuild) {
+                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
+                _ => None,
+            },*/
+            on_end_turn: match data.get(&H::OnEndTurn) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
             },
-            on_end_turn: match data.get(&H::OnEndTurn) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
+            action_script: match data.get(&H::ActionScript) {
+                Some(s) if s.len() > 0 => {
+                    let exe = loader.rhai_function(s, 1..=1)?;
+                    let input = loader.rhai_function(&format!("{s}_input"), 0..=0)?.index;
+                    Some((input, exe.index))
+                }
                 _ => None,
             },
         };
@@ -154,12 +162,12 @@ impl TableLine for TerrainPoweredConfig {
     }
 
     fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
-        let mut overrides = HashSet::default();
+        /*let mut overrides = HashSet::default();
         for key in self.build_overrides.iter().map(AttributeOverride::key) {
             if !overrides.insert(key) {
                 // TODO: return error
             }
-        }
+        }*/
         Ok(())
     }
 }
@@ -174,9 +182,10 @@ crate::listable_enum! {
         Repair,
         Build,
         SellsHero,
-        BuildOverrides,
+        //BuildOverrides,
         OnStartTurn,
         OnEndTurn,
-        OnBuild,
+        //OnBuild,
+        ActionScript,
     }
 }

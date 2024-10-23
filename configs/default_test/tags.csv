@@ -1,0 +1,9 @@
+Id;Type;MinValue;MaxValue;UniqueWith
+Hp;Int;0;100;
+DroneStationId;Unique;;;DroneId
+DroneId;Unique;;;
+Zombified;Flag;;;
+Unmoved;Flag;;;
+Level;Int;0;3;
+EnPassant;Point;;;
+HeroOrigin;Point;;;

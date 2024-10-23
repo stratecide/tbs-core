@@ -7,12 +7,9 @@ use super::event_handler::EventHandler;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit::Unit;
-use crate::units::attributes::*;
 use crate::units::combat::*;
 use crate::units::movement::*;
-use crate::terrain::attributes::TerrainAttributeKey;
 use crate::terrain::terrain::Terrain;
-use crate::details::*;
 
 macro_rules! event_handler_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -62,7 +59,7 @@ macro_rules! event_handler_module {
                 }
             }
 
-            pub fn heal_unit(mut handler: Handler, position: Point, amount: i32) {
+            /*pub fn heal_unit(mut handler: Handler, position: Point, amount: i32) {
                 if amount > 0 && handler.with_map(|map| map.get_unit(position).is_some()) {
                     handler.unit_heal(position, amount.min(100) as u8);
                 }
@@ -87,7 +84,7 @@ macro_rules! event_handler_module {
                     .map(|(p, heal)| (p, heal.min(100) as u8))
                     .collect();
                 handler.unit_mass_heal(map);
-            }
+            }*/
 
             #[rhai_fn(name = "sneak_attack")]
             pub fn sneak_attack(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32, attacker_id: usize) {
@@ -128,11 +125,11 @@ macro_rules! event_handler_module {
                 sneak_attack3(handler, vector, p, attacker, Rational32::from_integer(factor))
             }
 
-            pub fn set_unit_status(mut handler: Handler, position: Point, status: ActionStatus) {
+            /*pub fn set_unit_status(mut handler: Handler, position: Point, status: ActionStatus) {
                 if handler.with_map(|map| map.get_unit(position).is_some()) {
                     handler.unit_status(position, status);
                 }
-            }
+            }*/
 
             pub fn place_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {
@@ -175,7 +172,7 @@ macro_rules! event_handler_module {
                 move_unit(handler, path, false);
             }
 
-            pub fn set_unit_level(mut handler: Handler, position: Point, level: i32) {
+            /*pub fn set_unit_level(mut handler: Handler, position: Point, level: i32) {
                 let level = level.max(0).min(handler.environment().config.max_unit_level() as i32) as u8;
                 let has_attribute = handler.with_map(|map| {
                     map.get_unit(position)
@@ -196,13 +193,13 @@ macro_rules! event_handler_module {
                 if has_attribute {
                     handler.terrain_anger(position, anger);
                 }
-            }
+            }*/
 
             pub fn replace_terrain(mut handler: Handler, position: Point, terrain: Terrain) {
                 handler.terrain_replace(position, terrain);
             }
 
-            pub fn place_skull(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {
+            /*pub fn place_skull(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {
                 let environment = handler.environment();
                 if owner_id < 0 || owner_id >= environment.config.max_player_count() as i32 {
                     return;
@@ -243,7 +240,7 @@ macro_rules! event_handler_module {
                 }) {
                     handler.detail_remove(position, i);
                 }
-            }
+            }*/
         }
 
         def_package! {

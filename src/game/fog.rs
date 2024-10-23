@@ -8,10 +8,10 @@ use zipper::zipper_derive::*;
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
 use crate::map::point::Point;
-use crate::units::attributes::AttributeKey;
 use crate::units::hero::Hero;
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
+use crate::units::UnitVisibility;
 
 use super::game_view::GameView;
 use super::Direction;
@@ -291,8 +291,62 @@ pub fn find_visible_threats<D: Direction>(game: &impl GameView<D>, pos: Point, t
     result
 }
 
-pub fn visible_unit_with_attribute<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, pos: Point, attribute: AttributeKey) -> bool {
-    game.get_unit(pos).unwrap()
-    .fog_replacement(game, pos, game.get_fog_at(team, pos))
-    .and_then(|u| Some(u.has_attribute(attribute))).unwrap_or(false)
+pub fn is_unit_attribute_visible(fog_intensity: FogIntensity, unit_visibility: UnitVisibility, attribute_visibility: UnitVisibility) -> bool {
+    match fog_intensity {
+        FogIntensity::TrueSight => true,
+        FogIntensity::NormalVision => {
+            unit_visibility != UnitVisibility::Stealth && attribute_visibility != UnitVisibility::Stealth
+        }
+        FogIntensity::Light => {
+            match unit_visibility {
+                UnitVisibility::Stealth => false,
+                // unit gets replaced with (?) icon, flag invisible unless visibility is forced
+                UnitVisibility::Normal => attribute_visibility == UnitVisibility::AlwaysVisible,
+                UnitVisibility::AlwaysVisible => attribute_visibility != UnitVisibility::Stealth,
+            }
+        }
+        FogIntensity::Dark => {
+            unit_visibility == UnitVisibility::AlwaysVisible && attribute_visibility != UnitVisibility::Stealth
+        }
+    }
+}
+
+pub fn visible_unit_with_attribute<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, pos: Point, attribute_visibility: UnitVisibility) -> bool {
+    let unit = game.get_unit(pos).unwrap();
+    let fog_intensity = game.get_fog_at(team, pos);
+    let unit_visibility = unit.environment().config.unit_visibility(game, &unit, pos, &[]);
+    is_unit_attribute_visible(fog_intensity, unit_visibility, attribute_visibility)
+}
+
+pub fn visible_unit_with_attribute_transported<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, pos: Point, unload_index: usize, attribute_visibility: UnitVisibility) -> Option<usize> {
+    let transporter = game.get_unit(pos).unwrap();
+    let fog_intensity = game.get_fog_at(team, pos);
+    let transporter_visibility = transporter.environment().config.unit_visibility(game, &transporter, pos, &[]);
+    let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, pos, &[]);
+    if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
+        return None;
+    }
+    transporter.get_transported().iter()
+    .take(unload_index + 1)
+    .enumerate()
+    .filter_map(|(i, unit)| {
+        let unit_visibility = unit.environment().config.unit_visibility(game, &unit, pos, &[]);
+        match fog_intensity {
+            FogIntensity::TrueSight => (),
+            FogIntensity::NormalVision |
+            FogIntensity::Light => {
+                if unit_visibility == UnitVisibility::Stealth {
+                    return None
+                }
+            }
+            FogIntensity::Dark => {
+                if unit_visibility != UnitVisibility::AlwaysVisible {
+                    return None
+                }
+            }
+        }
+        Some((i, unit_visibility))
+    }).position(|(i, unit_visibility)| {
+        i == unload_index && is_unit_attribute_visible(fog_intensity, unit_visibility, attribute_visibility)
+    })
 }

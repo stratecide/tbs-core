@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::error::Error;
 use std::sync::Arc;
 
@@ -104,7 +104,7 @@ impl<D: Direction> Game<D> {
         let neutral_fog = if game.is_foggy() {
             import_fog(&mut unzipper, &points)?
         } else {
-            HashMap::new()
+            HashMap::default()
         };
         if let Some((team, team_view)) = team_view {
             let mut unzipper = Unzipper::new(team_view, version);
@@ -167,7 +167,7 @@ impl<D: Direction> Game<D> {
     }
 
     /*pub fn recalculate_fog(&self, perspective: ClientPerspective) -> HashMap<Point, FogIntensity> {
-        let mut fog = HashMap::new();
+        let mut fog = HashMap::default();
         let strongest_intensity = self.fog_mode.fog_setting(self.current_turn as usize, self.players.len()).intensity();
         for p in self.get_map().all_points() {
             fog.insert(p, strongest_intensity);
@@ -216,7 +216,7 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn get_teams(&self) -> HashSet<u8> {
-        let mut result = HashSet::new();
+        let mut result = HashSet::default();
         for p in self.players.iter() {
             match p.get_team() {
                 ClientPerspective::Team(team) => {
@@ -229,7 +229,7 @@ impl<D: Direction> Game<D> {
     }
 
     pub fn get_living_teams(&self) -> HashSet<u8> {
-        let mut result = HashSet::new();
+        let mut result = HashSet::default();
         for p in self.players.iter()
         .filter(|p| !p.dead) {
             match p.get_team() {
@@ -293,7 +293,7 @@ impl<D: Direction> Game<D> {
     }
 
     /*pub fn find_visible_threats(&self, pos: Point, threatened: &Unit<D>, team: ClientPerspective) -> HashSet<Point> {
-        let mut result = HashSet::new();
+        let mut result = HashSet::default();
         for p in self.map.all_points() {
             if let Some(unit) = self.map.get_unit(p) {
                 if self.can_see_unit_at(team, p, unit, false) && unit.threatens(threatened) && unit.shortest_path_to_attack(self, &Path::new(p), None, pos).is_some() {
@@ -320,7 +320,7 @@ fn export_fog(zipper: &mut Zipper, points: &Vec<Point>, fog: &HashMap<Point, Fog
 }
 
 fn import_fog(unzipper: &mut Unzipper, points: &Vec<Point>) -> Result<HashMap<Point, FogIntensity>, ZipperError> {
-    let mut result = HashMap::new();
+    let mut result = HashMap::default();
     for p in points {
         let intensity = FogIntensity::unzip(unzipper)?;
         if intensity != FogIntensity::TrueSight {
@@ -331,8 +331,8 @@ fn import_fog(unzipper: &mut Unzipper, points: &Vec<Point>) -> Result<HashMap<Po
 }
 
 fn create_base_fog<D: Direction>(_map: &Map<D>, players: &[Player]) -> HashMap<ClientPerspective, HashMap<Point, FogIntensity>> {
-    let mut fog = HashMap::new();
-    let neutral_fog: HashMap<Point, FogIntensity> = HashMap::new();
+    let mut fog = HashMap::default();
+    let neutral_fog: HashMap<Point, FogIntensity> = HashMap::default();
     for player in players {
         // TODO: maybe fog-maps should only be added for visible teams
         // (so all for the server but only your team's for client)
@@ -578,7 +578,7 @@ impl<D: Direction> GameInterface for Handle<Game<D>> {
                 export_fog(&mut zipper, &points, neutral_fog);
                 let public = zipper.finish();
                 // team perspectives
-                let mut teams = HashMap::new();
+                let mut teams = std::collections::HashMap::new();
                 for team in game.get_living_teams() {
                     // team perspective, one per team
                     if let Some(fog) = game.fog.get(&ClientPerspective::Team(team)) {
@@ -694,7 +694,7 @@ impl<D: Direction> EventsMap<D> {
         let version = Version::parse(VERSION).unwrap();
         Ok(match raw {
             Events::Secrets(map) => {
-                let mut result = HashMap::new();
+                let mut result = HashMap::default();
                 for (perspective, events) in map {
                     result.insert(interfaces::Perspective::from_i16(perspective).unwrap_or(interfaces::Perspective::Server), Event::import_list(events, environment, version.clone())?);
                 }

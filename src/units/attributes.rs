@@ -26,8 +26,11 @@ crate::listable_enum! {
         // Owner should be the first attribute
         // because other atributes may depend on Owner for importing
         // and attributes are imported in order (except commander-specific ones)
+        // not a tag
         Owner,
         Hero,
+        Transported,
+        // tag
         Hp,
         ActionStatus,
         Amphibious,
@@ -38,7 +41,6 @@ crate::listable_enum! {
         Unmoved,
         EnPassant,
         Level,
-        Transported,
     }
 }
 
@@ -460,15 +462,6 @@ impl From<u8> for Level {
     }
 }
 
-
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub enum UnitVisibility {
-        Stealth,
-        Normal,
-        AlwaysVisible,
-    }
-}
 
 
 

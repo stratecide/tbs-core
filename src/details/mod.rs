@@ -1,6 +1,7 @@
 pub mod rhai_details;
 
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 
 use interfaces::ClientPerspective;
 use zipper_derive::Zippable;
@@ -15,10 +16,9 @@ use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::Owner;
+use crate::tags::TagBag;
 use crate::terrain::TerrainType;
-use crate::units::attributes::Attribute;
-use crate::units::hero::HeroType;
-use crate::units::unit::{Unit, UnitBuilder};
+use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
 pub const MAX_STACK_SIZE: u32 = 31;
@@ -31,7 +31,7 @@ crate::listable_enum! {
         Coins2,
         Coins3,
         Bubble,
-        Skull,
+        //Skull,
         SludgeToken,
     }
 }
@@ -45,7 +45,7 @@ pub enum Detail<D: Direction> {
     Coins2,
     Coins3,
     Bubble(Owner, TerrainType),
-    Skull(SkullData<D>),
+    //Skull(SkullData<D>),
     SludgeToken(SludgeToken),
 }
 
@@ -57,7 +57,7 @@ impl<D: Direction> Detail<D> {
             Self::Coins2 => DetailType::Coins2,
             Self::Coins3 => DetailType::Coins3,
             Self::Bubble(_, _) => DetailType::Bubble,
-            Self::Skull(_) => DetailType::Skull,
+            //Self::Skull(_) => DetailType::Skull,
             Self::SludgeToken(_) => DetailType::SludgeToken,
         }
     }
@@ -97,7 +97,7 @@ impl<D: Direction> Detail<D> {
     pub fn correct_stack(details: Vec<Self>, environment: &Environment) -> Vec<Self> {
         let mut bubble = false;
         let mut coin = false;
-        let mut skull = false;
+        //let mut skull = false;
         let mut pipe_directions = HashSet::new();
         let max_sludge = details.iter()
         .filter_map(|d| match d {
@@ -109,7 +109,7 @@ impl<D: Direction> Detail<D> {
             let remove;
             match detail {
                 Self::Pipe(connection) => {
-                    remove = bubble || coin || skull
+                    remove = bubble || coin// || skull
                     || connection.directions[0] == connection.directions[1]
                     || connection.directions.iter().any(|d| pipe_directions.contains(d));
                     if !remove {
@@ -130,12 +130,12 @@ impl<D: Direction> Detail<D> {
                         coin = true;
                     }
                 }
-                Self::Skull(_) => {
+                /*Self::Skull(_) => {
                     remove = skull || pipe_directions.len() > 0;
                     if !remove {
                         skull = true;
                     }
-                }
+                }*/
                 Self::SludgeToken(token) => {
                     remove = max_sludge != token.remaining_turns(environment).unwrap_or(0) || pipe_directions.len() > 0;
                 }
@@ -178,14 +178,22 @@ impl<D: Direction> Detail<D> {
 
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
+//#[zippable(support_ref = Environment)]
 pub struct SkullData<D: Direction> {
     owner: Owner,
     unit_type: UnitType,
-    attributes: Vec<Attribute<D>>,
+    sub_movement_type: MovementType, // in case the unit had multiple movement types
+    tags: TagBag<D>,
 }
 
-impl<D: Direction> SupportedZippable<&Environment> for SkullData<D> {
+impl<D: Direction> Debug for SkullData<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Skull of {:?}", self.unit_type)
+    }
+}
+
+/*impl<D: Direction> SupportedZippable<&Environment> for SkullData<D> {
     fn export(&self, zipper: &mut zipper::Zipper, support: &Environment) {
         self.owner.export(zipper, support);
         self.unit_type.export(zipper, support);
@@ -209,21 +217,15 @@ impl<D: Direction> SupportedZippable<&Environment> for SkullData<D> {
             attributes,
         })
     }
-}
+}*/
 
-impl<D: Direction> SkullData<D> {
+/*impl<D: Direction> SkullData<D> {
     pub fn new(unit: &Unit<D>, owner: i8) -> Self {
-        let unit_type = unit.typ();
-        let mut attributes = Vec::new();
-        for key in unit.environment().unit_attributes(unit_type, owner) {
-            if key.is_skull_data(&unit.environment().config) {
-                attributes.push(unit.get_attributes().get(key).cloned().unwrap_or(key.default()));
-            }
-        }
         Self {
             owner: Owner(owner),
-            unit_type,
-            attributes,
+            unit_type: unit.typ(),
+            sub_movement_type: unit.sub_movement_type(),
+            tags: unit.get_tags().clone(),
         }
     }
 
@@ -245,7 +247,7 @@ impl<D: Direction> SkullData<D> {
         }
         builder.build_with_defaults()
     }
-}
+}*/
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Zippable)]
 pub struct PipeState<D: Direction> {

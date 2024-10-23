@@ -8,8 +8,8 @@ use crate::handle::Handle;
 use crate::map::map::FieldData;
 use crate::map::point::Point;
 use crate::map::point_map;
+use crate::tags::*;
 use crate::terrain::attributes::{CaptureProgress, Anger, BuiltThisTurn};
-use crate::units::attributes::{ActionStatus, AttributeKey, Level};
 use crate::units::commands::UnloadIndex;
 use crate::units::hero::{Hero, HeroChargeChange};
 use crate::units::unit::Unit;
@@ -65,27 +65,11 @@ impl<D: Direction> SupportedZippable<&Environment> for (Point, FogIntensity, Fie
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 6, support_ref = Environment)]
 pub enum Event<D:Direction> {
-    // unit events
-    UnitAdd(Point, Unit<D>),
-    UnitRemove(Point, Unit<D>),
-    UnitAddBoarded(Point, Unit<D>),
-    UnitRemoveBoarded(Point, UnloadIndex, Unit<D>),
-    UnitHpChange(Point, I<-100, 99>, I<-999, 100>),
-    UnitHpChangeBoarded(Point, UnloadIndex, I<-100, 99>),
-    UnitActionStatus(Point, ActionStatus, ActionStatus),
-    UnitActionStatusBoarded(Point, UnloadIndex, ActionStatus, ActionStatus),
-    UnitMovedThisGame(Point),
-    EnPassantOpportunity(Point, Option<Point>, Option<Point>),
-    UnitDirection(Point, D, D),
-    UnitLevel(Point, Level, Level),
     // global
     NextTurn,
     MoneyChange(Owner, Funds),
     PlayerDies(Owner),
     GameEnds,
-    // visual
-    Effect(Effect<D>),
-    UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
     // fog events
     PureFogChange(Perspective, LVec<(Point, FogIntensity, FogIntensity), {point_map::MAX_AREA}>),
     FogChange(Perspective, LVec<(Point, FogIntensity, FieldData<D>, FogIntensity, FieldData<D>), {point_map::MAX_AREA}>),
@@ -93,11 +77,35 @@ pub enum Event<D:Direction> {
     HideFunds(Owner, Funds),
     PureRevealFunds(Owner),
     RevealFunds(Owner, Funds),
+    // commander events
+    CommanderCharge(Owner, CommanderChargeChange),
+    CommanderPowerIndex(Owner, U<31>, U<31>),
     // hero events
-    HeroSet(Point, Hero, Hero),
+    HeroSet(Point, Hero),
     HeroCharge(Point, HeroChargeChange),
     HeroChargeTransported(Point, UnloadIndex, HeroChargeChange),
     HeroPower(Point, U<31>, U<31>),
+    // unit events
+    UnitAdd(Point, Unit<D>),
+    UnitRemove(Point, Unit<D>),
+    UnitAddBoarded(Point, Unit<D>),
+    UnitRemoveBoarded(Point, UnloadIndex, Unit<D>),
+    UnitFlag(Point, FlagKey),
+    UnitFlagBoarded(Point, UnloadIndex, FlagKey),
+    UnitSetTag(Point, TagKeyValues<1, D>),
+    UnitSetTagBoarded(Point, UnloadIndex, TagKeyValues<1, D>),
+    UnitRemoveTag(Point, TagKeyValues<1, D>),
+    UnitRemoveTagBoarded(Point, UnloadIndex, TagKeyValues<1, D>),
+    UnitReplaceTag(Point, TagKeyValues<2, D>),
+    UnitReplaceTagBoarded(Point, UnloadIndex, TagKeyValues<2, D>),
+    /*UnitHpChange(Point, I<-100, 99>, I<-999, 100>),
+    UnitHpChangeBoarded(Point, UnloadIndex, I<-100, 99>),
+    UnitActionStatus(Point, ActionStatus, ActionStatus),
+    UnitActionStatusBoarded(Point, UnloadIndex, ActionStatus, ActionStatus),
+    UnitMovedThisGame(Point),
+    EnPassantOpportunity(Point, Option<Point>, Option<Point>),
+    UnitDirection(Point, D, D),
+    UnitLevel(Point, Level, Level),*/
     // terrain events
     TerrainChange(Point, Terrain, Terrain),
     TerrainAnger(Point, Anger, Anger),
@@ -106,9 +114,9 @@ pub enum Event<D:Direction> {
     // detail events
     RemoveDetail(Point, U<{details::MAX_STACK_SIZE as i32 - 1}>, Detail<D>),
     ReplaceDetail(Point, LVec<Detail<D>, {details::MAX_STACK_SIZE}>, LVec<Detail<D>, {details::MAX_STACK_SIZE}>),
-    // commander events
-    CommanderCharge(Owner, CommanderChargeChange),
-    CommanderPowerIndex(Owner, U<31>, U<31>),
+    // visual
+    Effect(Effect<D>),
+    UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
 }
 
 impl<D: Direction> Event<D> {
@@ -134,6 +142,20 @@ impl<D: Direction> Event<D> {
 
     pub fn apply(&self, game: &mut Game<D>) {
         match self {
+            // global
+            Self::NextTurn => game.current_turn += 1,
+            Self::MoneyChange(owner, change) => {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
+                    player.funds += **change;
+                }
+            }
+            Self::PlayerDies(owner) => {
+                game.get_owning_player_mut(owner.0).unwrap().dead = true;
+            }
+            Self::GameEnds => {
+                game.set_ended(true);
+            }
+            // fog
             Self::PureFogChange(team, vision_changes) => {
                 let team = to_client_perspective(&team);
                 for (pos, _, intensity) in vision_changes {
@@ -146,8 +168,105 @@ impl<D: Direction> Event<D> {
                     apply_vision_changes(game, team, *pos, *intensity, fd);
                 }
             }
-            Self::NextTurn => game.current_turn += 1,
-            Self::UnitActionStatus(pos, _, action_status) => {
+            Self::PureHideFunds(_) => {}
+            Self::HideFunds(owner, _) => {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
+                    player.funds = 0.into();
+                }
+            }
+            Self::PureRevealFunds(_) => {}
+            Self::RevealFunds(owner, value) => {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
+                    player.funds = *value;
+                }
+            }
+            // commander
+            Self::CommanderCharge(owner, delta) => {
+                game.get_owning_player_mut(owner.0).unwrap().commander.add_charge(delta.0);
+            }
+            Self::CommanderPowerIndex(owner, _, index) => {
+                game.get_owning_player_mut(owner.0).unwrap().commander.set_active_power(**index as usize);
+            }
+            // hero
+            Self::HeroSet(p, hero) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
+                    unit.set_hero(hero.clone());
+                }
+            }
+            Self::HeroCharge(p, change) => {
+                let environment = game.environment().clone();
+                if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
+                    hero.set_charge(&environment, (hero.get_charge() as i8 + change.0) as u8);
+                }
+            }
+            Self::HeroChargeTransported(p, unload_index, change) => {
+                let environment = game.environment().clone();
+                if let Some(mut transported) = game.get_map_mut().get_unit_mut(*p)
+                .map(|u| u.get_transported_mut()) {
+                    if let Some(hero) = transported.get_mut(unload_index.0)
+                    .and_then(|u| u.get_hero_mut()) {
+                        hero.set_charge(&environment, (hero.get_charge() as i8 + change.0) as u8);
+                    }
+                }
+            }
+            Self::HeroPower(p, _, index) => {
+                if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
+                    hero.set_active_power(**index as usize);
+                }
+            }
+            // unit events
+            Self::UnitAdd(pos, unit) => {
+                game.get_map_mut().set_unit(*pos, Some(unit.clone()));
+            }
+            Self::UnitRemove(pos, _) => {
+                game.get_map_mut().set_unit(*pos, None).expect(&format!("expected a unit at {:?} to remove!", pos));
+            }
+            Self::UnitAddBoarded(pos, unit) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
+                let mut transported = transporter.get_transported_mut();
+                transported.push(unit.clone());
+            }
+            Self::UnitRemoveBoarded(pos, index, _) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
+                let mut transported = transporter.get_transported_mut();
+                transported.remove(index.0);
+            }
+            Self::UnitFlag(pos, key) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.flip_flag(key.0);
+                }
+            }
+            Self::UnitFlagBoarded(pos, index, key) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to flip flag!", pos));
+                if let Some(unit) = transporter.get_transported_mut().get_mut(index.0) {
+                    unit.flip_flag(key.0);
+                }
+            }
+            Self::UnitSetTag(pos, TagKeyValues(key, [value])) |
+            Self::UnitReplaceTag(pos, TagKeyValues(key, [_, value])) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.set_tag(key.0, value.clone());
+                }
+            }
+            Self::UnitSetTagBoarded(pos, index, TagKeyValues(key, [value])) |
+            Self::UnitReplaceTagBoarded(pos, index, TagKeyValues(key, [_, value])) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to set tag!", pos));
+                if let Some(unit) = transporter.get_transported_mut().get_mut(index.0) {
+                    unit.set_tag(key.0, value.clone());
+                }
+            }
+            Self::UnitRemoveTag(pos, TagKeyValues(key, _)) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.remove_tag(key.0);
+                }
+            }
+            Self::UnitRemoveTagBoarded(pos, index, TagKeyValues(key, _)) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to remove tag!", pos));
+                if let Some(unit) = transporter.get_transported_mut().get_mut(index.0) {
+                    unit.remove_tag(key.0);
+                }
+            }
+            /*Self::UnitActionStatus(pos, _, action_status) => {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
                     unit.set_status(*action_status);
                 }
@@ -174,59 +293,6 @@ impl<D: Direction> Event<D> {
                     boarded.set_hp((hp + **hp_change as i8) as u8);
                 }
             }
-            Self::UnitAdd(pos, unit) => {
-                game.get_map_mut().set_unit(*pos, Some(unit.clone()));
-            }
-            Self::UnitRemove(pos, _) => {
-                game.get_map_mut().set_unit(*pos, None).expect(&format!("expected a unit at {:?} to remove!", pos));
-            }
-            Self::UnitAddBoarded(pos, unit) => {
-                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
-                let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                transported.push(unit.clone());
-            }
-            Self::UnitRemoveBoarded(pos, index, _) => {
-                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
-                let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                transported.remove(index.0);
-            }
-            Self::MoneyChange(owner, change) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds += **change;
-                }
-            }
-            Self::PlayerDies(owner) => {
-                game.get_owning_player_mut(owner.0).unwrap().dead = true;
-            }
-            Self::GameEnds => {
-                game.set_ended(true);
-            }
-            Self::PureHideFunds(_) => {}
-            Self::HideFunds(owner, _) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds = 0.into();
-                }
-            }
-            Self::PureRevealFunds(_) => {}
-            Self::RevealFunds(owner, value) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds = *value;
-                }
-            }
-            Self::RemoveDetail(p, index, _) => {
-                game.get_map_mut().remove_detail(*p, **index as usize);
-            }
-            Self::ReplaceDetail(p, _, list) => {
-                game.get_map_mut().set_details(*p, list.iter().cloned().collect());
-            }
-            Self::Effect(_) => {}
-            Self::UnitPath(_, _) => {}
-            Self::CommanderCharge(owner, delta) => {
-                game.get_owning_player_mut(owner.0).unwrap().commander.add_charge(delta.0);
-            }
-            Self::CommanderPowerIndex(owner, _, index) => {
-                game.get_owning_player_mut(owner.0).unwrap().commander.set_active_power(**index as usize);
-            }
             Self::UnitMovedThisGame(p) => {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
                     unit.set_unmoved(!unit.get_unmoved());
@@ -246,33 +312,8 @@ impl<D: Direction> Event<D> {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
                     unit.set_level(level.0);
                 }
-            }
-            Self::HeroSet(p, _, hero) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
-                    unit.set_hero(hero.clone());
-                }
-            }
-            Self::HeroCharge(p, change) => {
-                let environment = game.environment().clone();
-                if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_charge(&environment, (hero.get_charge() as i8 + change.0) as u8);
-                }
-            }
-            Self::HeroChargeTransported(p, unload_index, change) => {
-                let environment = game.environment().clone();
-                if let Some(mut transported) = game.get_map_mut().get_unit_mut(*p)
-                .and_then(|u| u.get_transported_mut()) {
-                    if let Some(hero) = transported.get_mut(unload_index.0)
-                    .and_then(|u| u.get_hero_mut()) {
-                        hero.set_charge(&environment, (hero.get_charge() as i8 + change.0) as u8);
-                    }
-                }
-            }
-            Self::HeroPower(p, _, index) => {
-                if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_active_power(**index as usize);
-                }
-            }
+            }*/
+            // terrain
             Self::TerrainChange(pos, _, terrain) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
             }
@@ -285,10 +326,34 @@ impl<D: Direction> Event<D> {
             Self::UpdateBuiltThisTurn(pos, _, built_this_turn) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(built_this_turn.0);
             }
+            // detail
+            Self::RemoveDetail(p, index, _) => {
+                game.get_map_mut().remove_detail(*p, **index as usize);
+            }
+            Self::ReplaceDetail(p, _, list) => {
+                game.get_map_mut().set_details(*p, list.iter().cloned().collect());
+            }
+            // visual
+            Self::Effect(_) => {}
+            Self::UnitPath(_, _) => {}
         }
     }
     pub fn undo(&self, game: &mut Game<D>) {
         match self {
+            // global
+            Self::NextTurn => game.current_turn -= 1,
+            Self::MoneyChange(owner, change) => {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
+                    player.funds -= **change;
+                }
+            }
+            Self::PlayerDies(owner) => {
+                game.get_owning_player_mut(owner.0).unwrap().dead = false;
+            }
+            Self::GameEnds => {
+                game.set_ended(false);
+            }
+            // fog
             Self::PureFogChange(team, vision_changes) => {
                 let team = to_client_perspective(&team);
                 for (pos, intensity, _) in vision_changes {
@@ -301,8 +366,105 @@ impl<D: Direction> Event<D> {
                     apply_vision_changes(game, team, *pos, *intensity, fd);
                 }
             }
-            Self::NextTurn => game.current_turn -= 1,
-            Self::UnitActionStatus(pos, action_status, _) => {
+            Self::PureHideFunds(_) => {}
+            Self::HideFunds(owner, value) => {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
+                    player.funds = *value;
+                }
+            }
+            Self::PureRevealFunds(_) => {}
+            Self::RevealFunds(owner, _) => {
+                if let Some(player) = game.get_owning_player_mut(owner.0) {
+                    player.funds = 0.into();
+                }
+            }
+            // commander
+            Self::CommanderCharge(owner, delta) => {
+                game.get_owning_player_mut(owner.0).unwrap().commander.add_charge(-delta.0);
+            }
+            Self::CommanderPowerIndex(owner, index, _) => {
+                game.get_owning_player_mut(owner.0).unwrap().commander.set_active_power(**index as usize);
+            }
+            // hero
+            Self::HeroSet(p, _) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
+                    unit.remove_hero();
+                }
+            }
+            Self::HeroCharge(p, change) => {
+                let environment = game.environment().clone();
+                if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
+                    hero.set_charge(&environment, (hero.get_charge() as i8 - change.0) as u8);
+                }
+            }
+            Self::HeroChargeTransported(p, unload_index, change) => {
+                let environment = game.environment().clone();
+                if let Some(mut transported) = game.get_map_mut().get_unit_mut(*p)
+                .map(|u| u.get_transported_mut()) {
+                    if let Some(hero) = transported.get_mut(unload_index.0)
+                    .and_then(|u| u.get_hero_mut()) {
+                        hero.set_charge(&environment, (hero.get_charge() as i8 - change.0) as u8);
+                    }
+                }
+            }
+            Self::HeroPower(p, index, _) => {
+                if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
+                    hero.set_active_power(**index as usize);
+                }
+            }
+            // unit
+            Self::UnitAdd(pos, _) => {
+                game.get_map_mut().set_unit(*pos, None).expect(&format!("expected a unit at {:?} to die!", pos));
+            }
+            Self::UnitRemove(pos, unit) => {
+                game.get_map_mut().set_unit(*pos, Some(unit.clone()));
+            }
+            Self::UnitAddBoarded(pos, _) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
+                let mut transported = transporter.get_transported_mut();
+                transported.pop();
+            }
+            Self::UnitRemoveBoarded(pos, index, unit) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
+                let mut transported = transporter.get_transported_mut();
+                transported.insert(index.0, unit.clone());
+            }
+            Self::UnitFlag(pos, key) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.flip_flag(key.0);
+                }
+            }
+            Self::UnitFlagBoarded(pos, index, key) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to flip flag!", pos));
+                if let Some(unit) = transporter.get_transported_mut().get_mut(index.0) {
+                    unit.flip_flag(key.0);
+                }
+            }
+            Self::UnitSetTag(pos, TagKeyValues(key, _)) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.remove_tag(key.0);
+                }
+            }
+            Self::UnitSetTagBoarded(pos, index, TagKeyValues(key, _)) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to remove tag!", pos));
+                if let Some(unit) = transporter.get_transported_mut().get_mut(index.0) {
+                    unit.remove_tag(key.0);
+                }
+            }
+            Self::UnitRemoveTag(pos, TagKeyValues(key, [value])) |
+            Self::UnitReplaceTag(pos, TagKeyValues(key, [value, _])) => {
+                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
+                    unit.set_tag(key.0, value.clone());
+                }
+            }
+            Self::UnitRemoveTagBoarded(pos, index, TagKeyValues(key, [value])) |
+            Self::UnitReplaceTagBoarded(pos, index, TagKeyValues(key, [value, _])) => {
+                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to set tag!", pos));
+                if let Some(unit) = transporter.get_transported_mut().get_mut(index.0) {
+                    unit.set_tag(key.0, value.clone());
+                }
+            }
+            /*Self::UnitActionStatus(pos, action_status, _) => {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
                     unit.set_status(*action_status);
                 }
@@ -329,59 +491,6 @@ impl<D: Direction> Event<D> {
                     boarded.set_hp((hp - **hp_change as i8) as u8);
                 }
             }
-            Self::UnitAdd(pos, _) => {
-                game.get_map_mut().set_unit(*pos, None).expect(&format!("expected a unit at {:?} to die!", pos));
-            }
-            Self::UnitRemove(pos, unit) => {
-                game.get_map_mut().set_unit(*pos, Some(unit.clone()));
-            }
-            Self::UnitAddBoarded(pos, _) => {
-                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
-                let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                transported.pop();
-            }
-            Self::UnitRemoveBoarded(pos, index, unit) => {
-                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
-                let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                transported.insert(index.0, unit.clone());
-            }
-            Self::MoneyChange(owner, change) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds -= **change;
-                }
-            }
-            Self::PlayerDies(owner) => {
-                game.get_owning_player_mut(owner.0).unwrap().dead = false;
-            }
-            Self::GameEnds => {
-                game.set_ended(false);
-            }
-            Self::PureHideFunds(_) => {}
-            Self::HideFunds(owner, value) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds = *value;
-                }
-            }
-            Self::PureRevealFunds(_) => {}
-            Self::RevealFunds(owner, _) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds = 0.into();
-                }
-            }
-            Self::RemoveDetail(p, index, detail) => {
-                game.get_map_mut().insert_detail(*p, **index as usize, detail.clone());
-            }
-            Self::ReplaceDetail(p, list, _) => {
-                game.get_map_mut().set_details(*p, list.iter().cloned().collect());
-            }
-            Self::Effect(_) => {}
-            Self::UnitPath(_, _) => {}
-            Self::CommanderCharge(owner, delta) => {
-                game.get_owning_player_mut(owner.0).unwrap().commander.add_charge(-delta.0);
-            }
-            Self::CommanderPowerIndex(owner, index, _) => {
-                game.get_owning_player_mut(owner.0).unwrap().commander.set_active_power(**index as usize);
-            }
             Self::UnitMovedThisGame(p) => {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
                     unit.set_unmoved(!unit.get_unmoved());
@@ -401,33 +510,8 @@ impl<D: Direction> Event<D> {
                 if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
                     unit.set_level(level.0);
                 }
-            }
-            Self::HeroSet(p, hero, _) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
-                    unit.set_hero(hero.clone());
-                }
-            }
-            Self::HeroCharge(p, change) => {
-                let environment = game.environment().clone();
-                if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_charge(&environment, (hero.get_charge() as i8 - change.0) as u8);
-                }
-            }
-            Self::HeroChargeTransported(p, unload_index, change) => {
-                let environment = game.environment().clone();
-                if let Some(mut transported) = game.get_map_mut().get_unit_mut(*p)
-                .and_then(|u| u.get_transported_mut()) {
-                    if let Some(hero) = transported.get_mut(unload_index.0)
-                    .and_then(|u| u.get_hero_mut()) {
-                        hero.set_charge(&environment, (hero.get_charge() as i8 - change.0) as u8);
-                    }
-                }
-            }
-            Self::HeroPower(p, index, _) => {
-                if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_active_power(**index as usize);
-                }
-            }
+            }*/
+            // terrain
             Self::TerrainChange(pos, terrain, _) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
             }
@@ -440,65 +524,22 @@ impl<D: Direction> Event<D> {
             Self::UpdateBuiltThisTurn(pos, built_this_turn, _) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(built_this_turn.0);
             }
+            // detail
+            Self::RemoveDetail(p, index, detail) => {
+                game.get_map_mut().insert_detail(*p, **index as usize, detail.clone());
+            }
+            Self::ReplaceDetail(p, list, _) => {
+                game.get_map_mut().set_details(*p, list.iter().cloned().collect());
+            }
+            // visual
+            Self::Effect(_) => {}
+            Self::UnitPath(_, _) => {}
         }
     }
     pub fn fog_replacement(&self, game: &Handle<Game<D>>, team: ClientPerspective) -> Option<Event<D>> {
         match self {
-            Self::PureFogChange(t, points) => {
-                if to_client_perspective(t) == team {
-                    let mut changes = LVec::new();
-                    for (p, intensity_before, intensity) in points.iter() {
-                        let fd = FieldData::game_field(game, *p);
-                        changes.push((*p, *intensity_before, fd.clone().fog_replacement(game, *p, *intensity_before), *intensity, fd.fog_replacement(game, *p, *intensity)));
-                    }
-                    Some(Self::FogChange(t.clone(), changes))
-                } else {
-                    None
-                }
-            }
-            Self::FogChange(_, _) => {
-                panic!("FogChange should only ever be created as replacement for PureFogChange. It shouldn't be replaced itself!");
-            }
+            // global
             Self::NextTurn => Some(Self::NextTurn),
-            Self::UnitActionStatus(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::ActionStatus) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitHpChange(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Hp) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitAdd(pos, unit) => {
-                if let Some(unit) = unit.fog_replacement(game, *pos, game.get_fog_at(team, *pos)) {
-                    Some(Self::UnitAdd(*pos, unit))
-                } else {
-                    None
-                }
-            }
-            Self::UnitRemove(pos, unit) => {
-                if let Some(unit) = unit.fog_replacement(game, *pos, game.get_fog_at(team, *pos)) {
-                    Some(Self::UnitRemove(*pos, unit))
-                } else {
-                    None
-                }
-            }
-            Self::UnitActionStatusBoarded(p, _, _, _) |
-            Self::UnitHpChangeBoarded(p, _, _) |
-            Self::UnitAddBoarded(p, _) |
-            Self::UnitRemoveBoarded(p, _, _) |
-            Self::HeroChargeTransported(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Transported) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
             Self::MoneyChange(owner, _) => {
                 if !game.is_foggy() || team == game.get_team(owner.0) {
                     Some(self.clone())
@@ -515,6 +556,22 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
+            // fog
+            Self::PureFogChange(t, points) => {
+                if to_client_perspective(t) == team {
+                    let mut changes = LVec::new();
+                    for (p, intensity_before, intensity) in points.iter() {
+                        let fd = FieldData::game_field(game, *p);
+                        changes.push((*p, *intensity_before, fd.clone().fog_replacement(game, *p, *intensity_before), *intensity, fd.fog_replacement(game, *p, *intensity)));
+                    }
+                    Some(Self::FogChange(t.clone(), changes))
+                } else {
+                    None
+                }
+            }
+            Self::FogChange(_, _) => {
+                panic!("FogChange should only ever be created as replacement for PureFogChange. It shouldn't be replaced itself!");
+            }
             Self::HideFunds(_, _) => {
                 panic!("HideFunds should only ever be created as replacement for PureHideFunds. It shouldn't be replaced itself!");
             }
@@ -528,6 +585,242 @@ impl<D: Direction> Event<D> {
             Self::RevealFunds(_, _) => {
                 panic!("RevealFunds should only ever be created as replacement for PureRevealFunds. It shouldn't be replaced itself!");
             }
+            // commander
+            Self::CommanderCharge(_, _) => {
+                Some(self.clone())
+            }
+            Self::CommanderPowerIndex(_, _, _) => {
+                Some(self.clone())
+            }
+            // hero
+            Self::HeroSet(pos, _) => {
+                if can_see_unit_at(game, team, *pos, &game.get_unit(*pos).unwrap(), false) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::HeroCharge(p, _) |
+            Self::HeroPower(p, _, _) => {
+                let fog_intensity = game.get_fog_at(team, *p);
+                if fog_intensity == FogIntensity::TrueSight {
+                    return Some(self.clone());
+                }
+                let unit = game.get_unit(*p).unwrap();
+                if unit.fog_replacement(game, *p, fog_intensity).filter(|u| u.is_hero()).is_some() {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::HeroChargeTransported(p, unload_index, change) => {
+                let fog_intensity = game.get_fog_at(team, *p);
+                if fog_intensity == FogIntensity::TrueSight {
+                    return Some(self.clone());
+                }
+                let transporter = game.get_unit(*p).unwrap();
+                let transporter_visibility = transporter.environment().config.unit_visibility(game, &transporter, *p, &[]);
+                let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
+                if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
+                    return None;
+                }
+                let unit = &transporter.get_transported()[unload_index.0];
+                if unit.fog_replacement(game, *p, fog_intensity).filter(|u| u.is_hero()).is_some() {
+                    let i = transporter.get_transported().iter()
+                    .take(unload_index.0)
+                    .filter(|u| u.fog_replacement(game, *p, fog_intensity).is_some())
+                    .count();
+                    Some(Self::HeroChargeTransported(*p, i.into(), *change))
+                } else {
+                    None
+                }
+            }
+            // unit
+            Self::UnitAdd(pos, unit) => {
+                if let Some(unit) = unit.fog_replacement(game, *pos, game.get_fog_at(team, *pos)) {
+                    Some(Self::UnitAdd(*pos, unit))
+                } else {
+                    None
+                }
+            }
+            Self::UnitRemove(pos, unit) => {
+                if let Some(unit) = unit.fog_replacement(game, *pos, game.get_fog_at(team, *pos)) {
+                    Some(Self::UnitRemove(*pos, unit))
+                } else {
+                    None
+                }
+            }
+            Self::UnitAddBoarded(p, unit) => {
+                let fog_intensity = game.get_fog_at(team, *p);
+                if fog_intensity == FogIntensity::TrueSight {
+                    return Some(self.clone());
+                }
+                let transporter = game.get_unit(*p).unwrap();
+                let transporter_visibility = transporter.environment().config.unit_visibility(game, &transporter, *p, &[]);
+                let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
+                if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
+                    return None;
+                }
+                if let Some(unit) = unit.fog_replacement(game, *p, fog_intensity) {
+                    Some(Self::UnitAddBoarded(*p, unit))
+                } else {
+                    None
+                }
+            }
+            Self::UnitRemoveBoarded(p, unload_index, unit) => {
+                let fog_intensity = game.get_fog_at(team, *p);
+                if fog_intensity == FogIntensity::TrueSight {
+                    return Some(self.clone());
+                }
+                let transporter = game.get_unit(*p).unwrap();
+                let transporter_visibility = transporter.environment().config.unit_visibility(game, &transporter, *p, &[]);
+                let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
+                if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
+                    return None;
+                }
+                if let Some(unit) = unit.fog_replacement(game, *p, fog_intensity) {
+                    let i = transporter.get_transported().iter()
+                    .take(unload_index.0)
+                    .filter(|u| u.fog_replacement(game, *p, fog_intensity).is_some())
+                    .count();
+                    Some(Self::UnitRemoveBoarded(*p, i.into(), unit))
+                } else {
+                    None
+                }
+            }
+            Self::UnitFlag(p, FlagKey(key)) => {
+                let unit = game.get_unit(*p).unwrap();
+                if visible_unit_with_attribute(game, team, *p, unit.environment().flag_visibility(*key)) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitSetTag(p, TagKeyValues(TagKey(key), _)) |
+            Self::UnitRemoveTag(p, TagKeyValues(TagKey(key), _)) |
+            Self::UnitReplaceTag(p, TagKeyValues(TagKey(key), _)) => {
+                let unit = game.get_unit(*p).unwrap();
+                if visible_unit_with_attribute(game, team, *p, unit.environment().tag_visibility(*key)) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitFlagBoarded(p, unload_index, key) => {
+                let unit = game.get_unit(*p).unwrap();
+                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().flag_visibility(key.0)) {
+                    Some(Self::UnitFlagBoarded(*p, unload_index.into(), *key))
+                } else {
+                    None
+                }
+            }
+            Self::UnitSetTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
+                let unit = game.get_unit(*p).unwrap();
+                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().tag_visibility(key.0)) {
+                    Some(Self::UnitSetTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
+                } else {
+                    None
+                }
+            }
+            Self::UnitRemoveTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
+                let unit = game.get_unit(*p).unwrap();
+                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().tag_visibility(key.0)) {
+                    Some(Self::UnitRemoveTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
+                } else {
+                    None
+                }
+            }
+            Self::UnitReplaceTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
+                let unit = game.get_unit(*p).unwrap();
+                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().tag_visibility(key.0)) {
+                    Some(Self::UnitReplaceTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
+                } else {
+                    None
+                }
+            }
+            /*Self::UnitActionStatus(p, _, _) => {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::ActionStatus) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitHpChange(p, _, _) => {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Hp) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitActionStatusBoarded(p, _, _, _) |
+            Self::UnitHpChangeBoarded(p, _, _) => {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Transported) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitMovedThisGame(p) => {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Unmoved) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::EnPassantOpportunity(p, _, _) => {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::EnPassant) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitDirection(p, _, _) => {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Direction) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::UnitLevel(p, _, _) => {
+                if visible_unit_with_attribute(game, team, *p, AttributeKey::Level) {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }*/
+            // terrain
+            Self::TerrainChange(pos, before, after) => {
+                let fog_intensity = game.get_fog_at(team, *pos);
+                let before = before.fog_replacement(fog_intensity);
+                let after = after.fog_replacement(fog_intensity);
+                if before != after {
+                    Some(Self::TerrainChange(*pos, before, after))
+                } else {
+                    None
+                }
+            }
+            Self::TerrainAnger(_, _, _) => {
+                Some(self.clone())
+            }
+            Self::CaptureProgress(pos, _, _) => {
+                match game.get_fog_at(team, *pos) {
+                    FogIntensity::TrueSight |
+                    FogIntensity::NormalVision => {
+                        Some(self.clone())
+                    }
+                    _ => {
+                        None
+                    }
+                }
+            }
+            Self::UpdateBuiltThisTurn(p, _, _) => {
+                match game.get_fog_at(team, *p) {
+                    FogIntensity::TrueSight |
+                    FogIntensity::NormalVision => Some(self.clone()),
+                    _ => None,
+                }
+            }
+            // detail
             Self::RemoveDetail(p, index, detail) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
@@ -565,6 +858,7 @@ impl<D: Direction> Event<D> {
                     }
                 }
             }
+            // visual
             Self::Effect(effect) => {
                 if !game.is_foggy() {
                     Some(self.clone())
@@ -591,86 +885,6 @@ impl<D: Direction> Event<D> {
                     let start = result[0].get_start();
                     let unit = unit.fog_replacement(game, start, game.get_fog_at(team, start));
                     Some(Self::UnitPath(unit, result.try_into().unwrap()))
-                }
-            }
-            Self::CommanderCharge(_, _) => {
-                Some(self.clone())
-            }
-            Self::CommanderPowerIndex(_, _, _) => {
-                Some(self.clone())
-            }
-            Self::UnitMovedThisGame(p) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Unmoved) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::EnPassantOpportunity(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::EnPassant) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitDirection(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Direction) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitLevel(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Level) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::HeroSet(pos, _, _) => {
-                if can_see_unit_at(game, team, *pos, &game.get_unit(*pos).unwrap(), false) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::HeroCharge(p, _) |
-            Self::HeroPower(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Hero) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::TerrainChange(pos, before, after) => {
-                let fog_intensity = game.get_fog_at(team, *pos);
-                let before = before.fog_replacement(fog_intensity);
-                let after = after.fog_replacement(fog_intensity);
-                if before != after {
-                    Some(Self::TerrainChange(*pos, before, after))
-                } else {
-                    None
-                }
-            }
-            Self::TerrainAnger(_, _, _) => {
-                Some(self.clone())
-            }
-            Self::CaptureProgress(pos, _, _) => {
-                match game.get_fog_at(team, *pos) {
-                    FogIntensity::TrueSight |
-                    FogIntensity::NormalVision => {
-                        Some(self.clone())
-                    }
-                    _ => {
-                        None
-                    }
-                }
-            }
-            Self::UpdateBuiltThisTurn(p, _, _) => {
-                match game.get_fog_at(team, *p) {
-                    FogIntensity::TrueSight |
-                    FogIntensity::NormalVision => Some(self.clone()),
-                    _ => None,
                 }
             }
         }

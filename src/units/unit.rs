@@ -13,7 +13,7 @@ use zipper::*;
 use crate::commander::commander_type::CommanderType;
 use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
-use crate::game::fog::{FogIntensity, VisionMode, FogSetting};
+use crate::game::fog::{is_unit_attribute_visible, FogIntensity, FogSetting, VisionMode};
 use crate::game::game_view::GameView;
 use crate::game::modified_view::*;
 use crate::game::settings::GameSettings;
@@ -23,13 +23,13 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Player, Owner};
 use crate::script::*;
-use crate::terrain::attributes::TerrainAttributeKey;
+use crate::tags::{TagBag, TagValue};
 
+use super::UnitVisibility;
 use super::combat::*;
 use super::commands::UnitAction;
 use super::movement::*;
 use super::unit_types::UnitType;
-use super::attributes::*;
 use super::hero::*;
 
 
@@ -37,49 +37,65 @@ use super::hero::*;
 pub struct Unit<D: Direction> {
     environment: Environment,
     typ: UnitType,
-    attributes: HashMap<AttributeKey, Attribute<D>>,
+    owner: Owner,
+    sub_movement_type: MovementType, // in case the unit has multiple movement types
+    hero: Option<Hero>,
+    tags: TagBag<D>,
+    transport: Vec<Self>,
+    //attributes: HashMap<AttributeKey, Attribute<D>>,
 }
 
 impl<D: Direction> PartialEq for Unit<D> {
+    // compare everything except environment
     fn eq(&self, other: &Self) -> bool {
         self.typ == other.typ
-        && self.attributes == other.attributes
+        && self.owner == other.owner
+        && self.sub_movement_type == other.sub_movement_type
+        && self.hero == other.hero
+        && self.tags == other.tags
+        //&& self.attributes == other.attributes
     }
 }
 
 impl<D: Direction> Debug for Unit<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.name())?;
-        let mut keys: Vec<_> = self.attributes.keys().collect();
-        keys.sort();
-        for key in keys {
-            write!(f, "{:?}", self.attributes.get(key).unwrap())?;
+        write!(f, "Owner: {}", self.owner.0)?;
+        if let Some(hero) = &self.hero {
+            write!(f, "Hero: {hero:?}")?;
+        }
+        self.tags.debug(f, &self.environment)?;
+        if self.transport.len() > 0 {
+            write!(f, "Transporting: {:?}", self.transport)?;
         }
         write!(f, ")")
     }
 }
 
 impl<D: Direction> Unit<D> {
-    pub(super) fn new(environment: Environment, typ: UnitType) -> Self {
+    fn new(environment: Environment, typ: UnitType) -> Self {
         Self {
-            environment,
             typ,
-            attributes: HashMap::default(),
+            owner: Owner(-1),
+            sub_movement_type: environment.config.sub_movement_types(environment.config.base_movement_type(typ))[0],
+            hero: None,
+            tags: TagBag::new(),
+            transport: Vec::new(),
+            //attributes: HashMap::default(),
+            environment,
         }
     }
 
     pub(crate) fn start_game(&mut self, settings: &Arc<GameSettings>) {
         self.environment.start_game(settings);
-        if let Some(mut transported) = self.get_transported_mut() {
-            for unit in transported.deref_mut() {
-                unit.start_game(settings);
-            }
+        for unit in self.get_transported_mut().deref_mut() {
+            unit.start_game(settings);
         }
-        for key in self.environment.unit_attributes(self.typ, self.get_owner_id()) {
+        /*for key in self.environment.unit_attributes(self.typ, self.get_owner_id()) {
             if !self.attributes.contains_key(key) {
                 self.attributes.insert(*key, key.default());
             }
-        }
+        }*/
     }
 
     // getters that aren't influenced by attributes
@@ -87,9 +103,9 @@ impl<D: Direction> Unit<D> {
         &self.environment
     }
 
-    pub(crate) fn get_attributes(&self) -> &HashMap<AttributeKey, Attribute<D>> {
+    /*pub(crate) fn get_attributes(&self) -> &HashMap<AttributeKey, Attribute<D>> {
         &self.attributes
-    }
+    }*/
 
     pub fn typ(&self) -> UnitType {
         self.typ
@@ -106,27 +122,27 @@ impl<D: Direction> Unit<D> {
         self.transportable_units().contains(&other)
     }
     pub fn transport_capacity(&self) -> usize {
-        self.environment.unit_transport_capacity(self.typ, self.get_owner_id(), self.get_hero().typ())
+        self.environment.unit_transport_capacity(self.typ, self.get_owner_id(), self.get_hero().map(|hero| hero.typ()).unwrap_or(HeroType::None))
     }
 
     pub fn movement_pattern(&self) -> MovementPattern {
         self.environment.config.movement_pattern(self.typ)
     }
 
-    pub fn movement_type(&self, amphibious: Amphibious) -> MovementType {
-        self.environment.config.movement_type(self.typ, amphibious)
+    pub fn base_movement_type(&self) -> MovementType {
+        self.environment.config.base_movement_type(self.typ)
     }
-
-    pub fn default_movement_type(&self) -> MovementType {
-        self.environment.config.movement_type(self.typ, self.get_amphibious())
+    pub fn sub_movement_type(&self) -> MovementType {
+        self.sub_movement_type
+    }
+    pub fn set_sub_movement_type(&mut self, sub_movement_type: MovementType) {
+        if self.environment.config.sub_movement_types(self.environment.config.base_movement_type(self.typ)).contains(&sub_movement_type) {
+            self.sub_movement_type = sub_movement_type;
+        }
     }
 
     pub fn base_movement_points(&self) -> Rational32 {
         self.environment.config.base_movement_points(self.typ)
-    }
-
-    pub fn is_amphibious(&self) -> bool {
-        self.attributes.contains_key(&AttributeKey::Amphibious)
     }
 
     pub fn has_stealth(&self) -> bool {
@@ -149,10 +165,10 @@ impl<D: Direction> Unit<D> {
         self.environment.config.can_be_taken(self.typ)
     }
 
-    pub fn can_have_status(&self, status: ActionStatus) -> bool {
+    /*pub fn can_have_status(&self, status: ActionStatus) -> bool {
         self.has_attribute(AttributeKey::ActionStatus)
         && self.environment.unit_valid_action_status(self.typ, self.get_owner_id()).contains(&status)
-    }
+    }*/
 
     pub fn weapon(&self) -> WeaponType {
         self.environment.config.weapon(self.typ)
@@ -267,7 +283,7 @@ impl<D: Direction> Unit<D> {
 
     // getters and setters that care about attributes
 
-    pub fn has_attribute(&self, key: AttributeKey) -> bool {
+    /*pub fn has_attribute(&self, key: AttributeKey) -> bool {
         self.environment.unit_attributes(self.typ, self.get_owner_id()).any(|a| *a == key)
     }
 
@@ -291,13 +307,18 @@ impl<D: Direction> Unit<D> {
         } else {
             false
         }
-    }
+    }*/
 
     pub fn get_owner_id(&self) -> i8 {
-        self.get::<Owner>().0
+        self.owner.0
     }
     pub fn set_owner_id(&mut self, id: i8) {
-        if id >= 0 || !self.environment.config.unit_needs_owner(self.typ) {
+        if id < 0 && self.environment.config.unit_needs_owner(self.typ) {
+            return;
+        }
+        self.owner.0 = id;
+        self.fix_transported();
+        /*if id >= 0 || !self.environment.config.unit_needs_owner(self.typ) {
             let owner_before = self.get_owner_id();
             self.set(Owner(id.max(-1).min(self.environment.config.max_player_count() - 1)));
             let co_before = self.environment.config.commander_attributes(self.environment.get_commander(owner_before), self.typ);
@@ -309,7 +330,7 @@ impl<D: Direction> Unit<D> {
                 self.attributes.insert(*key, key.default());
             }
             self.fix_transported();
-        }
+        }*/
     }
 
     pub fn get_team(&self) -> ClientPerspective {
@@ -326,55 +347,93 @@ impl<D: Direction> Unit<D> {
         .unwrap_or(Commander::new(&self.environment, CommanderType::None))
     }
 
-    // TODO: return Option?
-    pub fn get_direction(&self) -> D {
-        self.get::<D>()
+    pub fn get_flag(&self, key: usize) -> bool {
+        self.tags.get_flag(key)
     }
-    pub fn set_direction(&mut self, direction: D) {
-        self.set(direction);
+    pub fn set_flag(&mut self, key: usize) {
+        self.tags.set_flag(&self.environment, key);
+    }
+    pub fn remove_flag(&mut self, key: usize) {
+        self.tags.remove_flag(key);
+    }
+    pub fn flip_flag(&mut self, key: usize) {
+        if self.get_flag(key) {
+            self.remove_flag(key);
+        } else {
+            self.set_flag(key);
+        }
+    }
+
+    pub fn get_tag(&self, key: usize) -> Option<TagValue<D>> {
+        self.tags.get_tag(key)
+    }
+    pub fn set_tag(&mut self, key: usize, value: TagValue<D>) {
+        self.tags.set_tag(&self.environment, key, value);
+    }
+    pub fn remove_tag(&mut self, key: usize) {
+        self.tags.remove_tag(key);
+    }
+
+    // TODO: hardcoded for movement
+    // replace when movement can be customized
+    pub fn get_pawn_direction(&self) -> D {
+        match self.environment.tag_by_name("PawnDirection")
+        .and_then(|key| self.tags.get_tag(key)) {
+            Some(TagValue::Direction(d)) => d,
+            _ => D::angle_0()
+        }
+    }
+    pub fn set_pawn_direction(&mut self, direction: D) {
+        if let Some(key) = self.environment.tag_by_name("PawnDirection") {
+            self.tags.set_tag(&self.environment, key, TagValue::Direction(direction));
+        }
     }
 
     pub fn distort(&mut self, distortion: Distortion<D>) {
-        self.set_direction(distortion.update_direction(self.get_direction()));
+        self.tags.distort(distortion);
+    }
+    pub fn translate(&mut self, translations: [D::T; 2], odd_if_hex: bool) {
+        self.tags.translate(translations, odd_if_hex);
     }
 
     pub fn is_hero(&self) -> bool {
-        if let Some(Attribute::Hero(hero)) = self.attributes.get(&AttributeKey::Hero) {
-            hero.typ() != HeroType::None
-        } else {
-            false
-        }
+        self.hero.is_some()
     }
-    pub fn get_hero(&self) -> Hero {
-        self.get::<Hero>()
+    pub fn get_hero(&self) -> Option<&Hero> {
+        self.hero.as_ref()
     }
     pub fn get_hero_mut(&mut self) -> Option<&mut Hero> {
-        if let Some(Attribute::Hero(hero)) = self.attributes.get_mut(&AttributeKey::Hero) {
-            Some(hero)
-        } else {
-            None
-        }
+        self.hero.as_mut()
     }
     pub fn set_hero(&mut self, hero: Hero) {
         // TODO: check if hero is compatible with this unit type
-        self.set(hero);
+        self.hero = Some(hero);
+        // update attributes influenced by the hero, e.g. Transported capacity
+        self.fix_transported()
+    }
+    pub fn remove_hero(&mut self) {
+        self.hero = None;
         // update attributes influenced by the hero, e.g. Transported capacity
         self.fix_transported()
     }
 
     pub fn get_max_charge(&self) -> u8 {
-        self.get::<Hero>().max_charge(&self.environment)
+        self.hero.as_ref()
+        .map(|hero| hero.max_charge(&self.environment))
+        .unwrap_or(0)
     }
     pub fn get_charge(&self) -> u8 {
-        self.get::<Hero>().get_charge()
+        self.hero.as_ref()
+        .map(|hero| hero.get_charge())
+        .unwrap_or(0)
     }
     pub fn set_charge(&mut self, charge: u8) {
-        if let Some(Attribute::Hero(hero)) = self.attributes.get_mut(&AttributeKey::Hero) {
+        if let Some(hero) = &mut self.hero {
             hero.set_charge(&self.environment, charge);
         }
     }
 
-    pub fn get_hp(&self) -> u8 {
+    /*pub fn get_hp(&self) -> u8 {
         self.get::<Hp>().0
     }
     pub fn set_hp(&mut self, hp: u8) {
@@ -413,11 +472,11 @@ impl<D: Direction> Unit<D> {
     }
     pub fn is_exhausted(&self) -> bool {
         self.get_status() != ActionStatus::Ready
-    }
+    }*/
 
-    pub fn can_capture(&self) -> bool {
+    /*pub fn can_capture(&self) -> bool {
         self.can_have_status(ActionStatus::Capturing)
-    }
+    }*/
 
     pub fn can_transport(&self, other: &Self) -> bool {
         self.could_transport(other.typ)
@@ -429,69 +488,52 @@ impl<D: Direction> Unit<D> {
     }
 
     pub fn get_transported(&self) -> &[Unit<D>] {
-        if let Some(Attribute::Transported(t)) = self.attributes.get(&AttributeKey::Transported) {
-            t
-        } else {
-            &[]
-        }
+        &self.transport
     }
-    pub fn get_transported_mut<'a>(&'a mut self) -> Option<TransportedRef<'a, D>> {
-        if self.attributes.contains_key(&AttributeKey::Transported) {
-            Some(TransportedRef { unit: self })
-        } else {
-            None
-        }
+    pub fn get_transported_mut<'a>(&'a mut self) -> TransportedRef<'a, D> {
+        TransportedRef { unit: self }
     }
     fn fix_transported(&mut self) {
-        let mut transported = match self.attributes.remove(&AttributeKey::Transported) {
-            Some(Attribute::Transported(t)) => t,
-            _ => return
-        };
         // remove units that can't be transported by self, don't go over capacity
         let transportable = self.environment.config.unit_transportable(self.typ);
-        transported = transported.into_iter()
+        let capacity = self.transport_capacity();
+        self.transport = self.transport.drain(..)
         .filter(|other| {
             other.environment == self.environment
             && transportable.contains(&other.typ)
         })
-        .take(self.transport_capacity())
+        .take(capacity)
         .collect();
         // some attributes are defined by the transporter. make sure this stays consistent
-        for unit in &mut transported {
-            for key in self.environment.unit_attributes(unit.typ, self.get_owner_id()) {
-                if let Some(f) = Attribute::<D>::build_from_transporter(*key) {
-                    let value = f(&self.attributes).expect(&format!("missing value for {key} in transporter"));
-                    unit.attributes.insert(*key, value);
-                } else if !unit.attributes.contains_key(key) {
-                    unit.attributes.insert(*key, key.default());
-                }
-            }
-        }
-        self.attributes.insert(AttributeKey::Transported, Attribute::Transported(transported));
     }
 
-    pub fn get_amphibious(&self) -> Amphibious {
-        self.get()
-    }
-    pub fn set_amphibious(&mut self, a: Amphibious) {
-        self.set(a);
-    }
-
-    pub fn get_unmoved(&self) -> bool {
+    /*pub fn get_unmoved(&self) -> bool {
         self.get::<Unmoved>().0
     }
     pub fn set_unmoved(&mut self, unmoved: bool) {
         self.set(Unmoved(unmoved));
-    }
+    }*/
 
+    // TODO: hardcoded for movement
+    // replace when movement can be customized
     pub fn get_en_passant(&self) -> Option<Point> {
-        self.get::<Option<Point>>()
+        match self.environment.tag_by_name("EnPassant")
+        .and_then(|key| self.tags.get_tag(key)) {
+            Some(TagValue::Point(p)) => Some(p),
+            _ => None
+        }
     }
     pub fn set_en_passant(&mut self, en_passant: Option<Point>) {
-        self.set(en_passant);
+        if let Some(key) = self.environment.tag_by_name("EnPassant") {
+            if let Some(p) = en_passant {
+                self.tags.set_tag(&self.environment, key, TagValue::Point(p));
+            } else {
+                self.tags.remove_tag(key);
+            }
+        }
     }
 
-    pub fn get_zombified(&self) -> bool {
+    /*pub fn get_zombified(&self) -> bool {
         self.get::<Zombified>().0
     }
     pub fn set_zombified(&mut self, zombified: bool) {
@@ -503,19 +545,13 @@ impl<D: Direction> Unit<D> {
     }
     pub fn set_level(&mut self, level: u8) {
         self.set(Level(level.min(self.environment.config.max_unit_level())));
-    }
-
-    pub fn translate(&mut self, translations: [D::T; 2], odd_if_hex: bool) {
-        for attribute in self.attributes.values_mut() {
-            attribute.translate(translations, odd_if_hex);
-        }
-    }
+    }*/
 
     // influenced by unit_power_config
 
     // ignores current hp
-    pub fn full_price(&self, game: &impl GameView<D>, position: Point, factory: Option<&Unit<D>>, heroes: &[HeroInfluence<D>]) -> i32 {
-        self.environment.config.unit_cost(
+    pub fn value(&self, game: &impl GameView<D>, position: Point, factory: Option<&Unit<D>>, heroes: &[HeroInfluence<D>]) -> i32 {
+        self.environment.config.unit_value(
             game,
             self,
             position,
@@ -525,9 +561,9 @@ impl<D: Direction> Unit<D> {
     }
 
     // full_price reduced by hp lost
-    pub fn value(&self, game: &impl GameView<D>, position: Point) -> i32 {
+    /*pub fn value(&self, game: &impl GameView<D>, position: Point) -> i32 {
         self.full_price(game, position, None, &[]) * self.get_hp() as i32 / 100
-    }
+    }*/
 
     pub fn movement_points(&self, game: &impl GameView<D>, position: Point, transporter: Option<&Unit<D>>, heroes: &[HeroInfluence<D>]) -> Rational32 {
         self.environment.config.unit_movement_points(
@@ -539,7 +575,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn build_overrides(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>]) -> HashSet<AttributeOverride> {
+    /*pub fn build_overrides(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>]) -> HashSet<AttributeOverride> {
         let overrides = self.environment.config.unit_attribute_overrides(
             game,
             self,
@@ -551,7 +587,7 @@ impl<D: Direction> Unit<D> {
         overrides.values()
         .cloned()
         .collect()
-    }
+    }*/
 
     // returns a list of damage factors
     // the first element is the selected target, the second element for points next to the target and so on
@@ -635,9 +671,9 @@ impl<D: Direction> Unit<D> {
 
     // methods that go beyond getter / setter functionality
 
-    pub fn zip(&self, zipper: &mut Zipper, transporter: Option<(UnitType, i8)>) {
+    pub fn zip(&self, zipper: &mut Zipper, transported: bool) {
         self.typ.export(zipper, &self.environment);
-        let owner = transporter.map(|t| t.1).unwrap_or(self.get_owner_id());
+        /*let owner = transporter.map(|t| t.1).unwrap_or(self.get_owner_id());
         for key in self.environment.unit_attributes(self.typ, owner) {
             if transporter.is_some() && Attribute::<D>::build_from_transporter(*key).is_some() {
                 continue;
@@ -645,14 +681,34 @@ impl<D: Direction> Unit<D> {
             let value = key.default();
             let value = self.attributes.get(key).unwrap_or(&value);
             value.export(&self.environment, zipper, self.typ, transporter.is_some(), owner, self.get_hero().typ());
+        }*/
+        self.owner.export(zipper, &*self.environment.config);
+        let sub_movement_types = self.environment.config.sub_movement_types(self.base_movement_type());
+        if sub_movement_types.len() > 1 {
+            let bits = bits_needed_for_max_value(sub_movement_types.len() as u32 - 1);
+            zipper.write_u32(sub_movement_types.iter().position(|mt| *mt == self.sub_movement_type).unwrap() as u32, bits);
+        }
+        self.hero.export(zipper, &self.environment);
+        self.tags.export(zipper, &self.environment);
+        if !transported && self.transport_capacity() > 0 {
+            zipper.write_u32(self.transport_capacity() as u32, bits_needed_for_max_value(self.transport_capacity() as u32));
+            for unit in &self.transport {
+                unit.zip(zipper, true);
+            }
         }
     }
 
-    pub fn unzip(unzipper: &mut Unzipper, environment: &Environment, transporter: Option<(UnitType, i8)>) -> Result<Self, ZipperError> {
+    pub fn unzip(unzipper: &mut Unzipper, environment: &Environment, transported: bool) -> Result<Self, ZipperError> {
         let typ = UnitType::import(unzipper, environment)?;
-        let mut attributes = HashMap::default();
-        let mut owner = transporter.map(|t| t.1).unwrap_or(-1);
-        let mut hero = HeroType::None;
+        let owner = Owner::import(unzipper, &*environment.config)?;
+        let sub_movement_types = environment.config.sub_movement_types(environment.config.base_movement_type(typ));
+        let mut sub_movement_type = sub_movement_types[0];
+        if sub_movement_types.len() > 1 {
+            let bits = bits_needed_for_max_value(sub_movement_types.len() as u32 - 1);
+            sub_movement_type = sub_movement_types[unzipper.read_u32(bits)? as usize];
+        }
+        let hero = Option::<Hero>::import(unzipper, environment)?;
+        /*let mut attributes = HashMap::default();
         for key in environment.config.unit_specific_attributes(typ) {
             if transporter.is_some() && Attribute::<D>::build_from_transporter(*key).is_some() {
                 continue;
@@ -682,12 +738,25 @@ impl<D: Direction> Unit<D> {
                 }
             }
             attributes.insert(AttributeKey::Transported, Attribute::Transported(units));
-        }
-        Ok(Unit {
+        }*/
+        let tags = TagBag::import(unzipper, environment)?;
+        let mut result = Self {
             environment: environment.clone(),
             typ,
-            attributes,
-        })
+            owner,
+            sub_movement_type,
+            hero,
+            tags,
+            transport: Vec::new(),
+        };
+        if !transported && result.transport_capacity() > 0 {
+            let transport_len = unzipper.read_u32(bits_needed_for_max_value(result.transport_capacity() as u32))?;
+            let mut transported = result.get_transported_mut();
+            for _ in 0..transport_len {
+                transported.push(Self::unzip(unzipper, environment, true)?);
+            }
+        }
+        Ok(result)
     }
 
     pub fn fog_replacement(&self, game: &impl GameView<D>, pos: Point, intensity: FogIntensity) -> Option<Self> {
@@ -708,7 +777,14 @@ impl<D: Direction> Unit<D> {
                 match visibility {
                     UnitVisibility::Stealth => return None,
                     UnitVisibility::Normal => {
-                        return Some(self.environment.config.unknown_unit().instance(&self.environment).build_with_defaults())
+                        let mut builder = self.environment.config.unknown_unit()
+                            .instance(&self.environment)
+                            .set_tag_bag(self.tags.fog_replacement(&self.environment, UnitVisibility::AlwaysVisible));
+                        if let Some(hero) = self.hero.as_ref()
+                        .filter(|hero| self.environment.hero_visibility(game, &self, pos, hero.typ()) >= UnitVisibility::AlwaysVisible) {
+                            builder = builder.set_hero(hero.clone());
+                        }
+                        return Some(builder.build_with_defaults())
                     }
                     UnitVisibility::AlwaysVisible => (),
                 }
@@ -721,14 +797,26 @@ impl<D: Direction> Unit<D> {
             }
         }
         // unit is visible, hide some attributes maybe
-        let mut builder = self.typ.instance(&self.environment);
-        let hero = self.get_hero();
+        let mut builder = self.typ.instance(&self.environment)
+            .set_owner_id(self.owner.0)
+            .set_movement_type(self.sub_movement_type)
+            .set_tag_bag(self.tags.fog_replacement(&self.environment, UnitVisibility::Normal));
+        if let Some(hero) = self.hero.as_ref()
+        .filter(|hero| self.environment.hero_visibility(game, &self, pos, hero.typ()) >= UnitVisibility::Normal) {
+            builder = builder.set_hero(hero.clone());
+        }
+        let transport_visibility = self.environment.unit_transport_visibility(game, self, pos, &[]);
+        if is_unit_attribute_visible(intensity, visibility, transport_visibility) {
+            let transport = Vec::new();
+            builder = builder.set_transported(transport);
+        }
+        /*let hero = self.get_hero();
         let hidden_attributes = self.environment.unit_attributes_hidden_by_fog(self.typ, &hero, self.get_owner_id());
         for (k, v) in &self.attributes {
             if !hidden_attributes.contains(k) {
                 builder.unit.attributes.insert(*k, v.clone());
             }
-        }
+        }*/
         Some(builder.build_with_defaults())
     }
 
@@ -799,10 +887,9 @@ impl<D: Direction> Unit<D> {
         })
     }
 
-    pub fn transformed_by_movement(&mut self, map: &impl GameView<D>, from: Point, to: Point, distortion: Distortion<D>) -> bool {
-        let prev_terrain = map.get_terrain(from).unwrap();
+    pub fn transformed_by_movement(&mut self, map: &impl GameView<D>, _from: Point, to: Point, distortion: Distortion<D>) -> bool {
         let terrain = map.get_terrain(to).unwrap();
-        let permanent = PermanentBallast::from_unit(self, &prev_terrain);
+        let permanent = PermanentBallast::from_unit(self);
         let changed = permanent.step(distortion, &terrain);
         changed.update_unit(self);
         changed != permanent
@@ -836,10 +923,10 @@ impl<D: Direction> Unit<D> {
             AttackTargeting::Enemy => self.get_team() != defender.get_team(),
             AttackTargeting::Friendly => self.get_team() == defender.get_team(),
             AttackTargeting::Owned => self.get_owner_id() == defender.get_owner_id(),
-            AttackTargeting::OwnedBothUnmoved => {
+            /*AttackTargeting::OwnedBothUnmoved => {
                 self.get_owner_id() == defender.get_owner_id()
                 && self.get_unmoved() && defender.get_unmoved()
-            }
+            }*/
         } {
             return false;
         }
@@ -894,9 +981,11 @@ impl<D: Direction> Unit<D> {
             let game = &game;
             let heroes = Hero::hero_influence_at(game, destination, self.get_owner_id());
             // hero power
-            self.get_hero().add_options_after_path(&mut result, game);
+            if let Some(hero) = &self.hero {
+                hero.add_options_after_path(&mut result, game);
+            }
             // buy hero
-            if !self.is_hero() && terrain.can_sell_hero(game, destination, self.get_owner_id()) {
+            /*if !self.is_hero() && terrain.can_sell_hero(game, destination, self.get_owner_id()) {
                 for hero in game.available_heroes(&self.get_player(game).unwrap()) {
                     if let Some(cost) = game.environment().config.hero_price_after_moving(game, hero, &path, destination, self.clone(), transporter.map(|(_, i)| i)) {
                         if cost <= funds_after_path {
@@ -904,7 +993,7 @@ impl<D: Direction> Unit<D> {
                         }
                     }
                 }
-            }
+            }*/
             // custom actions
             let custom_actions = self.environment.config.custom_actions();
             if custom_actions.len() > 0 {
@@ -925,42 +1014,6 @@ impl<D: Direction> Unit<D> {
                     }
                 }
             }
-            // build units
-            /*if self.can_build_units() && self.transport_capacity() > 0 {
-                let mut free_space = self.remaining_transport_capacity();
-                if let Some(drone_id) = self.get_drone_station_id() {
-                    let mut outside = 0;
-                    for p in game.all_points() {
-                        if let Some(u) = game.get_visible_unit(team, p) {
-                            if u.get_drone_id() == Some(drone_id) {
-                                outside += 1;
-                            }
-                        }
-                    }
-                    free_space = free_space.max(outside) - outside;
-                }
-                if free_space > 0 {
-                    let transporter = transporter.map(|(u, _)| (u, path.start));
-                    for (unit, cost) in self.unit_shop(game, destination, transporter, ballast) {
-                        if cost <= funds_after_path {
-                            result.push(UnitAction::BuyTransportedUnit(unit.typ()));
-                        }
-                    }
-                }
-            } else if self.can_build_units() && self.transport_capacity() == 0 {
-                let transporter = transporter.map(|(u, _)| (u, path.start));
-                for (unit, cost) in self.unit_shop(game, destination, transporter, ballast) {
-                    if cost <= funds_after_path {
-                        for d in D::list() {
-                            if game.get_neighbor(destination, d)
-                            .and_then(|(p, _)| game.get_terrain(p).unwrap().movement_cost(unit.default_movement_type()))
-                            .is_some() {
-                                result.push(UnitAction::BuyUnit(unit.typ(), d));
-                            }
-                        }
-                    }
-                }
-            }*/
             // attack
             if self.can_attack_after_moving() || path.steps.len() == 0 {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
@@ -968,15 +1021,10 @@ impl<D: Direction> Unit<D> {
                     result.push(UnitAction::Attack(attack_vector));
                 }
             }
-            if self.can_capture() && terrain.has_attribute(TerrainAttributeKey::Owner) && terrain.get_team() != self.get_team() {
+            /*if self.can_capture() && terrain.has_attribute(TerrainAttributeKey::Owner) && terrain.get_team() != self.get_team() {
                 result.push(UnitAction::Capture);
-            }
-            /*if self.get_hp() < 100 && terrain.can_repair() && terrain.can_repair_unit(self.typ)
-            && (!terrain.has_attribute(TerrainAttributeKey::Owner) || terrain.get_owner_id() == self.get_owner_id())
-            && funds_after_path * 100 >= self.full_price(game, destination, None, heroes.as_slice()) {
-                result.push(UnitAction::Repair);
             }*/
-            if self.can_have_status(ActionStatus::Exhausted) {
+            /*if self.can_have_status(ActionStatus::Exhausted) {
                 let mut take_instead_of_wait = false;
                 if takes != PathStepTakes::Deny && self.has_attribute(AttributeKey::EnPassant) {
                     for dp in game.all_points() {
@@ -993,48 +1041,20 @@ impl<D: Direction> Unit<D> {
                 } else {
                     result.push(UnitAction::Wait);
                 }
-            }
+            }*/
+            result.push(UnitAction::Wait);
         }
         println!("unit actions: {result:?}");
         result
-    }
-
-    pub(crate) fn unit_shop_option(&self, game: &impl GameView<D>, pos: Point, unit_type: UnitType, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], ballast: &[TBallast<D>]) -> (Unit<D>, i32) {
-        let attr_overrides = self.build_overrides(game, pos, transporter, heroes, ballast);
-        let mut builder: UnitBuilder<D> = unit_type.instance(&self.environment)
-        .set_status(ActionStatus::Exhausted);
-        for attr in &attr_overrides {
-            builder = builder.set_attribute(&attr.into());
-        }
-        if let Some(drone_id) = self.get_drone_station_id() {
-            // TODO: only a drone-station should be able to build drones
-            builder = builder.set_drone_id(drone_id);
-        }
-        let mut unit = builder
-        .set_owner_id(self.get_owner_id())
-        .build_with_defaults();
-        if self.has_attribute(AttributeKey::Direction) {
-            unit.set_direction(unit.get_direction().rotate_by(self.get_direction()));
-        }
-        let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
-        let cost = unit.full_price(game, pos, Some(self), &heroes);
-        (unit, cost)
-    }
-
-    pub fn unit_shop(&self, game: &impl GameView<D>, pos: Point, transporter: Option<(&Unit<D>, Point)>, ballast: &[TBallast<D>]) -> Vec<(Unit<D>, i32)> {
-        let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
-        self.transportable_units().iter().map(|unit_type| {
-            self.unit_shop_option(game, pos, *unit_type, transporter, &heroes, ballast)
-        }).collect()
     }
 }
 
 impl<D: Direction> SupportedZippable<&Environment> for Unit<D> {
     fn export(&self, zipper: &mut Zipper, _support: &Environment) {
-        self.zip(zipper, None);
+        self.zip(zipper, false);
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        Self::unzip(unzipper, support, None)
+        Self::unzip(unzipper, support, false)
     }
 }
 
@@ -1059,20 +1079,13 @@ impl<'a, D: Direction> Drop for TransportedRef<'a, D> {
 impl<'a, D: Direction> Deref for TransportedRef<'a, D> {
     type Target = Vec<Unit<D>>;
     fn deref(&self) -> &Self::Target {
-        match self.unit.attributes.get(&AttributeKey::Transported) {
-            Some(Attribute::Transported(t)) => t,
-            _ => panic!("TransportedRef was unable to find attribute in {:?}", self.unit),
-        }
+        &self.unit.transport
     }
 }
 
 impl<'a, D: Direction> DerefMut for TransportedRef<'a, D> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        match self.unit.attributes.get_mut(&AttributeKey::Transported) {
-            Some(Attribute::Transported(t)) => return t,
-            _ => ()
-        };
-        panic!("TransportedRef was unable to find mutable attribute");
+        &mut self.unit.transport
     }
 }
 
@@ -1097,20 +1110,32 @@ impl<D: Direction> UnitBuilder<D> {
         if self.unit.environment != other.environment {
             panic!("Can't copy from unit from different environment");
         }
-        for (key, value) in &other.attributes {
-            if self.unit.has_attribute(*key) {
-                self.unit.attributes.insert(*key, value.clone());
-            }
+        for key in other.tags.flags() {
+            self.unit.set_flag(*key);
+        }
+        for (key, value) in other.tags.tags() {
+            self.unit.set_tag(*key, value.clone());
         }
         self
     }
 
-    pub fn set_attribute(mut self, attribute: &Attribute<D>) -> Self {
-        let key = attribute.key();
-        if self.unit.has_attribute(key) {
-            self.unit.attributes.insert(key, attribute.clone());
-        }
+    pub fn set_tag_bag(mut self, bag: TagBag<D>) -> Self {
+        self.unit.tags = bag;
         self
+    }
+
+    pub fn set_flag(&mut self, key: usize) {
+        self.unit.set_flag(key);
+    }
+    pub fn remove_flag(&mut self, key: usize) {
+        self.unit.remove_flag(key);
+    }
+
+    pub fn set_tag(&mut self, key: usize, value: TagValue<D>) {
+        self.unit.set_tag(key, value);
+    }
+    pub fn remove_tag(&mut self, key: usize) {
+        self.unit.remove_tag(key);
     }
 
     pub fn set_owner_id(mut self, owner_id: i8) -> Self {
@@ -1119,7 +1144,12 @@ impl<D: Direction> UnitBuilder<D> {
         self
     }
 
-    pub fn set_direction(mut self, direction: D) -> Self {
+    pub fn set_movement_type(mut self, sub_movement_type: MovementType) -> Self {
+        self.unit.set_sub_movement_type(sub_movement_type);
+        self
+    }
+
+    /*pub fn set_direction(mut self, direction: D) -> Self {
         self.unit.set_direction(direction);
         self
     }
@@ -1137,14 +1167,14 @@ impl<D: Direction> UnitBuilder<D> {
     pub fn set_hp(mut self, hp: u8) -> Self {
         self.unit.set_hp(hp);
         self
-    }
+    }*/
 
     pub fn set_hero(mut self, hero: Hero) -> Self {
         self.unit.set_hero(hero);
         self
     }
 
-    pub fn set_status(mut self, status: ActionStatus) -> Self {
+    /*pub fn set_status(mut self, status: ActionStatus) -> Self {
         self.unit.set_status(status);
         self
     }
@@ -1157,45 +1187,22 @@ impl<D: Direction> UnitBuilder<D> {
     pub fn set_zombified(mut self, zombified: bool) -> Self {
         self.unit.set_zombified(zombified);
         self
-    }
+    }*/
 
     pub fn set_transported(mut self, transported: Vec<Unit<D>>) -> Self {
-        if self.unit.has_attribute(AttributeKey::Transported) {
-            self.unit.attributes.insert(AttributeKey::Transported, Attribute::Transported(transported));
-            self.unit.fix_transported();
-        }
+        *self.unit.get_transported_mut() = transported;
         self
     }
 
-    pub fn build(&self) -> Option<Unit<D>> {
-        for key in self.unit.environment.unit_attributes(self.unit.typ(), self.unit.get_owner_id()) {
-            if !self.unit.attributes.contains_key(key) {
-                return None;
-            }
-        }
-        Some(self.unit.clone())
+    pub fn build(&self) -> Unit<D> {
+        self.unit.clone()
     }
 
     /**
-     * Take Care! The following attributes don't have reasonable defaults:
-     *  - drone_id
-     *  - drone_station_id
-     *  - owner_id
-     *  - direction
-     * TODO: when parsing a config, make sure commanders don't have these attributes
+     * TODO: call rhai script to get default flags/tag values?
      */
     pub fn build_with_defaults(&self) -> Unit<D> {
-        let mut unit = self.unit.clone();
-        for key in self.unit.environment.unit_attributes(self.unit.typ(), self.unit.get_owner_id()) {
-            if !unit.attributes.contains_key(key) {
-                /*if *key == AttributeKey::DroneId || *key == AttributeKey::DroneStationId || *key == AttributeKey::Owner {
-                    println!("WARNING: building unit with missing Attribute {key}");
-                    //return Err(AttributeError { requested: *key, received: None });
-                }*/
-                unit.attributes.insert(*key, key.default());
-            }
-        }
-        unit
+        self.unit.clone()
     }
 }
 

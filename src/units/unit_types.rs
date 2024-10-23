@@ -35,7 +35,7 @@ impl SupportedZippable<&Environment> for UnitType {
 
 impl UnitType {
     pub fn base_cost(&self, environment: &Environment) -> i32 {
-        environment.config.base_cost(*self)
+        environment.config.base_value(*self)
     }
 
     pub fn instance<D: Direction>(&self, environment: &Environment) -> UnitBuilder<D> {

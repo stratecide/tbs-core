@@ -4,7 +4,6 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::config::parse::*;
 use crate::terrain::*;
-use crate::units::attributes::AttributeOverride;
 
 use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
@@ -26,7 +25,7 @@ pub struct TerrainTypeConfig {
     pub(super) can_build: bool,
     pub(super) can_sell_hero: bool,
     pub(super) extra_movement_options: ExtraMovementOptions,
-    pub(super) build_overrides: HashSet<AttributeOverride>,
+    //pub(super) build_overrides: HashSet<AttributeOverride>,
     #[cfg(feature = "rendering")]
     pub(super) preview: Vec<(interfaces::PreviewShape, Option<[u8; 4]>)>,
 }
@@ -57,7 +56,7 @@ impl TableLine for TerrainTypeConfig {
             can_sell_hero: parse_def(data, H::SellsHero, false, loader)?,
             chess: parse_def(data, H::Chess, false, loader)?,
             extra_movement_options: parse_def(data, H::MovementOptions, ExtraMovementOptions::None, loader)?,
-            build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
+            //build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
             #[cfg(feature = "rendering")]
             preview: parse_vec_def(data, H::Preview, Vec::new(), loader)?,
         };
@@ -97,7 +96,7 @@ crate::listable_enum! {
         SellsHero,
         Chess,
         MovementOptions,
-        BuildOverrides,
+        //BuildOverrides,
         Preview,
     }
 }

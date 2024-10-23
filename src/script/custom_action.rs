@@ -13,6 +13,7 @@ use crate::game::modified_view::UnitMovementView;
 use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
+use crate::terrain::terrain::Terrain;
 use crate::units::hero::HeroInfluence;
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
@@ -186,6 +187,19 @@ pub fn is_unit_script_input_valid<D: Direction>(
     }
 }
 
+pub fn is_terrain_script_input_valid<D: Direction>(
+    script: usize,
+    game: &Handle<Game<D>>,
+    pos: Point,
+    terrain: Terrain,
+    data: &[CustomActionData<D>],
+) -> bool {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_POSITION, pos);
+    scope.push_constant(CONST_NAME_TERRAIN, terrain);
+    is_script_input_valid(script, game, scope, data)
+}
+
 pub fn is_commander_script_input_valid<D: Direction>(
     script: usize,
     game: &Handle<Game<D>>,
@@ -278,6 +292,19 @@ pub fn execute_unit_script<D: Direction>(
     scope.push_constant(CONST_NAME_UNIT, unit.clone());
     scope.push_constant(CONST_NAME_POSITION, unit_pos);
     execute_script(script, handler, scope, data)
+}
+
+pub fn execute_terrain_script<D: Direction>(
+    script: usize,
+    handler: &mut EventHandler<D>,
+    pos: Point,
+    terrain: Terrain,
+    data: &[CustomActionData<D>],
+) {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_POSITION, pos);
+    scope.push_constant(CONST_NAME_TERRAIN, terrain);
+    execute_script(script, handler, scope, Some(data))
 }
 
 pub fn execute_commander_script<D: Direction>(

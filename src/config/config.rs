@@ -7,6 +7,7 @@ use num_rational::Rational32;
 use rhai::*;
 use semver::Version;
 
+use crate::details::Detail;
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
 use crate::game::game::Game;
@@ -25,11 +26,10 @@ use crate::script::*;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::*;
 use crate::terrain::attributes::TerrainAttributeKey;
-use crate::units::combat::*;
+use crate::units::{combat::*, UnitVisibility};
 use crate::units::movement::*;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
-use crate::units::attributes::*;
 use crate::units::hero::*;
 use crate::VERSION;
 
@@ -39,12 +39,12 @@ use super::hero_type_config::HeroTypeConfig;
 use super::commander_power_config::CommanderPowerConfig;
 use super::commander_type_config::CommanderTypeConfig;
 use super::commander_unit_config::CommanderPowerUnitConfig;
-use super::movement_type_config::MovementPattern;
+use super::movement_type_config::{MovementPattern, MovementTypeConfig};
 use super::number_modification::NumberMod;
 use super::table_config::CustomTable;
+use super::tag_config::TagConfig;
 use super::terrain_powered::TerrainPoweredConfig;
 use super::terrain_type_config::TerrainTypeConfig;
-use super::unit_filter::*;
 use super::unit_type_config::UnitTypeConfig;
 
 const DEFAULT_SPLASH: [Rational32; 1] = [Rational32::new_raw(1, 1)];
@@ -52,13 +52,18 @@ const DEFAULT_SPLASH: [Rational32; 1] = [Rational32::new_raw(1, 1)];
 pub struct Config {
     pub(super) name: String,
     pub(super) owner_colors: Vec<[u8; 4]>,
+    // tags
+    pub(super) flags: Vec<TagConfig>,
+    pub(super) tags: Vec<TagConfig>,
+    pub(super) movement_types: Vec<MovementTypeConfig>,
+    pub(super) movement_type_transformer: HashMap<MovementType, HashMap<(TerrainType, MovementType), MovementType>>,
     // units
     pub(super) units: Vec<UnitTypeConfig>,
     pub(super) unknown_unit: UnitType,
     pub(super) unit_transports: HashMap<UnitType, Vec<UnitType>>,
-    pub(super) unit_attributes: HashMap<UnitType, Vec<AttributeKey>>,
+    /*pub(super) unit_attributes: HashMap<UnitType, Vec<AttributeKey>>,
     pub(super) unit_hidden_attributes: HashMap<UnitType, Vec<AttributeKey>>,
-    pub(super) unit_status: HashMap<UnitType, Vec<ActionStatus>>,
+    pub(super) unit_status: HashMap<UnitType, Vec<ActionStatus>>,*/
     pub(super) attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
     pub(super) custom_actions: Vec<CustomActionConfig>,
     pub(super) max_transported: usize,
@@ -90,7 +95,7 @@ pub struct Config {
     pub(super) commander_powers: HashMap<CommanderType, Vec<CommanderPowerConfig>>,
     pub(super) terrain_overrides: Vec<TerrainPoweredConfig>,
     pub(super) unit_overrides: Vec<CommanderPowerUnitConfig>,
-    pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
+    //pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
     pub(super) max_commander_charge: u32,
     // rhai
     //pub(super) global_ast: AST,
@@ -100,6 +105,9 @@ pub struct Config {
     pub(super) global_constants: Scope<'static>,
     pub(super) asts: Vec<AST>,
     pub(super) functions: Vec<(usize, String)>,
+    pub(super) is_unit_dead_rhai: usize,
+    pub(super) is_unit_movable_rhai: usize,
+    pub(super) deal_damage_rhai: usize,
     pub(super) custom_tables: HashMap<String, CustomTable>,
 }
 
@@ -199,11 +207,11 @@ impl Config {
         self.unit_config(typ).movement_pattern
     }
 
-    pub fn movement_type(&self, typ: UnitType, amphibious: Amphibious) -> MovementType {
-        match amphibious {
-            Amphibious::OnLand => self.unit_config(typ).movement_type,
-            Amphibious::InWater => self.unit_config(typ).water_movement_type.unwrap_or(self.unit_config(typ).movement_type),
-        }
+    pub fn base_movement_type(&self, typ: UnitType) -> MovementType {
+        self.unit_config(typ).movement_type
+    }
+    pub fn sub_movement_types(&self, typ: MovementType) -> &[MovementType] {
+        &self.movement_types[typ.0].sub_types
     }
 
     pub fn base_movement_points(&self, typ: UnitType) -> Rational32 {
@@ -246,8 +254,8 @@ impl Config {
         self.attack_damage.get(&attacker)?.get(&defender).cloned()
     }
 
-    pub fn base_cost(&self, typ: UnitType) -> i32 {
-        self.unit_config(typ).cost as i32
+    pub fn base_value(&self, typ: UnitType) -> i32 {
+        self.unit_config(typ).value as i32
     }
 
     pub fn displacement(&self, typ: UnitType) -> Displacement {
@@ -274,7 +282,7 @@ impl Config {
         self.unit_config(typ).true_vision
     }
 
-    pub fn unit_specific_attributes(&self, typ: UnitType) -> &[AttributeKey] {
+    /*pub fn unit_specific_attributes(&self, typ: UnitType) -> &[AttributeKey] {
         self.unit_attributes.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
     }
 
@@ -284,7 +292,7 @@ impl Config {
 
     pub fn unit_specific_statuses(&self, typ: UnitType) -> &[ActionStatus] {
         self.unit_status.get(&typ).map(|v| v.as_slice()).unwrap_or(&[ActionStatus::Ready])
-    }
+    }*/
 
     pub fn unit_transportable(&self, typ: UnitType) -> &[UnitType] {
         if let Some(transportable) = self.unit_transports.get(&typ) {
@@ -367,7 +375,7 @@ impl Config {
         scope.push_constant(CONST_NAME_POSITION, unit_pos);
         let engine = game.environment().get_engine(game);
         let executor = Executor::new(engine, scope, game.environment());
-        let cost = self.hero_config(hero).price.update_value(self.base_cost(unit_type), &executor);
+        let cost = self.hero_config(hero).price.update_value(self.base_value(unit_type), &executor);
         if cost < 0 {
             None
         } else {
@@ -409,7 +417,9 @@ impl Config {
         unit_pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
     ) -> Option<usize> {
-        let hero = unit.get_hero();
+        let Some(hero) = unit.get_hero() else {
+            return None
+        };
         let result = self.unit_power_configs(
             map,
             unit,
@@ -668,7 +678,7 @@ impl Config {
         self.terrain_hidden_attributes.get(&typ).expect(&format!("Environment doesn't contain terrain type {typ:?}"))
     }
 
-    pub fn terrain_unit_attribute_overrides<D: Direction>(
+    /*pub fn terrain_unit_attribute_overrides<D: Direction>(
         &self,
         _game: &impl GameView<D>,
         terrain: &Terrain,
@@ -680,7 +690,7 @@ impl Config {
             result.insert(ov.key(), ov.clone());
         }
         result
-    }
+    }*/
 
     pub fn terrain_on_start_turn<D: Direction>(
         &self,
@@ -706,7 +716,7 @@ impl Config {
         result
     }
 
-    pub fn terrain_on_build<D: Direction>(
+    /*pub fn terrain_on_build<D: Direction>(
         &self,
         map: &impl GameView<D>,
         pos: Point,
@@ -728,6 +738,30 @@ impl Config {
             }
         );
         result
+    }*/
+    pub fn terrain_action_script<D: Direction>(
+        &self,
+        map: &impl GameView<D>,
+        pos: Point,
+        terrain: &Terrain,
+        heroes: &[HeroInfluence<D>],
+    ) -> Option<(usize, usize)> {
+        let mut result = None;
+        self.terrain_power_configs(
+            map,
+            pos,
+            terrain,
+            false,
+            heroes,
+            |iter, _executor| {
+                for config in iter {
+                    if let Some(script) = config.action_script {
+                        result = Some(script);
+                    }
+                }
+            }
+        );
+        result
     }
 
     #[cfg(feature = "rendering")]
@@ -738,6 +772,19 @@ impl Config {
                 .unwrap_or(self.owner_colors[(owner + 1) as usize]);
             (*shape, color)
         }).collect()
+    }
+
+    // details
+
+    pub fn detail_action_script<D: Direction>(
+        &self,
+        map: &impl GameView<D>,
+        pos: Point,
+        detail: &Detail<D>,
+        heroes: &[HeroInfluence<D>],
+    ) -> Option<(usize, usize)> {
+        // TODO
+        None
     }
 
     // commanders
@@ -758,7 +805,7 @@ impl Config {
         &self.commander_config(typ).name
     }
 
-    pub fn commander_attributes(&self, typ: CommanderType, unit: UnitType) -> &[AttributeKey] {
+    /*pub fn commander_attributes(&self, typ: CommanderType, unit: UnitType) -> &[AttributeKey] {
         if let Some(attributes) = self.commander_unit_attributes.get(&typ) {
             for (filter, attributes, _) in attributes {
                 if filter.check(self, unit) {
@@ -778,7 +825,7 @@ impl Config {
             }
         }
         &[]
-    }
+    }*/
 
     pub fn max_commander_charge(&self) -> u32 {
         self.max_commander_charge
@@ -857,7 +904,7 @@ impl Config {
         r
     }
 
-    pub fn unit_cost<D: Direction>(
+    pub fn unit_value<D: Direction>(
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
@@ -876,8 +923,8 @@ impl Config {
             false,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
-                    self.base_cost(unit.typ()),
-                    iter.map(|c| &c.cost),
+                    self.base_value(unit.typ()),
+                    iter.map(|c| &c.value),
                     executor,
                 )
             }
@@ -966,7 +1013,7 @@ impl Config {
         ) as usize
     }
 
-    pub fn unit_attribute_overrides<D: Direction>(
+    /*pub fn unit_attribute_overrides<D: Direction>(
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
@@ -993,7 +1040,7 @@ impl Config {
             }
         );
         result
-    }
+    }*/
 
     pub fn unit_start_turn_effects<D: Direction>(
         &self,
@@ -1171,6 +1218,37 @@ impl Config {
         result
     }
 
+    pub fn unit_normal_action_effects<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        unit_pos: (Point, Option<usize>),
+        // the transporter the unit moved out of
+        transporter: Option<(&Unit<D>, Point)>,
+        // the unit this unit moved on top of
+        other_unit: Option<(&Unit<D>, Point)>,
+        heroes: &[HeroInfluence<D>],
+        temporary_ballast: &[TBallast<D>],
+    ) -> Vec<usize> {
+        let mut result = Vec::new();
+        self.unit_power_configs(
+            game,
+            unit,
+            unit_pos,
+            transporter,
+            other_unit,
+            heroes,
+            temporary_ballast,
+            false,
+            |iter, _executor| {
+                for config in iter {
+                    result.extend(config.on_normal_action.iter().cloned())
+                }
+            }
+        );
+        result
+    }
+
     pub fn unit_movement_points<D: Direction>(
         &self,
         game: &impl GameView<D>,
@@ -1258,16 +1336,17 @@ impl Config {
             )
         }));
         // attack is reduced by the damage the attacker has already taken
-        let damage_factor = iter_gen(Box::new(|iter: Box<dyn DoubleEndedIterator<Item = &CommanderPowerUnitConfig>>, executor| {
+        /*let damage_factor = iter_gen(Box::new(|iter: Box<dyn DoubleEndedIterator<Item = &CommanderPowerUnitConfig>>, executor| {
             NumberMod::update_value_repeatedly(
                 Rational32::from_integer(1),
                 iter.map(|c| &c.attack_reduced_by_damage),
                 executor,
             )
-        }));
-        let damage = Rational32::from_integer(100 - unit.get_hp() as i32);
+        }));*/
+        factor
+        /*let damage = Rational32::from_integer(100 - unit.get_hp() as i32);
         let hp_factor = (Rational32::from_integer(100) - damage * damage_factor) / 100;
-        hp_factor * factor
+        hp_factor * factor*/
     }
 
     pub fn unit_defense<D: Direction>(

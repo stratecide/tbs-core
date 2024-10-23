@@ -96,7 +96,7 @@ macro_rules! board_module {
                 board.get_terrain(p).expect("script requested terrain at {p:?}, but that point is invalid")
             }
 
-            #[rhai_fn(pure)]
+            /*#[rhai_fn(pure)]
             pub fn get_skull(board: &mut Board, p: Point, owner_id: i32) -> Dynamic {
                 for detail in board.get_details(p) {
                     match detail {
@@ -109,7 +109,7 @@ macro_rules! board_module {
                     }
                 }
                 ().into()
-            }
+            }*/
 
             #[rhai_fn(pure)]
             pub fn player_funds(board: &mut Board, owner_id: i32) -> i32 {

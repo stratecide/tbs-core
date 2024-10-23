@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
@@ -20,6 +20,7 @@ use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::player::Player;
+use crate::tags::{TagValue, UniqueId};
 use crate::{details::*, VERSION};
 use crate::details;
 use crate::terrain::terrain::Terrain;
@@ -66,7 +67,7 @@ impl<D: Direction> Map<D> {
 
     pub fn new(wrapping_logic: WrappingMap<D>, config: &Arc<Config>) -> Self {
         let environment = Environment::new_map(config.clone(), wrapping_logic.pointmap().size());
-        let mut terrain = HashMap::new();
+        let mut terrain = HashMap::default();
         for p in wrapping_logic.pointmap().get_valid_points() {
             terrain.insert(p, environment.default_terrain());
         }
@@ -74,13 +75,13 @@ impl<D: Direction> Map<D> {
             environment,
             wrapping_logic,
             terrain,
-            units: HashMap::new(),
-            details: HashMap::new(),
+            units: HashMap::default(),
+            details: HashMap::default(),
         }
     }
 
     pub fn new2(wrapping_logic: WrappingMap<D>, environment: &Environment) -> Self {
-        let mut terrain = HashMap::new();
+        let mut terrain = HashMap::default();
         for p in wrapping_logic.pointmap().get_valid_points() {
             terrain.insert(p, environment.default_terrain());
         }
@@ -88,8 +89,8 @@ impl<D: Direction> Map<D> {
             environment: environment.clone(),
             wrapping_logic,
             terrain,
-            units: HashMap::new(),
-            details: HashMap::new(),
+            units: HashMap::default(),
+            details: HashMap::default(),
         }
     }
 
@@ -197,11 +198,14 @@ impl<D: Direction> Map<D> {
     }
     
     // returns a random DroneId that isn't in use yet
-    pub fn new_drone_id(&self, rng: f32) -> u16 {
-        let mut existing_ids = HashSet::new();
+    pub fn new_unique_id(&self, pool: &str, rng: f32) -> Option<UniqueId> {
+        let mut existing_ids = HashSet::default();
+        let keys = self.environment.unique_tag_keys(pool);
         for unit in self.units.values() {
-            if let Some(id) = unit.get_drone_station_id().or(unit.get_drone_id()) {
-                existing_ids.insert(id);
+            for key in &keys {
+                if let Some(TagValue::Unique(id)) = unit.get_tag(*key) {
+                    id.add_to_pool(&mut existing_ids);
+                }
             }
         }
         /*for details in self.details.values() {
@@ -216,11 +220,7 @@ impl<D: Direction> Map<D> {
                 }
             }
         }*/
-        let mut drone_id = (u16::MAX as f32 * rng) as u16;
-        while existing_ids.contains(&drone_id) {
-            drone_id = (drone_id + 1) % u16::MAX as u16;
-        }
-        drone_id
+        UniqueId::new(&existing_ids, rng)
     }
 
     /**
@@ -319,11 +319,11 @@ impl<D: Direction> Map<D> {
     }
 
     pub fn width_search(&self, start: Point, mut f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
-        let mut result = HashSet::new();
-        let mut to_check = HashSet::new();
+        let mut result = HashSet::default();
+        let mut to_check = HashSet::default();
         to_check.insert(start);
         while to_check.len() > 0 {
-            let mut next = HashSet::new();
+            let mut next = HashSet::default();
             for p in to_check {
                 if f(p) {
                     result.insert(p);
@@ -344,14 +344,14 @@ impl<D: Direction> Map<D> {
             return Vec::new();
         }
         let mut result = Vec::new();
-        let mut layer: HashSet<(Point, D, Option<D>)> = HashSet::new();
+        let mut layer: HashSet<(Point, D, Option<D>)> = HashSet::default();
         for dp in self.get_neighbors(center, NeighborMode::FollowPipes) {
             layer.insert((dp.point, dp.direction, None));
         }
         for _ in 1..range {
             let previous_layer = layer;
-            layer = HashSet::new();
-            let mut result_layer = HashSet::new();
+            layer = HashSet::default();
+            let mut result_layer = HashSet::default();
             for (p, dir, dir_change) in previous_layer {
                 result_layer.insert(p);
                 if let Some((point, distortion)) = self.get_neighbor(p, dir) {
@@ -383,7 +383,7 @@ impl<D: Direction> Map<D> {
             }
             result.push(result_layer);
         }
-        let mut result_layer = HashSet::new();
+        let mut result_layer = HashSet::default();
         for (p, _, _) in layer {
             result_layer.insert(p);
         }
@@ -405,7 +405,7 @@ impl<D: Direction> Map<D> {
     }*/
 
     pub fn fix_errors_details(&self) -> HashMap<Point, Vec<Detail<D>>> {
-        let mut corrected = HashMap::new();
+        let mut corrected = HashMap::default();
         for p in self.all_points() {
             let stack = Detail::correct_stack(self.get_details(p).to_vec(), &self.environment);
             if *self.details.get(&p).unwrap_or(&stack) != stack {
@@ -442,7 +442,7 @@ impl<D: Direction> Map<D> {
     }
     
     pub fn get_viable_player_ids(&self, game: &impl GameView<D>) -> Vec<u8> {
-        let mut owners = HashSet::new();
+        let mut owners = HashSet::default();
         for p in self.all_points() {
             if let Some(unit) = self.get_unit(p) {
                 if unit.get_owner_id() >= 0 {
@@ -480,9 +480,9 @@ impl<D: Direction> Map<D> {
     pub fn import_from_unzipper(unzipper: &mut Unzipper, environment: &mut Environment) -> Result<Self, ZipperError> {
         let wrapping_logic = WrappingMap::unzip(unzipper)?;
         environment.map_size = wrapping_logic.pointmap().size();
-        let mut terrain = HashMap::new();
-        let mut units = HashMap::new();
-        let mut details = HashMap::new();
+        let mut terrain = HashMap::default();
+        let mut units = HashMap::default();
+        let mut details = HashMap::default();
         for p in wrapping_logic.pointmap().get_valid_points() {
             terrain.insert(p, Terrain::import(unzipper, environment)?);
             let det = LVec::<Detail<D>, MAX_STACK_SIZE>::import(unzipper, environment)?;
@@ -491,7 +491,7 @@ impl<D: Direction> Map<D> {
             }
             // could be more memory-efficient by returning Option<Unit> from import and removing this read_bool
             if unzipper.read_bool()? {
-                units.insert(p, Unit::unzip(unzipper, environment, None)?);
+                units.insert(p, Unit::unzip(unzipper, environment, false)?);
             }
         }
         Ok(Self {
@@ -687,8 +687,8 @@ impl<D: Direction> MapInterface for Handle<Map<D>> {
         self.with(|map| map.get_viable_player_ids(self).len()) as u16
     }
 
-    fn metrics(&self) -> HashMap<String, i32> {
-        let mut result = HashMap::new();
+    fn metrics(&self) -> std::collections::HashMap<String, i32> {
+        let mut result = std::collections::HashMap::default();
         let mut income = 0;
         self.with(|map| {
             for t in map.terrain.values() {

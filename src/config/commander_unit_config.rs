@@ -1,12 +1,11 @@
 use std::error::Error;
 
 use num_rational::Rational32;
-use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
-use crate::units::attributes::*;
 use crate::units::combat::*;
-use crate::units::movement::MovementType;
+use crate::units::UnitVisibility;
 
 use super::file_loader::FileLoader;
 use super::file_loader::TableLine;
@@ -23,8 +22,8 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) min_range: NumberMod<u8>,
     pub(super) max_range: NumberMod<u8>,
     pub(super) visibility: Option<UnitVisibility>,
-    pub(super) movement_type: Option<MovementType>,
-    pub(super) water_movement_type: Option<MovementType>,
+    //pub(super) movement_type: Option<MovementType>,
+    //pub(super) water_movement_type: Option<MovementType>,
     pub(super) movement_points: NumberMod<Rational32>,
     pub(super) vision: NumberMod<u8>,
     pub(super) true_vision: NumberMod<u8>,
@@ -32,17 +31,18 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) attack_pattern: Option<AttackType>,
     pub(super) attack_targets: Option<AttackTargeting>,
     pub(super) splash_damage: Vec<Rational32>, // doesn't override if empty. contains factor per additional distance
-    pub(super) cost: NumberMod<i32>,
+    pub(super) value: NumberMod<i32>,
     pub(super) displacement: Option<Displacement>, // implies that attack_pattern is Adjacent or Straight
     pub(super) displacement_distance: NumberMod<i8>, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: Option<bool>,
-    pub(super) build_overrides: HashSet<AttributeOverride>,
+    //pub(super) build_overrides: HashSet<AttributeOverride>,
     pub(super) on_start_turn: Option<usize>,
     pub(super) on_end_turn: Option<usize>,
     pub(super) on_attack: Option<usize>,
     pub(super) on_defend: Option<usize>,
     pub(super) on_kill: Option<usize>,
     pub(super) on_death: Option<usize>,
+    pub(super) on_normal_action: Option<usize>,
     pub(super) aura_range: NumberMod<i8>,
     pub(super) aura_range_transported: NumberMod<i8>,
 }
@@ -64,14 +64,14 @@ impl TableLine for CommanderPowerUnitConfig {
                 Some(s) if s.len() > 0 => Some(UnitVisibility::from_conf(s, loader)?.0),
                 _ => None,
             },
-            movement_type: match data.get(&H::MovementType) {
+            /*movement_type: match data.get(&H::MovementType) {
                 Some(s) if s.len() > 0 => Some(MovementType::from_conf(s, loader)?.0),
                 _ => None,
             },
             water_movement_type: match data.get(&H::WaterMovementType) {
                 Some(s) if s.len() > 0 => Some(MovementType::from_conf(s, loader)?.0),
                 _ => None,
-            },
+            },*/
             movement_points: parse_def(data, H::MovementPoints, NumberMod::Keep, loader)?,
             vision: parse_def(data, H::Vision, NumberMod::Keep, loader)?,
             true_vision: parse_def(data, H::TrueVision, NumberMod::Keep, loader)?,
@@ -88,7 +88,7 @@ impl TableLine for CommanderPowerUnitConfig {
                 _ => None,
             },
             splash_damage: parse_vec_def(data, H::SplashDamage, Vec::new(), loader)?,
-            cost: parse_def(data, H::Cost, NumberMod::Keep, loader)?,
+            value: parse_def(data, H::Value, NumberMod::Keep, loader)?,
             displacement: match data.get(&H::Displacement) {
                 Some(s) if s.len() > 0 => Some(Displacement::from_conf(s, loader)?.0),
                 _ => None,
@@ -98,7 +98,7 @@ impl TableLine for CommanderPowerUnitConfig {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
             },
-            build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
+            //build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
             on_start_turn: match data.get(&H::OnStartTurn) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
@@ -123,6 +123,10 @@ impl TableLine for CommanderPowerUnitConfig {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
             },
+            on_normal_action: match data.get(&H::OnNormalAction) {
+                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
+                _ => None,
+            },
             aura_range: parse_def(data, H::AuraRange, NumberMod::Keep, loader)?,
             aura_range_transported: parse_def(data, H::AuraRangeTransported, NumberMod::Keep, loader)?,
         };
@@ -130,12 +134,12 @@ impl TableLine for CommanderPowerUnitConfig {
     }
 
     fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
-        let mut overrides = HashSet::default();
+        /*let mut overrides = HashSet::default();
         for key in self.build_overrides.iter().map(AttributeOverride::key) {
             if !overrides.insert(key) {
                 // TODO: return error
             }
-        }
+        }*/
         Ok(())
     }
 }
@@ -151,8 +155,8 @@ crate::listable_enum! {
         MinRange,
         MaxRange,
         Visibility,
-        MovementType,
-        WaterMovementType,
+        //MovementType,
+        //WaterMovementType,
         MovementPoints,
         Vision,
         TrueVision,
@@ -166,18 +170,19 @@ crate::listable_enum! {
         AttackTargets,
         SplashDamage,
         CanBuildUnits,
-        Cost,
+        Value,
         Displacement,
         DisplacementDistance,
         CanBeDisplaced,
         TransportCapacity,
-        BuildOverrides,
+        //BuildOverrides,
         OnStartTurn,
         OnEndTurn,
         OnAttack,
         OnDefend,
         OnKill,
         OnDeath,
+        OnNormalAction,
         AuraRange,
         AuraRangeTransported,
     }

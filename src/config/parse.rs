@@ -17,13 +17,14 @@ use crate::terrain::TerrainType;
 use crate::terrain::attributes::TerrainAttributeKey;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
-use crate::units::attributes::*;
 use crate::units::hero::*;
 
 use super::custom_action_config::*;
 use super::file_loader::FileLoader;
 use super::hero_power_config::*;
+use super::movement_type_config::MovementTypeConfig;
 use super::table_config::TableConfig;
+use super::tag_config::{TagConfig, TagType};
 use super::terrain_powered::*;
 use super::ConfigParseError;
 use super::commander_power_config::*;
@@ -36,6 +37,9 @@ use super::unit_type_config::*;
 use super::config::Config;
 
 const RULESET_CONFIG: &'static str = "ruleset.csv";
+const MOVEMENT_TYPE_CONFIG: &'static str = "movement_types.csv";
+const SUB_MOVEMENT_TYPE_CONFIG: &'static str = "sub_mt_";
+const TAG_CONFIG: &'static str = "tags.csv";
 const UNIT_CONFIG: &'static str = "units.csv";
 const UNIT_ATTRIBUTES: &'static str = "unit_attributes.csv";
 const UNIT_TRANSPORT: &'static str = "unit_transport.csv";
@@ -80,13 +84,18 @@ impl Config {
         let mut result = Self {
             name,
             owner_colors: Vec::new(),
+            // tags
+            flags: Vec::new(),
+            tags: Vec::new(),
+            movement_types: Vec::new(),
+            movement_type_transformer: HashMap::default(),
             // units
             units: Vec::new(),
             unknown_unit: UnitType(usize::MAX),
             unit_transports: HashMap::default(),
-            unit_attributes: HashMap::default(),
+            /*unit_attributes: HashMap::default(),
             unit_hidden_attributes: HashMap::default(),
-            unit_status: HashMap::default(),
+            unit_status: HashMap::default(),*/
             attack_damage: HashMap::default(),
             custom_actions: Vec::new(),
             max_transported: 0,
@@ -118,7 +127,7 @@ impl Config {
             commander_powers: HashMap::default(),
             terrain_overrides: Vec::new(),
             unit_overrides: Vec::new(),
-            commander_unit_attributes: HashMap::default(),
+            //commander_unit_attributes: HashMap::default(),
             max_commander_charge: 0,
             // rhai
             //global_ast,
@@ -128,6 +137,9 @@ impl Config {
             global_constants,
             asts: Vec::new(),
             functions: Vec::new(),
+            is_unit_dead_rhai: usize::MAX,
+            is_unit_movable_rhai: usize::MAX,
+            deal_damage_rhai: usize::MAX,
             custom_tables: HashMap::default(),
         };
 
@@ -144,6 +156,9 @@ impl Config {
                     result.owner_colors = parse_inner_vec(value, false, file_loader)?.0;
                 }
                 "UnknownUnit" => unknown_unit = value.to_string(),
+                "UnitDeathTest" => result.is_unit_dead_rhai = file_loader.rhai_function(value, 2..=2)?.index,
+                "UnitMovableTest" => result.is_unit_movable_rhai = file_loader.rhai_function(value, 0..=0)?.index,
+                "DealDamageToUnit" => result.deal_damage_rhai = file_loader.rhai_function(value, 0..=0)?.index,
                 _ => ()
             }
             Ok(())
@@ -155,6 +170,37 @@ impl Config {
             Some(color) => result.owner_colors.insert(0, color),
             None => return Err(Box::new(ConfigParseError::MissingNeutralColor)),
         }
+        if result.is_unit_dead_rhai == usize::MAX {
+            return Err(format!("missing entry in {RULESET_CONFIG}: 'UnitDeathTest'").into());
+        }
+        if result.is_unit_movable_rhai == usize::MAX {
+            return Err(format!("missing entry in {RULESET_CONFIG}: 'UnitMovableTest'").into());
+        }
+        if result.deal_damage_rhai == usize::MAX {
+            return Err(format!("missing entry in {RULESET_CONFIG}: 'DealDamageToUnit'").into());
+        }
+
+        // movement types
+        file_loader.table_with_headers(TAG_CONFIG, |line: MovementTypeConfig| {
+            if result.units.iter().any(|conf| conf.name == line.name) {
+                // TODO: error
+            }
+            result.movement_types.push(line);
+            Ok(())
+        })?;
+
+        // tags
+        file_loader.table_with_headers(TAG_CONFIG, |line: TagConfig| {
+            if result.units.iter().any(|conf| conf.name == line.name) {
+                // TODO: error
+            }
+            if line.tag_type == TagType::Flag {
+                result.flags.push(line);
+            } else {
+                result.tags.push(line);
+            }
+            Ok(())
+        })?;
 
         // simple unit data
         file_loader.table_with_headers(UNIT_CONFIG, |line: UnitTypeConfig| {
@@ -204,7 +250,7 @@ impl Config {
         }
 
         // unit attributes
-        let data = file_loader.load_config(UNIT_ATTRIBUTES)?;
+        /*let data = file_loader.load_config(UNIT_ATTRIBUTES)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         let mut attributes: Vec<AttributeKey> = Vec::new();
         for h in reader.headers()?.into_iter().skip(1) {
@@ -268,7 +314,7 @@ impl Config {
             if values.len() > 1 {
                 result.unit_status.insert(typ, values);
             }
-        }
+        }*/
 
         // attack damage
         let data = file_loader.load_config(UNIT_DAMAGE)?;
@@ -326,7 +372,7 @@ impl Config {
         result.max_transported += bonus_transported;
 
         // unit is allowed to have that hero
-        let data = file_loader.load_config(UNIT_HEROES)?;
+        /*let data = file_loader.load_config(UNIT_HEROES)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         // TODO: ensure uniqueness of column and row IDs
         let mut units: Vec<UnitType> = Vec::new();
@@ -364,7 +410,7 @@ impl Config {
             if units.len() > 0 {
                 result.hero_units.insert(typ, values);
             }
-        }
+        }*/
 
         // hero powers
         file_loader.table_with_headers(HERO_POWERS, |line: HeroPowerConfig| {
@@ -451,6 +497,41 @@ impl Config {
             if movement_types.len() > 0 {
                 result.movement_cost.insert(typ, values);
             }
+        }
+
+        for (i, conf) in result.movement_types.iter().enumerate() {
+            let data = file_loader.load_config(&format!("{SUB_MOVEMENT_TYPE_CONFIG}{}.csv", conf.name))?;
+            let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+            // TODO: ensure uniqueness of column and row IDs
+            let mut headers: Vec<MovementType> = Vec::new();
+            for h in reader.headers()?.into_iter().skip(1) {
+                let header = MovementType::from_conf(h, &mut file_loader)?.0;
+                if headers.contains(&header) {
+                    return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+                }
+                headers.push(header);
+            }
+            let mut map = HashMap::default();
+            for line in reader.records() {
+                let line = line?;
+                let mut line = line.into_iter();
+                let terrain: TerrainType = match line.next() {
+                    Some(t) => TerrainType::from_conf(t, &mut file_loader)?.0,
+                    _ => continue,
+                };
+                for (i, val) in line.enumerate() {
+                    if val.len() > 0 && i < headers.len() {
+                        let movement_type = MovementType::from_conf(val, &mut file_loader)?.0;
+                        if movement_type != headers[i] {
+                            map.insert((terrain, headers[i]), movement_type);
+                        }
+                    }
+                }
+            }
+            if map.len() == 0 {
+                // TODO: return error?
+            }
+            result.movement_type_transformer.insert(MovementType(i), map);
         }
 
         // attack bonus
@@ -551,7 +632,7 @@ impl Config {
             }
             result.commander_types.push(line.id);
             result.commander_powers.insert(line.id, Vec::new());
-            result.commander_unit_attributes.insert(line.id, Vec::new());
+            //result.commander_unit_attributes.insert(line.id, Vec::new());
             result.max_commander_charge = result.max_commander_charge.max(line.max_charge);
             bonus_transported = bonus_transported.max(line.transport_capacity as usize);
             result.commanders.insert(line.id, line);
@@ -568,7 +649,7 @@ impl Config {
         })?;
 
         // commanders' unit attributes
-        let data = file_loader.load_config(COMMANDER_ATTRIBUTES)?;
+        /*let data = file_loader.load_config(COMMANDER_ATTRIBUTES)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         let mut attributes: Vec<AttributeKey> = Vec::new();
         for h in reader.headers()?.into_iter().skip(2) {
@@ -604,7 +685,7 @@ impl Config {
             }
             result.commander_unit_attributes.get_mut(&typ).ok_or(ConfigParseError::MissingCommanderForAttributes(typ))?
             .push((filter, values, hidden));
-        }
+        }*/
 
         // unit overrides, has to be after commander and hero parsing
         file_loader.table_with_headers(POWERED_UNITS, |line: CommanderPowerUnitConfig| {

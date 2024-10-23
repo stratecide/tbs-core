@@ -39,6 +39,7 @@ pub const CONST_NAME_TRANSPORT_INDEX: &'static str = "TRANSPORT_INDEX";
 pub const CONST_NAME_TRANSPORTER_POSITION: &'static str = "TRANSPORTER_POSITION";
 pub const CONST_NAME_IS_COUNTER: &'static str = "IS_COUNTER";
 pub const CONST_NAME_DAMAGE: &'static str = "DAMAGE";
+pub const CONST_NAME_INTERRUPTED: &'static str = "INTERRUPTED";
 
 pub const FUNCTION_NAME_INPUT_CHOICE: &'static str = "user_selection";
 pub const FUNCTION_NAME_BLAST_DIRECTION: &'static str = "get_blast_direction";

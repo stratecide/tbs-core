@@ -1,18 +1,62 @@
+use std::error::Error;
+use rustc_hash::FxHashMap as HashMap;
+
+use crate::config::parse::*;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::ExtraMovementOptions;
-use crate::units::movement::{PathStep, PathStepTakes, PbEntry, TBallast};
+use crate::units::movement::{MovementType, PathStep, PathStepTakes, PbEntry, TBallast};
 
-/*#[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
+use super::file_loader::{FileLoader, TableLine};
+use super::ConfigParseError;
+
+#[derive(Debug)]
 pub struct MovementTypeConfig {
-    allow_loops: bool,
-    temporary: TemporaryBallast<D: Direction>,
-    permanent: PermanentBallast<D: Direction>,
-}*/
+    pub(super) name: String,
+    pub(super) sub_types: Vec<MovementType>,
+}
+
+impl TableLine for MovementTypeConfig {
+    type Header = MovementTypeConfigHeader;
+    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
+        use MovementTypeConfigHeader as H;
+        use ConfigParseError as E;
+        let get = |key| {
+            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
+        };
+        let name = get(H::Id)?.trim().to_string();
+        let mut sub_types = parse_vec_def(data, H::SubMovementTypes, Vec::new(), loader)?;
+        if sub_types.len() == 1 {
+            return Err(format!("Movement type can't have just one sub-type: {name}").into());
+        }
+        if sub_types.len() == 0 {
+            sub_types.push(MovementType(loader.movement_types.len()));
+        }
+        loader.movement_types.push(name.clone());
+        Ok(Self {
+            name,
+            sub_types,
+        })
+    }
+
+    fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
+        if self.name.len() == 0 {
+            return Err(Box::new(ConfigParseError::NameTooShort));
+        }
+        Ok(())
+    }
+}
+
+crate::listable_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum MovementTypeConfigHeader {
+        Id,
+        SubMovementTypes,
+    }
+}
 
 crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

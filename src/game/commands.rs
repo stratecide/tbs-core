@@ -2,25 +2,21 @@ use std::error::Error;
 use std::fmt::Display;
 
 use interfaces::GameInterface;
-use rhai::Scope;
+use semver::Version;
 use zipper_derive::Zippable;
 use zipper::*;
 
 use crate::config::environment::Environment;
+use crate::handle::Handle;
 use crate::map::point::Point;
-use crate::details::Detail;
-use crate::script::custom_action::{execute_commander_script, is_commander_script_input_valid, CustomActionData};
-use crate::script::executor::Executor;
-use crate::script::{CONST_NAME_POSITION, CONST_NAME_TERRAIN};
-use crate::terrain::attributes::TerrainAttributeKey;
-use crate::terrain::terrain::TerrainBuilder;
+use crate::script::custom_action::*;
 use crate::map::direction::Direction;
-use crate::units::attributes::{ActionStatus, AttributeKey};
 use crate::units::commands::{UnitCommand, MAX_CUSTOM_ACTION_STEPS};
 use crate::units::hero::Hero;
-use crate::units::unit_types::UnitType;
+use crate::VERSION;
 use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
+use super::game::Game;
 use super::game_view::GameView;
 
 #[derive(Debug, Clone, Zippable)]
@@ -28,7 +24,8 @@ use super::game_view::GameView;
 pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand<D>),
-    BuyUnit(Point, UnitType, D),
+    TerrainAction(Point, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
+    //BuyUnit(Point, UnitType, D),
     CommanderPower(CommanderPowerIndex, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
 }
 
@@ -44,7 +41,67 @@ impl<D: Direction> Command<D> {
                 Ok(())
             }
             Self::UnitCommand(command) => command.execute(handler),
-            Self::BuyUnit(pos, unit_type, d) => {
+            Self::TerrainAction(pos, data) => {
+                let team = handler.get_game().current_team();
+                if let Some(err) = handler.with_game(|game| {
+                    if !game.get_map().is_point_valid(pos) {
+                        return Some(CommandError::InvalidPoint(pos));
+                    }
+                    if game.get_fog_at(team, pos) != FogIntensity::TrueSight {
+                        // without TrueSight, a stealthed unit could block this field
+                        return Some(CommandError::NoVision);
+                    }
+                    if game.get_map().get_unit(pos).is_some() {
+                        return Some(CommandError::Blocked(pos));
+                    }
+                    None
+                }) {
+                    return Err(err);
+                }
+                let terrain = handler.get_game().get_terrain(pos).unwrap();
+                if terrain.get_owner_id() != handler.get_game().current_owner() {
+                    return Err(CommandError::NotYourProperty);
+                }
+                let borrowed_game = handler.get_game();
+                let client_game;
+                let client = if handler.get_game().is_foggy() {
+                    let player = handler.get_game().current_owner() as u8;
+                    let data = handler.get_game().export();
+                    let secret = data.hidden
+                    .and_then(|mut h| h.teams.remove(&player))
+                    .map(|h| (player, h));
+                    let version = Version::parse(VERSION).unwrap();
+                    client_game = Handle::new(*Game::import_client(data.public, secret, &handler.environment().config, version).unwrap());
+                    &client_game
+                } else {
+                    // shouldn't need to clone here, actually
+                    &*borrowed_game
+                };
+                // check whether the player should even be able to send this command
+                let script = {
+                    // making sure i don't accidently change anything while testing move validity
+                    #[allow(unused_variables)]
+                    let handler = ();
+                    let heroes = Hero::hero_influence_at(client, pos, client.current_owner());
+                    let (input_script, script) = client.with(|game| {
+                        for d in game.get_map().get_details(pos) {
+                            if game.environment().config.detail_action_script(client, pos, d, &heroes).is_some() {
+                                return Err(CommandError::Blocked(pos));
+                            }
+                        }
+                        game.environment().config.terrain_action_script(client, pos, &terrain, &heroes)
+                        .ok_or(CommandError::InvalidAction)
+                    })?;
+                    if !is_terrain_script_input_valid(input_script, client, pos, terrain.clone(), &data) {
+                        return Err(CommandError::InvalidAction);
+                    }
+                    script
+                };
+                drop(borrowed_game);
+                execute_terrain_script(script, handler, pos, terrain, &data);
+                Ok(())
+            }
+            /*Self::BuyUnit(pos, unit_type, d) => {
                 let owner_id = handler.get_game().current_owner();
                 let player = handler.get_game().get_owning_player(owner_id).unwrap();
                 if handler.with_game(|game| game.get_fog_at(player.get_team(), pos)) != FogIntensity::TrueSight {
@@ -120,7 +177,7 @@ impl<D: Direction> Command<D> {
                     }
                 }
                 Ok(())
-            }
+            }*/
             Self::CommanderPower(index, data) => {
                 let owner_id = handler.get_game().current_owner();
                 let player = handler.get_game().get_owning_player(owner_id).unwrap();

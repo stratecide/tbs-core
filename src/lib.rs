@@ -10,6 +10,7 @@ pub mod commander;
 pub mod config;
 pub mod script;
 pub mod handle;
+pub mod tags;
 
 pub use zipper;
 pub use interfaces;

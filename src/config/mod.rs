@@ -15,6 +15,7 @@ mod hero_power_config;
 mod terrain_powered;
 pub mod file_loader;
 pub mod table_config;
+pub mod tag_config;
 
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -22,7 +23,6 @@ use std::error::Error;
 use std::path::PathBuf;
 
 use crate::commander::commander_type::CommanderType;
-use crate::units::attributes::AttributeKey;
 use crate::units::hero::HeroType;
 use crate::units::unit_types::UnitType;
 
@@ -48,7 +48,6 @@ pub enum ConfigParseError {
     MissingCommanderForAttributes(CommanderType),
     MissingCommanderForPower(CommanderType),
     MissingHeroForPower(HeroType),
-    MissingUnitAttribute(UnitType, AttributeKey),
     NameTooShort,
     NotEnoughValues(String),
     NumberTooBig(String),

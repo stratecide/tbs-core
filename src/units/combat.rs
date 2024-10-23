@@ -19,7 +19,6 @@ use crate::map::map::NeighborMode;
 use crate::map::wrapping_map::{OrientedPoint, Distortion};
 use crate::script::*;
 
-use super::attributes::{AttributeKey, ActionStatus};
 use super::hero::{Hero, HeroInfluence};
 use super::movement::*;
 use super::unit::Unit;
@@ -290,8 +289,8 @@ impl<D: Direction> AttackVector<D> {
                 }
             }
             AttackType::Triangle(min_range, max_range) => {
-                if attacker.has_attribute(AttributeKey::Direction) {
-                    let direction = attacker.get_direction();
+                // TODO: restrict direction if the unit can only shoot in one direction
+                for direction in D::list() {
                     if let Some((point, distortion)) = game.get_neighbor(pos, direction) {
                         let min_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, true, min_range, is_counter.is_counter()) as usize;
                         let max_range = game.environment().config.unit_range(game, attacker, pos, transporter, &heroes, temporary_ballast, false, max_range, is_counter.is_counter()) as usize;
@@ -566,21 +565,24 @@ fn attack_targets<D: Direction>(
     }
     let mut defenders = Vec::new();
 
-    if exhaust_after_attacking {
-        match attacker_id.and_then(|id| handler.get_observed_unit_pos(id)) {
+    if exhaust_after_attacking && attacker_id.is_some() {
+        /*match attacker_id.and_then(|id| handler.get_observed_unit_pos(id)) {
             Some((p, None)) => handler.unit_status(p, ActionStatus::Exhausted),
             Some((p, Some(index))) => handler.unit_status_boarded(p, index, ActionStatus::Exhausted),
             None => (),
-        }
+        }*/
+        let (path, ballast) = path.map(|(path, _, ballast)| (path.clone(), ballast))
+        .unwrap_or((Path::new(attacker_pos), &[]));
+        handler.on_unit_normal_action(attacker_id.unwrap(), path, false, &attacker_heroes, ballast);
     }
     let mut counter_attackers = Vec::new();
-    for (defender_id, defender_pos, defender, damage) in &attacked_units {
+    for (defender_id, defender_pos, defender, _, value_before) in &attacked_units {
         if attacker.get_team() != defender.get_team() {
             defenders.push((
                 attacker.get_owner_id(),
                 defender.get_owner_id(),
-                (Rational32::from_integer(*damage as i32) * Rational32::from_integer(defender.full_price(&*handler.get_game(), *defender_pos, None, &[])) / Rational32::from_integer(100))
-                .ceil().to_integer().max(0) as u32,
+                (*value_before - defender.value(&*handler.get_game(), *defender_pos, None, &[]))
+                .max(0) as u32,
             ));
             if !counter_attackers.contains(defender_id) {
                 counter_attackers.push(*defender_id);
@@ -593,11 +595,11 @@ fn attack_targets<D: Direction>(
         let temporary_ballast = path.map(|(_, _, t)| t).unwrap_or(&[]);
         let transporter = path.and_then(|(_, t, _)| t);
         let mut defend_script_users = Vec::new();
-        for (defender_id, defender_pos, defender, damage) in &attacked_units {
+        for (defender_id, defender_pos, defender, damage, _) in &attacked_units {
             if let Some(i) = defend_script_users.iter().position(|(id, _, _, _)| *id == *defender_id) {
                 defend_script_users[i].3 += *damage as u16;
             } else {
-                defend_script_users.push((*defender_id, *defender_pos, defender, *damage as u16));
+                defend_script_users.push((*defender_id, *defender_pos, defender, *damage));
             }
         }
         for (defender_id, defender_pos, defender, damage) in defend_script_users {
@@ -640,7 +642,7 @@ fn attack_targets<D: Direction>(
             }
         }
         let mut scripts = Vec::new();
-        for (defender_id, defender_pos, defender, damage) in attacked_units {
+        for (defender_id, defender_pos, defender, damage, _) in attacked_units {
             let script = attacker.on_attack(&*handler.get_game(), attacker_pos, &defender, defender_pos, transporter, attacker_heroes, temporary_ballast, counter.is_counter());
             scripts.push((script, defender_id, defender_pos, defender, damage));
         }
@@ -713,57 +715,82 @@ fn filter_attack_targets<D: Direction>(game: &impl GameView<D>, attacker: &Unit<
     .collect()
 }
 
-fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, targets: Vec<(Point, Option<D>, Rational32)>, counter: Counter<D>, attacker_heroes: &[HeroInfluence<D>]) -> (Vec<(Point, Option<D>, Rational32)>, u32, Vec<(usize, Point, Unit<D>, u8)>, Vec<(Point, Unit<D>)>) {
+fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, targets: Vec<(Point, Option<D>, Rational32)>, counter: Counter<D>, attacker_heroes: &[HeroInfluence<D>]) -> (Vec<(Point, Option<D>, Rational32)>, u32, Vec<(usize, Point, Unit<D>, u16, i32)>, Vec<(Point, Unit<D>)>) {
     let mut raw_damage = HashMap::default();
     let mut hero_charge = 0;
     let mut attack_script_targets = Vec::new();
     for (defender_pos, _, factor) in targets.iter().cloned() {
         let defender = handler.get_game().get_unit(defender_pos).unwrap();
-        let hp = defender.get_hp();
+        /*let hp = defender.get_hp();
         if hp == 0 {
             continue;
-        }
+        }*/
         let damage = calculate_attack_damage(&*handler.get_game(), attacker, attacker_pos, path, &defender, defender_pos, factor, counter.clone(), attacker_heroes);
         if damage == 0 {
             continue;
         }
-        let defender = defender.clone();
+        let defender_id = handler.observe_unit(defender_pos, None).0;
         handler.effect_weapon(defender_pos, attacker.weapon());
         if damage > 0 {
             if attacker.get_team() != defender.get_team() {
                 hero_charge += 1;
             }
             if !raw_damage.contains_key(&defender_pos) {
-                attack_script_targets.push(defender_pos);
+                attack_script_targets.push((
+                    defender_pos,
+                    defender.clone(),
+                    defender_id,
+                    defender.value(&*handler.get_game(), defender_pos, None, &[]),
+                ));
             }
             let previous_damage = raw_damage.remove(&defender_pos).unwrap_or(0);
             raw_damage.insert(defender_pos, previous_damage + damage as u16);
         } else {
-            handler.unit_heal(defender_pos, (-damage) as u8);
+            //handler.unit_heal(defender_pos, (-damage) as u8);
+        }
+        // OnDamage shouldn't remove units?
+        let environment = handler.get_game().environment();
+        let deal_damage_rhai = environment.deal_damage_rhai();
+        let engine = environment.get_engine_handler(handler);
+        let mut scope = Scope::new();
+        scope.push_constant(CONST_NAME_POSITION, defender_pos);
+        scope.push_constant(CONST_NAME_UNIT, defender);
+        scope.push_constant(CONST_NAME_UNIT_ID, defender_id);
+        scope.push_constant(CONST_NAME_OTHER_POSITION, attacker_pos);
+        scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
+        //scope.push_constant(CONST_NAME_OTHER_UNIT_ID, attacker_id.unwrap());
+        scope.push_constant(CONST_NAME_DAMAGE, damage as i32);
+        let executor = Executor::new(engine, scope, environment);
+        match executor.run(deal_damage_rhai, ()) {
+            Ok(()) => (),
+            Err(e) => {
+                // TODO: log error
+                println!("unit deal_damage_rhai {deal_damage_rhai}: {e:?}");
+            }
         }
     }
-    let attack_script_targets: Vec<(usize, Point, Unit<D>, u8)> = attack_script_targets.into_iter()
-    .map(|p| {
+    let attack_script_targets: Vec<(usize, Point, Unit<D>, u16, i32)> = attack_script_targets.into_iter()
+    .map(|(p, unit, unit_id, value)| {
         let raw_damage = *raw_damage.get(&p).unwrap();
-        let unit = handler.get_game().get_unit(p).unwrap();
-        let hp = unit.get_hp() as u16;
-        (handler.observe_unit(p, None).0, p, unit, hp.min(raw_damage) as u8)
+        (unit_id, p, unit, raw_damage, value)
     })
-    //.filter(|(_, _, u, _)| u.get_team() != attacker.get_team())
     .collect();
-    /*let defenders: Vec<(Unit<D>, u8)> = attack_script_targets.iter()
-    .map(|(_, unit, damage)| {
-        (unit.clone(), *damage)
-    })
-    .collect();*/
-    handler.unit_mass_damage(&raw_damage);
+    //handler.unit_mass_damage(&raw_damage);
     // destroy defeated units
-    let dead_units: Vec<(Point, Unit<D>)> = raw_damage.keys()
-    .filter_map(|p| handler.get_game().get_unit(*p).and_then(|u| {
-        if u.get_hp() == 0 {
-            Some((*p, u.clone()))
-        } else {
-            None
+    let environment = handler.get_game().environment();
+    let is_unit_dead_rhai = environment.is_unit_dead_rhai();
+    let engine = environment.get_engine(&*handler.get_game());
+    let executor = Executor::new(engine, Scope::new(), environment);
+    let dead_units: Vec<(Point, Unit<D>)> = handler.with_map(|map| map.all_points()).into_iter()
+    .filter_map(|p| handler.get_game().get_unit(p).and_then(|u| {
+        match executor.run(is_unit_dead_rhai, (u.clone(), p)) {
+            Ok(true) => Some((p, u)),
+            Ok(false) => None,
+            Err(e) => {
+                // TODO: log error
+                println!("unit is_unit_dead_rhai {is_unit_dead_rhai}: {e:?}");
+                None
+            }
         }
     }))
     .collect();
@@ -1004,7 +1031,7 @@ crate::listable_enum! {
         All,
         // special case for King-Castling
         // same owner + both unmoved
-        OwnedBothUnmoved,
+        //OwnedBothUnmoved,
     }
 }
 

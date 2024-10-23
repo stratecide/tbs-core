@@ -7,7 +7,6 @@ use crate::map::point::*;
 use crate::units::unit_types::UnitType;
 use crate::units::hero::*;
 use crate::script::with_board;
-use super::attributes::*;
 use crate::units::movement::MovementType;
 
 #[export_module]
@@ -34,7 +33,7 @@ mod unit_type_module {
         *u1 != u2
     }
 
-    pub fn status_repairing() -> ActionStatus {
+    /*pub fn status_repairing() -> ActionStatus {
         ActionStatus::Repairing
     }
     pub fn status_exhausted() -> ActionStatus {
@@ -51,7 +50,7 @@ mod unit_type_module {
     #[rhai_fn(pure, name = "!=")]
     pub fn as_neq(u1: &mut ActionStatus, u2: ActionStatus) -> bool {
         *u1 != u2
-    }
+    }*/
 }
 
 macro_rules! board_module {
@@ -85,7 +84,7 @@ macro_rules! board_module {
                 unit.get_team().to_i16() as i32
             }
 
-            #[rhai_fn(pure, get = "hp")]
+            /*#[rhai_fn(pure, get = "hp")]
             pub fn get_hp(unit: &mut Unit) -> i32 {
                 unit.get_hp() as i32
             }
@@ -120,24 +119,22 @@ macro_rules! board_module {
                 unit.get_drone_id()
                 .map(|id| (id as i32).into())
                 .unwrap_or(().into())
-            }
+            }*/
 
-            #[rhai_fn(pure, name = "full_price")]
-            pub fn full_price1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {
-                with_board(context, |game| unit.full_price(game, position, None, &[]))
+            #[rhai_fn(pure, name = "value")]
+            pub fn value1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {
+                with_board(context, |game| unit.value(game, position, None, &[]))
             }
-            #[rhai_fn(pure, name = "full_price")]
-            pub fn full_price2(context: NativeCallContext, unit: &mut Unit, position: Point, factory: Unit) -> i32 {
-                with_board(context, |game| unit.full_price(game, position, Some(&factory), &[]))
+            #[rhai_fn(pure, name = "value")]
+            pub fn value2(context: NativeCallContext, unit: &mut Unit, position: Point, factory: Unit) -> i32 {
+                with_board(context, |game| unit.value(game, position, Some(&factory), &[]))
             }
 
             #[rhai_fn(pure, get = "transported")]
-            pub fn get_transported(unit: &mut Unit) -> Dynamic {
-                if unit.has_attribute(AttributeKey::Transported) {
-                    unit.get_transported().to_vec().into()
-                } else {
-                    ().into()
-                }
+            pub fn get_transported(unit: &mut Unit) -> Array {
+                unit.get_transported().iter()
+                .map(|u| Dynamic::from(u.clone()))
+                .collect()
             }
             #[rhai_fn(pure, get = "transported_len")]
             pub fn get_transported_len(unit: &mut Unit) -> i32 {
@@ -150,7 +147,7 @@ macro_rules! board_module {
 
             #[rhai_fn(pure, get = "movement_type")]
             pub fn get_movement_type(unit: &mut Unit) -> MovementType {
-                unit.default_movement_type()
+                unit.sub_movement_type()
             }
 
             #[rhai_fn(pure)]
@@ -179,13 +176,13 @@ macro_rules! board_module {
             #[rhai_fn(return_raw, name = "hero")]
             pub fn builder_hero_type(builder: UnitBuilder, name: &str) -> Result<UnitBuilder, Box<EvalAltResult>> {
                 if let Some(hero_type) = builder.environment().config.find_hero_by_name(name) {
-                    Ok(builder.set_hero(Hero::new(hero_type, None)))
+                    Ok(builder.set_hero(Hero::new(hero_type)))
                 } else {
                     Err(format!("Unknown hero type '{name}'").into())
                 }
             }
 
-            #[rhai_fn(name = "hp")]
+            /*#[rhai_fn(name = "hp")]
             pub fn builder_hp(builder: UnitBuilder, hp: i32) -> UnitBuilder {
                 builder.set_hp(hp.max(0).min(100) as u8)
             }
@@ -197,7 +194,7 @@ macro_rules! board_module {
             #[rhai_fn(name = "zombified")]
             pub fn builder_zombified2(builder: UnitBuilder) -> UnitBuilder {
                 builder_zombified(builder, true)
-            }
+            }*/
 
             #[rhai_fn(name = "build")]
             pub fn builder_build(builder: UnitBuilder) -> Unit {

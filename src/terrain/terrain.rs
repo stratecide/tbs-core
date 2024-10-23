@@ -11,14 +11,12 @@ use crate::commander::commander_type::CommanderType;
 use crate::commander::Commander;
 use crate::config::environment::Environment;
 use crate::game::fog::{FogIntensity, FogSetting};
-use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Owner, Player};
-use crate::units::attributes::{ActionStatus, AttributeOverride};
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::MovementType;
 use crate::units::unit::{Unit, UnitBuilder};
@@ -85,12 +83,12 @@ impl Terrain {
     }
 
     pub fn attack_bonus<D: Direction>(&self, unit: &Unit<D>) -> Rational32 {
-        let bonus = self.environment.config.terrain_attack_bonus(self.typ, unit.default_movement_type());
+        let bonus = self.environment.config.terrain_attack_bonus(self.typ, unit.sub_movement_type());
         bonus
     }
     
     pub fn defense_bonus<D: Direction>(&self, unit: &Unit<D>) -> Rational32 {
-        let bonus = self.environment.config.terrain_defense_bonus(self.typ, unit.default_movement_type());
+        let bonus = self.environment.config.terrain_defense_bonus(self.typ, unit.sub_movement_type());
         bonus
     }
 
@@ -313,7 +311,7 @@ impl Terrain {
         }
     }
 
-    pub fn can_sell_hero<D: Direction>(&self, map: &impl GameView<D>, pos: Point, owner_id: i8) -> bool {
+    /*pub fn can_sell_hero<D: Direction>(&self, map: &impl GameView<D>, pos: Point, owner_id: i8) -> bool {
         if !self.could_sell_hero() {
             return false;
         }
@@ -336,9 +334,9 @@ impl Terrain {
             }
         }
         true
-    }
+    }*/
 
-    pub fn unit_build_overrides<D: Direction>(&self, game: &impl GameView<D>, position: Point, heroes: &[HeroInfluence<D>]) -> HashSet<AttributeOverride> {
+    /*fn unit_build_overrides<D: Direction>(&self, game: &impl GameView<D>, position: Point, heroes: &[HeroInfluence<D>]) -> HashSet<AttributeOverride> {
         self.environment.config.terrain_unit_attribute_overrides(
             game,
             self,
@@ -360,7 +358,7 @@ impl Terrain {
         let unit = builder
         .set_owner_id(self.get_owner_id())
         .build_with_defaults();
-        let cost = unit.full_price(game, pos, None, &heroes)
+        let cost = unit.value(game, pos, None, &heroes)
         + self.get_built_this_turn() as i32 * self.environment.built_this_turn_cost_factor();
         (unit, cost)
     }
@@ -373,7 +371,7 @@ impl Terrain {
         self.buildable_units(game, pos, is_bubble, &heroes).iter().map(|unit_type| {
             self.unit_shop_option(game, pos, *unit_type, &heroes)
         }).collect()
-    }
+    }*/
 
     pub fn on_start_turn<D: Direction>(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> Vec<usize> {
         self.environment.config.terrain_on_start_turn(
@@ -385,7 +383,7 @@ impl Terrain {
         )
     }
 
-    pub fn on_build<D: Direction>(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<usize> {
+    /*pub fn on_build<D: Direction>(&self, game: &impl GameView<D>, pos: Point, is_bubble: bool) -> Vec<usize> {
         let heroes = Hero::hero_influence_at(game, pos, self.get_owner_id());
         self.environment.config.terrain_on_build(
             game,
@@ -394,7 +392,7 @@ impl Terrain {
             is_bubble,
             &heroes,
         )
-    }
+    }*/
 
     pub fn distort<D: Direction>(&mut self, _distortion: Distortion<D>) {
         // TODO

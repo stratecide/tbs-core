@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::sync::Arc;
 
 use interfaces::ClientPerspective;
@@ -209,8 +209,8 @@ impl<D: Direction> UnitMovementView<D> {
     pub fn new(base: &impl GameView<D>) -> Self {
         Self {
             base: base.as_shared(),
-            units: HashMap::new(),
-            players: HashMap::new(),
+            units: HashMap::default(),
+            players: HashMap::default(),
         }
     }
 
@@ -219,7 +219,7 @@ impl<D: Direction> UnitMovementView<D> {
             if let Some(index) = unload_index {
                 if unit.get_transported().len() > index {
                     let mut unit = unit.clone();
-                    let u = unit.get_transported_mut().unwrap().remove(index);
+                    let u = unit.get_transported_mut().remove(index);
                     self.units.insert(pos, Some(unit));
                     Some(u)
                 } else {
@@ -344,7 +344,7 @@ impl<D: Direction> ModifiedView<D> for MovingHeroView<D> {
         let pos = self.hero_pos?;
         let unit = self.hero_unit.clone();
         if let Some(strength) = Hero::aura(self, &unit, pos, self.get_transporter()).get(&point) {
-            let hero = unit.get_hero();
+            let hero = unit.get_hero().unwrap().clone();
             Some(vec![(unit, hero, pos, self.get_transporter().map(|(_, unload_index)| unload_index), *strength as u8)])
         } else {
             None
@@ -357,8 +357,8 @@ impl<D: Direction> ModifiedView<D> for MovingHeroView<D> {
         }
         let pos = self.hero_pos?;
         let unit = self.hero_unit.clone();
-        let mut result: HashMap<(Point, i8), Vec<HeroInfluence<D>>> = HashMap::new();
-        let hero = unit.get_hero();
+        let mut result: HashMap<(Point, i8), Vec<HeroInfluence<D>>> = HashMap::default();
+        let hero = unit.get_hero().unwrap();
         for (p, strength) in Hero::aura(self, &unit, pos, self.get_transporter()) {
             let key = (p, unit.get_owner_id());
             result.insert(key, vec![(unit.clone(), hero.clone(), p, self.get_transporter().map(|(_, unload_index)| unload_index), strength as u8)]);
