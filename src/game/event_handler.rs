@@ -13,9 +13,7 @@ use crate::map::wrapping_map::Distortion;
 use crate::script::custom_action::execute_commander_script;
 use crate::script::executor::Executor;
 use crate::script::*;
-use crate::tags::TagKey;
-use crate::tags::TagKeyValues;
-use crate::tags::TagValue;
+use crate::tags::*;
 use crate::terrain::terrain::*;
 use crate::units::combat::WeaponType;
 use crate::player::*;
@@ -973,6 +971,19 @@ impl<D: Direction> EventHandler<D> {
                     println!("unit OnNormalAction {function_index}: {e:?}");
                 }
             }
+        }
+    }
+
+    pub fn set_unit_flag(&mut self, position: Point, flag: usize) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        if !unit.has_flag(flag) {
+            self.add_event(Event::UnitFlag(position, FlagKey(flag)));
+        }
+    }
+    pub fn remove_unit_flag(&mut self, position: Point, flag: usize) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        if unit.has_flag(flag) {
+            self.add_event(Event::UnitFlag(position, FlagKey(flag)));
         }
     }
 

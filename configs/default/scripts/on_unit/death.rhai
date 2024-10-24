@@ -28,21 +28,19 @@ fn lose_game() {
 }
 
 fn revive_neutral() {
-    let new_unit = CONFIG.build_unit(UNIT.type)
-        .copy_from(UNIT)
-        .owner_id(-1)
-        .hp(50)
-        .build();
+    let new_unit = Unit(UNIT.type);
+    new_unit.copy_from(UNIT);
+    new_unit.owner_id(-1);
+    new_unit.hp(50);
     // TODO: show effect?
     EVENT_HANDLER.place_unit(POSITION, new_unit);
 }
 
 fn revive_converted() {
-    let new_unit = CONFIG.build_unit(UNIT.type)
-        .copy_from(UNIT)
-        .owner_id(OTHER_UNIT?.owner_id ?? -1)
-        .hp(50)
-        .build();
+    let new_unit = Unit(UNIT.type);
+    new_unit.copy_from(UNIT);
+    new_unit.owner_id(OTHER_UNIT?.owner_id ?? -1);
+    new_unit.hp(50);
     // TODO: show effect?
     EVENT_HANDLER.place_unit(POSITION, new_unit);
 }

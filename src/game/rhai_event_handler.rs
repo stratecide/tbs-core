@@ -60,7 +60,23 @@ macro_rules! event_handler_module {
                 }
             }
 
+            pub fn set_unit_flag(mut handler: Handler, position: Point, flag: FlagKey) {
+                if handler.with_map(|map| map.get_unit(position).is_none()) {
+                    return;
+                }
+                handler.set_unit_flag(position, flag.0);
+            }
+            pub fn remove_unit_flag(mut handler: Handler, position: Point, flag: FlagKey) {
+                if handler.with_map(|map| map.get_unit(position).is_none()) {
+                    return;
+                }
+                handler.remove_unit_flag(position, flag.0);
+            }
+
             pub fn set_unit_tag(mut handler: Handler, position: Point, key: TagKey, value: Dynamic) {
+                if handler.with_map(|map| map.get_unit(position).is_none()) {
+                    return;
+                }
                 let Some(value) = TagValue::from_dynamic(value, key.0, &handler.environment()) else {
                     return;
                 };

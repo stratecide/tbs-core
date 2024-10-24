@@ -73,7 +73,7 @@ impl<D: Direction> Debug for Unit<D> {
 }
 
 impl<D: Direction> Unit<D> {
-    fn new(environment: Environment, typ: UnitType) -> Self {
+    pub(super) fn new(environment: Environment, typ: UnitType) -> Self {
         Self {
             typ,
             owner: Owner(-1),
@@ -345,6 +345,18 @@ impl<D: Direction> Unit<D> {
         self.get_player(game)
         .and_then(|player| Some(player.commander.clone()))
         .unwrap_or(Commander::new(&self.environment, CommanderType::None))
+    }
+
+    pub(super) fn copy_from(&mut self, other: &Unit<D>) {
+        if self.environment != other.environment {
+            panic!("Can't copy from unit from different environment");
+        }
+        for key in other.tags.flags() {
+            self.set_flag(*key);
+        }
+        for (key, value) in other.tags.tags() {
+            self.set_tag(*key, value.clone());
+        }
     }
 
     pub fn has_flag(&self, key: usize) -> bool {
@@ -1107,15 +1119,7 @@ impl<D: Direction> UnitBuilder<D> {
     }
 
     pub fn copy_from(mut self, other: &Unit<D>) -> Self {
-        if self.unit.environment != other.environment {
-            panic!("Can't copy from unit from different environment");
-        }
-        for key in other.tags.flags() {
-            self.unit.set_flag(*key);
-        }
-        for (key, value) in other.tags.tags() {
-            self.unit.set_tag(*key, value.clone());
-        }
+        self.unit.copy_from(other);
         self
     }
 

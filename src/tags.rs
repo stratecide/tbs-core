@@ -1,4 +1,5 @@
 use rhai::*;
+use rhai::plugin::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use zipper::*;
 use zipper_derive::Zippable;
@@ -221,7 +222,7 @@ impl<D: Direction> TagValue<D> {
     }
 
     pub fn from_dynamic(value: Dynamic, key: usize, environment: &Environment) -> Option<Self> {
-        let result = match value.type_name() {
+        let result = match value.type_name().split("::").last().unwrap() {
             "Direction" => Some(Self::Direction(value.cast())),
             "i32" => {
                 let TagType::Int { min, max } = environment.tag_type(key) else {
@@ -236,6 +237,18 @@ impl<D: Direction> TagValue<D> {
             _ => None
         }?;
         Some(result)
+    }
+}
+
+impl<D: Direction> From<i32> for TagValue<D> {
+    fn from(value: i32) -> Self {
+        Self::Int(Int32(value))
+    }
+}
+
+impl<D: Direction> From<UniqueId> for TagValue<D> {
+    fn from(value: UniqueId) -> Self {
+        Self::Unique(value)
     }
 }
 
@@ -353,6 +366,15 @@ impl<const K: usize, D: Direction> SupportedZippable<&Environment> for TagKeyVal
 #[export_module]
 mod tag_module {
     pub type UniqueId = super::UniqueId;
+
+    #[rhai_fn(pure, name = "==")]
+    pub fn eq(u1: &mut UniqueId, u2: UniqueId) -> bool {
+        *u1 == u2
+    }
+    #[rhai_fn(pure, name = "!=")]
+    pub fn neq(u1: &mut UniqueId, u2: UniqueId) -> bool {
+        *u1 != u2
+    }
 }
 
 def_package! {
@@ -377,6 +399,8 @@ pub mod tests {
     pub const FLAG_CAPTURING: usize = 4;
     
     pub const TAG_HP: usize = 0;
+    pub const TAG_DRONE_STATION_ID: usize = 1;
+    pub const TAG_DRONE_ID: usize = 2;
     pub const TAG_LEVEL: usize = 3;
     pub const TAG_HERO_ORIGIN: usize = 5;
     pub const TAG_PAWN_DIRECTION: usize = 6;
@@ -390,6 +414,8 @@ pub mod tests {
         assert_eq!(environment.flag_name(FLAG_REPAIRING), "Repairing");
         assert_eq!(environment.flag_name(FLAG_CAPTURING), "Capturing");
         assert_eq!(environment.tag_name(TAG_HP), "Hp");
+        assert_eq!(environment.tag_name(TAG_DRONE_STATION_ID), "DroneStationId");
+        assert_eq!(environment.tag_name(TAG_DRONE_ID), "DroneId");
         assert_eq!(environment.tag_name(TAG_HERO_ORIGIN), "HeroOrigin");
         assert_eq!(environment.tag_name(TAG_PAWN_DIRECTION), "PawnDirection");
         assert_eq!(environment.tag_name(TAG_ANGER), "Anger");

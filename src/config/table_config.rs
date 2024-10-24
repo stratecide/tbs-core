@@ -147,7 +147,7 @@ impl TableValue {
     }
 
     pub fn from_dynamic(value: Dynamic) -> Option<Self> {
-        match value.type_name().split("::").last()? {
+        match value.type_name().split("::").last().unwrap() {
             "bool" => Some(Self::Bool(value.try_cast()?)),
             "i32" => Some(Self::Int(value.try_cast()?)),
             _ => None
@@ -189,7 +189,7 @@ impl TableAxisKey {
     }
 
     pub fn from_dynamic(value: Dynamic) -> Option<Self> {
-        match value.type_name().split("::").last()? {
+        match value.type_name().split("::").last().unwrap() {
             "UnitType" => Some(Self::Unit(value.try_cast()?)),
             "TerrainType" => Some(Self::Terrain(value.try_cast()?)),
             _ => None

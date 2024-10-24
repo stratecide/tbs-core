@@ -6,7 +6,7 @@ use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit_types::UnitType;
 use crate::units::hero::*;
-use crate::script::with_board;
+use crate::script::{with_board, get_environment};
 use crate::units::movement::MovementType;
 use crate::tags::*;
 
@@ -59,7 +59,6 @@ macro_rules! board_module {
         #[export_module]
         mod $name {
             pub type Unit = crate::units::unit::Unit<$d>;
-            pub type UnitBuilder = crate::units::unit::UnitBuilder<$d>;
 
             #[rhai_fn(pure, name = "==")]
             pub fn eq(p1: &mut Unit, p2: Unit) -> bool {
@@ -70,6 +69,12 @@ macro_rules! board_module {
                 *u1 != u2
             }
         
+            #[rhai_fn(name = "Unit")]
+            pub fn new_unit(context: NativeCallContext, typ: UnitType) -> Unit {
+                let environment = get_environment(context);
+                Unit::new(environment, typ)
+            }
+
             #[rhai_fn(pure, get = "type")]
             pub fn get_type(unit: &mut Unit) -> UnitType {
                 unit.typ()
@@ -78,6 +83,10 @@ macro_rules! board_module {
             #[rhai_fn(pure, get = "owner_id")]
             pub fn get_owner_id(unit: &mut Unit) -> i32 {
                 unit.get_owner_id() as i32
+            }
+            #[rhai_fn(set = "owner_id")]
+            pub fn builder_owner_id(unit: &mut Unit, owner_id: i32) {
+                unit.set_owner_id(owner_id.max(-1).min(unit.environment().config.max_player_count() as i32) as i8)
             }
 
             #[rhai_fn(pure, get = "team")]
@@ -122,13 +131,33 @@ macro_rules! board_module {
                 .unwrap_or(().into())
             }*/
 
-            #[rhai_fn(pure)]
+            pub fn copy_from(unit: &mut Unit, other: Unit) {
+                unit.copy_from(&other);
+            }
+
+            #[rhai_fn(pure, name = "has")]
             pub fn has_flag(unit: &mut Unit, flag: FlagKey) -> bool {
                 unit.has_flag(flag.0)
             }
-            #[rhai_fn(pure)]
+            #[rhai_fn(name = "set")]
+            pub fn set_flag(unit: &mut Unit, flag: FlagKey) {
+                unit.set_flag(flag.0)
+            }
+            #[rhai_fn(name = "remove")]
+            pub fn remove_flag(unit: &mut Unit, flag: FlagKey) {
+                unit.remove_flag(flag.0)
+            }
+
+            #[rhai_fn(pure, name = "get")]
             pub fn get_tag(unit: &mut Unit, key: TagKey) -> Dynamic {
                 unit.get_tag(key.0).map(|v| v.into_dynamic()).unwrap_or(().into())
+            }
+
+            #[rhai_fn(name = "set")]
+            pub fn set_tag(unit: &mut Unit, key: TagKey, value: Dynamic) {
+                if let Some(value) = TagValue::from_dynamic(value, key.0, unit.environment()) {
+                    unit.set_tag(key.0, value);
+                }
             }
 
             #[rhai_fn(pure, name = "value")]
@@ -160,7 +189,7 @@ macro_rules! board_module {
                 unit.sub_movement_type()
             }
 
-            #[rhai_fn(pure)]
+            /*#[rhai_fn(pure)]
             pub fn build_unit(environment: &mut Environment, unit_type: UnitType) -> UnitBuilder {
                 unit_type.instance::<$d>(environment)
             }
@@ -192,6 +221,16 @@ macro_rules! board_module {
                 }
             }
 
+            #[rhai_fn(name = "set")]
+            pub fn builder_flag(builder: UnitBuilder, flag: FlagKey) -> UnitBuilder {
+                builder.set_flag(flag.0)
+            }
+
+            #[rhai_fn(name = "set")]
+            pub fn builder_tag_i32(builder: UnitBuilder, key: TagKey, value: i32) -> UnitBuilder {
+                builder.set_tag(key.0, value.into())
+            }
+
             /*#[rhai_fn(name = "hp")]
             pub fn builder_hp(builder: UnitBuilder, hp: i32) -> UnitBuilder {
                 builder.set_hp(hp.max(0).min(100) as u8)
@@ -209,7 +248,7 @@ macro_rules! board_module {
             #[rhai_fn(name = "build")]
             pub fn builder_build(builder: UnitBuilder) -> Unit {
                 builder.build_with_defaults()
-            }
+            }*/
         }
 
         def_package! {

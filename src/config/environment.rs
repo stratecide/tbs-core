@@ -95,9 +95,12 @@ impl Environment {
         self.config.tags.iter().position(|tag| tag.name.as_str() == name)
     }
 
-    pub fn unique_tag_keys(&self, pool_name: &str) -> Vec<usize> {
+    pub fn unique_tag_keys(&self, base_key: usize) -> Vec<usize> {
+        let TagType::Unique { pool: pool_name } = self.tag_type(base_key) else {
+            return Vec::new();
+        };
         self.config.tags.iter().enumerate()
-        .filter(|(_, conf)| matches!(&conf.tag_type, TagType::Unique { pool } if pool.as_str() == pool_name))
+        .filter(|(_, conf)| matches!(&conf.tag_type, TagType::Unique { pool } if pool == pool_name))
         .map(|(i, _)| i)
         .collect()
     }
@@ -119,18 +122,20 @@ impl Environment {
         let game = game.as_shared();
         #[allow(deprecated)]
         engine.on_var(move |name, _index, _context| {
+            if name.starts_with("TAG_") {
+                if let Some(key) = this.tag_by_name(&name[4..]) {
+                    return Ok(Some(Dynamic::from(TagKey(key))))
+                }
+            }
+            if name.starts_with("FLAG_") {
+                if let Some(key) = this.flag_by_name(&name[5..]) {
+                    return Ok(Some(Dynamic::from(FlagKey(key))))
+                }
+            }
             match name {
                 CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
                 CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
-                _ => {
-                    if let Some(key) = this.flag_by_name(name) {
-                        Ok(Some(Dynamic::from(FlagKey(key))))
-                    } else if let Some(key) = this.tag_by_name(name) {
-                        Ok(Some(Dynamic::from(TagKey(key))))
-                    } else {
-                        Ok(None)
-                    }
-                }
+                _ => Ok(None)
             }
         });
         engine
@@ -143,19 +148,21 @@ impl Environment {
         let handler = handler.clone();
         #[allow(deprecated)]
         engine.on_var(move |name, _index, _context| {
+            if name.starts_with("TAG_") {
+                if let Some(key) = this.tag_by_name(&name[4..]) {
+                    return Ok(Some(Dynamic::from(TagKey(key))))
+                }
+            }
+            if name.starts_with("FLAG_") {
+                if let Some(key) = this.flag_by_name(&name[5..]) {
+                    return Ok(Some(Dynamic::from(FlagKey(key))))
+                }
+            }
             match name {
                 CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
                 CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
                 CONST_NAME_EVENT_HANDLER => Ok(Some(Dynamic::from(handler.clone()))),
-                _ => {
-                    if let Some(key) = this.flag_by_name(name) {
-                        Ok(Some(Dynamic::from(FlagKey(key))))
-                    } else if let Some(key) = this.tag_by_name(name) {
-                        Ok(Some(Dynamic::from(TagKey(key))))
-                    } else {
-                        Ok(None)
-                    }
-                }
+                _ => Ok(None)
             }
         });
         engine

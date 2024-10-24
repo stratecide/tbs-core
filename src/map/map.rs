@@ -225,9 +225,9 @@ impl<D: Direction> Map<D> {
     }
     
     // returns a random DroneId that isn't in use yet
-    pub fn new_unique_id(&self, pool: &str, rng: f32) -> Option<UniqueId> {
+    pub fn new_unique_id(&self, tag_key: usize, rng: f32) -> Option<UniqueId> {
         let mut existing_ids = HashSet::default();
-        let keys = self.environment.unique_tag_keys(pool);
+        let keys = self.environment.unique_tag_keys(tag_key);
         for unit in self.units.values() {
             for key in &keys {
                 if let Some(TagValue::Unique(id)) = unit.get_tag(*key) {
@@ -235,18 +235,22 @@ impl<D: Direction> Map<D> {
                 }
             }
         }
-        /*for tokens in self.tokens.values() {
-            for det in tokens {
-                match det {
-                    Detail::Skull(_, unit) => {
-                        if let Some(id) = unit.get_drone_station_id().or(unit.get_drone_id()) {
-                            existing_ids.insert(id);
-                        }
+        for tokens in self.tokens.values() {
+            for token in tokens {
+                for key in &keys {
+                    if let Some(TagValue::Unique(id)) = token.get_tag(*key) {
+                        id.add_to_pool(&mut existing_ids);
                     }
-                    _ => ()
                 }
             }
-        }*/
+        }
+        for terrain in self.terrain.values() {
+            for key in &keys {
+                if let Some(TagValue::Unique(id)) = terrain.get_tag(*key) {
+                    id.add_to_pool(&mut existing_ids);
+                }
+            }
+        }
         UniqueId::new(&existing_ids, rng)
     }
 

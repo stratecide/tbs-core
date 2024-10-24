@@ -34,7 +34,7 @@ impl TerrainType {
     pub const Sea: Self = Self(21);
     pub const ShallowSea: Self = Self(22);
     pub const Street: Self = Self(23);
-    pub const StatueLand: Self = Self(25);
+    pub const StatueLand: Self = Self(24);
     pub const TentacleDepths: Self = Self(25);
     pub const FairyForest: Self = Self(28);
 }

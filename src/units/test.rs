@@ -84,7 +84,9 @@ fn build_drone() {
             map.set_terrain(Point::new(x, y), TerrainType::Sea.instance(&map_env).build_with_defaults());
         }
     }
-    map.set_unit(Point::new(3, 4), Some(UnitType::drone_boat().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    let uid = map.new_unique_id(TAG_DRONE_STATION_ID, 0.).unwrap();
+    map.set_unit(Point::new(3, 4), Some(UnitType::drone_boat().instance(&map_env).set_owner_id(0).set_hp(100).set_tag(TAG_DRONE_STATION_ID, uid.into()).build_with_defaults()));
+    assert!(map.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).is_some());
     map.set_unit(Point::new(1, 6), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
@@ -93,6 +95,8 @@ fn build_drone() {
     let mut client = Game::new_client(map, settings.build_default(), events.get(&Perspective::Team(0)).unwrap());
     let to_build = UnitType::light_drone().instance(&server.environment())
         .set_owner_id(0)
+        .set_hp(100)
+        .set_tag(TAG_DRONE_ID, uid.into())
         .build_with_defaults();
     let events = server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -109,8 +113,8 @@ fn build_drone() {
         1
     );
     assert_eq!(
-        client.get_unit(Point::new(3, 4)).unwrap().get_transported().len(),
-        1
+        client.get_unit(Point::new(3, 4)).unwrap().get_transported()[0].get_tag(TAG_DRONE_ID),
+        client.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID)
     );
 }
 
@@ -142,8 +146,10 @@ fn repair_unit() {
     assert!(*server.get_owning_player(0).unwrap().funds < 1000);
     assert!(server.get_unit(Point::new(3, 4)).unwrap().get_hp() > 1);
     assert!(server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_REPAIRING));
+    assert!(server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    assert!(!server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_REPAIRING));
     assert!(!server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
@@ -240,10 +246,10 @@ fn puffer_fish() {
     // experiment
     map.set_terrain(Point::new(1, 1), sea.clone());
     map.set_terrain(Point::new(2, 1), sea.clone());
-    map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(0, 2), Some(UnitType::artillery().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(0, 2), Some(UnitType::artillery().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
     map.set_unit(Point::new(1, 1), Some(UnitType::puffer_fish().instance(&map_env).build_with_defaults()));
-    map.set_unit(Point::new(2, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(2, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -305,19 +311,18 @@ fn s_factory() {
     map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
-    let environment = game.environment().clone();
     game.with(|game| {
         assert_eq!(*game.current_player().funds, game.current_player().get_income() * 2);
     });
     assert!(!game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     let to_build = UnitType::marine().instance(&game.environment())
         .set_owner_id(0)
-        .build_with_defaults();
+        .set_hp(100);
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
-        action: UnitAction::custom(0, vec![CustomActionData::Unit(to_build), CustomActionData::Direction(Direction6::D180)]),
+        action: UnitAction::custom(0, vec![CustomActionData::Unit(to_build.build_with_defaults()), CustomActionData::Direction(Direction6::D180)]),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), UnitType::marine().instance(&environment).set_owner_id(0). set_flag(FLAG_EXHAUSTED).build_with_defaults());
+    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), to_build.set_flag(FLAG_EXHAUSTED).build_with_defaults());
     assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
 }

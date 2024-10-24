@@ -75,7 +75,7 @@ crate::listable_enum! {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum TagType {
+pub enum TagType {
     Flag,
     Int{
         min: i32,

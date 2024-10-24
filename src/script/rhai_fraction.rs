@@ -148,7 +148,7 @@ mod fraction_module {
 
     #[rhai_fn(return_raw, name = "+=")]
     pub fn add_assign_df(a: &mut Dynamic, b: Fraction) -> Result<(), Box<EvalAltResult>> {
-        match a.type_name() {
+        match a.type_name().split("::").last().unwrap() {
             "i32" => {
                 *a = Dynamic::from(add_if(a.clone().cast(), b));
             }
@@ -166,7 +166,7 @@ mod fraction_module {
 
     #[rhai_fn(return_raw, name = "-=")]
     pub fn sub_assign_df(a: &mut Dynamic, b: Fraction) -> Result<(), Box<EvalAltResult>> {
-        match a.type_name() {
+        match a.type_name().split("::").last().unwrap() {
             "i32" => {
                 *a = Dynamic::from(sub_if(a.clone().cast(), b));
             }
@@ -213,7 +213,7 @@ mod fraction_module {
 
     #[rhai_fn(return_raw, name = "*=")]
     pub fn mul_assign_df(a: &mut Dynamic, b: Fraction) -> Result<(), Box<EvalAltResult>> {
-        match a.type_name() {
+        match a.type_name().split("::").last().unwrap() {
             "i32" => {
                 *a = Dynamic::from(mul_if(a.clone().cast(), b));
             }
@@ -231,7 +231,7 @@ mod fraction_module {
 
     #[rhai_fn(return_raw, name = "/=")]
     pub fn div_assign_df(a: &mut Dynamic, b: Fraction) -> Result<(), Box<EvalAltResult>> {
-        match a.type_name() {
+        match a.type_name().split("::").last().unwrap() {
             "i32" => {
                 *a = Dynamic::from(div_if(a.clone().cast(), b));
             }

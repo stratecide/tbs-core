@@ -1095,12 +1095,12 @@ mod tests {
         let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
         let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
         let mut map = Map::new2(wmap, &environment);
-        map.set_unit(Point::new(1, 0), Some(UnitType::magnet().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(3, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::destroyer().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::destroyer().instance(&environment).set_owner_id(1).build_with_defaults()));
-        //map.set_unit(Point::new(3, 1), Some(UnitType::destroyer().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&environment).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(1, 0), Some(UnitType::magnet().instance(&environment).set_owner_id(0).set_hp(100).build_with_defaults()));
+        map.set_unit(Point::new(3, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).set_hp(100).build_with_defaults()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::destroyer().instance(&environment).set_owner_id(0).set_hp(100).build_with_defaults()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::destroyer().instance(&environment).set_owner_id(1).set_hp(100).build_with_defaults()));
+        //map.set_unit(Point::new(3, 1), Some(UnitType::destroyer().instance(&environment).set_owner_id(1).set_hp(100).build_with_defaults()));
+        map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&environment).set_owner_id(1).set_hp(100).build_with_defaults()));
         let settings = map.settings().unwrap().build_default();
         let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
         let unchanged = game.clone();
