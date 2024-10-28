@@ -135,28 +135,30 @@ fn kraken() {
             map.set_terrain(Point::new(x, y), TerrainType::TentacleDepths.instance(&map_env).build_with_defaults());
         }
     }
-    map.set_terrain(Point::new(2, 2), TerrainType::Kraken.instance(&map_env).set_tag(TAG_ANGER, TagValue::Int(Int32(7))).build_with_defaults());
-    map.set_unit(Point::new(2, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build_with_defaults()));
-    map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(3, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_terrain(Point::new(2, 2), TerrainType::Kraken.instance(&map_env).set_tag(TAG_ANGER, 7.into()).build_with_defaults());
+    map.set_terrain(Point::new(0, 0), TerrainType::Kraken.instance(&map_env).build_with_defaults());
+    map.set_unit(Point::new(2, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(3, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     let environment = game.environment();
-    assert_eq!(game.get_unit(Point::new(0, 0)), Some(UnitType::tentacle().instance(&environment).build_with_defaults()));
-    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(TagValue::Int(Int32(7))));
+    assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::tentacle().instance(&environment).set_hp(100).build_with_defaults()));
+    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(7.into()));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 2)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(4, 2)), None);
-    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(TagValue::Int(Int32(8))));
+    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(8.into()));
     assert_eq!(game.get_unit(Point::new(3, 2)).unwrap().get_hp(), 100);
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 2)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D180)),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(TagValue::Int(Int32(0))));
+    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), None);
+    assert_eq!(game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_ANGER), Some(2.into()));
     assert!(game.get_unit(Point::new(3, 2)).unwrap().get_hp() < 100);
 }

@@ -11,6 +11,14 @@ use crate::tags::*;
 mod terrain_type_module {
     pub type TerrainType = crate::terrain::TerrainType;
 
+    #[rhai_fn(name = "TerrainType")]
+    pub fn new_terrain_type(context: NativeCallContext, name: &str) -> Dynamic {
+        let environment = get_environment(context);
+        environment.config.find_terrain_by_name(name)
+        .map(Dynamic::from)
+        .unwrap_or(().into())
+    }
+
     #[rhai_fn(pure, name = "==")]
     pub fn tt_eq(t1: &mut TerrainType, t2: TerrainType) -> bool {
         *t1 == t2

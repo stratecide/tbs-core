@@ -1,6 +1,8 @@
 
 fn spawn_tentacle() {
-    EVENT_HANDLER.place_unit(POSITION, CONFIG.build_unit("Tentacle").build());
+    let unit = Unit("Tentacle");
+    unit.set(TAG_Hp, 100);
+    EVENT_HANDLER.place_unit(POSITION, unit);
 }
 
 fn get_captured() {
