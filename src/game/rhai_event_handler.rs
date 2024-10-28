@@ -9,6 +9,7 @@ use crate::map::point::*;
 use crate::units::unit::Unit;
 use crate::units::combat::*;
 use crate::units::movement::*;
+use crate::units::hero::*;
 use crate::terrain::terrain::Terrain;
 use crate::tags::*;
 
@@ -81,6 +82,13 @@ macro_rules! event_handler_module {
                     return;
                 };
                 handler.set_unit_tag(position, key.0, value);
+            }
+
+            pub fn set_hero(mut handler: Handler, position: Point, hero: Hero) {
+                if handler.with_map(|map| map.get_unit(position).is_none()) {
+                    return;
+                }
+                handler.unit_set_hero(position, hero);
             }
 
             /*pub fn heal_unit(mut handler: Handler, position: Point, amount: i32) {

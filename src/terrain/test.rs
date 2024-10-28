@@ -9,7 +9,8 @@ use crate::map::direction::*;
 use crate::map::map::Map;
 use crate::map::point::*;
 use crate::map::point_map::{MapSize, PointMap};
-use crate::script::custom_action::CustomActionData;
+use crate::script::custom_action::test::CA_UNIT_CAPTURE;
+use crate::script::custom_action::CustomActionInput;
 use crate::terrain::TerrainType;
 use crate::map::wrapping_map::*;
 use crate::units::combat::AttackVector;
@@ -79,7 +80,7 @@ fn capture_city() {
             PathStep::Dir(Direction4::D0),
             PathStep::Dir(Direction4::D270),
         ]),
-        action: UnitAction::custom(2, Vec::new()),
+        action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
     }), Arc::new(|| 0.)).unwrap();
     game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     assert_eq!(-1, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
@@ -102,7 +103,7 @@ fn build_unit() {
     assert_eq!(1000, game.with(|game| *game.current_player().funds));
     //game.handle_command(Command::BuyUnit(Point::new(0, 0), UnitType::marine(), Direction4::D0), Arc::new(|| 0.)).unwrap();
     game.handle_command(Command::TerrainAction(Point::new(0, 0), vec![
-        CustomActionData::Unit(UnitType::marine().instance(&game.environment()).build_with_defaults()),
+        CustomActionInput::ShopItem(0.into()),
     ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
     assert!(game.with(|game| *game.current_player().funds) < 1000);
     assert_eq!(0, game.get_unit(Point::new(0, 0)).unwrap().get_owner_id());

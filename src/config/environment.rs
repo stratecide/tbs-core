@@ -198,8 +198,7 @@ impl Environment {
         self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name)
         .map(|(_, table)| {
-            table.values.get(&y)
-            .and_then(|map| map.get(&x))
+            table.values.get(&(x, y))
             .unwrap_or(&table.default_value)
             .clone()
         })
@@ -209,10 +208,21 @@ impl Environment {
         let mut result = Vec::new();
         if let Some((_, table)) = self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name) {
-            let map = table.values.get(&y);
             for header in &table.column_keys {
-                if value == *map.and_then(|map| map.get(header)).unwrap_or(&table.default_value) {
+                if value == *table.values.get(&(*header, y)).unwrap_or(&table.default_value) {
                     result.push(*header);
+                }
+            }
+        }
+        result
+    }
+    pub fn table_column(&self, name: &str, x: TableAxisKey, value: TableValue) -> Vec<TableAxisKey> {
+        let mut result = Vec::new();
+        if let Some((_, table)) = self.config.custom_tables.iter()
+        .find(|(key, _)| key.as_str() == name) {
+            for row_key in &table.row_keys {
+                if value == *table.values.get(&(x, *row_key)).unwrap_or(&table.default_value) {
+                    result.push(*row_key);
                 }
             }
         }

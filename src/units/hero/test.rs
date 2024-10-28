@@ -11,7 +11,9 @@ use crate::map::point::Point;
 use crate::map::point::Position;
 use crate::map::point_map::PointMap;
 use crate::map::wrapping_map::WMBuilder;
-use crate::script::custom_action::CustomActionData;
+use crate::script::custom_action::test::CA_UNIT_BUY_HERO;
+use crate::script::custom_action::CustomActionInput;
+use crate::tags::TagValue;
 use crate::terrain::TerrainType;
 use crate::units::combat::AttackVector;
 use crate::units::commands::*;
@@ -37,18 +39,19 @@ fn buy_hero() {
     settings.players[0].set_funds(999999);
 
     let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
-    let environment: crate::config::environment::Environment = server.environment().clone();
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), None);
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
     println!("options: {:?}", options);
-    assert!(options.contains(&UnitAction::BuyHero(HeroType::Crystal)));
+    assert!(options.contains(&UnitAction::custom(CA_UNIT_BUY_HERO, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,
-        action: UnitAction::BuyHero(HeroType::Crystal),
+        action: UnitAction::custom(CA_UNIT_BUY_HERO, vec![CustomActionInput::ShopItem(0.into())]),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_unit(Point::new(1, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::Crystal)).set_hero_origin(Point::new(1, 1)).set_flag(FLAG_EXHAUSTED).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(1, 1)).unwrap().get_hero(), Some(&Hero::new(HeroType::Crystal)));
+    assert_eq!(server.get_unit(Point::new(1, 1)).unwrap().get_tag(TAG_HERO_ORIGIN), Some(TagValue::Point(Point::new(1, 1))));
+    assert!(server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
 }
 
@@ -86,7 +89,7 @@ fn crystal() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,
-        action: UnitAction::hero_power(1, vec![CustomActionData::Point(Point::new(0, 1))]),
+        action: UnitAction::hero_power(1, vec![CustomActionInput::Point(Point::new(0, 1))]),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(0, 1)), Some(UnitType::hero_crystal().instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk)).build_with_defaults()));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
@@ -256,13 +259,10 @@ fn tess() {
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
     println!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
-    let to_build = UnitType::small_tank().instance(&server.environment())
-        .set_owner_id(0)
-        .build_with_defaults();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,
-        action: UnitAction::hero_power(1, vec![CustomActionData::Unit(to_build), CustomActionData::Direction(Direction4::D0)]),
+        action: UnitAction::hero_power(1, vec![CustomActionInput::ShopItem(3.into()), CustomActionInput::Direction(Direction4::D0)]),
     }), Arc::new(|| 0.)).unwrap();
     assert!(!server.get_unit(Point::new(2, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert!(*server.get_owning_player(0).unwrap().funds < 9999);
@@ -298,7 +298,7 @@ fn edwin() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,
-        action: UnitAction::hero_power(1, vec![CustomActionData::Point(Point::new(2, 1)), CustomActionData::Point(Point::new(0, 4))]),
+        action: UnitAction::hero_power(1, vec![CustomActionInput::Point(Point::new(2, 1)), CustomActionInput::Point(Point::new(0, 4))]),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(2, 1)), Some(friend));
     assert_eq!(server.get_unit(Point::new(0, 4)), Some(enemy));

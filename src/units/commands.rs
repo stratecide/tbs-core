@@ -38,10 +38,10 @@ pub enum UnitAction<D: Direction> {
     Enter,
     //Capture,
     Attack(AttackVector<D>),
-    BuyHero(HeroType),
-    HeroPower(HeroPowerIndex, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
+    //BuyHero(HeroType),
+    HeroPower(HeroPowerIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
     //PawnUpgrade(UnitType),
-    Custom(CustomActionIndex, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
+    Custom(CustomActionIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
 }
 
 impl<D: Direction> fmt::Display for UnitAction<D> {
@@ -52,7 +52,7 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Enter => write!(f, "Enter"),
             //Self::Capture => write!(f, "Capture"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
-            Self::BuyHero(_) => write!(f, "Buy Mercenary"),
+            //Self::BuyHero(_) => write!(f, "Buy Mercenary"),
             Self::HeroPower(index, _) => write!(f, "Hero Power {}", index.0),
             //Self::PawnUpgrade(u) => write!(f, "Upgrade unit to {u:?}"),
             Self::Custom(index, _) => write!(f, "Custom {}", index.0),
@@ -61,49 +61,55 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
 }
 
 impl<D: Direction> UnitAction<D> {
-    pub fn custom(index: usize, custom_action_data: Vec<CustomActionData<D>>) -> Self {
+    pub fn custom(index: usize, custom_action_data: Vec<CustomActionInput<D>>) -> Self {
         Self::Custom(CustomActionIndex(index), custom_action_data.try_into().unwrap())
     }
 
-    pub fn hero_power(index: usize, custom_action_data: Vec<CustomActionData<D>>) -> Self {
+    pub fn hero_power(index: usize, custom_action_data: Vec<CustomActionInput<D>>) -> Self {
         Self::HeroPower(HeroPowerIndex(index), custom_action_data.try_into().unwrap())
     }
 
-    pub fn is_valid_option(&self, game: &Handle<Game<D>>, unit: &Unit<D>, path: &Path<D>, _destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> bool {
+    pub fn build_action_data_if_valid(&self, game: &Handle<Game<D>>, unit: &Unit<D>, path: &Path<D>, _destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Option<Vec<CustomActionData<D>>> {
         let options = unit.options_after_path(game, path, transporter, ballast);
         match self {
             Self::HeroPower(index, data) => {
                 if !options.contains(&Self::hero_power(index.0, Vec::new())) {
-                    return false;
+                    return None;
                 }
                 let Some(hero) = unit.get_hero() else {
-                    return false;
+                    return None;
                 };
                 let environment = game.environment();
                 let power = &environment.config.hero_powers(hero.typ())[index.0];
                 if let Some((Some(input_script), _)) = power.script {
-                    is_unit_script_input_valid(input_script, game, path, transporter.map(|(_, i)| i), data)
-                } else {
-                    data.len() == 0
+                    return is_unit_script_input_valid(input_script, game, path, transporter.map(|(_, i)| i), data);
+                } else if data.len() == 0 {
+                    return Some(Vec::new())
                 }
             }
             Self::Custom(index, data) => {
                 if !options.contains(&Self::custom(index.0, Vec::new())) {
-                    return false;
+                    return None;
                 }
                 let environment = game.environment();
                 let custom_action = &environment.config.custom_actions()[index.0];
                 if let Some(input_script) = custom_action.script.0 {
-                    is_unit_script_input_valid(input_script, game, path, transporter.map(|(_, i)| i), data)
-                } else {
-                    data.len() == 0
+                    return is_unit_script_input_valid(input_script, game, path, transporter.map(|(_, i)| i), data);
+                } else if data.len() == 0 {
+                    return Some(Vec::new())
                 }
             }
-            _ => options.contains(self)
+            _ => {
+                if options.contains(self) {
+                    return Some(Vec::new())
+                }
+            }
         }
+        // invalid option chosen
+        None
     }
 
-    pub fn execute(&self, handler: &mut EventHandler<D>, unit_id: usize, end: Point, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) {
+    pub fn execute(&self, handler: &mut EventHandler<D>, unit_id: usize, end: Point, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>], action_data: Vec<CustomActionData<D>>) {
         let owner_id = handler.get_game().current_owner();
         let needs_to_exhaust = match self {
             Self::Wait => true,
@@ -189,7 +195,7 @@ impl<D: Direction> UnitAction<D> {
                 );
                 false
             }
-            Self::BuyHero(hero_type) => {
+            /*Self::BuyHero(hero_type) => {
                 let unit = handler.get_game().get_unit(end).unwrap();
                 let owner_id = unit.get_owner_id();
                 // TODO: cost could be put into the enum so it doesn't have to be re-calculated here
@@ -200,7 +206,7 @@ impl<D: Direction> UnitAction<D> {
                     handler.unit_set_hero(end, Hero::new(*hero_type));
                 }
                 true
-            }
+            }*/
             /*Self::PawnUpgrade(unit_type) => {
                 let old_unit = handler.get_game().get_unit(end).unwrap();
                 let new_unit = unit_type.instance(&handler.environment())
@@ -209,7 +215,7 @@ impl<D: Direction> UnitAction<D> {
                 handler.unit_replace(end, new_unit);
                 true
             }*/
-            Self::HeroPower(index, data) => {
+            Self::HeroPower(index, _) => {
                 let unit = handler.get_game().get_unit(end).unwrap().clone();
                 let hero = unit.get_hero().unwrap();
                 let config = handler.environment().config.clone();
@@ -219,19 +225,19 @@ impl<D: Direction> UnitAction<D> {
                 let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
                 //handler.unit_status(end, ActionStatus::Exhausted);
                 if let Some((input_script, function_index)) = power.script {
-                    let data = input_script.map(|_| data.as_slice());
-                    execute_unit_script(function_index, handler, &unit, path, end, transporter, &heroes, ballast, data);
+                    let action_data = input_script.map(|_| action_data);
+                    execute_unit_script(function_index, handler, &unit, path, end, transporter, &heroes, ballast, action_data);
                 }
                 false
             }
-            Self::Custom(index, data) => {
+            Self::Custom(index, _) => {
                 let unit = handler.get_game().get_unit(end).unwrap();
                 let config = handler.environment().config.clone();
                 let custom_action = &config.custom_actions()[index.0];
                 let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
                 //handler.unit_status(end, ActionStatus::Exhausted);
-                let data = custom_action.script.0.map(|_| data.as_slice());
-                execute_unit_script(custom_action.script.1, handler, &unit, path, end, transporter, &heroes, ballast, data);
+                let action_data = custom_action.script.0.map(|_| action_data);
+                execute_unit_script(custom_action.script.1, handler, &unit, path, end, transporter, &heroes, ballast, action_data);
                 false
             }
         };
@@ -271,7 +277,7 @@ impl<D: Direction> UnitCommand<D> {
         let board_at_the_end = self.action == UnitAction::Enter;
         let start = self.path.start;
         // check whether the player should even be able to send this command
-        {
+        let action_data = {
             // making sure i don't accidently change anything while testing move validity
             #[allow(unused_variables)]
             let handler = ();
@@ -327,10 +333,9 @@ impl<D: Direction> UnitCommand<D> {
             } else {
                 ballast.get_entries()
             };
-            if !self.action.is_valid_option(client, &unit, &self.path, destination, transporter, ballast) {
-                return Err(CommandError::InvalidAction);
-            }
-        }
+            self.action.build_action_data_if_valid(client, &unit, &self.path, destination, transporter, ballast)
+            .ok_or(CommandError::InvalidAction)?
+        };
         drop(borrowed_game);
 
         // now we know that the player entered a valid command
@@ -395,7 +400,7 @@ impl<D: Direction> UnitCommand<D> {
         } else {
             // TODO: need to check whether action can really be executed
             // so far the code mainly checks whether it looks correct from the user perspective
-            self.action.execute(handler, unit_id, end, &path_taken, transporter, ballast);
+            self.action.execute(handler, unit_id, end, &path_taken, transporter, ballast, action_data);
         }
         //exhaust_all_on_chess_board(handler, path_taken.start);
         Ok(())

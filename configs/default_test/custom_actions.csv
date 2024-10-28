@@ -1,3 +1,5 @@
 Name;Script;UnitFilter
+Summon Hero;unit_actions/buy_hero > ua_buy_hero;MP(Standard), Not(IsHero()), T(StatueLand, StatueSea), Rhai(unit_actions/buy_hero > uf_can_buy_hero)
 Build Unit;unit_actions/build_unit > ua_exhausted;Unit(DroneBoat, BattleShip, SwimmingFactory, DroneTower, Factory), Rhai(unit_actions/build_unit > uf_can_build)
+Capture;unit_actions/capture > ua_capture;Rhai(unit_actions/capture > uf_can_capture)
 Repair;unit_actions/repair > ua_self_30;Not(Co(SludgeMonster)), Rhai(unit_actions/repair > uf_can_repair)

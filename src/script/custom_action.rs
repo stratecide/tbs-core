@@ -1,7 +1,7 @@
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
-use rhai_action_data::*;
 use zipper_derive::Zippable;
 use zipper::*;
 
@@ -14,12 +14,15 @@ use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::terrain::terrain::Terrain;
-use crate::units::hero::HeroInfluence;
+use crate::units::hero::{HeroInfluence, HeroType};
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
 
 use super::executor::Executor;
 use super::*;
+
+// Shop windows can have at most this many entries.
+pub const MAXIMUM_SHOP_SIZE: usize = 50;
 
 pub type CustomAction = (Option<usize>, usize);
 
@@ -29,12 +32,78 @@ pub type CustomAction = (Option<usize>, usize);
     UnitType,
 }*/
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShopItemIndex(pub usize);
+
+impl From<usize> for ShopItemIndex {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
+
+impl Zippable for ShopItemIndex {
+    fn zip(&self, zipper: &mut Zipper) {
+        let max_value = MAXIMUM_SHOP_SIZE as u32 - 1;
+        let bits = bits_needed_for_max_value(max_value);
+        zipper.write_u32(self.0 as u32, bits);
+    }
+    fn unzip(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+        let max_value = MAXIMUM_SHOP_SIZE as u32 - 1;
+        let bits = bits_needed_for_max_value(max_value);
+        let inner = unzipper.read_u32(bits)?;
+        if inner > max_value {
+            return Err(ZipperError::EnumOutOfBounds(format!("ShopItemIndex({inner})")));
+        }
+        Ok(Self(inner as usize))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Zippable)]
-#[zippable(bits=5, support_ref = Environment)]
+#[zippable(bits=4, support_ref = Environment)]
+pub enum CustomActionInput<D: Direction> {
+    Point(Point),
+    Direction(D),
+    ShopItem(ShopItemIndex),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ShopItemKey<D: Direction> {
+    String(String),
+    Unit(Unit<D>),
+    HeroType(HeroType),
+}
+
+impl<D: Direction> ShopItemKey<D> {
+    pub fn into_dynamic(&self) -> Dynamic {
+        match self {
+            Self::String(key) => Dynamic::from(ImmutableString::from(key)),
+            Self::Unit(unit) => Dynamic::from(unit.clone()),
+            Self::HeroType(key) => Dynamic::from(*key),
+        }
+    }
+
+    pub fn from_dynamic(value: Dynamic) -> Option<Self> {
+        match value.type_name().split("::").last().unwrap() {
+            "string" => Some(Self::String(value.cast::<ImmutableString>().into_owned())),
+            "Unit" => Some(Self::Unit(value.cast())),
+            "HeroType" => Some(Self::HeroType(value.cast())),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShopItem<D: Direction> {
+    pub(super) key: ShopItemKey<D>,
+    pub(super) enabled: bool,
+    pub(super) costs: Vec<Option<i32>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum CustomActionData<D: Direction> {
     Point(Point),
     Direction(D),
-    Unit(Unit<D>),
+    ShopItem(ShopItem<D>),
 }
 
 impl<D: Direction> CustomActionData<D> {
@@ -42,7 +111,7 @@ impl<D: Direction> CustomActionData<D> {
         match self {
             Self::Point(value) => Dynamic::from(*value),
             Self::Direction(value) => Dynamic::from(*value),
-            Self::Unit(value) => Dynamic::from(value.clone()),
+            Self::ShopItem(value) => Dynamic::from(value.clone()),
         }
     }
 }
@@ -51,17 +120,30 @@ impl<D: Direction> CustomActionData<D> {
 pub enum CustomActionDataOptions<D: Direction> {
     Point(HashSet<Point>),
     Direction(Point, HashSet<D>),
-    UnitShop(Vec<(Unit<D>, i32)>),
+    Shop(String, Vec<ShopItem<D>>),
 }
 
 impl<D: Direction> CustomActionDataOptions<D> {
-    pub fn contains(&self, data: &CustomActionData<D>) -> bool {
+    pub fn contains(&self, data: &CustomActionInput<D>) -> Option<CustomActionData<D>> {
         match (self, data) {
-            (Self::Point(options), CustomActionData::Point(option)) => options.contains(option),
-            (Self::Direction(_visual_center, options), CustomActionData::Direction(option)) => options.contains(option),
-            (Self::UnitShop(options), CustomActionData::Unit(option)) => options.iter().any(|o| o.0 == *option),
-            _ => false
+            (Self::Point(options), CustomActionInput::Point(option)) => {
+                if options.contains(option) {
+                    return Some(CustomActionData::Point(*option));
+                }
+            }
+            (Self::Direction(_visual_center, options), CustomActionInput::Direction(option)) => {
+                if options.contains(option) {
+                    return Some(CustomActionData::Direction(*option));
+                }
+            }
+            (Self::Shop(_, options), CustomActionInput::ShopItem(index)) => {
+                return options.get(index.0)
+                .filter(|item| item.enabled)
+                .map(|item| CustomActionData::ShopItem(item.clone()));
+            }
+            _ => ()
         }
+        None
     }
 }
 
@@ -81,7 +163,7 @@ pub fn run_unit_input_script<D: Direction>(
     game: &impl GameView<D>,
     path: &Path<D>,
     transport_index: Option<usize>,
-    data: &[CustomActionData<D>],
+    data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
     let mut game = UnitMovementView::new(game);
     if let Some((unit_pos, unit)) = game.unit_path_without_placing(transport_index, path) {
@@ -102,7 +184,7 @@ pub fn run_unit_input_script<D: Direction>(
 pub fn run_commander_input_script<D: Direction>(
     script: usize,
     game: &Handle<Game<D>>,
-    data: &[CustomActionData<D>],
+    data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
     let mut scope = Scope::new();
     scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner() as i32);
@@ -114,7 +196,7 @@ fn run_input_script<D: Direction>(
     script: usize,
     game: &impl GameView<D>,
     scope: Scope<'static>,
-    data: &[CustomActionData<D>],
+    data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
     let index = Arc::new(Mutex::new(0));
     let result = Arc::new(Mutex::new(None));
@@ -123,11 +205,6 @@ fn run_input_script<D: Direction>(
     let data = data.to_vec();
     let environment = game.environment();
     let mut engine = environment.get_engine(game);
-    if D::is_hex() {
-        ActionDataPackage6::new().register_into_engine(&mut engine);
-    } else {
-        ActionDataPackage4::new().register_into_engine(&mut engine);
-    }
     engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<Dynamic, Box<EvalAltResult>> {
         let mut index = index.lock().unwrap();
         let i = *index;
@@ -141,11 +218,11 @@ fn run_input_script<D: Direction>(
             }
             return Err("Script requests Input".into());
         }
-        if !options.contains(&data[i]) {
+        let Some(data) = options.contains(&data[i]) else {
             *invalid_data.lock().unwrap() = true;
             return Err(format!("script {script} asks for ({i}) {options:?} but received {:?}", data[i]).into());
-        }
-        Ok(data[i].into_dynamic())
+        };
+        Ok(data.into_dynamic())
     });
     let executor = Executor::new(engine, scope, environment);
     match executor.run(script, ()) {
@@ -169,8 +246,8 @@ pub fn is_unit_script_input_valid<D: Direction>(
     game: &Handle<Game<D>>,
     path: &Path<D>,
     transport_index: Option<usize>,
-    data: &[CustomActionData<D>],
-) -> bool {
+    data: &[CustomActionInput<D>],
+) -> Option<Vec<CustomActionData<D>>> {
     let mut game = UnitMovementView::new(game);
     if let Some((unit_pos, unit)) = game.unit_path_without_placing(transport_index, path) {
         game.put_unit(unit_pos, unit.clone());
@@ -183,7 +260,7 @@ pub fn is_unit_script_input_valid<D: Direction>(
         scope.push_constant(CONST_NAME_POSITION, unit_pos);
         is_script_input_valid(script, &game, scope, data)
     } else {
-        false
+        None
     }
 }
 
@@ -192,8 +269,8 @@ pub fn is_terrain_script_input_valid<D: Direction>(
     game: &Handle<Game<D>>,
     pos: Point,
     terrain: Terrain<D>,
-    data: &[CustomActionData<D>],
-) -> bool {
+    data: &[CustomActionInput<D>],
+) -> Option<Vec<CustomActionData<D>>> {
     let mut scope = Scope::new();
     scope.push_constant(CONST_NAME_POSITION, pos);
     scope.push_constant(CONST_NAME_TERRAIN, terrain);
@@ -203,8 +280,8 @@ pub fn is_terrain_script_input_valid<D: Direction>(
 pub fn is_commander_script_input_valid<D: Direction>(
     script: usize,
     game: &Handle<Game<D>>,
-    data: &[CustomActionData<D>],
-) -> bool {
+    data: &[CustomActionInput<D>],
+) -> Option<Vec<CustomActionData<D>>> {
     let mut scope = Scope::new();
     scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner() as i32);
     scope.push_constant(CONST_NAME_TEAM, game.current_team().to_i16() as i32);
@@ -215,23 +292,20 @@ fn is_script_input_valid<D: Direction>(
     script: usize,
     game: &impl GameView<D>,
     scope: Scope<'static>,
-    data: &[CustomActionData<D>],
-) -> bool {
+    data: &[CustomActionInput<D>],
+) -> Option<Vec<CustomActionData<D>>> {
     let index = Arc::new(Mutex::new(0));
     let index_ = index.clone();
     let success = Arc::new(Mutex::new(false));
     let success_ = success.clone();
     let invalid_data = Arc::new(Mutex::new(false));
     let invalid_data_ = invalid_data.clone();
+    let result = Arc::new(Mutex::new(Vec::new()));
+    let result_ = result.clone();
     let data_len = data.len();
     let data = data.to_vec();
     let environment = game.environment();
     let mut engine = environment.get_engine(game);
-    if D::is_hex() {
-        ActionDataPackage6::new().register_into_engine(&mut engine);
-    } else {
-        ActionDataPackage4::new().register_into_engine(&mut engine);
-    }
     engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<Dynamic, Box<EvalAltResult>> {
         let mut index = index.lock().unwrap();
         let i = *index;
@@ -246,28 +320,37 @@ fn is_script_input_valid<D: Direction>(
             }
             return Err(format!("not enough data ({}) for script {script}", data.len()).into());
         }
-        if !options.contains(&data[i]) {
+        let Some(data) = options.contains(&data[i]) else {
             *invalid_data.lock().unwrap() = true;
             return Err(format!("script {script} asks for ({i}) {options:?} but received {:?}", data[i]).into());
-        }
-        Ok(data[i].into_dynamic())
+        };
+        result.lock().unwrap().push(data.clone());
+        Ok(data.into_dynamic())
     });
     let executor = Executor::new(engine, scope, environment);
     match executor.run(script, ()) {
-        Ok(b) => b && *index_.lock().unwrap() == data_len,
+        Ok(b) => {
+            if b && *index_.lock().unwrap() == data_len {
+                // success: input script returned success and input data was used up
+                Some(result_.lock().unwrap().clone())
+            } else {
+                // superfluous input data is an error
+                None
+            }
+        }
         Err(e) => {
             if *success_.lock().unwrap() {
                 // early success
-                true
+                Some(result_.lock().unwrap().clone())
             } else if *invalid_data_.lock().unwrap() {
                 // wrong data supplied
                 // TODO: log error
-                false
+                None
             } else {
                 // script had an error
                 // TODO: log error
                 println!("is_script_input_valid: {e:?}");
-                false
+                None
             }
         }
     }
@@ -282,7 +365,7 @@ pub fn execute_unit_script<D: Direction>(
     transporter: Option<(&Unit<D>, usize)>,
     _heroes: &[HeroInfluence<D>],
     _ballast: &[TBallast<D>],
-    data: Option<&[CustomActionData<D>]>,
+    data: Option<Vec<CustomActionData<D>>>,
 ) {
     let mut scope = Scope::new();
     scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
@@ -299,7 +382,7 @@ pub fn execute_terrain_script<D: Direction>(
     handler: &mut EventHandler<D>,
     pos: Point,
     terrain: Terrain<D>,
-    data: &[CustomActionData<D>],
+    data: Vec<CustomActionData<D>>,
 ) {
     let mut scope = Scope::new();
     scope.push_constant(CONST_NAME_POSITION, pos);
@@ -310,7 +393,7 @@ pub fn execute_terrain_script<D: Direction>(
 pub fn execute_commander_script<D: Direction>(
     script: usize,
     handler: &mut EventHandler<D>,
-    data: Option<&[CustomActionData<D>]>,
+    data: Option<Vec<CustomActionData<D>>>,
 ) {
     let mut scope = Scope::new();
     scope.push_constant(CONST_NAME_OWNER_ID, handler.get_game().current_owner() as i32);
@@ -322,7 +405,7 @@ fn execute_script<D: Direction>(
     script: usize,
     handler: &mut EventHandler<D>,
     scope: Scope<'static>,
-    data: Option<&[CustomActionData<D>]>,
+    data: Option<Vec<CustomActionData<D>>>,
 ) {
     let environment = handler.get_game().environment();
     let engine = environment.get_engine_handler(handler);
@@ -520,7 +603,7 @@ impl CustomAction {
         destination: Point,
         transporter: Option<(&Unit<D>, usize)>,
         ballast: &[TBallast<D>],
-        data: &[CustomActionData<D>],
+        data: Vec<CustomActionData<D>>,
     ) -> bool {
         let funds = game.get_owning_player(unit.get_owner_id()).unwrap().funds_after_path(game, path);
         let heroes = Hero::hero_influence_at(game, destination, unit.get_owner_id());
@@ -553,7 +636,7 @@ impl CustomAction {
         _transporter: Option<(&Unit<D>, usize)>,
         _heroes: &[HeroInfluence<D>],
         ballast: &[TBallast<D>],
-        data: &[CustomActionData<D>],
+        data: Vec<CustomActionData<D>>,
     ) {
         match self {
             Self::None => (),
@@ -661,3 +744,11 @@ pub fn buy_unit<D: Direction>(handler: &mut EventHandler<D>, path_start: Point, 
         true
     }
 }*/
+
+#[cfg(test)]
+pub(crate) mod test {
+    pub const CA_UNIT_BUY_HERO: usize = 0;
+    pub const CA_UNIT_BUILD_UNIT: usize = 1;
+    pub const CA_UNIT_CAPTURE: usize = 2;
+    pub const CA_UNIT_REPAIR: usize = 3;
+}

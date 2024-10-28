@@ -24,13 +24,13 @@ use super::game_view::GameView;
 pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand<D>),
-    TerrainAction(Point, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
+    TerrainAction(Point, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
     //BuyUnit(Point, UnitType, D),
-    CommanderPower(CommanderPowerIndex, LVec<CustomActionData<D>, {MAX_CUSTOM_ACTION_STEPS}>),
+    CommanderPower(CommanderPowerIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
 }
 
 impl<D: Direction> Command<D> {
-    pub fn commander_power(index: usize, custom_action_data: Vec<CustomActionData<D>>) -> Self {
+    pub fn commander_power(index: usize, custom_action_data: Vec<CustomActionInput<D>>) -> Self {
         Self::CommanderPower(CommanderPowerIndex(index), custom_action_data.try_into().unwrap())
     }
 
@@ -78,7 +78,7 @@ impl<D: Direction> Command<D> {
                     &*borrowed_game
                 };
                 // check whether the player should even be able to send this command
-                let script = {
+                let (script, data) = {
                     // making sure i don't accidently change anything while testing move validity
                     #[allow(unused_variables)]
                     let handler = ();
@@ -92,13 +92,13 @@ impl<D: Direction> Command<D> {
                         game.environment().config.terrain_action_script(client, pos, &terrain, &heroes)
                         .ok_or(CommandError::InvalidAction)
                     })?;
-                    if !is_terrain_script_input_valid(input_script, client, pos, terrain.clone(), &data) {
+                    let Some(data) = is_terrain_script_input_valid(input_script, client, pos, terrain.clone(), &data) else {
                         return Err(CommandError::InvalidAction);
-                    }
-                    script
+                    };
+                    (script, data)
                 };
                 drop(borrowed_game);
-                execute_terrain_script(script, handler, pos, terrain, &data);
+                execute_terrain_script(script, handler, pos, terrain, data);
                 Ok(())
             }
             /*Self::BuyUnit(pos, unit_type, d) => {
@@ -186,19 +186,19 @@ impl<D: Direction> Command<D> {
                     return Err(CommandError::PowerNotUsable);
                 }
                 let script = commander.power_activation_script(index.0);
-                let valid = if let Some((Some(input_script), _)) = script {
+                let data = if let Some((Some(input_script), _)) = script {
                     is_commander_script_input_valid(input_script, &*handler.get_game(), &data)
+                    .ok_or(CommandError::PowerNotUsable)?
+                } else if data.len() == 0 {
+                    Vec::new()
                 } else {
-                    data.len() == 0
-                };
-                if !valid {
                     return Err(CommandError::PowerNotUsable);
-                }
+                };
                 //Self::activate_power(handler, index.0, &data);
                 handler.commander_charge_sub(owner_id, commander.power_cost(index.0));
                 handler.commander_power(owner_id, index.0);
                 if let Some((input_script, function_index)) = script {
-                    let data = input_script.map(|_| data.as_slice());
+                    let data = input_script.map(|_| data);
                     execute_commander_script(function_index, handler, data);
                 }
                 Ok(())
@@ -218,7 +218,7 @@ impl<D: Direction> Command<D> {
         Ok(())
     }
 
-    /*pub(crate) fn activate_power(handler: &mut EventHandler<D>, index: usize, data: &[CustomActionData<D>]) {
+    /*pub(crate) fn activate_power(handler: &mut EventHandler<D>, index: usize, data: &[CustomActionInput<D>]) {
         let owner_id = handler.get_game().current_owner();
         let commander = &handler.get_game().get_owning_player(owner_id).unwrap().commander;
         let script = commander.power_activation_script(index);

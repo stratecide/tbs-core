@@ -27,7 +27,7 @@ fn unit_can_build(UNIT, POSITION) {
 }
 
 fn build_unit_input(UNIT, POSITION) {
-    let options = new_unit_shop();
+    let options = new_shop("Build Unit");
     for unit_type in CONFIG.table_row("UNIT_BUILD", UNIT.type, true) {
         let unit = Unit(unit_type);
         unit.owner_id = UNIT.owner_id;
@@ -38,7 +38,7 @@ fn build_unit_input(UNIT, POSITION) {
         let price = unit.value(POSITION);
         options.add(unit, price);
     }
-    let unit = user_selection(options, false);
+    let unit = user_selection(options, false).key;
     if UNIT.transport_capacity == 0 {
         // need to find a place outside
         let options = new_direction_selection(POSITION);
@@ -55,7 +55,8 @@ fn build_unit_input(UNIT, POSITION) {
 
 fn build_unit(UNIT, POSITION, exhaust, data) {
     EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
-    let unit = data[0];
+    let unit = data[0].key;
+    let cost = data[0].costs[0];
     if exhaust {
         unit.set(FLAG_Exhausted);
     }
@@ -72,6 +73,5 @@ fn build_unit(UNIT, POSITION, exhaust, data) {
     } else {
         EVENT_HANDLER.transport_unit(POSITION, unit);
     }
-    let cost = unit.value(POSITION);
     EVENT_HANDLER.spend_money(UNIT.owner_id, cost);
 }

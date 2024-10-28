@@ -13,7 +13,8 @@ use crate::map::map::Map;
 use crate::map::point::*;
 use crate::map::point_map::PointMap;
 use crate::map::wrapping_map::*;
-use crate::script::custom_action::CustomActionData;
+use crate::script::custom_action::test::{CA_UNIT_BUILD_UNIT, CA_UNIT_REPAIR};
+use crate::script::custom_action::CustomActionInput;
 use crate::tags::{Int32, TagValue};
 use crate::tags::tests::*;
 use crate::terrain::TerrainType;
@@ -97,11 +98,12 @@ fn build_drone() {
         .set_owner_id(0)
         .set_hp(100)
         .set_tag(TAG_DRONE_ID, uid.into())
+        .set_flag(FLAG_EXHAUSTED)
         .build_with_defaults();
     let events = server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
-        action: UnitAction::custom(0, vec![CustomActionData::Unit(to_build)]),
+        action: UnitAction::custom(CA_UNIT_BUILD_UNIT, vec![CustomActionInput::ShopItem(0.into())]),
     }), Arc::new(|| 0.)).unwrap();
     client.with_mut(|client| {
         for ev in events.get(&Perspective::Team(0)).unwrap() {
@@ -111,6 +113,10 @@ fn build_drone() {
     assert_eq!(
         server.get_unit(Point::new(3, 4)).unwrap().get_transported().len(),
         1
+    );
+    assert_eq!(
+        client.get_unit(Point::new(3, 4)).unwrap().get_transported()[0],
+        to_build
     );
     assert_eq!(
         client.get_unit(Point::new(3, 4)).unwrap().get_transported()[0].get_tag(TAG_DRONE_ID),
@@ -141,7 +147,7 @@ fn repair_unit() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
-        action: UnitAction::custom(1, Vec::new()),
+        action: UnitAction::custom(CA_UNIT_REPAIR, Vec::new()),
     }), Arc::new(|| 0.)).unwrap();
     assert!(*server.get_owning_player(0).unwrap().funds < 1000);
     assert!(server.get_unit(Point::new(3, 4)).unwrap().get_hp() > 1);
@@ -321,7 +327,7 @@ fn s_factory() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
-        action: UnitAction::custom(0, vec![CustomActionData::Unit(to_build.build_with_defaults()), CustomActionData::Direction(Direction6::D180)]),
+        action: UnitAction::custom(CA_UNIT_BUILD_UNIT, vec![CustomActionInput::ShopItem(0.into()), CustomActionInput::Direction(Direction6::D180)]),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), to_build.set_flag(FLAG_EXHAUSTED).build_with_defaults());
     assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));

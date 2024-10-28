@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use zipper::*;
 
+pub mod rhai_hero;
 #[cfg(test)]
 mod test;
 

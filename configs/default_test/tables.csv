@@ -1,3 +1,5 @@
 Id;Path;Type;DefaultValue;Left;Top
 TERRAIN_REPAIR;terrain_repair.csv;Boolean;false;Terrain;Unit
 UNIT_BUILD;unit_build.csv;Boolean;false;Unit;Unit
+UNIT_HEROES;unit_heroes.csv;Boolean;false;Hero;Unit
+TERRAIN_CAPTURE;terrain_capture.csv;Boolean;false;Terrain;Unit

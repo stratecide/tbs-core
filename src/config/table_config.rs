@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
 use crate::terrain::*;
+use crate::units::hero::HeroType;
 use crate::units::unit_types::UnitType;
 
 use super::file_loader::{FileLoader, TableLine};
@@ -12,8 +13,7 @@ use super::ConfigParseError;
 
 pub struct CustomTable {
     pub default_value: TableValue,
-    // first y, then x
-    pub values: HashMap<TableAxisKey, HashMap<TableAxisKey,  TableValue>>,
+    pub values: HashMap<(TableAxisKey, TableAxisKey),  TableValue>,
     pub row_keys: Vec<TableAxisKey>,
     pub column_keys: Vec<TableAxisKey>,
 }
@@ -83,7 +83,6 @@ impl TableConfig {
                 return Err(Box::new(ConfigParseError::DuplicateHeader(format!("{left:?}"))))
             }
             row_keys.push(left);
-            let mut map = HashMap::default();
             for (i, value) in line.enumerate() {
                 let value = value.trim();
                 if value.len() == 0 {
@@ -91,11 +90,8 @@ impl TableConfig {
                 }
                 let value = TableValue::from_conf(self.typ, value, loader)?;
                 if value != self.default_value {
-                    map.insert(headers[i], value);
+                    values.insert((headers[i], left), value);
                 }
-            }
-            if map.len() > 0 {
-                values.insert(left, map);
             }
         }
         Ok(CustomTable {
@@ -167,6 +163,7 @@ crate::listable_enum! {
     pub(crate) enum TableAxis {
         Unit,
         Terrain,
+        Hero,
     }
 }
 
@@ -174,6 +171,7 @@ crate::listable_enum! {
 pub enum TableAxisKey {
     Unit(UnitType),
     Terrain(TerrainType),
+    Hero(HeroType),
 }
 
 impl TableAxisKey {
@@ -185,6 +183,9 @@ impl TableAxisKey {
             TableAxis::Terrain => {
                 Ok(Self::Terrain(TerrainType::from_conf(s, loader)?.0))
             }
+            TableAxis::Hero => {
+                Ok(Self::Hero(HeroType::from_conf(s, loader)?.0))
+            }
         }
     }
 
@@ -192,6 +193,7 @@ impl TableAxisKey {
         match value.type_name().split("::").last().unwrap() {
             "UnitType" => Some(Self::Unit(value.try_cast()?)),
             "TerrainType" => Some(Self::Terrain(value.try_cast()?)),
+            "HeroType" => Some(Self::Hero(value.try_cast()?)),
             _ => None
         }
     }
@@ -199,6 +201,7 @@ impl TableAxisKey {
         match self {
             Self::Unit(value) => Dynamic::from(value),
             Self::Terrain(value) => Dynamic::from(value),
+            Self::Hero(value) => Dynamic::from(value),
         }
     }
 }

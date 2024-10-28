@@ -34,6 +34,18 @@ mod environment_module {
             .into_iter().map(TableAxisKey::into_dynamic)
             .collect::<Vec<_>>()
     }
+    #[rhai_fn(pure)]
+    pub fn table_column(environment: &mut Config, name: &str, x: Dynamic, value: Dynamic) -> Array {
+        let Some(x) = TableAxisKey::from_dynamic(x) else {
+            return Array::new();
+        };
+        let Some(value) = TableValue::from_dynamic(value) else {
+            return Array::new();
+        };
+        environment.table_column(name, x, value)
+            .into_iter().map(TableAxisKey::into_dynamic)
+            .collect::<Vec<_>>()
+    }
 
     #[rhai_fn(pure)]
     pub fn income_factor(environment: &mut Environment, owner_id: i32) -> i32 {

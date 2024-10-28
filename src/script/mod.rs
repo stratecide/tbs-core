@@ -72,6 +72,7 @@ def_package! {
         BasicMapPackage,
         rhai_environment::EnvironmentPackage,
         rhai_fraction::FractionPackage,
+        rhai_action_data::ActionDataPackage4,
         crate::terrain::rhai_terrain::TerrainPackage4,
         crate::map::rhai_point::PositionPackage4,
         crate::map::rhai_direction::DirectionPackage4,
@@ -79,6 +80,7 @@ def_package! {
         crate::units::rhai_unit::UnitPackage4,
         crate::units::rhai_combat::CombatPackage4,
         crate::units::rhai_movement::MovementPackage4,
+        crate::units::hero::rhai_hero::HeroPackage,
         crate::tokens::rhai_token::TokenPackage4,
         crate::game::rhai_event_handler::EventHandlerPackage4 {}
 }
@@ -91,6 +93,7 @@ def_package! {
         BasicMapPackage,
         rhai_environment::EnvironmentPackage,
         rhai_fraction::FractionPackage,
+        rhai_action_data::ActionDataPackage6,
         crate::terrain::rhai_terrain::TerrainPackage6,
         crate::map::rhai_point::PositionPackage6,
         crate::map::rhai_direction::DirectionPackage6,
@@ -98,6 +101,7 @@ def_package! {
         crate::units::rhai_unit::UnitPackage6,
         crate::units::rhai_combat::CombatPackage6,
         crate::units::rhai_movement::MovementPackage6,
+        crate::units::hero::rhai_hero::HeroPackage,
         crate::tokens::rhai_token::TokenPackage6,
         crate::game::rhai_event_handler::EventHandlerPackage6 {}
 }
