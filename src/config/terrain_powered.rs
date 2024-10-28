@@ -22,7 +22,7 @@ pub(super) enum TerrainFilter {
     Rhai(usize),
     Commander(CommanderType, Option<u8>),
     Type(HashSet<TerrainType>),
-    Bubble,
+    Ownable,
     Not(Vec<Self>),
 }
 
@@ -50,7 +50,7 @@ impl FromConfig for TerrainFilter {
                 remainder = r;
                 Self::Type(list.into_iter().collect())
             }
-            "Bubble" => Self::Bubble,
+            "Ownable" => Self::Ownable,
             "Not" => {
                 let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
                 remainder = r;
@@ -67,7 +67,6 @@ impl TerrainFilter {
         game: &impl GameView<D>,
         pos: Point,
         terrain: &Terrain<D>,
-        is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
         executor: &Executor,
@@ -88,12 +87,12 @@ impl TerrainFilter {
                 && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
             Self::Type(t) => t.contains(&terrain.typ()),
-            Self::Bubble => is_bubble,
+            Self::Ownable => terrain.environment().config.terrain_can_have_owner(terrain.typ()),
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
                 negated.iter()
-                .any(|negated| !negated.check(game, pos, terrain, is_bubble, heroes, executor))
+                .any(|negated| !negated.check(game, pos, terrain, heroes, executor))
             }
         }
     }

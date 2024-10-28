@@ -1,11 +1,11 @@
 use rhai::*;
 use rhai::plugin::*;
 
-use crate::config::environment::Environment;
 use crate::map::direction::*;
 use crate::script::get_environment;
 use crate::units::movement::MovementType;
 use crate::terrain::TerrainType;
+use crate::tags::*;
 
 #[export_module]
 mod terrain_type_module {
@@ -46,7 +46,7 @@ macro_rules! board_module {
         #[export_module]
         mod $name {
             pub type Terrain = crate::terrain::terrain::Terrain<$d>;
-            pub type TerrainBuilder = crate::terrain::terrain::TerrainBuilder<$d>;
+            //pub type TerrainBuilder = crate::terrain::terrain::TerrainBuilder<$d>;
 
             #[rhai_fn(pure, name = "==")]
             pub fn t_eq(t1: &mut Terrain, t2: Terrain) -> bool {
@@ -57,24 +57,78 @@ macro_rules! board_module {
                 *t1 != t2
             }
 
+            #[rhai_fn(name = "Terrain")]
+            pub fn new_terrain(context: NativeCallContext, typ: TerrainType) -> Terrain {
+                let environment = get_environment(context);
+                Terrain::new(environment, typ)
+            }
+            #[rhai_fn(name = "Terrain")]
+            pub fn new_terrain_str(context: NativeCallContext, typ: &str) -> Dynamic {
+                let environment = get_environment(context);
+                if let Some(typ) = environment.config.find_terrain_by_name(typ) {
+                    Dynamic::from(Terrain::new(environment, typ))
+                } else {
+                    ().into()
+                }
+            }
+
             #[rhai_fn(pure, get = "type")]
             pub fn get_type(terrain: &mut Terrain) -> TerrainType {
                 terrain.typ()
             }
 
             #[rhai_fn(pure, get = "owner_id")]
-            pub fn get_owner_id(terrain: &mut Terrain) -> i32 {
-                terrain.get_owner_id() as i32
+            pub fn get_owner_id(terrain: &mut Terrain) -> Dynamic {
+                if !terrain.environment().config.terrain_can_have_owner(terrain.typ()) {
+                    return ().into()
+                }
+                Dynamic::from(terrain.get_owner_id() as i32)
+            }
+            #[rhai_fn(set = "owner_id")]
+            pub fn set_owner_id(terrain: &mut Terrain, owner_id: i32) {
+                terrain.set_owner_id(owner_id.max(-1).min(terrain.environment().config.max_player_count() as i32) as i8)
             }
 
-            /*#[rhai_fn(pure, get = "anger")]
-            pub fn get_anger(terrain: &mut Terrain) -> Dynamic {
-                if terrain.has_attribute(TerrainAttributeKey::Anger) {
-                    (terrain.get_anger() as i32).into()
-                } else {
-                    ().into()
+            #[rhai_fn(pure, get = "team")]
+            pub fn get_team(terrain: &mut Terrain) -> i32 {
+                terrain.get_team().to_i16() as i32
+            }
+
+            pub fn copy_from(terrain: &mut Terrain, other: Terrain) {
+                terrain.copy_from(&other);
+            }
+
+            #[rhai_fn(pure, name = "has")]
+            pub fn has_flag(terrain: &mut Terrain, flag: FlagKey) -> bool {
+                terrain.has_flag(flag.0)
+            }
+            #[rhai_fn(name = "set")]
+            pub fn set_flag(terrain: &mut Terrain, flag: FlagKey) {
+                terrain.set_flag(flag.0)
+            }
+            #[rhai_fn(name = "remove")]
+            pub fn remove_flag(terrain: &mut Terrain, flag: FlagKey) {
+                terrain.remove_flag(flag.0)
+            }
+
+            #[rhai_fn(pure, name = "has")]
+            pub fn has_tag(terrain: &mut Terrain, tag: TagKey) -> bool {
+                terrain.get_tag(tag.0).is_some()
+            }
+            #[rhai_fn(pure, name = "get")]
+            pub fn get_tag(terrain: &mut Terrain, key: TagKey) -> Dynamic {
+                terrain.get_tag(key.0).map(|v| v.into_dynamic()).unwrap_or(().into())
+            }
+            #[rhai_fn(name = "set")]
+            pub fn set_tag(terrain: &mut Terrain, key: TagKey, value: Dynamic) {
+                if let Some(value) = TagValue::from_dynamic(value, key.0, terrain.environment()) {
+                    terrain.set_tag(key.0, value);
                 }
-            }*/
+            }
+            #[rhai_fn(name = "remove")]
+            pub fn remove_tag(terrain: &mut Terrain, tag: TagKey) {
+                terrain.remove_tag(tag.0)
+            }
 
             #[rhai_fn(pure, name = "movement_cost")]
             pub fn get_movement_cost(terrain: &mut Terrain, movement_type: MovementType) -> Dynamic {
@@ -83,7 +137,7 @@ macro_rules! board_module {
                     .unwrap_or(().into())
             }
 
-            #[rhai_fn(pure, name="build_terrain")]
+            /*#[rhai_fn(pure, name="build_terrain")]
             pub fn build_terrain(environment: &mut Environment, terrain_type: TerrainType) -> TerrainBuilder {
                 terrain_type.instance(environment)
             }
@@ -109,7 +163,7 @@ macro_rules! board_module {
             #[rhai_fn(name = "build")]
             pub fn builder_build(builder: TerrainBuilder) -> Terrain {
                 builder.build_with_defaults()
-            }
+            }*/
         }
 
         def_package! {

@@ -458,6 +458,7 @@ impl<D: Direction> EventHandler<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, p);
                     scope.push_constant(CONST_NAME_TERRAIN, terrain);
+                    scope.push_constant(CONST_NAME_OWNER_ID, owner_id as i32);
                     let environment = handler.get_game().environment();
                     let engine = environment.get_engine_handler(handler);
                     let executor = Executor::new(engine, scope, environment);
@@ -498,6 +499,7 @@ impl<D: Direction> EventHandler<D> {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, unit_pos);
                     scope.push_constant(CONST_NAME_UNIT, unit.clone());
+                    scope.push_constant(CONST_NAME_OWNER_ID, owner_id as i32);
                     let environment = handler.get_game().environment();
                     let engine = environment.get_engine_handler(handler);
                     let executor = Executor::new(engine, scope, environment);
@@ -730,6 +732,37 @@ impl<D: Direction> EventHandler<D> {
     pub fn terrain_replace(&mut self, position: Point, terrain: Terrain<D>) {
         let old_terrain = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone());
         self.add_event(Event::TerrainChange(position, old_terrain.clone(), terrain));
+    }
+
+    pub fn set_terrain_flag(&mut self, position: Point, flag: usize) {
+        let terrain = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone());
+        if !terrain.has_flag(flag) {
+            self.add_event(Event::TerrainFlag(position, FlagKey(flag)));
+        }
+    }
+    pub fn remove_terrain_flag(&mut self, position: Point, flag: usize) {
+        let terrain = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone());
+        if terrain.has_flag(flag) {
+            self.add_event(Event::TerrainFlag(position, FlagKey(flag)));
+        }
+    }
+
+    pub fn set_terrain_tag(&mut self, position: Point, key: usize, value: TagValue<D>) {
+        let terrain = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone());
+        if !value.has_valid_type(&self.environment(), key) {
+            return;
+        }
+        if let Some(old) = terrain.get_tag(key) {
+            self.add_event(Event::TerrainReplaceTag(position, TagKeyValues(TagKey(key), [old, value])));
+        } else {
+            self.add_event(Event::TerrainSetTag(position, TagKeyValues(TagKey(key), [value])));
+        }
+    }
+    pub fn remove_terrain_tag(&mut self, position: Point, key: usize) {
+        let terrain = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone());
+        if let Some(old) = terrain.get_tag(key) {
+            self.add_event(Event::TerrainRemoveTag(position, TagKeyValues(TagKey(key), [old])));
+        }
     }
 
     /*pub fn terrain_anger(&mut self, position: Point, anger: u8) {
@@ -996,6 +1029,12 @@ impl<D: Direction> EventHandler<D> {
             self.add_event(Event::UnitReplaceTag(position, TagKeyValues(TagKey(key), [old, value])));
         } else {
             self.add_event(Event::UnitSetTag(position, TagKeyValues(TagKey(key), [value])));
+        }
+    }
+    pub fn remove_unit_tag(&mut self, position: Point, key: usize) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        if let Some(old) = unit.get_tag(key) {
+            self.add_event(Event::UnitRemoveTag(position, TagKeyValues(TagKey(key), [old])));
         }
     }
 

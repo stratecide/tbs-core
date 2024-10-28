@@ -6,6 +6,6 @@ fn uf_can_capture() {
 }
 
 fn ua_capture() {
-    EVENT_HANDLER.set_unit_flag(position, FLAG_Capturing);
-    EVENT_HANDLER.set_unit_flag(position, FLAG_Exhausted);
+    EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Capturing);
+    EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
 }

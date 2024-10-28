@@ -93,7 +93,7 @@ macro_rules! board_module {
                 unit.get_owner_id() as i32
             }
             #[rhai_fn(set = "owner_id")]
-            pub fn builder_owner_id(unit: &mut Unit, owner_id: i32) {
+            pub fn set_owner_id(unit: &mut Unit, owner_id: i32) {
                 unit.set_owner_id(owner_id.max(-1).min(unit.environment().config.max_player_count() as i32) as i8)
             }
 
@@ -156,16 +156,23 @@ macro_rules! board_module {
                 unit.remove_flag(flag.0)
             }
 
+            #[rhai_fn(pure, name = "has")]
+            pub fn has_tag(unit: &mut Unit, tag: TagKey) -> bool {
+                unit.get_tag(tag.0).is_some()
+            }
             #[rhai_fn(pure, name = "get")]
             pub fn get_tag(unit: &mut Unit, key: TagKey) -> Dynamic {
                 unit.get_tag(key.0).map(|v| v.into_dynamic()).unwrap_or(().into())
             }
-
             #[rhai_fn(name = "set")]
             pub fn set_tag(unit: &mut Unit, key: TagKey, value: Dynamic) {
                 if let Some(value) = TagValue::from_dynamic(value, key.0, unit.environment()) {
                     unit.set_tag(key.0, value);
                 }
+            }
+            #[rhai_fn(name = "remove")]
+            pub fn remove_tag(terrain: &mut Unit, tag: TagKey) {
+                terrain.remove_tag(tag.0)
             }
 
             #[rhai_fn(pure, name = "value")]

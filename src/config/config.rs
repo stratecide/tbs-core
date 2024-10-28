@@ -531,7 +531,6 @@ impl Config {
         game: &'a impl GameView<D>,
         pos: Point,
         terrain: &'a Terrain<D>,
-        is_bubble: bool,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &'a [HeroInfluence<D>],
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a TerrainPoweredConfig> + 'a>, &Executor) -> R,
@@ -541,7 +540,6 @@ impl Config {
         // build scope
         scope.push_constant(CONST_NAME_POSITION, pos);
         scope.push_constant(CONST_NAME_TERRAIN, terrain.clone());
-        scope.push_constant(CONST_NAME_IS_BUBBLE, is_bubble);
         // TODO: heroes (put them into Arc<Vec<>> instead of &[])
         let executor = Arc::new(Executor::new(engine, scope, game.environment()));
         let executor_ = executor.clone();
@@ -552,7 +550,7 @@ impl Config {
         .enumerate()
         .filter(move |(i, config)| {
             game.set_terrain_config_limit(Some(*i));
-            config.affects.iter().all(|filter| filter.check(game, pos, terrain, is_bubble, heroes, &executor))
+            config.affects.iter().all(|filter| filter.check(game, pos, terrain, heroes, &executor))
         })
         .map(|(_, config)| config);
         let r = f(Box::new(it), &executor_);
@@ -610,7 +608,6 @@ impl Config {
             map,
             pos,
             terrain,
-            false,
             heroes,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
@@ -707,7 +704,6 @@ impl Config {
         map: &impl GameView<D>,
         pos: Point,
         terrain: &Terrain<D>,
-        is_bubble: bool,
         heroes: &[HeroInfluence<D>],
     ) -> Vec<usize> {
         let mut result = Vec::new();
@@ -715,7 +711,6 @@ impl Config {
             map,
             pos,
             terrain,
-            is_bubble,
             heroes,
             |iter, _executor| {
                 for config in iter {
@@ -761,7 +756,6 @@ impl Config {
             map,
             pos,
             terrain,
-            false,
             heroes,
             |iter, _executor| {
                 for config in iter {

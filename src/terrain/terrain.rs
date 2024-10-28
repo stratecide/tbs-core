@@ -230,6 +230,18 @@ impl<D: Direction> Terrain<D> {
         .unwrap_or(Commander::new(&self.environment, CommanderType::None))
     }
 
+    pub(super) fn copy_from(&mut self, other: &Terrain<D>) {
+        if self.environment != other.environment {
+            panic!("Can't copy from terrain from different environment");
+        }
+        for key in other.tags.flags() {
+            self.set_flag(*key);
+        }
+        for (key, value) in other.tags.tags() {
+            self.set_tag(*key, value.clone());
+        }
+    }
+
     pub fn has_flag(&self, key: usize) -> bool {
         self.tags.has_flag(key)
     }
@@ -423,7 +435,6 @@ impl<D: Direction> Terrain<D> {
             game,
             pos,
             self,
-            false,
             &heroes,
         )
     }
@@ -494,15 +505,7 @@ impl<D: Direction> TerrainBuilder<D> {
     }
 
     pub fn copy_from(mut self, other: &Terrain<D>) -> Self {
-        if self.terrain.environment != other.environment {
-            panic!("Can't copy from terrain from different environment");
-        }
-        for key in other.tags.flags() {
-            self.terrain.set_flag(*key);
-        }
-        for (key, value) in other.tags.tags() {
-            self.terrain.set_tag(*key, value.clone());
-        }
+        self.terrain.copy_from(other);
         self
     }
 

@@ -13,6 +13,7 @@ use crate::units::commands::UnloadIndex;
 use crate::units::hero::{Hero, HeroChargeChange};
 use crate::units::unit::Unit;
 use crate::units::movement::MAX_PATH_LENGTH;
+use crate::units::UnitVisibility;
 use crate::{player::*, tokens};
 use crate::terrain::terrain::*;
 use crate::tokens::token::Token;
@@ -107,6 +108,10 @@ pub enum Event<D:Direction> {
     UnitLevel(Point, Level, Level),*/
     // terrain events
     TerrainChange(Point, Terrain<D>, Terrain<D>),
+    TerrainFlag(Point, FlagKey),
+    TerrainSetTag(Point, TagKeyValues<1, D>),
+    TerrainRemoveTag(Point, TagKeyValues<1, D>),
+    TerrainReplaceTag(Point, TagKeyValues<2, D>),
     /*TerrainAnger(Point, Anger, Anger),
     CaptureProgress(Point, CaptureProgress, CaptureProgress),
     UpdateBuiltThisTurn(Point, BuiltThisTurn, BuiltThisTurn),*/
@@ -316,6 +321,22 @@ impl<D: Direction> Event<D> {
             Self::TerrainChange(pos, _, terrain) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
             }
+            Self::TerrainFlag(pos, key) => {
+                if let Some(terrain) = game.get_map_mut().get_terrain_mut(*pos) {
+                    terrain.flip_flag(key.0);
+                }
+            }
+            Self::TerrainSetTag(pos, TagKeyValues(key, [value])) |
+            Self::TerrainReplaceTag(pos, TagKeyValues(key, [_, value])) => {
+                if let Some(terrain) = game.get_map_mut().get_terrain_mut(*pos) {
+                    terrain.set_tag(key.0, value.clone());
+                }
+            }
+            Self::TerrainRemoveTag(pos, TagKeyValues(key, _)) => {
+                if let Some(terrain) = game.get_map_mut().get_terrain_mut(*pos) {
+                    terrain.remove_tag(key.0);
+                }
+            }
             /*Self::TerrainAnger(pos, _, anger) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(anger.0);
             }
@@ -513,6 +534,22 @@ impl<D: Direction> Event<D> {
             // terrain
             Self::TerrainChange(pos, terrain, _) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
+            }
+            Self::TerrainFlag(pos, key) => {
+                if let Some(terrain) = game.get_map_mut().get_terrain_mut(*pos) {
+                    terrain.flip_flag(key.0);
+                }
+            }
+            Self::TerrainSetTag(pos, TagKeyValues(key, _)) => {
+                if let Some(terrain) = game.get_map_mut().get_terrain_mut(*pos) {
+                    terrain.remove_tag(key.0);
+                }
+            }
+            Self::TerrainRemoveTag(pos, TagKeyValues(key, [value])) |
+            Self::TerrainReplaceTag(pos, TagKeyValues(key, [value, _])) => {
+                if let Some(terrain) = game.get_map_mut().get_terrain_mut(*pos) {
+                    terrain.set_tag(key.0, value.clone());
+                }
             }
             /*Self::TerrainAnger(pos, anger, _) => {
                 game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(anger.0);
@@ -794,6 +831,34 @@ impl<D: Direction> Event<D> {
                 let after = after.fog_replacement(fog_intensity);
                 if before != after {
                     Some(Self::TerrainChange(*pos, before, after))
+                } else {
+                    None
+                }
+            }
+            Self::TerrainFlag(p, FlagKey(key)) => {
+                // terrain is AlwaysVisible
+                // flag_visibility should be same as in Terrain::fog_replacement
+                if match game.environment().flag_visibility(*key) {
+                    UnitVisibility::AlwaysVisible => true,
+                    UnitVisibility::Normal |
+                    UnitVisibility::Stealth => game.get_fog_at(team, *p) < FogIntensity::Light,
+                } {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            Self::TerrainSetTag(p, TagKeyValues(TagKey(key), _)) |
+            Self::TerrainRemoveTag(p, TagKeyValues(TagKey(key), _)) |
+            Self::TerrainReplaceTag(p, TagKeyValues(TagKey(key), _)) => {
+                // terrain is AlwaysVisible
+                // tag_visibility should be same as in Terrain::fog_replacement
+                if match game.environment().tag_visibility(*key) {
+                    UnitVisibility::AlwaysVisible => true,
+                    UnitVisibility::Normal |
+                    UnitVisibility::Stealth => game.get_fog_at(team, *p) < FogIntensity::Light,
+                } {
+                    Some(self.clone())
                 } else {
                     None
                 }

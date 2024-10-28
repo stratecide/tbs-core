@@ -70,7 +70,7 @@ fn capture_city() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build_with_defaults());
-    map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0). set_hp(55).build_with_defaults()));
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build_with_defaults()));
     let settings = map.settings().unwrap().build_default();
     let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
@@ -84,6 +84,18 @@ fn capture_city() {
     }), Arc::new(|| 0.)).unwrap();
     game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     assert_eq!(-1, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
+    assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_CAPTURING));
+    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    assert_eq!(-1, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
+    assert!(!game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_CAPTURING));
+    assert_eq!(Some(6.into()), game.get_terrain(Point::new(1, 1)).unwrap().get_tag(TAG_CAPTURE_PROGRESS));
+    assert_eq!(Some(0.into()), game.get_terrain(Point::new(1, 1)).unwrap().get_tag(TAG_CAPTURE_OWNER));
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(1, 1), Vec::new()),
+        action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
+    }), Arc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     assert_eq!(0, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
 }

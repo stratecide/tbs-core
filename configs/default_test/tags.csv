@@ -14,3 +14,5 @@ PawnDirection;Direction;;;
 Direction;Direction;;;
 Anger;Int;1;8;
 BuiltThisTurn;Int;1;2;
+CaptureOwner;Int;0;15;
+CaptureProgress;Int;1;9;

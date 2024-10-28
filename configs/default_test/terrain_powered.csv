@@ -1,3 +1,4 @@
 Power;Affects;Vision;Income;Repair;Build;SellsHero;OnStartTurn;OnEndTurn;ActionScript
 Co(Tapio, 3);T(FairyForest);;;;true;;;;
 ;T(TentacleDepths);;;;;;on_terrain/start_turn > spawn_tentacle;;
+;Ownable;;;;;;on_terrain/start_turn > get_captured;;

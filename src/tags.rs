@@ -406,6 +406,8 @@ pub mod tests {
     pub const TAG_PAWN_DIRECTION: usize = 6;
     pub const TAG_ANGER: usize = 8;
     pub const TAG_BUILT_THIS_TURN: usize = 9;
+    pub const TAG_CAPTURE_OWNER: usize = 10;
+    pub const TAG_CAPTURE_PROGRESS: usize = 11;
     #[test]
     fn verify_tag_test_constants() {
         let config = Arc::new(Config::test_config());
@@ -420,6 +422,8 @@ pub mod tests {
         assert_eq!(environment.tag_name(TAG_PAWN_DIRECTION), "PawnDirection");
         assert_eq!(environment.tag_name(TAG_ANGER), "Anger");
         assert_eq!(environment.tag_name(TAG_BUILT_THIS_TURN), "BuiltThisTurn");
+        assert_eq!(environment.tag_name(TAG_CAPTURE_OWNER), "CaptureOwner");
+        assert_eq!(environment.tag_name(TAG_CAPTURE_PROGRESS), "CaptureProgress");
     }
 
 }

@@ -83,6 +83,12 @@ macro_rules! event_handler_module {
                 };
                 handler.set_unit_tag(position, key.0, value);
             }
+            pub fn remove_unit_tag(mut handler: Handler, position: Point, key: TagKey) {
+                if handler.with_map(|map| map.get_unit(position).is_none()) {
+                    return;
+                }
+                handler.remove_unit_tag(position, key.0);
+            }
 
             pub fn set_hero(mut handler: Handler, position: Point, hero: Hero) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {
@@ -229,6 +235,23 @@ macro_rules! event_handler_module {
 
             pub fn replace_terrain(mut handler: Handler, position: Point, terrain: Terrain<$d>) {
                 handler.terrain_replace(position, terrain);
+            }
+
+            pub fn set_terrain_flag(mut handler: Handler, position: Point, flag: FlagKey) {
+                handler.set_terrain_flag(position, flag.0);
+            }
+            pub fn remove_terrain_flag(mut handler: Handler, position: Point, flag: FlagKey) {
+                handler.remove_terrain_flag(position, flag.0);
+            }
+
+            pub fn set_terrain_tag(mut handler: Handler, position: Point, key: TagKey, value: Dynamic) {
+                let Some(value) = TagValue::from_dynamic(value, key.0, &handler.environment()) else {
+                    return;
+                };
+                handler.set_terrain_tag(position, key.0, value);
+            }
+            pub fn remove_terrain_tag(mut handler: Handler, position: Point, key: TagKey) {
+                handler.remove_terrain_tag(position, key.0);
             }
 
             /*pub fn place_skull(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {
