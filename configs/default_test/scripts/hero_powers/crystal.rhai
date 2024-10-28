@@ -24,4 +24,5 @@ fn ua_summon_obelisk(data) {
         //EVENT_HANDLER.effect(ef_summon_unit(target, obelisk))
         EVENT_HANDLER.place_unit(target, obelisk);
     }
+    EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
 }

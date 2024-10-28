@@ -67,4 +67,4 @@ Co(Celerity, 2);MovementPattern(Standard), AttackType(Adjacent), Not(U(Marine, S
 ;;Rhai(unit_powered > multiply_hp);;;;;;;;;;;;;;;;;;Rhai(unit_powered > multiply_hp);;;;;;;;;;;
 ;U(BattleShip, Sniper, Blimp), Moved, Not(Counter);*7/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Flag(Capturing, Repairing);;*6/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/start_turn > unexhaust;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/start_turn > clear_status_flags;on_unit/end_turn > unexhaust;;;;

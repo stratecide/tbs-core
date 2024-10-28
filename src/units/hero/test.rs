@@ -221,6 +221,7 @@ fn blue_berry() {
     let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
     assert!(server.get_unit(Point::new(2, 1)).unwrap().get_hp() > 50);
     assert_eq!(server.get_unit(Point::new(4, 4)).unwrap().get_hp(), 50);
+    assert!(server.get_unit(Point::new(4, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
     // use power
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);

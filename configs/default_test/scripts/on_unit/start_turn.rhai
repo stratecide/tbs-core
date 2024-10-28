@@ -16,8 +16,7 @@ fn damage_20() {
     EVENT_HANDLER.set_unit_tag(POSITION, TAG_Hp, UNIT.get(TAG_Hp) - 20);
 }
 
-fn unexhaust() {
-    EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Exhausted);
+fn clear_status_flags() {
     EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Repairing);
     EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Capturing);
 }
