@@ -1,11 +1,10 @@
 use rhai::*;
 use rhai::plugin::*;
 
-use crate::config::environment::Environment;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit_types::UnitType;
-use crate::units::hero::*;
+use crate::units::hero::Hero;
 use crate::script::{with_board, get_environment};
 use crate::units::movement::MovementType;
 use crate::tags::*;
@@ -73,6 +72,15 @@ macro_rules! board_module {
             pub fn new_unit(context: NativeCallContext, typ: UnitType) -> Unit {
                 let environment = get_environment(context);
                 Unit::new(environment, typ)
+            }
+            #[rhai_fn(name = "Unit")]
+            pub fn new_unit_str(context: NativeCallContext, typ: &str) -> Dynamic {
+                let environment = get_environment(context);
+                if let Some(typ) = environment.config.find_unit_by_name(typ) {
+                    Dynamic::from(Unit::new(environment, typ))
+                } else {
+                    ().into()
+                }
             }
 
             #[rhai_fn(pure, get = "type")]
@@ -187,6 +195,25 @@ macro_rules! board_module {
             #[rhai_fn(pure, get = "movement_type")]
             pub fn get_movement_type(unit: &mut Unit) -> MovementType {
                 unit.sub_movement_type()
+            }
+
+            #[rhai_fn(pure, get = "hero")]
+            pub fn get_hero(unit: &mut Unit) -> Dynamic {
+                unit.get_hero()
+                .map(|hero| Dynamic::from(hero.clone()))
+                .unwrap_or(().into())
+            }
+            #[rhai_fn(set = "hero")]
+            pub fn set_hero(unit: &mut Unit, hero: Hero) {
+                unit.set_hero(hero)
+            }
+            #[rhai_fn(set = "hero")]
+            pub fn remove_hero(unit: &mut Unit, _: ()) {
+                unit.remove_hero()
+            }
+            #[rhai_fn(name = "remove_hero")]
+            pub fn remove_hero2(unit: &mut Unit) {
+                unit.remove_hero()
             }
 
             /*#[rhai_fn(pure)]

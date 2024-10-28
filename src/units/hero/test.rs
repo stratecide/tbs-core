@@ -67,10 +67,10 @@ fn crystal() {
     crystal.set_charge(&map_env, crystal.max_charge(&map_env));
     //map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk, None)).build_with_defaults()));
     map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(crystal).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(3, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(3, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
 
-    map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk)).build_with_defaults()));
+    map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).set_hero(Hero::new(HeroType::CrystalObelisk)).build_with_defaults()));
 
     let settings = map.settings().unwrap();
     let mut settings = settings.clone();
@@ -91,7 +91,7 @@ fn crystal() {
         path,
         action: UnitAction::hero_power(1, vec![CustomActionInput::Point(Point::new(0, 1))]),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_unit(Point::new(0, 1)), Some(UnitType::hero_crystal().instance(&environment).set_owner_id(0).set_hero(Hero::new(HeroType::CrystalObelisk)).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(0, 1)), Some(UnitType::hero_crystal().instance(&environment).set_owner_id(0).set_hp(100).set_hero(Hero::new(HeroType::CrystalObelisk)).build_with_defaults()));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -122,7 +122,7 @@ fn crystal() {
     assert_eq!(Hero::hero_influence_at(&*server, Point::new(0, 0), 1).len(), 0);
     assert_eq!(Hero::hero_influence_at(&*server, Point::new(0, 0), -1).len(), 1);
 
-    assert!(aura_damage < power_aura_damage);
+    assert!(aura_damage < power_aura_damage, "{aura_damage} < {power_aura_damage}");
 
     // test crystal obelisk behavior when hero is missing
     map.set_unit(Point::new(1, 1), None);

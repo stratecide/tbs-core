@@ -1,6 +1,8 @@
 use rhai::*;
 use rhai::plugin::*;
 
+use crate::script::get_environment;
+
 #[export_module]
 mod hero_type_module {
 
@@ -28,6 +30,15 @@ mod hero_type_module {
     #[rhai_fn(name = "Hero")]
     pub fn new_hero(hero_type: HeroType) -> Hero {
         Hero::new(hero_type)
+    }
+    #[rhai_fn(name = "Hero")]
+    pub fn new_hero_str(context: NativeCallContext, typ: &str) -> Dynamic {
+        let environment = get_environment(context);
+        if let Some(typ) = environment.config.find_hero_by_name(typ) {
+            Dynamic::from(Hero::new(typ))
+        } else {
+            ().into()
+        }
     }
 }
 
