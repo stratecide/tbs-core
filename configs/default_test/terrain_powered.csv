@@ -1,4 +1,5 @@
-Power;Affects;Vision;Income;Repair;Build;SellsHero;OnStartTurn;OnEndTurn;ActionScript
-Co(Tapio, 3);T(FairyForest);;;;true;;;;
-;T(TentacleDepths);;;;;;on_terrain/start_turn > spawn_tentacle;;
-;Ownable;;;;;;on_terrain/start_turn > get_captured;;
+Power;Affects;Vision;OnStartTurn;OnEndTurn;ActionScript
+Co(Tapio, 3);T(FairyForest);;;;terrain_actions/build_unit > and_turn_into_grass
+;T(TentacleDepths);;on_terrain/start_turn > spawn_tentacle;;
+;Ownable;;on_terrain/start_turn > get_captured;;
+;T(Airport, Factory, Port), Not(Flag(Exhausted));;;;terrain_actions/build_unit > build_unit

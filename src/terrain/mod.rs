@@ -83,7 +83,7 @@ impl FromConfig for TerrainType {
         let (base, s) = crate::config::parse::string_base(s);
         match loader.terrain_types.iter().position(|name| name.as_str() == base) {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::MissingUnit(base.to_string()))
+            None => Err(crate::config::ConfigParseError::MissingTerrain(base.to_string()))
         }
     }
 }

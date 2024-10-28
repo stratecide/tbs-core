@@ -60,6 +60,7 @@ pub enum ConfigParseError {
     TableEmpty,
     NotEnoughPlayerColors,
     MissingUnit(String),
+    MissingTerrain(String),
     MissingNeutralColor,
     MissingToken(String),
     InvalidColor(String),

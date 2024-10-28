@@ -120,7 +120,8 @@ fn build_unit() {
     assert!(game.with(|game| *game.current_player().funds) < 1000);
     assert_eq!(0, game.get_unit(Point::new(0, 0)).unwrap().get_owner_id());
     assert!(game.get_unit(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
-    assert_eq!(Some(TagValue::Int(Int32(1))), game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_BUILT_THIS_TURN));
+    //assert_eq!(Some(TagValue::Int(Int32(1))), game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_BUILT_THIS_TURN));
+    assert!(game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
 #[test]

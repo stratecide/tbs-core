@@ -1,7 +1,6 @@
 use std::error::Error;
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use num_rational::Rational32;
 
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
@@ -9,6 +8,7 @@ use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::executor::Executor;
+use crate::tags::*;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::TerrainType;
 use crate::units::hero::HeroInfluence;
@@ -23,6 +23,7 @@ pub(super) enum TerrainFilter {
     Commander(CommanderType, Option<u8>),
     Type(HashSet<TerrainType>),
     Ownable,
+    Flag(HashSet<FlagKey>),
     Not(Vec<Self>),
 }
 
@@ -51,6 +52,11 @@ impl FromConfig for TerrainFilter {
                 Self::Type(list.into_iter().collect())
             }
             "Ownable" => Self::Ownable,
+            "Flag" | "F" => {
+                let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
+                remainder = r;
+                Self::Flag(list.into_iter().collect())
+            }
             "Not" => {
                 let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
                 remainder = r;
@@ -88,6 +94,7 @@ impl TerrainFilter {
             }
             Self::Type(t) => t.contains(&terrain.typ()),
             Self::Ownable => terrain.environment().config.terrain_can_have_owner(terrain.typ()),
+            Self::Flag(flags) => flags.iter().any(|flag| terrain.has_flag(flag.0)),
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
@@ -102,10 +109,10 @@ impl TerrainFilter {
 pub(super) struct TerrainPoweredConfig {
     pub(super) affects: Vec<TerrainFilter>,
     pub(super) vision: NumberMod<i8>,
-    pub(super) income: NumberMod<Rational32>,
+    /*pub(super) income: NumberMod<Rational32>,
     pub(super) repair: Option<bool>,
     pub(super) build: Option<bool>,
-    pub(super) sells_hero: Option<bool>,
+    pub(super) sells_hero: Option<bool>,*/
     //pub(super) build_overrides: HashSet<AttributeOverride>,
     pub(super) on_start_turn: Option<usize>,
     pub(super) on_end_turn: Option<usize>,
@@ -122,7 +129,7 @@ impl TableLine for TerrainPoweredConfig {
         let result = Self {
             affects: power.into_iter().chain(affects.into_iter()).collect(),
             vision: parse_def(data, H::Vision, NumberMod::Keep, loader)?,
-            income: parse_def(data, H::Income, NumberMod::Keep, loader)?,
+            /*income: parse_def(data, H::Income, NumberMod::Keep, loader)?,
             repair: match data.get(&H::Repair) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
@@ -134,7 +141,7 @@ impl TableLine for TerrainPoweredConfig {
             sells_hero: match data.get(&H::SellsHero) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
-            },
+            },*/
             //build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
             on_start_turn: match data.get(&H::OnStartTurn) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
@@ -177,10 +184,10 @@ crate::listable_enum! {
         Power,
         Affects,
         Vision,
-        Income,
+        /*Income,
         Repair,
         Build,
-        SellsHero,
+        SellsHero,*/
         //BuildOverrides,
         OnStartTurn,
         OnEndTurn,
