@@ -15,6 +15,7 @@ use crate::script::executor::Executor;
 use crate::script::*;
 use crate::tags::*;
 use crate::terrain::terrain::*;
+use crate::tokens::MAX_STACK_SIZE;
 use crate::units::combat::WeaponType;
 use crate::player::*;
 use crate::tokens::token::Token;
@@ -612,9 +613,12 @@ impl<D: Direction> EventHandler<D> {
 
     pub fn token_add(&mut self, position: Point, token: Token<D>) {
         let old_tokens = self.with_map(|map| map.get_tokens(position).to_vec());
-        let mut tokens = old_tokens.to_vec();
-        tokens.push(token);
-        if old_tokens != tokens.as_slice() {
+        // should be same as Token::correct_stack
+        let mut tokens: Vec<Token<D>> = old_tokens.iter()
+        .filter(|t| t.typ() != token.typ() || t.get_owner_id() != token.get_owner_id())
+        .cloned().collect();
+        if tokens.len() < MAX_STACK_SIZE as usize {
+            tokens.push(token);
             self.add_event(Event::ReplaceToken(position, old_tokens.try_into().unwrap(), Token::correct_stack(tokens).try_into().unwrap()));
         }
     }

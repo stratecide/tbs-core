@@ -43,6 +43,21 @@ impl FromConfig for MovementType {
     }
 }
 
+impl SupportedZippable<&Environment> for MovementType {
+    fn export(&self, zipper: &mut Zipper, environment: &Environment) {
+        let bits = bits_needed_for_max_value(environment.config.movement_type_count() as u32 - 1);
+        zipper.write_u32(self.0 as u32, bits);
+    }
+    fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
+        let bits = bits_needed_for_max_value(environment.config.movement_type_count() as u32 - 1);
+        let index = unzipper.read_u32(bits)? as usize;
+        if index >= environment.config.movement_type_count() {
+            return Err(ZipperError::EnumOutOfBounds(format!("MovementType index {}", index)))
+        }
+        Ok(Self(index))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable, Hash)]
 #[zippable(bits = 3)]
 pub enum PathStep<D: Direction> {

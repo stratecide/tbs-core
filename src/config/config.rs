@@ -835,6 +835,16 @@ impl Config {
         self.token_config(typ).on_unit_path
     }
 
+    // movement type
+
+    pub fn movement_type_count(&self) -> usize {
+        self.movement_types.len()
+    }
+
+    pub fn movement_type_name(&self, typ: MovementType) -> &str {
+        &self.movement_types[typ.0].name
+    }
+
     // commanders
 
     pub fn commander_count(&self) -> usize {

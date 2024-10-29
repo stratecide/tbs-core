@@ -36,7 +36,7 @@ pub struct Terrain<D: Direction> {
 impl<D: Direction> Debug for Terrain<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.name())?;
-        write!(f, "Owner: {}", self.owner.0)?;
+        write!(f, "Owner: {}, ", self.owner.0)?;
         self.tags.debug(f, &self.environment)?;
         /*let mut keys: Vec<_> = self.attributes.keys().collect();
         keys.sort();

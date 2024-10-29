@@ -1,6 +1,8 @@
 pub mod token_types;
 pub mod token;
 pub mod rhai_token;
+#[cfg(test)]
+pub(crate) mod test;
 
 pub const MAX_STACK_SIZE: u32 = 31;
 

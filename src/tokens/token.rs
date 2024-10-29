@@ -32,14 +32,14 @@ pub struct Token<D: Direction> {
 impl<D: Direction> Debug for Token<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.name())?;
-        write!(f, "Owner: {}", self.owner.0)?;
+        write!(f, "Owner: {}, ", self.owner.0)?;
         self.tags.debug(f, &self.environment)?;
         write!(f, ")")
     }
 }
 
 impl<D: Direction> Token<D> {
-    pub(super) fn new(environment: Environment, typ: TokenType) -> Self {
+    pub fn new(environment: Environment, typ: TokenType) -> Self {
         Self {
             environment,
             typ,
@@ -99,6 +99,18 @@ impl<D: Direction> Token<D> {
         self.get_player(game)
         .and_then(|player| Some(player.commander.clone()))
         .unwrap_or(Commander::new(&self.environment, CommanderType::None))
+    }
+
+    pub(super) fn copy_from(&mut self, other: &TagBag<D>) {
+        for key in other.flags() {
+            self.set_flag(*key);
+        }
+        for (key, value) in other.tags() {
+            self.set_tag(*key, value.clone());
+        }
+    }
+    pub fn get_tag_bag(&self) -> &TagBag<D> {
+        &self.tags
     }
 
     pub fn has_flag(&self, key: usize) -> bool {

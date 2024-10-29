@@ -8,6 +8,7 @@ use crate::units::hero::Hero;
 use crate::script::{with_board, get_environment};
 use crate::units::movement::MovementType;
 use crate::tags::*;
+use crate::tokens::token::Token;
 
 #[export_module]
 mod unit_type_module {
@@ -140,7 +141,11 @@ macro_rules! board_module {
             }*/
 
             pub fn copy_from(unit: &mut Unit, other: Unit) {
-                unit.copy_from(&other);
+                unit.copy_from(other.get_tag_bag());
+            }
+            #[rhai_fn(name = "copy_from")]
+            pub fn copy_from2(unit: &mut Unit, other: Token<$d>) {
+                unit.copy_from(&other.get_tag_bag());
             }
 
             #[rhai_fn(pure, name = "has")]
@@ -199,9 +204,19 @@ macro_rules! board_module {
                 unit.transport_capacity() as i32
             }
 
+            #[rhai_fn(pure, get = "movement_types")]
+            pub fn get_movement_types(unit: &mut Unit) -> Array {
+                unit.environment().config.sub_movement_types(unit.environment().config.base_movement_type(unit.typ())).iter()
+                .map(|mt| Dynamic::from(*mt))
+                .collect()
+            }
             #[rhai_fn(pure, get = "movement_type")]
             pub fn get_movement_type(unit: &mut Unit) -> MovementType {
                 unit.sub_movement_type()
+            }
+            #[rhai_fn(set = "movement_type")]
+            pub fn set_movement_type(unit: &mut Unit, movement_type: MovementType) {
+                unit.set_sub_movement_type(movement_type)
             }
 
             #[rhai_fn(pure, get = "hero")]

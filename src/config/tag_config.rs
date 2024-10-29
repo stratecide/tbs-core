@@ -35,8 +35,9 @@ impl TableLine for TagConfig {
             },
             "point" => TagType::Point,
             "direction" => TagType::Direction,
-            "terrain_type" => TagType::TerrainType,
-            "unit_type" => TagType::UnitType,
+            "terrain_type" | "terraintype" => TagType::TerrainType,
+            "unit_type" | "unittype" => TagType::UnitType,
+            "movement_type" | "movementtype" => TagType::MovementType,
             unknown => return Err(ConfigParseError::UnknownEnumMember(format!("TagType::{unknown}")).into())
         };
         Ok(Self {
@@ -88,4 +89,5 @@ pub enum TagType {
     Direction,
     TerrainType,
     UnitType,
+    MovementType,
 }

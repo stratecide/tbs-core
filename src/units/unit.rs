@@ -347,16 +347,16 @@ impl<D: Direction> Unit<D> {
         .unwrap_or(Commander::new(&self.environment, CommanderType::None))
     }
 
-    pub(super) fn copy_from(&mut self, other: &Unit<D>) {
-        if self.environment != other.environment {
-            panic!("Can't copy from unit from different environment");
-        }
-        for key in other.tags.flags() {
+    pub(super) fn copy_from(&mut self, other: &TagBag<D>) {
+        for key in other.flags() {
             self.set_flag(*key);
         }
-        for (key, value) in other.tags.tags() {
+        for (key, value) in other.tags() {
             self.set_tag(*key, value.clone());
         }
+    }
+    pub fn get_tag_bag(&self) -> &TagBag<D> {
+        &self.tags
     }
 
     pub fn has_flag(&self, key: usize) -> bool {
@@ -1119,7 +1119,7 @@ impl<D: Direction> UnitBuilder<D> {
     }
 
     pub fn copy_from(mut self, other: &Unit<D>) -> Self {
-        self.unit.copy_from(other);
+        self.unit.copy_from(other.get_tag_bag());
         self
     }
 

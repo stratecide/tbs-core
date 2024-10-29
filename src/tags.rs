@@ -12,6 +12,7 @@ use crate::map::point::Point;
 use crate::map::point_map::MAX_AREA;
 use crate::map::wrapping_map::Distortion;
 use crate::terrain::TerrainType;
+use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 use crate::units::UnitVisibility;
 
@@ -45,6 +46,7 @@ impl<D: Direction> TagBag<D> {
                 TagValue::Direction(value) => write!(f, "{value:?}")?,
                 TagValue::UnitType(value) => write!(f, "{}", environment.config.unit_name(*value))?,
                 TagValue::TerrainType(value) => write!(f, "{}", environment.config.terrain_name(*value))?,
+                TagValue::MovementType(value) => write!(f, "{}", environment.config.movement_type_name(*value))?,
             }
         }
         write!(f, "]")
@@ -176,6 +178,8 @@ pub enum TagValue<D: Direction> {
     UnitType(UnitType),
     #[supp(&support.0)]
     TerrainType(TerrainType),
+    #[supp(&support.0)]
+    MovementType(MovementType),
 }
 
 impl<D: Direction> TagValue<D> {
@@ -186,6 +190,7 @@ impl<D: Direction> TagValue<D> {
             (Self::Direction(_), TagType::Direction) => true,
             (Self::UnitType(_), TagType::UnitType) => true,
             (Self::TerrainType(_), TagType::TerrainType) => true,
+            (Self::MovementType(_), TagType::MovementType) => true,
             (Self::Int(value), TagType::Int { min, max }) => {
                 value.0 >= *min && value.0 <= *max
             }
@@ -218,6 +223,7 @@ impl<D: Direction> TagValue<D> {
             Self::TerrainType(value) => Dynamic::from(*value),
             Self::Unique(value) => Dynamic::from(*value),
             Self::UnitType(value) => Dynamic::from(*value),
+            Self::MovementType(value) => Dynamic::from(*value),
         }
     }
 
@@ -408,6 +414,8 @@ pub mod tests {
     pub const TAG_BUILT_THIS_TURN: usize = 9;
     pub const TAG_CAPTURE_OWNER: usize = 10;
     pub const TAG_CAPTURE_PROGRESS: usize = 11;
+    pub const TAG_UNIT_TYPE: usize = 12;
+    pub const TAG_MOVEMENT_TYPE: usize = 13;
     #[test]
     fn verify_tag_test_constants() {
         let config = Arc::new(Config::test_config());
@@ -424,6 +432,8 @@ pub mod tests {
         assert_eq!(environment.tag_name(TAG_BUILT_THIS_TURN), "BuiltThisTurn");
         assert_eq!(environment.tag_name(TAG_CAPTURE_OWNER), "CaptureOwner");
         assert_eq!(environment.tag_name(TAG_CAPTURE_PROGRESS), "CaptureProgress");
+        assert_eq!(environment.tag_name(TAG_UNIT_TYPE), "UnitType");
+        assert_eq!(environment.tag_name(TAG_MOVEMENT_TYPE), "MovementType");
     }
 
 }

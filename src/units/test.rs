@@ -24,6 +24,8 @@ use crate::units::movement::Path;
 use crate::units::unit::*;
 use crate::units::unit_types::UnitType;
 
+use super::movement::MovementType;
+
 // helper functions
 impl<D: Direction> Unit<D> {
     pub fn get_hp(&self) -> u8 {
@@ -41,6 +43,11 @@ impl<D: Direction> UnitBuilder<D> {
     pub fn set_hero_origin(self, p: Point) -> Self {
         self.set_tag(TAG_HERO_ORIGIN, TagValue::Point(p))
     }
+}
+
+impl MovementType {
+    pub const FOOT: MovementType = MovementType(0);
+    pub const HOVER: MovementType = MovementType(4);
 }
 
 // actual tests

@@ -5,7 +5,8 @@ use semver::Version;
 use zipper::*;
 use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
-use crate::tokens::*;
+use crate::script::custom_action::CustomActionInput;
+use crate::tokens::token::*;
 use crate::game::commands::*;
 use crate::game::fog::*;
 use crate::game::game::Game;
@@ -18,14 +19,16 @@ use crate::map::wrapping_map::WMBuilder;
 use crate::script::custom_action::CustomActionData;
 use crate::tags::*;
 use crate::terrain::TerrainType;
+use crate::tokens::token_types::TokenType;
 use crate::units::combat::AttackVector;
 use crate::units::commands::*;
+use crate::units::movement::MovementType;
 use crate::units::movement::Path;
 use crate::tags::tests::*;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::VERSION;
-/*
+
 #[test]
 fn zombie() {
     let config = Arc::new(Config::test_config());
@@ -38,10 +41,16 @@ fn zombie() {
 
     map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
 
-    let skull = SkullData::new(&UnitType::marine().instance(&map_env).set_owner_id(1).set_amphibious(Amphibious::InWater).build_with_defaults(), 0);
-    map.set_tokens(Point::new(0, 4), vec![Detail::Skull(skull.clone())]);
-    let skull2 = SkullData::new(&UnitType::marine().instance(&map_env).set_owner_id(1).set_amphibious(Amphibious::OnLand).build_with_defaults(), 0);
-    map.set_tokens(Point::new(1, 4), vec![Detail::Skull(skull2.clone())]);
+    let mut skull = Token::new(map_env.clone(), TokenType::SKULL);
+    skull.set_owner_id(0);
+    skull.set_tag(TAG_UNIT_TYPE, TagValue::UnitType(UnitType::marine()));
+    skull.set_tag(TAG_MOVEMENT_TYPE, TagValue::MovementType(MovementType::HOVER));
+    map.set_tokens(Point::new(0, 4), vec![skull]);
+    let mut skull2 = Token::new(map_env.clone(), TokenType::SKULL);
+    skull2.set_owner_id(0);
+    skull2.set_tag(TAG_UNIT_TYPE, TagValue::UnitType(UnitType::marine()));
+    skull2.set_tag(TAG_MOVEMENT_TYPE, TagValue::MovementType(MovementType::FOOT));
+    map.set_tokens(Point::new(1, 4), vec![skull2]);
 
     map.set_terrain(Point::new(3, 1), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
 
@@ -63,20 +72,23 @@ fn zombie() {
     // small power
     server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_amphibious(Amphibious::InWater).build_with_defaults()));
-    assert_eq!(server.get_unit(Point::new(1, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_amphibious(Amphibious::OnLand).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(1, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::FOOT).build_with_defaults()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(2, 1)), vec![Detail::Skull(SkullData::new(&UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults(), 0))]);
+    let mut skull = Token::new(environment.clone(), TokenType::SKULL);
+    skull.set_owner_id(0);
+    skull.set_tag(TAG_UNIT_TYPE, TagValue::UnitType(UnitType::small_tank()));
+    assert_eq!(server.get_tokens(Point::new(2, 1)), vec![skull]);
     assert_eq!(server.get_unit(Point::new(2, 1)), None);
     // big power
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_amphibious(Amphibious::InWater).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build_with_defaults()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
@@ -89,7 +101,9 @@ fn zombie() {
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().funds = 1000.into();
     });
-    server.handle_command(Command::BuyUnit(Point::new(3, 1), UnitType::marine(), Direction6::D0), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::TerrainAction(Point::new(3, 1), vec![
+        CustomActionInput::ShopItem(0.into()),
+    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(3, 1)).is_some());
     for p in server.all_points() {
         if let Some(unit) = server.get_unit(p) {
@@ -109,11 +123,11 @@ fn simo() {
     map.set_unit(arty_pos, Some(UnitType::artillery().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
 
     let target_close = Point::new(3, 1);
-    map.set_unit(target_close, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(target_close, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
     let target_far = Point::new(4, 1);
-    map.set_unit(target_far, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(target_far, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
     let target_farthest = Point::new(5, 1);
-    map.set_unit(target_farthest, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(target_farthest, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
 
     let settings = map.settings().unwrap();
 
@@ -276,7 +290,7 @@ fn vlad() {
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 50);
 }
 
-#[test]
+/*#[test]
 fn tapio() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(6, 5, false);
@@ -684,5 +698,4 @@ fn lageos() {
         assert!(server.get_unit(Point::new(i, 1)).unwrap().get_hp() < 100);
         assert!(server.get_unit(Point::new(i, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     }
-}
-*/
+}*/

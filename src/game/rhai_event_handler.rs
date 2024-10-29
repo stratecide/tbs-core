@@ -12,6 +12,7 @@ use crate::units::movement::*;
 use crate::units::hero::*;
 use crate::terrain::terrain::Terrain;
 use crate::tags::*;
+use crate::tokens::token::Token;
 
 macro_rules! event_handler_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -254,7 +255,27 @@ macro_rules! event_handler_module {
                 handler.remove_terrain_tag(position, key.0);
             }
 
-            /*pub fn place_skull(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {
+            // tokens
+
+            pub fn place_token(mut handler: Handler, position: Point, token: Token<$d>) {
+                handler.token_add(position, token);
+            }
+            pub fn remove_token(mut handler: Handler, position: Point, name: &str, owner_id: i32) -> Dynamic {
+                if let Some((i, token)) = handler.with_map(|map| {
+                    map.get_tokens(position).iter()
+                    .enumerate()
+                    .find(|(_, token)| {
+                        token.name() == name && token.get_owner_id() as i32 == owner_id
+                    }).map(|(i, token)| (i, token.clone()))
+                }) {
+                    handler.token_remove(position, i);
+                    Dynamic::from(token)
+                } else {
+                    ().into()
+                }
+            }
+
+            /*pub fn place_token(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {
                 let environment = handler.environment();
                 if owner_id < 0 || owner_id >= environment.config.max_player_count() as i32 {
                     return;
