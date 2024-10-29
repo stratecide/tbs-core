@@ -14,7 +14,7 @@ fn and_turn_into_grass_input() {
 
 fn and_turn_into_grass(data) {
     EVENT_HANDLER.replace_terrain(POSITION, Terrain("Grass"));
-    _build_unit(TERRAIN, POSITION, data, false);
+    _build_unit(TERRAIN, POSITION, data, true);
 }
 
 fn _build_unit_input(TERRAIN, POSITION) {

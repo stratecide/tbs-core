@@ -290,7 +290,7 @@ fn vlad() {
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 50);
 }
 
-/*#[test]
+#[test]
 fn tapio() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(6, 5, false);
@@ -304,8 +304,8 @@ fn tapio() {
     map.set_terrain(Point::new(0, 2), TerrainType::Forest.instance(&map_env).build_with_defaults());
     map.set_terrain(Point::new(0, 3), TerrainType::FairyForest.instance(&map_env).set_owner_id(0).build_with_defaults());
     for i in 0..4 {
-        map.set_unit(Point::new(0, i), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(1, i), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(0, i), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+        map.set_unit(Point::new(1, i), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
         map.set_terrain(Point::new(2, i), TerrainType::Grass.instance(&map_env).build_with_defaults());
     }
 
@@ -314,7 +314,7 @@ fn tapio() {
     map.set_unit(Point::new(5, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
 
     map.set_terrain(Point::new(3, 0), TerrainType::FairyForest.instance(&map_env).set_owner_id(1).build_with_defaults());
-    map.set_unit(Point::new(3, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(3, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
 
     let mut settings = map.settings().unwrap();
     for player in &settings.players {
@@ -351,10 +351,10 @@ fn tapio() {
 
     // ACTIVE: turn grass into fairy forests
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(1, vec![CustomActionData::Point(Point::new(3, 0))]), Arc::new(|| 0.)).err().expect("can't turn street into fairy forest");
+    server.handle_command(Command::commander_power(1, vec![CustomActionInput::Point(Point::new(3, 0))]), Arc::new(|| 0.)).err().expect("can't turn street into fairy forest");
     for i in 0..2 {
         let charge_before = server.with(|server| server.players[0].commander.charge);
-        server.handle_command(Command::commander_power(1, vec![CustomActionData::Point(Point::new(2, i))]), Arc::new(|| 0.)).expect(&format!("loop {i}"));
+        server.handle_command(Command::commander_power(1, vec![CustomActionInput::Point(Point::new(2, i))]), Arc::new(|| 0.)).expect(&format!("loop {i}"));
         assert!(server.with(|server| server.players[0].commander.charge) < charge_before);
         assert_eq!(server.get_terrain(Point::new(2, i)).unwrap().typ(), TerrainType::FairyForest);
     }
@@ -375,15 +375,19 @@ fn tapio() {
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     assert_ne!(server.get_fog_at(ClientPerspective::Team(0), Point::new(5, 3)), FogIntensity::TrueSight);
-    server.handle_command(Command::BuyUnit(Point::new(5, 3), UnitType::small_tank(), Direction4::D0), Arc::new(|| 0.)).err().unwrap();
+    server.handle_command(Command::TerrainAction(Point::new(5, 3), vec![
+        CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
+    ].try_into().unwrap()), Arc::new(|| 0.)).err().unwrap();
     server.handle_command(Command::commander_power(3, Vec::new()), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_fog_at(ClientPerspective::Team(0), Point::new(5, 3)), FogIntensity::TrueSight);
-    server.handle_command(Command::BuyUnit(Point::new(5, 3), UnitType::small_tank(), Direction4::D0), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::TerrainAction(Point::new(5, 3), vec![
+        CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
+    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(5, 3)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert_eq!(server.get_terrain(Point::new(5, 3)).unwrap().typ(), TerrainType::Grass);
 }
 
-#[test]
+/*#[test]
 fn sludge_monster() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
