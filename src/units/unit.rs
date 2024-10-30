@@ -61,6 +61,9 @@ impl<D: Direction> Debug for Unit<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(", self.name())?;
         write!(f, "Owner: {}, ", self.owner.0)?;
+        if self.environment.config.sub_movement_types(self.environment.config.base_movement_type(self.typ)).len() > 0 {
+            write!(f, "MovementType: {}, ", self.environment.config.movement_type_name(self.sub_movement_type))?;
+        }
         if let Some(hero) = &self.hero {
             write!(f, "Hero: {hero:?}, ")?;
         }

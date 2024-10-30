@@ -1,6 +1,6 @@
 
 fn buy_airport_input() {
-    terrain_buy_unit_input(POSITION, Terrain("Airport").type, TOKEN.owner_id, ())
+    terrain_buy_unit_input(POSITION, TERRAIN_Airport, TOKEN.owner_id, ())
 }
 
 fn buy_airport(data) {
@@ -9,7 +9,7 @@ fn buy_airport(data) {
 }
 
 fn buy_factory_input() {
-    terrain_buy_unit_input(POSITION, Terrain("Factory").type, TOKEN.owner_id, ())
+    terrain_buy_unit_input(POSITION, TERRAIN_Factory, TOKEN.owner_id, ())
 }
 
 fn buy_factory(data) {
@@ -18,7 +18,7 @@ fn buy_factory(data) {
 }
 
 fn buy_port_input() {
-    terrain_buy_unit_input(POSITION, Terrain("Port").type, TOKEN.owner_id, ())
+    terrain_buy_unit_input(POSITION, TERRAIN_Port, TOKEN.owner_id, ())
 }
 
 fn buy_port(data) {

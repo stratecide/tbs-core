@@ -847,6 +847,15 @@ impl Config {
     pub fn movement_type_name(&self, typ: MovementType) -> &str {
         &self.movement_types[typ.0].name
     }
+    
+    pub fn find_movement_by_name(&self, name: &str) -> Option<MovementType> {
+        for (movement_type, conf) in self.movement_types.iter().enumerate() {
+            if conf.name.as_str() == name {
+                return Some(MovementType(movement_type))
+            }
+        }
+        None
+    }
 
     // commanders
 

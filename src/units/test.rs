@@ -18,6 +18,8 @@ use crate::script::custom_action::CustomActionInput;
 use crate::tags::{Int32, TagValue};
 use crate::tags::tests::*;
 use crate::terrain::TerrainType;
+use crate::tokens::token::Token;
+use crate::tokens::token_types::TokenType;
 use crate::units::combat::AttackVector;
 use crate::units::commands::*;
 use crate::units::movement::Path;
@@ -47,6 +49,7 @@ impl<D: Direction> UnitBuilder<D> {
 
 impl MovementType {
     pub const FOOT: MovementType = MovementType(0);
+    pub const AMPHIBIOUS: MovementType = MovementType(12);
     pub const HOVER: MovementType = MovementType(4);
 }
 
@@ -338,4 +341,32 @@ fn s_factory() {
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), to_build.set_flag(FLAG_EXHAUSTED).build_with_defaults());
     assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
+}
+
+#[test]
+fn marine_movement_types() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(4, 4, false);
+    let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+    let mut map = Map::new(wmap, &config);
+    let map_env = map.environment().clone();
+    let mut bubble = Token::new(map_env.clone(), TokenType::BUBBLE_FACTORY);
+    bubble.set_owner_id(0);
+    map.set_tokens(Point::new(0, 0), vec![bubble]);
+    let mut bubble = Token::new(map_env.clone(), TokenType::BUBBLE_PORT);
+    bubble.set_owner_id(0);
+    map.set_tokens(Point::new(1, 0), vec![bubble]);
+    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    let mut settings = map.settings().unwrap();
+    settings.players[0].set_funds(1000);
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let environment = game.environment();
+    game.handle_command(Command::TokenAction(Point::new(0, 0), vec![
+        CustomActionInput::ShopItem(0.into()),
+    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    assert_eq!(game.get_unit(Point::new(0, 0)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(100).set_movement_type(MovementType::FOOT).build()));
+    game.handle_command(Command::TokenAction(Point::new(1, 0), vec![
+        CustomActionInput::ShopItem(0.into()),
+    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(100).set_movement_type(MovementType::AMPHIBIOUS).build()));
 }

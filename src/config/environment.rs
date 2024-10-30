@@ -8,6 +8,7 @@ use rustc_hash::FxHashMap as HashMap;
 use crate::commander::commander_type::CommanderType;
 use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
+use crate::game::rhai_board::SharedGameView;
 use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -117,51 +118,35 @@ impl Environment {
     }
 
     pub fn get_engine<D: Direction>(&self, game: &impl GameView<D>) -> Engine {
-        let mut engine = self.get_engine_base(D::is_hex());
-        let this = self.clone();
         let game = game.as_shared();
-        #[allow(deprecated)]
-        engine.on_var(move |name, _index, _context| {
-            if name.starts_with("TAG_") {
-                if let Some(key) = this.tag_by_name(&name[4..]) {
-                    return Ok(Some(Dynamic::from(TagKey(key))))
-                }
-            }
-            if name.starts_with("FLAG_") {
-                if let Some(key) = this.flag_by_name(&name[5..]) {
-                    return Ok(Some(Dynamic::from(FlagKey(key))))
-                }
-            }
-            match name {
-                CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
-                CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
-                _ => Ok(None)
-            }
-        });
-        engine
+        self._get_engine(game, None)
     }
 
     pub fn get_engine_handler<D: Direction>(&self, handler: &EventHandler<D>) -> Engine {
+        let game = handler.get_game().as_shared();
+        let handler = handler.clone();
+        self._get_engine(game, Some(handler))
+    }
+
+    fn _get_engine<D: Direction>(&self, game: SharedGameView<D>, handler: Option<EventHandler<D>>) -> Engine {
         let mut engine = self.get_engine_base(D::is_hex());
         let this = self.clone();
-        let game = handler.get_game().as_shared();
         let handler = handler.clone();
         #[allow(deprecated)]
         engine.on_var(move |name, _index, _context| {
-            if name.starts_with("TAG_") {
-                if let Some(key) = this.tag_by_name(&name[4..]) {
-                    return Ok(Some(Dynamic::from(TagKey(key))))
-                }
-            }
-            if name.starts_with("FLAG_") {
-                if let Some(key) = this.flag_by_name(&name[5..]) {
-                    return Ok(Some(Dynamic::from(FlagKey(key))))
-                }
+            match name.split_once("_") {
+                Some(("TAG", name)) => return Ok(this.tag_by_name(name).map(|key| Dynamic::from(TagKey(key)))),
+                Some(("FLAG", name)) => return Ok(this.flag_by_name(name).map(|key| Dynamic::from(FlagKey(key)))),
+                Some(("MOVEMENT", name)) => return Ok(this.config.find_movement_by_name(name).map(Dynamic::from)),
+                Some(("TERRAIN", name)) => return Ok(this.config.find_terrain_by_name(name).map(Dynamic::from)),
+                Some(("TOKEN", name)) => return Ok(this.config.find_token_by_name(name).map(Dynamic::from)),
+                Some(("UNIT", name)) => return Ok(this.config.find_unit_by_name(name).map(Dynamic::from)),
+                _ => (),
             }
             match name {
                 CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
                 CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
-                CONST_NAME_EVENT_HANDLER => Ok(Some(Dynamic::from(handler.clone()))),
+                CONST_NAME_EVENT_HANDLER => Ok(handler.clone().map(Dynamic::from)),
                 _ => Ok(None)
             }
         });

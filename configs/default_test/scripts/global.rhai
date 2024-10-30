@@ -85,6 +85,9 @@ fn terrain_buy_unit_input(position, terrain_type, owner_id, direction) {
         if direction != () {
             unit.set(TAG_Direction, direction);
         }
+        if unit.movement_types.len > 1 && terrain_type == TERRAIN_Port {
+            unit.movement_type = MOVEMENT_Amphibious;
+        }
         let price = unit.value(position);
         options.add(unit, price);
     }
