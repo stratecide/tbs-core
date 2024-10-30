@@ -28,7 +28,5 @@ fn resurrect() {
 }
 
 fn level_up() {
-    if UNIT.level != () {
-        EVENT_HANDLER.set_unit_level(POSITION, UNIT.level + 1);
-    }
+    EVENT_HANDLER.set_unit_tag(POSITION, TAG_Level, (UNIT.get(TAG_Level) ?? 0) + 1);
 }

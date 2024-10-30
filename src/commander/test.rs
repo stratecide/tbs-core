@@ -16,7 +16,6 @@ use crate::map::map::Map;
 use crate::map::point::*;
 use crate::map::point_map::PointMap;
 use crate::map::wrapping_map::WMBuilder;
-use crate::script::custom_action::CustomActionData;
 use crate::tags::*;
 use crate::terrain::TerrainType;
 use crate::tokens::token_types::TokenType;
@@ -502,7 +501,7 @@ fn sludge_monster() {
     }), Arc::new(|| 0.)), Err(CommandError::InvalidAction));
 }
 
-/*#[test]
+#[test]
 fn celerity() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -511,15 +510,15 @@ fn celerity() {
     let map_env = map.environment().clone();
     map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
 
-    map.set_unit(Point::new(4, 0), Some(UnitType::convoy().instance(&map_env).set_owner_id(0).set_transported(vec![
+    map.set_unit(Point::new(4, 0), Some(UnitType::convoy().instance(&map_env).set_owner_id(0).set_hp(100).set_transported(vec![
         UnitType::marine().instance(&map_env).set_hp(34).build_with_defaults(),
         UnitType::sniper().instance(&map_env).set_hp(69).build_with_defaults(),
     ]).set_hp(89).build_with_defaults()));
 
     map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
     map.set_unit(Point::new(1, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(2, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(3, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(2, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(3, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
     map.set_unit(Point::new(2, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
 
     map.set_terrain(Point::new(0, 4), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
@@ -542,7 +541,9 @@ fn celerity() {
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
     }), Arc::new(|| 0.)).unwrap();
     let default_attack = 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp();
-    server.handle_command(Command::BuyUnit(Point::new(0, 4), UnitType::small_tank(), Direction4::D0), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
+        CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
+    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
     let default_cost = funds - server.with(|server| *server.current_player().funds);
     assert!(!server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL).is_some());
 
@@ -555,9 +556,11 @@ fn celerity() {
     });
     let unchanged = server.clone();
 
-    server.handle_command(Command::BuyUnit(Point::new(0, 4), UnitType::small_tank(), Direction4::D0), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
+        CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
+    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
     assert!(funds - server.with(|server| *server.current_player().funds) < default_cost);
-    assert_eq!(server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL), Some(TagValue::Int(Int32(0))), "New units are Level 0");
+    assert_eq!(server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL), None, "New units are Level 0");
 
     // level attack bonuses
     let mut attack_damage = Vec::new();
@@ -572,7 +575,9 @@ fn celerity() {
             server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
             server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
         }
-        assert_eq!(server.get_unit(Point::new(2, 2)).unwrap().get_tag(TAG_LEVEL), Some(TagValue::Int(Int32(i as i32))));
+        if i > 0 {
+            assert_eq!(server.get_unit(Point::new(2, 2)).unwrap().get_tag(TAG_LEVEL), Some(TagValue::Int(Int32(i as i32))));
+        }
         attack_damage.push(100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
     }
     for i in 0..attack_damage.len() - 1 {
@@ -622,7 +627,7 @@ fn celerity() {
     ]).set_hp(89).build_with_defaults()));
 }
 
-#[test]
+/*#[test]
 fn lageos() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(8, 5, false);
