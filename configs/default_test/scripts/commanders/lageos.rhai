@@ -12,14 +12,12 @@ fn co_rockets_input() {
 
 fn co_rockets(data) {
     for position in data {
-        let damages = new_mass_damage();
         for position in BOARD.positions_in_range(position, 1) {
             let unit = BOARD.get_unit(position);
-            if unit != () {
-                damages.add(position, 30);
+            if unit != () && unit.has(TAG_Hp) {
+                EVENT_HANDLER.set_unit_tag(position, TAG_Hp, (unit.get(TAG_Hp) ?? 0) - 20);
             }
         }
-        EVENT_HANDLER.damage_units(damages);
     }
 }
 
@@ -34,18 +32,18 @@ fn co_stun_rockets_input() {
 
 fn co_stun_rockets(data) {
     for position in data {
-        let damages = new_mass_damage();
-        let stuns = [];
         for position in BOARD.positions_in_range(position, 1) {
             let unit = BOARD.get_unit(position);
             if unit != () {
-                damages.add(position, 30);
-                stuns.push(position);
+                if unit.has(TAG_Hp) {
+                    EVENT_HANDLER.set_unit_tag(position, TAG_Hp, (unit.get(TAG_Hp) ?? 0) - 30);
+                }
+                if unit.owner_id == OWNER_ID && !unit.has(FLAG_Exhausted) {
+                    EVENT_HANDLER.set_unit_flag(position, FLAG_Exhausted);
+                } else if unit.owner_id >= 0 {
+                    EVENT_HANDLER.set_unit_flag(position, FLAG_Stunned);
+                }
             }
-        }
-        EVENT_HANDLER.damage_units(damages);
-        for position in stuns {
-            EVENT_HANDLER.set_unit_status(position, status_exhausted());
         }
     }
 }

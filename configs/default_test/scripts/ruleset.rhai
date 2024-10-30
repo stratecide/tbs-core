@@ -4,7 +4,7 @@ fn unit_death_test(unit, position) {
 }
 
 fn unit_movable_test() {
-    !UNIT.has(FLAG_Exhausted)
+    !UNIT.has(FLAG_Exhausted) && !UNIT.has(FLAG_Stunned)
 }
 
 fn deal_damage_to_unit() {

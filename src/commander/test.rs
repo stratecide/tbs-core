@@ -627,17 +627,17 @@ fn celerity() {
     ]).set_hp(89).build_with_defaults()));
 }
 
-/*#[test]
+#[test]
 fn lageos() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(8, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(1).build_with_defaults()));
-    map.set_unit(Point::new(0, 1), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(1).build_with_defaults()));
-    map.set_unit(Point::new(1, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(1, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
 
     let settings = map.settings().unwrap();
     for player in &settings.players {
@@ -692,9 +692,9 @@ fn lageos() {
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::commander_power(1, vec![
-        CustomActionData::Point(Point::new(0, 1)),
-        CustomActionData::Point(Point::new(0, 1)),
-        CustomActionData::Point(Point::new(2, 1)),
+        CustomActionInput::Point(Point::new(0, 1)),
+        CustomActionInput::Point(Point::new(0, 1)),
+        CustomActionInput::Point(Point::new(2, 1)),
     ]), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(1, 0)).unwrap().get_hp(), 100);
     assert!(server.get_unit(Point::new(0, 1)).unwrap().get_hp() < 100);
@@ -706,15 +706,18 @@ fn lageos() {
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::commander_power(2, vec![
-        CustomActionData::Point(Point::new(0, 1)),
-        CustomActionData::Point(Point::new(0, 1)),
+        CustomActionInput::Point(Point::new(0, 1)),
+        CustomActionInput::Point(Point::new(0, 1)),
     ]), Arc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::commander_power(2, vec![
-        CustomActionData::Point(Point::new(0, 1)),
+        CustomActionInput::Point(Point::new(0, 1)),
     ]), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(1, 0)).unwrap().get_hp(), 100);
-    for i in 0..=1 {
-        assert!(server.get_unit(Point::new(i, 1)).unwrap().get_hp() < 100);
-        assert!(server.get_unit(Point::new(i, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
-    }
-}*/
+    assert!(server.get_unit(Point::new(0, 1)).unwrap().get_hp() < 100);
+    assert!(server.get_unit(Point::new(1, 1)).unwrap().get_hp() < 100);
+    assert!(server.get_unit(Point::new(0, 1)).unwrap().has_flag(FLAG_STUNNED));
+    assert!(server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
+    assert!(!server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_STUNNED));
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    assert!(server.get_unit(Point::new(0, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
+}

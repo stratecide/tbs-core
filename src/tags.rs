@@ -403,6 +403,7 @@ pub mod tests {
     pub const FLAG_EXHAUSTED: usize = 2;
     pub const FLAG_REPAIRING: usize = 3;
     pub const FLAG_CAPTURING: usize = 4;
+    pub const FLAG_STUNNED: usize = 5;
     
     pub const TAG_HP: usize = 0;
     pub const TAG_DRONE_STATION_ID: usize = 1;
@@ -422,9 +423,11 @@ pub mod tests {
     fn verify_tag_test_constants() {
         let config = Arc::new(Config::test_config());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
+        assert_eq!(environment.flag_name(FLAG_ZOMBIFIED), "Zombified");
         assert_eq!(environment.flag_name(FLAG_EXHAUSTED), "Exhausted");
         assert_eq!(environment.flag_name(FLAG_REPAIRING), "Repairing");
         assert_eq!(environment.flag_name(FLAG_CAPTURING), "Capturing");
+        assert_eq!(environment.flag_name(FLAG_STUNNED), "Stunned");
         assert_eq!(environment.tag_name(TAG_HP), "Hp");
         assert_eq!(environment.tag_name(TAG_DRONE_STATION_ID), "DroneStationId");
         assert_eq!(environment.tag_name(TAG_DRONE_ID), "DroneId");

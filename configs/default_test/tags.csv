@@ -20,3 +20,4 @@ UnitType;UnitType;;;
 MovementType;MovementType;;;
 SludgeCounter;Int;0;1;
 Coins;Int;1;3;
+Stunned;Flag;;;

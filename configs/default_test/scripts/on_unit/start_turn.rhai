@@ -19,4 +19,8 @@ fn damage_20() {
 fn clear_status_flags() {
     EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Repairing);
     EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Capturing);
+    if UNIT.has(FLAG_Stunned) {
+        EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
+        EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Stunned);
+    }
 }
