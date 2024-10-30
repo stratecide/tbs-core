@@ -18,3 +18,4 @@ CaptureOwner;Int;0;15;
 CaptureProgress;Int;1;9;
 UnitType;UnitType;;;
 MovementType;MovementType;;;
+SludgeCounter;Int;0;1;

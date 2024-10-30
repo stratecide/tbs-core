@@ -6,6 +6,7 @@ use rhai::{Dynamic, Scope};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::config::environment::Environment;
+use crate::config::global_events::GlobalEventConfig;
 use crate::handle::Handle;
 use crate::map::map::Map;
 use crate::map::point::Point;
@@ -228,7 +229,7 @@ impl<D: Direction> EventHandler<D> {
         }*/
 
         // unit end turn event
-        self.trigger_all_unit_scripts(
+        /*self.trigger_all_unit_scripts(
             |game, unit, unit_pos, transporter, heroes| {
                 unit.on_end_turn(game, unit_pos, transporter, heroes)
             },
@@ -252,7 +253,8 @@ impl<D: Direction> EventHandler<D> {
                     }
                 }
             }
-        );
+        );*/
+        self.trigger_all_global_events(|conf| conf.on_end_turn);
 
         // reset built_this_turn-counter for realties
         /*for p in self.with_map(|map| map.all_points()) {
@@ -449,7 +451,7 @@ impl<D: Direction> EventHandler<D> {
             }
         );*/
 
-        self.trigger_all_terrain_scripts(
+        /*self.trigger_all_terrain_scripts(
             |game, p, terrain, heroes| {
                 terrain.on_start_turn(game, p, heroes)
             },
@@ -474,7 +476,7 @@ impl<D: Direction> EventHandler<D> {
                     }
                 }
             }
-        );
+        );*/
 
         // has to be recalculated before structures, because the effects of some structures on
         // other players should maybe not be visible
@@ -486,7 +488,7 @@ impl<D: Direction> EventHandler<D> {
         }
 
         // unit start turn event
-        self.trigger_all_unit_scripts(
+        /*self.trigger_all_unit_scripts(
             |game, unit, unit_pos, transporter, heroes| {
                 if unit.get_owner_id() == owner_id {
                     unit.on_start_turn(game, unit_pos, transporter, heroes)
@@ -515,7 +517,8 @@ impl<D: Direction> EventHandler<D> {
                     }
                 }
             }
-        );
+        );*/
+        self.trigger_all_global_events(|conf| conf.on_start_turn);
 
         /*// tick sludge tokens
         for p in self.with_map(|map| map.all_points()) {
@@ -1246,6 +1249,46 @@ impl<D: Direction> EventHandler<D> {
         for (scripts, unit, unit_pos, observation_id) in scripts {
             // the unit may not be at unit_pos anymore
             execute_script(self, scripts, unit_pos, &unit, observation_id);
+        }
+    }
+
+    pub fn trigger_all_global_events(
+        &mut self,
+        get_script: impl Fn(&GlobalEventConfig) -> Option<usize>,
+    ) {
+        let hero_auras = Hero::map_influence(&*self.get_game(), -1);
+        let all_points = self.with_map(|map| map.all_points());
+        let environment = self.environment();
+        for (i, conf) in environment.config.global_events.iter().enumerate() {
+            let Some(script) = get_script(conf) else {
+                continue;
+            };
+            let mut scripts = Vec::new();
+            {
+                let game = &*self.get_game();
+                // commander scripts
+                if let Some(scope) = conf.typ.test_global(game) {
+                    scripts.push((script, scope))
+                } else {
+                    // terrain, token, unit scripts
+                    for p in all_points.iter().cloned() {
+                        for scope in conf.typ.test_local(game, p, &hero_auras) {
+                            scripts.push((script, scope))
+                        }
+                    }
+                }
+            }
+            for (function_index, scope) in scripts {
+                let engine = environment.get_engine_handler(self);
+                let executor = Executor::new(engine, scope, environment.clone());
+                match executor.run(function_index, ()) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        // TODO: log error
+                        println!("global_event #{i} {function_index}: {e:?}");
+                    }
+                }
+            }
         }
     }
 

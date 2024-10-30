@@ -36,8 +36,8 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) displacement_distance: NumberMod<i8>, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: Option<bool>,
     //pub(super) build_overrides: HashSet<AttributeOverride>,
-    pub(super) on_start_turn: Option<usize>,
-    pub(super) on_end_turn: Option<usize>,
+    //pub(super) on_start_turn: Option<usize>,
+    //pub(super) on_end_turn: Option<usize>,
     pub(super) on_attack: Option<usize>,
     pub(super) on_defend: Option<usize>,
     pub(super) on_kill: Option<usize>,
@@ -99,14 +99,14 @@ impl TableLine for CommanderPowerUnitConfig {
                 _ => None,
             },
             //build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
-            on_start_turn: match data.get(&H::OnStartTurn) {
+            /*on_start_turn: match data.get(&H::OnStartTurn) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
             },
             on_end_turn: match data.get(&H::OnEndTurn) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
-            },
+            },*/
             on_attack: match data.get(&H::OnAttack) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
@@ -176,8 +176,8 @@ crate::listable_enum! {
         CanBeDisplaced,
         TransportCapacity,
         //BuildOverrides,
-        OnStartTurn,
-        OnEndTurn,
+        //OnStartTurn,
+        //OnEndTurn,
         OnAttack,
         OnDefend,
         OnKill,

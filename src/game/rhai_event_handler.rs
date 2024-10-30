@@ -274,6 +274,10 @@ macro_rules! event_handler_module {
                     ().into()
                 }
             }
+            #[rhai_fn(name = "remove_token")]
+            pub fn remove_token2(handler: Handler, position: Point, token: Token<$d>) -> Dynamic {
+                remove_token(handler, position, token.name(), token.get_owner_id() as i32)
+            }
 
             /*pub fn place_token(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {
                 let environment = handler.environment();

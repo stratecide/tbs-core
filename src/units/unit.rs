@@ -607,7 +607,7 @@ impl<D: Direction> Unit<D> {
         self.environment.config.unit_splash_damage(game, self, unit_pos, heroes, temporary_ballast, is_counter)
     }
 
-    pub fn on_start_turn(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[HeroInfluence<D>]) -> Vec<usize> {
+    /*pub fn on_start_turn(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Self, usize)>, heroes: &[HeroInfluence<D>]) -> Vec<usize> {
         self.environment.config.unit_start_turn_effects(
             game,
             self,
@@ -625,7 +625,7 @@ impl<D: Direction> Unit<D> {
             transporter.map(|(u, _)| (u, position)),
             heroes,
         )
-    }
+    }*/
 
     pub fn on_attack(&self, game: &impl GameView<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>], temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<usize> {
         self.environment.config.unit_attack_effects(

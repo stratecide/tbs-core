@@ -387,7 +387,7 @@ fn tapio() {
     assert_eq!(server.get_terrain(Point::new(5, 3)).unwrap().typ(), TerrainType::Grass);
 }
 
-/*#[test]
+#[test]
 fn sludge_monster() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -397,11 +397,14 @@ fn sludge_monster() {
     map.set_terrain(Point::new(1, 0), TerrainType::City.instance(&map_env).set_owner_id(0).build_with_defaults());
     map.set_unit(Point::new(1, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
     map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
-    map.set_tokens(Point::new(2, 1), vec![Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
+    let mut sludge = Token::new(map_env.clone(), TokenType::SLUDGE);
+    sludge.set_owner_id(1);
+    sludge.set_tag(TAG_SLUDGE_COUNTER, 0.into());
+    map.set_tokens(Point::new(2, 1), vec![sludge]);
     map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(60).build_with_defaults()));
     map.set_terrain(Point::new(1, 2), TerrainType::OilPlatform.instance(&map_env).build_with_defaults());
     map.set_unit(Point::new(1, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
-    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
 
     let settings = map.settings().unwrap();
 
@@ -413,6 +416,13 @@ fn sludge_monster() {
     let mut settings = settings.build_default();
     settings.players[0].set_commander(CommanderType::SludgeMonster);
     let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let environment = server.environment();
+    let sludge_token = move |owner_id: i8, counter: i32| {
+        let mut sludge = Token::new(environment.clone(), TokenType::SLUDGE);
+        sludge.set_owner_id(owner_id);
+        sludge.set_tag(TAG_SLUDGE_COUNTER, counter.into());
+        sludge
+    };
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -440,8 +450,8 @@ fn sludge_monster() {
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
     }), Arc::new(|| 0.)).unwrap();
     let oil_platform_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
-    assert!(default_attack < oil_platform_attack);
-    assert!(sludge_attack > oil_platform_attack, "sludge token should give +25% and oil platform only +20%");
+    assert!(default_attack < oil_platform_attack, "{default_attack} < {oil_platform_attack}");
+    assert!(sludge_attack > oil_platform_attack, "{sludge_attack} > {oil_platform_attack} but sludge token should give +25% and oil platform only +20%");
 
     // leave token after unit death
     let mut server = unchanged.clone();
@@ -451,35 +461,35 @@ fn sludge_monster() {
         path: Path::new(Point::new(1, 0)),
         action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
     }), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(1, 0)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(1, 0)), &[sludge_token(0, 0)]);
 
     // small power
     let mut server = unchanged.clone();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     assert_eq!(server.get_tokens(Point::new(1, 1)), &[]);
     server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
-    assert_eq!(server.get_tokens(Point::new(1, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
+    assert_eq!(server.get_tokens(Point::new(1, 1)), &[sludge_token(0, 0)]);
 
     // big power
     let mut server = unchanged.clone();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     assert_eq!(server.get_tokens(Point::new(1, 1)), &[]);
-    assert_eq!(server.get_tokens(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(1, 0)]);
     server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
-    assert_eq!(server.get_tokens(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 1)]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(0, 1)]);
     // tokens vanish over time
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 1))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 1)]);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 0, 0))]);
+    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     let mut server = unchanged.clone();
-    assert_eq!(server.get_tokens(Point::new(2, 1)), &[Detail::SludgeToken(SludgeToken::new(&config, 1, 0))]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(1, 0)]);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(2, 1)), &[]);
 
@@ -492,7 +502,7 @@ fn sludge_monster() {
     }), Arc::new(|| 0.)), Err(CommandError::InvalidAction));
 }
 
-#[test]
+/*#[test]
 fn celerity() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);

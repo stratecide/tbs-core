@@ -31,7 +31,7 @@ macro_rules! board_module {
             #[rhai_fn(pure)]
             pub fn all_points(board: &mut Board) -> Array {
                 board.all_points().into_iter()
-                .map(|p| Dynamic::from(p))
+                .map(Dynamic::from)
                 .collect()
             }
 
@@ -58,7 +58,7 @@ macro_rules! board_module {
             #[rhai_fn(pure)]
             pub fn all_positions(board: &mut Board) -> Array {
                 board.all_points().into_iter()
-                .map(|p| Dynamic::from(p))
+                .map(Dynamic::from)
                 .collect()
             }
 
@@ -71,7 +71,7 @@ macro_rules! board_module {
                     .flatten()
                     .collect();
                 set.insert(p);
-                set.into_iter().map(|p| Dynamic::from(p)).collect()
+                set.into_iter().map(Dynamic::from).collect()
             }
 
             #[rhai_fn(pure)]
@@ -80,15 +80,22 @@ macro_rules! board_module {
                     return Vec::new();
                 }
                 board.range_in_layers(p, range as usize).into_iter()
-                .map(|p| Dynamic::from(p))
+                .map(Dynamic::from)
                 .collect()
             }
 
             #[rhai_fn(pure)]
             pub fn get_unit(board: &mut Board, p: Point) -> Dynamic {
                 board.get_unit(p)
-                .map(|u| Dynamic::from(u))
+                .map(Dynamic::from)
                 .unwrap_or(().into())
+            }
+
+            #[rhai_fn(pure)]
+            pub fn get_tokens(board: &mut Board, p: Point) -> Array {
+                board.get_tokens(p).into_iter()
+                .map(Dynamic::from)
+                .collect()
             }
 
             #[rhai_fn(pure)]

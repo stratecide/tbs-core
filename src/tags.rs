@@ -416,6 +416,7 @@ pub mod tests {
     pub const TAG_CAPTURE_PROGRESS: usize = 11;
     pub const TAG_UNIT_TYPE: usize = 12;
     pub const TAG_MOVEMENT_TYPE: usize = 13;
+    pub const TAG_SLUDGE_COUNTER: usize = 14;
     #[test]
     fn verify_tag_test_constants() {
         let config = Arc::new(Config::test_config());
@@ -434,6 +435,7 @@ pub mod tests {
         assert_eq!(environment.tag_name(TAG_CAPTURE_PROGRESS), "CaptureProgress");
         assert_eq!(environment.tag_name(TAG_UNIT_TYPE), "UnitType");
         assert_eq!(environment.tag_name(TAG_MOVEMENT_TYPE), "MovementType");
+        assert_eq!(environment.tag_name(TAG_SLUDGE_COUNTER), "SludgeCounter");
     }
 
 }

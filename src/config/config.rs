@@ -33,6 +33,7 @@ use crate::units::hero::*;
 use crate::VERSION;
 
 use super::custom_action_config::CustomActionConfig;
+use super::global_events::GlobalEventConfig;
 use super::hero_power_config::HeroPowerConfig;
 use super::hero_type_config::HeroTypeConfig;
 use super::commander_power_config::CommanderPowerConfig;
@@ -98,6 +99,8 @@ pub struct Config {
     pub(super) unit_overrides: Vec<CommanderPowerUnitConfig>,
     //pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
     pub(super) max_commander_charge: u32,
+    // global events, shared by terrain, units, commanders, ...
+    pub(crate) global_events: Vec<GlobalEventConfig>,
     // rhai
     //pub(super) global_ast: AST,
     pub(super) my_package_4: MyPackage4,
@@ -699,7 +702,7 @@ impl Config {
         result
     }*/
 
-    pub fn terrain_on_start_turn<D: Direction>(
+    /*pub fn terrain_on_start_turn<D: Direction>(
         &self,
         map: &impl GameView<D>,
         pos: Point,
@@ -719,7 +722,7 @@ impl Config {
             }
         );
         result
-    }
+    }*/
 
     /*pub fn terrain_on_build<D: Direction>(
         &self,
@@ -1100,7 +1103,7 @@ impl Config {
         result
     }*/
 
-    pub fn unit_start_turn_effects<D: Direction>(
+    /*pub fn unit_start_turn_effects<D: Direction>(
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
@@ -1152,7 +1155,7 @@ impl Config {
             }
         );
         result
-    }
+    }*/
 
     pub fn unit_attack_effects<D: Direction>(
         &self,

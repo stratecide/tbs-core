@@ -62,6 +62,9 @@ trait ModifiedView<D: Direction> {
         self.get_inner_view().get_line(start, d, length, mode)
     }
 
+    fn current_owner(&self) -> i8 {
+        self.get_inner_view().current_owner()
+    }
     fn get_owning_player(&self, owner: i8) -> Option<Player> {
         self.get_inner_view().get_owning_player(owner)
     }
@@ -108,15 +111,15 @@ macro_rules! impl_game_view {
             fn as_shared(&self) -> SharedGameView<D> {
                 SharedGameView(Arc::new(self.clone()))
             }
-                            
+
             fn wrapping_logic(&self) -> BorrowedHandle<WrappingMap<D>> {
                 self.get_inner_view().wrapping_logic()
             }
-        
+
             fn next_pipe_tile(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
                 ModifiedView::next_pipe_tile(self, point, direction)
             }
-        
+
             fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
                 ModifiedView::get_neighbor(self, p, d)
             }
@@ -129,11 +132,14 @@ macro_rules! impl_game_view {
             fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<Point>> {
                 ModifiedView::range_in_layers(self, center, range)
             }
-        
+
             fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
                 ModifiedView::get_line(self, start, d, length, mode)
             }
-        
+
+            fn current_owner(&self) -> i8 {
+                ModifiedView::current_owner(self)
+            }
             fn get_owning_player(&self, owner: i8) -> Option<Player> {
                 ModifiedView::get_owning_player(self, owner)
             }
@@ -146,7 +152,7 @@ macro_rules! impl_game_view {
             fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
                 ModifiedView::get_fog_at(self, team, position)
             }
-        
+
             fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>> {
                 ModifiedView::get_visible_unit(self, team, p)
             }
@@ -156,7 +162,7 @@ macro_rules! impl_game_view {
             fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
                 ModifiedView::additional_hero_influence_map(self, only_owner_id)
             }
-        
+
             // prevent infinite loop in Config
             fn get_unit_config_limit(&self) -> Option<usize> {
                 self.get_inner_view().get_unit_config_limit()

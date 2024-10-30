@@ -17,6 +17,8 @@ pub mod file_loader;
 pub mod table_config;
 pub mod tag_config;
 pub mod token_typ_config;
+pub mod global_events;
+pub mod token_filter;
 
 use std::fmt::Debug;
 use std::fmt::Display;

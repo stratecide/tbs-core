@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::fmt::Debug;
 use zipper::*;
 
@@ -160,7 +160,7 @@ impl Hero {
         unit_pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
     ) -> HashMap<Point, usize> {
-        let mut result = HashMap::new();
+        let mut result = HashMap::default();
         let mut aura_range = match Self::aura_range(map, unit, unit_pos, transporter) {
             Some(aura_range) => aura_range,
             _ => return result
@@ -219,7 +219,7 @@ impl Hero {
                 }
             }
         }
-        let mut hero_auras: HashMap<(Point, i8), Vec<HeroInfluence<D>>> = HashMap::new();
+        let mut hero_auras: HashMap<(Point, i8), Vec<HeroInfluence<D>>> = HashMap::default();
         for hero in heroes {
             let transporter = hero.3.map(|i| (map.get_unit(hero.2).unwrap(), i));
             for (p, strength) in Hero::aura(map, &hero.0, hero.2, transporter.as_ref().map(|(u, i)| (u, *i))) {

@@ -19,6 +19,7 @@ use crate::units::unit_types::UnitType;
 
 use super::custom_action_config::*;
 use super::file_loader::FileLoader;
+use super::global_events::GlobalEventConfig;
 use super::hero_power_config::*;
 use super::movement_type_config::MovementTypeConfig;
 use super::table_config::TableConfig;
@@ -59,6 +60,7 @@ const COMMANDER_POWERS: &'static str = "commander_powers.csv";
 const COMMANDER_ATTRIBUTES: &'static str = "commander_attributes.csv";
 const POWERED_UNITS: &'static str = "unit_powered.csv";
 const POWERED_TERRAIN: &'static str = "terrain_powered.csv";
+const GLOBAL_EVENTS: &'static str = "global_events.csv";
 const TABLES: &'static str = "tables.csv";
 // scripts
 pub(super) const GLOBAL_SCRIPT: &'static str = "global";
@@ -161,6 +163,8 @@ impl Config {
             unit_overrides: Vec::new(),
             //commander_unit_attributes: HashMap::default(),
             max_commander_charge: 0,
+            // shared by terrain, units, commanders, ...
+            global_events: Vec::new(),
             // rhai
             //global_ast,
             my_package_4: MyPackage4::new(),
@@ -737,6 +741,12 @@ impl Config {
         // terrain overrides, has to be after commander and hero parsing
         file_loader.table_with_headers(POWERED_TERRAIN, |line: TerrainPoweredConfig| {
             result.terrain_overrides.push(line);
+            Ok(())
+        })?;
+
+        // terrain overrides, has to be after commander and hero parsing
+        file_loader.table_with_headers(GLOBAL_EVENTS, |line: GlobalEventConfig| {
+            result.global_events.push(line);
             Ok(())
         })?;
 

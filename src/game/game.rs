@@ -380,10 +380,6 @@ impl<D: Direction> Handle<Game<D>> {
         self.with(|game| game.is_foggy())
     }
 
-    pub fn current_owner(&self) -> i8 {
-        self.with(|game| game.current_player().get_owner_id())
-    }
-
     pub fn current_team(&self) -> ClientPerspective {
         self.with(|game| game.current_player().get_team())
     }
@@ -475,6 +471,10 @@ impl<D: Direction> GameView<D> for Handle<Game<D>> {
 
     fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
         self.with(|game| game.map.get_line(start, d, length, mode))
+    }
+
+    fn current_owner(&self) -> i8 {
+        self.with(|game| game.current_player().get_owner_id())
     }
 
     fn get_owning_player(&self, owner: i8) -> Option<Player> {

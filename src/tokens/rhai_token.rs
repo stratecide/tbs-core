@@ -43,6 +43,11 @@ macro_rules! token_module {
                 }
             }
 
+            #[rhai_fn(pure, get = "type")]
+            pub fn get_type(token: &mut Token) -> TokenType {
+                token.typ()
+            }
+
             #[rhai_fn(pure, get="owner_id")]
             pub fn get_owner_id(token: &mut Token) -> i32 {
                 token.get_owner_id() as i32

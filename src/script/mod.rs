@@ -28,6 +28,7 @@ pub const CONST_NAME_TEAM: &'static str = "TEAM";
 pub const CONST_NAME_POSITION: &'static str = "POSITION";
 pub const CONST_NAME_OTHER_POSITION: &'static str = "OTHER_POSITION";
 pub const CONST_NAME_TERRAIN: &'static str = "TERRAIN";
+pub const CONST_NAME_TOKEN: &'static str = "TOKEN";
 pub const CONST_NAME_UNIT: &'static str = "UNIT";
 pub const CONST_NAME_UNIT_ID: &'static str = "UNIT_ID";
 pub const CONST_NAME_OTHER_UNIT: &'static str = "OTHER_UNIT";

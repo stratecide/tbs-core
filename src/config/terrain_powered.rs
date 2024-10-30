@@ -18,11 +18,13 @@ use super::number_modification::NumberMod;
 use super::ConfigParseError;
 
 #[derive(Debug, Clone)]
-pub(super) enum TerrainFilter {
+pub(crate) enum TerrainFilter {
     Rhai(usize),
     Commander(CommanderType, Option<u8>),
     Type(HashSet<TerrainType>),
     Ownable,
+    Unowned,
+    OwnerTurn,
     Flag(HashSet<FlagKey>),
     Not(Vec<Self>),
 }
@@ -52,6 +54,8 @@ impl FromConfig for TerrainFilter {
                 Self::Type(list.into_iter().collect())
             }
             "Ownable" => Self::Ownable,
+            "Unowned" => Self::Unowned,
+            "OwnerTurn" => Self::OwnerTurn,
             "Flag" | "F" => {
                 let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
                 remainder = r;
@@ -94,6 +98,8 @@ impl TerrainFilter {
             }
             Self::Type(t) => t.contains(&terrain.typ()),
             Self::Ownable => terrain.environment().config.terrain_can_have_owner(terrain.typ()),
+            Self::Unowned => terrain.get_owner_id() < 0,
+            Self::OwnerTurn => terrain.get_owner_id() == game.current_owner(),
             Self::Flag(flags) => flags.iter().any(|flag| terrain.has_flag(flag.0)),
             Self::Not(negated) => {
                 // returns true if at least one check returns false
@@ -114,8 +120,8 @@ pub(super) struct TerrainPoweredConfig {
     pub(super) build: Option<bool>,
     pub(super) sells_hero: Option<bool>,*/
     //pub(super) build_overrides: HashSet<AttributeOverride>,
-    pub(super) on_start_turn: Option<usize>,
-    pub(super) on_end_turn: Option<usize>,
+    //pub(super) on_start_turn: Option<usize>,
+    //pub(super) on_end_turn: Option<usize>,
     //pub(super) on_build: Option<usize>,
     pub(super) action_script: Option<(usize, usize)>,
 }
@@ -143,18 +149,18 @@ impl TableLine for TerrainPoweredConfig {
                 _ => None,
             },*/
             //build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
-            on_start_turn: match data.get(&H::OnStartTurn) {
+            /*on_start_turn: match data.get(&H::OnStartTurn) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
-            },
+            },*/
             /*on_build: match data.get(&H::OnBuild) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
             },*/
-            on_end_turn: match data.get(&H::OnEndTurn) {
+            /*on_end_turn: match data.get(&H::OnEndTurn) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
-            },
+            },*/
             action_script: match data.get(&H::ActionScript) {
                 Some(s) if s.len() > 0 => {
                     let exe = loader.rhai_function(s, 1..=1)?;
@@ -189,8 +195,8 @@ crate::listable_enum! {
         Build,
         SellsHero,*/
         //BuildOverrides,
-        OnStartTurn,
-        OnEndTurn,
+        //OnStartTurn,
+        //OnEndTurn,
         //OnBuild,
         ActionScript,
     }

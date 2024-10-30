@@ -657,6 +657,10 @@ impl<D: Direction> GameView<D> for Handle<Map<D>> {
         self.with(|map| map.get_line(start, d, length, mode))
     }
 
+    fn current_owner(&self) -> i8 {
+        -1
+    }
+
     fn get_owning_player(&self, _: i8) -> Option<Player> {
         None
     }

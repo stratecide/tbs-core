@@ -79,6 +79,8 @@ pub(crate) enum UnitFilter {
     AttackType(HashSet<AttackTypeKey>),
     Unowned,
     // situation/environment
+    OwnerTurn,
+    Carried,
     Counter,
     Terrain(HashSet<TerrainType>),
     Token(HashSet<TokenType>),
@@ -192,6 +194,8 @@ impl FromConfig for UnitFilter {
                 Self::Hp(hp)
             }
             "TerrainOwner" => Self::TerrainOwner,*/
+            "OwnerTurn" => Self::OwnerTurn,
+            "Carried" => Self::Carried,
             "Counter" => Self::Counter,
             /*"Level" => {
                 let (level, r) = parse_tuple1(remainder, loader)?;
@@ -319,6 +323,8 @@ impl UnitFilter {
             Self::TerrainOwner => {
                 game.get_terrain(unit_pos.0).unwrap().get_owner_id() == unit.get_owner_id()
             }*/
+            Self::OwnerTurn => unit.get_owner_id() == game.current_owner(),
+            Self::Carried => transporter.is_some(),
             Self::Counter => is_counter,
             //Self::Level(level) => unit.get_level() >= *level,
             Self::Not(negated) => {

@@ -44,5 +44,21 @@ fn revive_converted() {
 }
 
 fn sludge_1() {
-    EVENT_HANDLER.place_sludge(POSITION, UNIT.owner_id, 0);
+    let counter = 0;
+    let token = Token("Sludge");
+    let old_token = for t in BOARD.get_tokens(POSITION) {
+        if t.type == token.type {
+            break t;
+        }
+    };
+    if old_token != () {
+        if old_token.get(TAG_SludgeCounter) > counter {
+            return;
+        } else {
+            EVENT_HANDLER.remove_token(POSITION, old_token);
+        }
+    }
+    token.owner_id = UNIT.owner_id;
+    token.set(TAG_SludgeCounter, counter);
+    EVENT_HANDLER.place_token(POSITION, token);
 }

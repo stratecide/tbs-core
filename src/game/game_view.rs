@@ -56,6 +56,7 @@ pub trait GameView<D: Direction>: Send + Sync {
     // the result may be shorter than the requested length if not enough points could be found
     fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>>;
 
+    fn current_owner(&self) -> i8;
     fn get_owning_player(&self, owner: i8) -> Option<Player>;
     fn get_team(&self, owner: i8) -> ClientPerspective;
     fn is_foggy(&self) -> bool {
