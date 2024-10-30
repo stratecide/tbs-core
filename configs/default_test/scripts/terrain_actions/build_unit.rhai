@@ -18,27 +18,9 @@ fn and_turn_into_grass(data) {
 }
 
 fn _build_unit_input(TERRAIN, POSITION) {
-    let options = new_shop("Build Unit");
-    for unit_type in CONFIG.table_row("TERRAIN_BUILD", TERRAIN.type, true) {
-        let unit = Unit(unit_type);
-        unit.owner_id = TERRAIN.owner_id;
-        unit.set(TAG_Hp, 100);
-        let price = unit.value(POSITION);
-        options.add(unit, price);
-    }
-    user_selection(options, false);
-    success()
+    terrain_buy_unit_input(POSITION, TERRAIN.type, TERRAIN.owner_id, TERRAIN.get(TAG_Direction))
 }
 
 fn _build_unit(TERRAIN, POSITION, data, exhaust_unit) {
-    let unit = data[0].key;
-    let cost = data[0].costs[0];
-    if exhaust_unit {
-        unit.set(FLAG_Exhausted);
-    }
-    if TERRAIN.has(TAG_Direction) {
-        unit.set(TAG_Direction, TERRAIN.get(TAG_Direction));
-    }
-    EVENT_HANDLER.spend_money(TERRAIN.owner_id, cost);
-    EVENT_HANDLER.place_unit(POSITION, unit);
+    terrain_buy_unit(POSITION, TERRAIN.owner_id, data, exhaust_unit)
 }

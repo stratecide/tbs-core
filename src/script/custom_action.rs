@@ -14,6 +14,7 @@ use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::terrain::terrain::Terrain;
+use crate::tokens::token::Token;
 use crate::units::hero::{HeroInfluence, HeroType};
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
@@ -264,6 +265,19 @@ pub fn is_unit_script_input_valid<D: Direction>(
     }
 }
 
+pub fn is_token_script_input_valid<D: Direction>(
+    script: usize,
+    game: &Handle<Game<D>>,
+    pos: Point,
+    token: Token<D>,
+    data: &[CustomActionInput<D>],
+) -> Option<Vec<CustomActionData<D>>> {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_POSITION, pos);
+    scope.push_constant(CONST_NAME_TOKEN, token);
+    is_script_input_valid(script, game, scope, data)
+}
+
 pub fn is_terrain_script_input_valid<D: Direction>(
     script: usize,
     game: &Handle<Game<D>>,
@@ -345,6 +359,7 @@ fn is_script_input_valid<D: Direction>(
             } else if *invalid_data_.lock().unwrap() {
                 // wrong data supplied
                 // TODO: log error
+                println!("is_script_input_valid: {e:?}");
                 None
             } else {
                 // script had an error
@@ -375,6 +390,19 @@ pub fn execute_unit_script<D: Direction>(
     scope.push_constant(CONST_NAME_UNIT, unit.clone());
     scope.push_constant(CONST_NAME_POSITION, unit_pos);
     execute_script(script, handler, scope, data)
+}
+
+pub fn execute_token_script<D: Direction>(
+    script: usize,
+    handler: &mut EventHandler<D>,
+    pos: Point,
+    token: Token<D>,
+    data: Vec<CustomActionData<D>>,
+) {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_POSITION, pos);
+    scope.push_constant(CONST_NAME_TOKEN, token);
+    execute_script(script, handler, scope, Some(data))
 }
 
 pub fn execute_terrain_script<D: Direction>(

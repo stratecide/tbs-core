@@ -25,6 +25,7 @@ pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand<D>),
     TerrainAction(Point, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
+    TokenAction(Point, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
     //BuyUnit(Point, UnitType, D),
     CommanderPower(CommanderPowerIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
 }
@@ -99,6 +100,64 @@ impl<D: Direction> Command<D> {
                 };
                 drop(borrowed_game);
                 execute_terrain_script(script, handler, pos, terrain, data);
+                Ok(())
+            }
+            Self::TokenAction(pos, data) => {
+                let team = handler.get_game().current_team();
+                if let Some(err) = handler.with_game(|game| {
+                    if !game.get_map().is_point_valid(pos) {
+                        return Some(CommandError::InvalidPoint(pos));
+                    }
+                    if game.get_fog_at(team, pos) != FogIntensity::TrueSight {
+                        // without TrueSight, a stealthed unit could block this field
+                        return Some(CommandError::NoVision);
+                    }
+                    if game.get_map().get_unit(pos).is_some() {
+                        return Some(CommandError::Blocked(pos));
+                    }
+                    None
+                }) {
+                    return Err(err);
+                }
+                let borrowed_game = handler.get_game();
+                let client_game;
+                let client = if handler.get_game().is_foggy() {
+                    let player = handler.get_game().current_owner() as u8;
+                    let data = handler.get_game().export();
+                    let secret = data.hidden
+                    .and_then(|mut h| h.teams.remove(&player))
+                    .map(|h| (player, h));
+                    let version = Version::parse(VERSION).unwrap();
+                    client_game = Handle::new(*Game::import_client(data.public, secret, &handler.environment().config, version).unwrap());
+                    &client_game
+                } else {
+                    // shouldn't need to clone here, actually
+                    &*borrowed_game
+                };
+                // check whether the player should even be able to send this command
+                let (script, token, data) = {
+                    // making sure i don't accidently change anything while testing move validity
+                    #[allow(unused_variables)]
+                    let handler = ();
+                    client.with(|game| {
+                        let mut script_data = None;
+                        // look from top to bottom
+                        for token in game.get_map().get_tokens(pos).iter()
+                        .rev() {
+                            if let Some((input_script, script)) = game.environment().config.token_action_script(token.typ()) {
+                                if token.get_owner_id() != game.current_player().get_owner_id() {
+                                    return Err(CommandError::Blocked(pos));
+                                }
+                                script_data = is_token_script_input_valid(input_script, client, pos, token.clone(), &data)
+                                .map(|data| (script, token.clone(), data));
+                                break;
+                            }
+                        }
+                        script_data.ok_or(CommandError::InvalidAction)
+                    })?
+                };
+                drop(borrowed_game);
+                execute_token_script(script, handler, pos, token, data);
                 Ok(())
             }
             /*Self::BuyUnit(pos, unit_type, d) => {
@@ -275,7 +334,6 @@ pub enum CommandError {
     NotYourProperty,
     BuildLimitReached,
     CannotCaptureHere,
-    NotYourBubble,
     InvalidCommanderPower,
     NotEnoughCharge,
     CannotRepairHere,

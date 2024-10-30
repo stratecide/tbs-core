@@ -75,3 +75,29 @@ fn build_unit(UNIT, POSITION, exhaust, data) {
     }
     EVENT_HANDLER.spend_money(UNIT.owner_id, cost);
 }
+
+fn terrain_buy_unit_input(position, terrain_type, owner_id, direction) {
+    let options = new_shop("Build Unit");
+    for unit_type in CONFIG.table_row("TERRAIN_BUILD", terrain_type, true) {
+        let unit = Unit(unit_type);
+        unit.owner_id = owner_id;
+        unit.set(TAG_Hp, 100);
+        if direction != () {
+            unit.set(TAG_Direction, direction);
+        }
+        let price = unit.value(position);
+        options.add(unit, price);
+    }
+    user_selection(options, false);
+    success()
+}
+
+fn terrain_buy_unit(position, owner_id, data, exhaust_unit) {
+    let unit = data[0].key;
+    let cost = data[0].costs[0];
+    if exhaust_unit {
+        unit.set(FLAG_Exhausted);
+    }
+    EVENT_HANDLER.spend_money(owner_id, cost);
+    EVENT_HANDLER.place_unit(position, unit);
+}

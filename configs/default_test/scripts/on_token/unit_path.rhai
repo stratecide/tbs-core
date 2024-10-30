@@ -6,5 +6,7 @@ fn collect_coins(position, token) {
 }
 
 fn remove_if_enemy(position, token) {
-    // TODO
+    if UNIT.team != token.team {
+        EVENT_HANDLER.remove_token(position, token);
+    }
 }
