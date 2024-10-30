@@ -127,6 +127,15 @@ macro_rules! board_module {
                 .map(|player| *player.funds)
                 .unwrap_or(0)
             }
+            #[rhai_fn(pure)]
+            pub fn player_income(board: &mut Board, owner_id: i32) -> i32 {
+                if owner_id < 0 || owner_id > i8::MAX as i32 {
+                    return 0;
+                }
+                board.get_owning_player(owner_id as i8)
+                .map(|player| player.get_income())
+                .unwrap_or(0)
+            }
         }
 
         def_package! {
