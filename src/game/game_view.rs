@@ -66,7 +66,7 @@ pub trait GameView<D: Direction>: Send + Sync {
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity;
     //fn get_fog(&self, position: Point) -> FogIntensity;
 
-    fn available_heroes(&self, player: &Player) -> Vec<HeroType> {
+    /*fn available_heroes(&self, player: &Player) -> Vec<HeroType> {
         let mut used = HashSet::default();
         used.insert(HeroType::None);
         for p in self.all_points() {
@@ -81,7 +81,7 @@ pub trait GameView<D: Direction>: Send + Sync {
         .filter(|m| !used.contains(m))
         .cloned()
         .collect()
-    }
+    }*/
 
     fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>>;
     fn additional_hero_influence_at(&self, _point: Point, _only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {

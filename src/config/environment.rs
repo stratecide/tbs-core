@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use interfaces::ClientPerspective;
 use packages::Package;
 use rhai::*;
-use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::{FxHashMap as HashMap, FxHashSet};
 
 use crate::commander::commander_type::CommanderType;
 use crate::game::event_handler::EventHandler;
@@ -34,25 +34,38 @@ pub struct Environment {
     pub settings: Option<Arc<GameSettings>>,
     // cache compilation
     compiled_asts: Arc<Mutex<HashMap<usize, Shared<AST>>>>,
+    unique_ids: Arc<Mutex<HashMap<String, FxHashSet<usize>>>>,
 }
 
 impl Environment {
     pub fn new_map(config: Arc<Config>, map_size: MapSize) -> Self {
         Self {
-            config,
             map_size,
             settings: None,
             compiled_asts: Arc::default(),
+            unique_ids: Self::setup_unique_ids(&config),
+            config,
         }
     }
 
     pub fn new_game(config: Arc<Config>, map_size: MapSize, settings: GameSettings) -> Self {
         Self {
-            config,
             map_size,
             settings: Some(Arc::new(settings)),
             compiled_asts: Arc::default(),
+            unique_ids: Self::setup_unique_ids(&config),
+            config,
         }
+    }
+
+    fn setup_unique_ids(config: &Config) -> Arc<Mutex<HashMap<String, FxHashSet<usize>>>> {
+        Arc::new(Mutex::new(config.tags.iter()
+        .filter_map(|tag_config| {
+            match &tag_config.tag_type {
+                TagType::Unique { pool } => Some((pool.clone(), FxHashSet::default())),
+                _ => None
+            }
+        }).collect()))
     }
 
     pub fn start_game(&mut self, settings: &Arc<GameSettings>) {
@@ -96,14 +109,32 @@ impl Environment {
         self.config.tags.iter().position(|tag| tag.name.as_str() == name)
     }
 
-    pub fn unique_tag_keys(&self, base_key: usize) -> Vec<usize> {
-        let TagType::Unique { pool: pool_name } = self.tag_type(base_key) else {
-            return Vec::new();
+    pub(crate) fn add_unique_id(&self, tag_key: usize, id: usize) {
+        if let TagType::Unique { pool } = self.tag_type(tag_key) {
+            self.unique_ids.lock().unwrap().get_mut(pool).unwrap().insert(id);
+        }
+    }
+    pub(crate) fn remove_unique_id(&self, tag_key: usize, id: usize) {
+        if let TagType::Unique { pool } = self.tag_type(tag_key) {
+            self.unique_ids.lock().unwrap().get_mut(pool).unwrap().remove(&id);
+        }
+    }
+    pub(crate) fn generate_unique_id(&self, tag_key: usize, random: f32) -> Option<usize> {
+        let TagType::Unique { pool } = self.tag_type(tag_key) else {
+            return None;
         };
-        self.config.tags.iter().enumerate()
-        .filter(|(_, conf)| matches!(&conf.tag_type, TagType::Unique { pool } if pool == pool_name))
-        .map(|(i, _)| i)
-        .collect()
+        let mut unique_ids = self.unique_ids.lock().unwrap();
+        let pool = unique_ids.get_mut(pool).unwrap();
+        if pool.len() > UniqueId::MAX_VALUE {
+            return None;
+        }
+        let count = UniqueId::MAX_VALUE + 1;
+        let mut id = (count as f64 * random as f64) as usize;
+        while pool.contains(&id) {
+            id = (id + 1) % count;
+        }
+        pool.insert(id);
+        Some(id)
     }
 
     fn get_engine_base(&self, is_hex: bool) -> Engine {

@@ -20,7 +20,6 @@ use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::player::Player;
-use crate::tags::{TagValue, UniqueId};
 use crate::VERSION;
 use crate::tokens;
 use crate::terrain::terrain::Terrain;
@@ -224,36 +223,6 @@ impl<D: Direction> Map<D> {
         None
     }
     
-    // returns a random DroneId that isn't in use yet
-    pub fn new_unique_id(&self, tag_key: usize, rng: f32) -> Option<UniqueId> {
-        let mut existing_ids = HashSet::default();
-        let keys = self.environment.unique_tag_keys(tag_key);
-        for unit in self.units.values() {
-            for key in &keys {
-                if let Some(TagValue::Unique(id)) = unit.get_tag(*key) {
-                    id.add_to_pool(&mut existing_ids);
-                }
-            }
-        }
-        for tokens in self.tokens.values() {
-            for token in tokens {
-                for key in &keys {
-                    if let Some(TagValue::Unique(id)) = token.get_tag(*key) {
-                        id.add_to_pool(&mut existing_ids);
-                    }
-                }
-            }
-        }
-        for terrain in self.terrain.values() {
-            for key in &keys {
-                if let Some(TagValue::Unique(id)) = terrain.get_tag(*key) {
-                    id.add_to_pool(&mut existing_ids);
-                }
-            }
-        }
-        UniqueId::new(&existing_ids, rng)
-    }
-
     /**
      * checks the pipe at dp.point for whether it can be entered by dp.direction and if true, returns the position of the next pipe tile
      * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
@@ -681,7 +650,7 @@ impl<D: Direction> GameView<D> for Handle<Map<D>> {
     fn get_visible_unit(&self, _: ClientPerspective, p: Point) -> Option<Unit<D>> {
         self.with(|map| map.get_unit(p).cloned())
     }
-    
+
     fn get_unit_config_limit(&self) -> Option<usize> {
         Handle::get_unit_config_limit(self)
     }

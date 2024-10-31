@@ -95,21 +95,14 @@ fn build_drone() {
             map.set_terrain(Point::new(x, y), TerrainType::Sea.instance(&map_env).build_with_defaults());
         }
     }
-    let uid = map.new_unique_id(TAG_DRONE_STATION_ID, 0.).unwrap();
-    map.set_unit(Point::new(3, 4), Some(UnitType::drone_boat().instance(&map_env).set_owner_id(0).set_hp(100).set_tag(TAG_DRONE_STATION_ID, uid.into()).build_with_defaults()));
-    assert!(map.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).is_some());
+    map.set_unit(Point::new(3, 4), Some(UnitType::drone_boat().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
     map.set_unit(Point::new(1, 6), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build_with_defaults()));
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].set_funds(1000);
     let (mut server, events) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
     let mut client = Game::new_client(map, settings.build_default(), events.get(&Perspective::Team(0)).unwrap());
-    let to_build = UnitType::light_drone().instance(&server.environment())
-        .set_owner_id(0)
-        .set_hp(100)
-        .set_tag(TAG_DRONE_ID, uid.into())
-        .set_flag(FLAG_EXHAUSTED)
-        .build_with_defaults();
+    assert!(server.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).is_none());
     let events = server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
@@ -120,17 +113,24 @@ fn build_drone() {
             ev.apply(client);
         }
     });
+    assert!(server.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).is_some());
+    assert!(client.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).is_some());
     assert_eq!(
         server.get_unit(Point::new(3, 4)).unwrap().get_transported().len(),
         1
     );
     assert_eq!(
         client.get_unit(Point::new(3, 4)).unwrap().get_transported()[0],
-        to_build
+        UnitType::light_drone().instance(&server.environment())
+        .set_owner_id(0)
+        .set_hp(100)
+        .set_tag(TAG_DRONE_ID, client.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).unwrap())
+        .set_flag(FLAG_EXHAUSTED)
+        .build()
     );
     assert_eq!(
-        client.get_unit(Point::new(3, 4)).unwrap().get_transported()[0].get_tag(TAG_DRONE_ID),
-        client.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID)
+        server.get_unit(Point::new(3, 4)).unwrap().get_transported()[0].get_tag(TAG_DRONE_ID),
+        server.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID)
     );
 }
 

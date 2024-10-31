@@ -62,6 +62,13 @@ macro_rules! event_handler_module {
                 }
             }
 
+            pub fn generate_unique_id(handler: Handler, tag: TagKey) -> Dynamic {
+                let environment = handler.environment();
+                super::UniqueId::new(&environment, tag.0, handler.rng())
+                .map(Dynamic::from)
+                .unwrap_or(().into())
+            }
+        
             pub fn set_unit_flag(mut handler: Handler, position: Point, flag: FlagKey) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {
                     return;

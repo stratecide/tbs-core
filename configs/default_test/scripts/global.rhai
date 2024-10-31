@@ -60,6 +60,11 @@ fn build_unit(UNIT, POSITION, exhaust, data) {
     if exhaust {
         unit.set(FLAG_Exhausted);
     }
+    if unit.type == UNIT_LightDrone && !UNIT.has(TAG_DroneStationId) {
+        let uid = EVENT_HANDLER.generate_unique_id(TAG_DroneStationId);
+        EVENT_HANDLER.set_unit_tag(POSITION, TAG_DroneStationId, uid);
+        unit.set(TAG_DroneId, uid);
+    }
     if UNIT.transport_capacity == 0 {
         let direction = data[1];
         let target = BOARD.get_neighbor(POSITION, direction);

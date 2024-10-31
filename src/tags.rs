@@ -1,8 +1,8 @@
+use std::sync::Arc;
 use rhai::*;
 use rhai::plugin::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use zipper::*;
-use zipper_derive::Zippable;
 
 use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
@@ -143,7 +143,7 @@ impl<D: Direction> SupportedZippable<&Environment> for TagBag<D> {
         zipper.write_u32(self.tags.len() as u32, tag_bits);
         for (key, value) in &self.tags {
             zipper.write_u32(*key as u32, tag_bits);
-            value.export(zipper, &(support.clone(), *key));
+            value.export(zipper, support, *key);
         }
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
@@ -157,35 +157,77 @@ impl<D: Direction> SupportedZippable<&Environment> for TagBag<D> {
         let tag_count = unzipper.read_u32(tag_bits)?.min(support.tag_count() as u32);
         for _ in 0..tag_count {
             let key = support.tag_count().min(unzipper.read_u32(tag_bits)? as usize);
-            let value = TagValue::import(unzipper, &(support.clone(), key))?;
+            let value = TagValue::import(unzipper, support, key)?;
             result.set_tag(support, key, value);
         }
         Ok(result)
     }
 }
 
-pub(crate) type TagValueZipSupport = (Environment, usize);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable)]
-#[zippable(bits = 4, support_ref=TagValueZipSupport)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TagValue<D: Direction> {
-    Unique(UniqueId),
+    Unique(Arc<UniqueId>),
     Int(Int32),
-    #[supp(&support.0)]
     Point(Point),
     Direction(D),
-    #[supp(&support.0)]
     UnitType(UnitType),
-    #[supp(&support.0)]
     TerrainType(TerrainType),
-    #[supp(&support.0)]
     MovementType(MovementType),
 }
 
+const TAG_VALUE_ENUM_BITS: u8 = 4;
 impl<D: Direction> TagValue<D> {
+    fn export(&self, zipper: &mut Zipper, environment: &Environment, tag_key: usize) {
+        match self {
+            Self::Unique(value) => {
+                zipper.write_u8(0, TAG_VALUE_ENUM_BITS);
+                value.export(zipper);
+            }
+            Self::Int(value) => {
+                zipper.write_u8(1, TAG_VALUE_ENUM_BITS);
+                value.export(zipper, environment, tag_key);
+            }
+            Self::Point(value) => {
+                zipper.write_u8(2, TAG_VALUE_ENUM_BITS);
+                value.export(zipper, environment);
+            }
+            Self::Direction(value) => {
+                zipper.write_u8(3, TAG_VALUE_ENUM_BITS);
+                value.zip(zipper);
+            }
+            Self::UnitType(value) => {
+                zipper.write_u8(4, TAG_VALUE_ENUM_BITS);
+                value.export(zipper, environment);
+            }
+            Self::TerrainType(value) => {
+                zipper.write_u8(5, TAG_VALUE_ENUM_BITS);
+                value.export(zipper, environment);
+            }
+            Self::MovementType(value) => {
+                zipper.write_u8(6, TAG_VALUE_ENUM_BITS);
+                value.export(zipper, environment);
+            }
+        }
+    }
+
+    fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Self, ZipperError> {
+        match unzipper.read_u8(TAG_VALUE_ENUM_BITS)? {
+            0 => Ok(Self::Unique(UniqueId::import(unzipper, environment, tag_key)?)),
+            1 => Ok(Self::Int(Int32::import(unzipper, environment, tag_key)?)),
+            2 => Ok(Self::Point(Point::import(unzipper, environment)?)),
+            3 => Ok(Self::Direction(D::unzip(unzipper)?)),
+            4 => Ok(Self::UnitType(UnitType::import(unzipper, environment)?)),
+            5 => Ok(Self::TerrainType(TerrainType::import(unzipper, environment)?)),
+            6 => Ok(Self::MovementType(MovementType::import(unzipper, environment)?)),
+            e => Err(ZipperError::EnumOutOfBounds(format!("TagValue::{e}")))
+        }
+    }
+
     pub(crate) fn has_valid_type(&self, environment: &Environment, key: usize) -> bool {
         match (self, environment.tag_type(key)) {
-            (Self::Unique(_), TagType::Unique { .. }) => true,
+            (Self::Unique(value), tag_type) => {
+                value.environment == *environment && environment.tag_type(value.tag) == tag_type
+            },
             (Self::Point(_), TagType::Point) => true,
             (Self::Direction(_), TagType::Direction) => true,
             (Self::UnitType(_), TagType::UnitType) => true,
@@ -221,7 +263,7 @@ impl<D: Direction> TagValue<D> {
             Self::Int(value) => Dynamic::from(value.0),
             Self::Point(value) => Dynamic::from(*value),
             Self::TerrainType(value) => Dynamic::from(*value),
-            Self::Unique(value) => Dynamic::from(*value),
+            Self::Unique(value) => Dynamic::from(value.clone()),
             Self::UnitType(value) => Dynamic::from(*value),
             Self::MovementType(value) => Dynamic::from(*value),
         }
@@ -239,12 +281,18 @@ impl<D: Direction> TagValue<D> {
             "Point" => Some(Self::Point(value.cast())),
             "TerrainType" => Some(Self::TerrainType(value.try_cast()?)),
             "UnitType" => Some(Self::UnitType(value.try_cast()?)),
-            "UniqueId" => Some(Self::Unique(value.try_cast()?)),
-            _ => None
+            "UniqueId>" => Some(Self::Unique(value.try_cast()?)),
+            err => {
+                println!("failed to turn dynamic '{err}' into TagValue");
+                None
+            }
         }?;
         Some(result)
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Int32(pub i32);
 
 impl<D: Direction> From<i32> for TagValue<D> {
     fn from(value: i32) -> Self {
@@ -252,64 +300,74 @@ impl<D: Direction> From<i32> for TagValue<D> {
     }
 }
 
-impl<D: Direction> From<UniqueId> for TagValue<D> {
-    fn from(value: UniqueId) -> Self {
-        Self::Unique(value)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Int32(pub i32);
-impl SupportedZippable<&TagValueZipSupport> for Int32 {
-    fn export(&self, zipper: &mut Zipper, (environment, key): &(Environment, usize)) {
-        let TagType::Int { min, max } = environment.tag_type(*key) else {
-            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.tag_name(*key));
+impl Int32 {
+    fn export(&self, zipper: &mut Zipper, environment: &Environment, tag_key: usize) {
+        let TagType::Int { min, max } = environment.tag_type(tag_key) else {
+            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.tag_name(tag_key));
         };
         let bits = bits_needed_for_max_value((*max - *min) as u32);
         zipper.write_u32((self.0 - *min) as u32, bits);
     }
-    fn import(unzipper: &mut Unzipper, (environment, key): &(Environment, usize)) -> Result<Self, ZipperError> {
-        let TagType::Int { min, max } = environment.tag_type(*key) else {
-            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.tag_name(*key));
+    fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Self, ZipperError> {
+        let TagType::Int { min, max } = environment.tag_type(tag_key) else {
+            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.tag_name(tag_key));
         };
         let bits = bits_needed_for_max_value((*max - *min) as u32);
         Ok(Self((unzipper.read_u32(bits)? as i32 + *min).min(*max)))
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct UniqueId(usize);
+#[derive(Debug, PartialEq, Eq)]
+pub struct UniqueId {
+    environment: Environment,
+    tag: usize,
+    id: usize,
+}
 
-impl UniqueId {
-    // has to be 7 or fewer decimal digits according to Wikipedia
-    // https://en.wikipedia.org/wiki/Single-precision_floating-point_format
-    const MAX_VALUE: usize = MAX_AREA as usize * 100 - 1;
-
-    pub fn add_to_pool(&self, pool: &mut FxHashSet<usize>) {
-        pool.insert(self.0);
-    }
-
-    pub fn new(pool: &FxHashSet<usize>, random: f32) -> Option<Self> {
-        if pool.len() > Self::MAX_VALUE {
-            return None;
-        }
-        let count = Self::MAX_VALUE + 1;
-        let mut i = (count as f32 * random) as usize;
-        while pool.contains(&i) {
-            i = (i + 1) % count;
-        }
-        Some(Self(i))
+impl<D: Direction> From<Arc<UniqueId>> for TagValue<D> {
+    fn from(value: Arc<UniqueId>) -> Self {
+        Self::Unique(value)
     }
 }
 
-impl Zippable for UniqueId {
-    fn zip(&self, zipper: &mut Zipper) {
-        let bits = bits_needed_for_max_value(Self::MAX_VALUE as u32);
-        zipper.write_u32(self.0 as u32, bits);
+impl UniqueId {
+    pub(crate) const MAX_VALUE: usize = MAX_AREA as usize * 100 - 1;
+
+    pub fn add_to_pool(&self, pool: &mut FxHashSet<usize>) {
+        pool.insert(self.id);
     }
-    fn unzip(unzipper: &mut Unzipper) -> Result<Self, ZipperError> {
+
+    pub fn new(environment: &Environment, tag_key: usize, random: f32) -> Option<Arc<Self>> {
+        // "add_unique_id" isn't needed here
+        // because "generate_unique_id" automatically adds the generated id to the pool
+        let id = environment.generate_unique_id(tag_key, random)?;
+        Some(Arc::new(Self {
+            environment: environment.clone(),
+            tag: tag_key,
+            id,
+        }))
+    }
+
+    fn export(&self, zipper: &mut Zipper) {
         let bits = bits_needed_for_max_value(Self::MAX_VALUE as u32);
-        Ok(Self(Self::MAX_VALUE.min(unzipper.read_u32(bits)? as usize)))
+        zipper.write_u32(self.id as u32, bits);
+    }
+
+    fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Arc<Self>, ZipperError> {
+        let bits = bits_needed_for_max_value(Self::MAX_VALUE as u32);
+        let id = Self::MAX_VALUE.min(unzipper.read_u32(bits)? as usize);
+        environment.add_unique_id(tag_key, id);
+        Ok(Arc::new(Self {
+            environment: environment.clone(),
+            tag: tag_key,
+            id,
+        }))
+    }
+}
+
+impl Drop for UniqueId {
+    fn drop(&mut self) {
+        self.environment.remove_unique_id(self.tag, self.id);
     }
 }
 
@@ -352,17 +410,15 @@ pub struct TagKeyValues<const K: usize, D: Direction>(pub TagKey, pub [TagValue<
 impl<const K: usize, D: Direction> SupportedZippable<&Environment> for TagKeyValues<K, D> {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         self.0.export(zipper, support);
-        let support = (support.clone(), self.0.0);
         for value in &self.1 {
-            value.export(zipper, &support);
+            value.export(zipper, support, self.0.0);
         }
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let key = TagKey::import(unzipper, support)?;
-        let support = (support.clone(), key.0);
         let mut values = Vec::with_capacity(K);
         for _ in 0..K {
-            values.push(TagValue::import(unzipper, &support)?);
+            values.push(TagValue::import(unzipper, support, key.0)?);
         }
         Ok(Self(key, values.try_into().unwrap()))
     }
@@ -371,7 +427,7 @@ impl<const K: usize, D: Direction> SupportedZippable<&Environment> for TagKeyVal
 
 #[export_module]
 mod tag_module {
-    pub type UniqueId = super::UniqueId;
+    pub type UniqueId = Arc<super::UniqueId>;
 
     #[rhai_fn(pure, name = "==")]
     pub fn eq(u1: &mut UniqueId, u2: UniqueId) -> bool {
@@ -398,6 +454,8 @@ pub mod tests {
     use crate::config::config::Config;
     use crate::config::environment::Environment;
     use crate::map::point_map::MapSize;
+
+    use super::UniqueId;
 
     pub const FLAG_ZOMBIFIED: usize = 0;
     pub const FLAG_EXHAUSTED: usize = 2;
@@ -443,4 +501,24 @@ pub mod tests {
         assert_eq!(environment.tag_name(TAG_COINS), "Coins");
     }
 
+    #[test]
+    fn unique_ids_are_unique() {
+        let config = Arc::new(Config::test_config());
+        let environment = Environment::new_map(config, MapSize::new(5, 5));
+        // ids get dropped and freed immediately, so all ids are the same (since the rng is fixed)
+        for _ in 0..10 {
+            assert_eq!(UniqueId::new(&environment, TAG_DRONE_STATION_ID, 0.).unwrap().id, 0);
+            assert_eq!(UniqueId::new(&environment, TAG_DRONE_ID, 0.).unwrap().id, 0);
+        }
+        // now ids don't get dropped, so all ids are sequential (since the rng is fixed)
+        let mut ids = Vec::new();
+        for i in 0..10 {
+            let uid = UniqueId::new(&environment, TAG_DRONE_STATION_ID, 0.).unwrap();
+            assert_eq!(uid.id, i * 2);
+            ids.push(uid);
+            let uid = UniqueId::new(&environment, TAG_DRONE_ID, 0.).unwrap();
+            assert_eq!(uid.id, i * 2 + 1);
+            ids.push(uid);
+        }
+    }
 }
