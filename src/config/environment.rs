@@ -210,6 +210,10 @@ impl Environment {
         self.config.deal_damage_rhai
     }
 
+    pub fn calculate_attack_damage_rhai(&self) -> usize {
+        self.config.calculate_damage_rhai
+    }
+
     pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
         self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name)

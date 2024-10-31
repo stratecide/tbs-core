@@ -13,7 +13,7 @@ use crate::map::point::Point;
 use super::commands::UnitAction;
 use super::unit::Unit;
 
-crate::enum_with_custom! {
+crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum HeroType {
         None,

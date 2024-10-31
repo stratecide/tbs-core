@@ -12,7 +12,6 @@ use num_rational::Rational32;
 use rhai::*;
 
 use crate::script::{create_base_engine, MyPackage4, MyPackage6};
-use crate::tags::*;
 use crate::terrain::TerrainType;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
@@ -146,8 +145,8 @@ impl Config {
             /*terrain_attributes: HashMap::default(),
             terrain_hidden_attributes: HashMap::default(),*/
             movement_cost: HashMap::default(),
-            attack_bonus: HashMap::default(),
-            defense_bonus: HashMap::default(),
+            //attack_bonus: HashMap::default(),
+            //defense_bonus: HashMap::default(),
             /*build: HashMap::default(),
             max_capture_resistance: 0,
             terrain_max_anger: 0,
@@ -175,6 +174,7 @@ impl Config {
             functions: Vec::new(),
             is_unit_dead_rhai: usize::MAX,
             is_unit_movable_rhai: usize::MAX,
+            calculate_damage_rhai: usize::MAX,
             deal_damage_rhai: usize::MAX,
             custom_tables: HashMap::default(),
         };
@@ -196,7 +196,8 @@ impl Config {
                 "DefaultTerrain" => default_terrain = value.to_string(),
                 "UnitDeathTest" => result.is_unit_dead_rhai = file_loader.rhai_function(value, 2..=2)?.index,
                 "UnitMovableTest" => result.is_unit_movable_rhai = file_loader.rhai_function(value, 0..=0)?.index,
-                "DealDamageToUnit" => result.deal_damage_rhai = file_loader.rhai_function(value, 0..=0)?.index,
+                "CalculateAttackDamage" => result.calculate_damage_rhai = file_loader.rhai_function(value, 1..=1)?.index,
+                "DealDamageToUnit" => result.deal_damage_rhai = file_loader.rhai_function(value, 2..=2)?.index,
                 _ => ()
             }
             Ok(())
@@ -580,7 +581,7 @@ impl Config {
         }
 
         // attack bonus
-        let data = file_loader.load_config(TERRAIN_ATTACK)?;
+        /*let data = file_loader.load_config(TERRAIN_ATTACK)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
         // TODO: ensure uniqueness of column and row IDs
         let mut attackers: Vec<MovementType> = Vec::new();
@@ -637,7 +638,7 @@ impl Config {
             if defenders.len() > 0 {
                 result.defense_bonus.insert(typ, values);
             }
-        }
+        }*/
 
         // terrain building / repairing
         /*let data = file_loader.load_config(TERRAIN_BUILD)?;

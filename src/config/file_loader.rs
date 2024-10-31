@@ -72,7 +72,7 @@ impl FileLoader {
     }
 
     pub(super) fn table_with_headers<
-        Header: FromConfig + PartialEq + Eq + Hash + Copy,
+        Header: FromConfig + PartialEq + Eq + Hash + Clone,
         Line: TableLine<Header=Header>,
     >(&mut self, filename: &str, mut f: impl FnMut(Line) -> Result<(), Box<dyn Error>>) -> Result<(), Box<dyn Error>> {
         let data = self.load_config(filename)?;
@@ -89,7 +89,7 @@ impl FileLoader {
             let mut map = HashMap::default();
             let line = line?;
             for (i, s) in line.iter().enumerate().take(headers.len()) {
-                map.insert(headers[i], s);
+                map.insert(headers[i].clone(), s);
             }
             let line = Line::parse(&map, self)?;
             line.simple_validation()?;

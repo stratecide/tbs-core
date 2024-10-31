@@ -16,8 +16,8 @@ use super::unit_filter::UnitFilter;
 #[derive(Debug)]
 pub(super) struct CommanderPowerUnitConfig {
     pub(super) affects: Vec<UnitFilter>,
-    pub(super) attack: NumberMod<Rational32>,
-    pub(super) defense: NumberMod<Rational32>,
+    //pub(super) attack: NumberMod<Rational32>,
+    //pub(super) defense: NumberMod<Rational32>,
     //pub(super) attack_reduced_by_damage: NumberMod<Rational32>,
     pub(super) min_range: NumberMod<u8>,
     pub(super) max_range: NumberMod<u8>,
@@ -45,6 +45,7 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) on_normal_action: Option<usize>,
     pub(super) aura_range: NumberMod<i8>,
     pub(super) aura_range_transported: NumberMod<i8>,
+    custom_columns: HashMap<String, NumberMod<Rational32>>,
 }
 
 impl TableLine for CommanderPowerUnitConfig {
@@ -53,10 +54,20 @@ impl TableLine for CommanderPowerUnitConfig {
         use CommanderPowerUnitConfigHeader as H;
         let power = parse_vec_def(data, H::Power, Vec::new(), loader)?;
         let affects = parse_vec_def(data, H::Affects, Vec::new(), loader)?;
-        let result = Self {
+        let mut custom_columns = HashMap::default();
+        for (header, s) in data {
+            if let H::Custom(name) = header {
+                let s = s.trim();
+                if s.len() > 0 {
+                    let nm =NumberMod::from_conf(s, loader)?.0;
+                    custom_columns.insert(name.clone(), nm);
+                }
+            }
+        }
+        Ok(Self {
             affects: power.into_iter().chain(affects.into_iter()).collect(),
-            attack: parse_def(data, H::Attack, NumberMod::Keep, loader)?,
-            defense: parse_def(data, H::Defense, NumberMod::Keep, loader)?,
+            //attack: parse_def(data, H::Attack, NumberMod::Keep, loader)?,
+            //defense: parse_def(data, H::Defense, NumberMod::Keep, loader)?,
             //attack_reduced_by_damage: parse_def(data, H::AttackReducedByDamage, NumberMod::Keep, loader)?,
             min_range: parse_def(data, H::MinRange, NumberMod::Keep, loader)?,
             max_range: parse_def(data, H::MaxRange, NumberMod::Keep, loader)?,
@@ -129,8 +140,8 @@ impl TableLine for CommanderPowerUnitConfig {
             },
             aura_range: parse_def(data, H::AuraRange, NumberMod::Keep, loader)?,
             aura_range_transported: parse_def(data, H::AuraRangeTransported, NumberMod::Keep, loader)?,
-        };
-        Ok(result)
+            custom_columns,
+        })
     }
 
     fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
@@ -144,13 +155,21 @@ impl TableLine for CommanderPowerUnitConfig {
     }
 }
 
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+impl CommanderPowerUnitConfig {
+    pub(super) fn get_fraction(&self, column_name: &String) -> NumberMod<Rational32> {
+        self.custom_columns.get(column_name)
+        .cloned()
+        .unwrap_or(NumberMod::Keep)
+    }
+}
+
+crate::enum_with_custom! {
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum CommanderPowerUnitConfigHeader {
         Power,
         Affects,
-        Attack,
-        Defense,
+        //Attack,
+        //Defense,
         //AttackReducedByDamage,
         MinRange,
         MaxRange,

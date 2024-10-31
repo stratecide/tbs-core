@@ -1,11 +1,13 @@
 use std::error::Error;
 
+use num_rational::Rational32;
 use rhai::Dynamic;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
 use crate::terrain::*;
 use crate::units::hero::HeroType;
+use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
 use super::file_loader::{FileLoader, TableLine};
@@ -121,6 +123,7 @@ crate::listable_enum! {
     pub(crate) enum TableType {
         Boolean,
         Int,
+        Fraction,
     }
 }
 
@@ -128,6 +131,7 @@ crate::listable_enum! {
 pub enum TableValue {
     Bool(bool),
     Int(i32),
+    Fraction(Rational32),
 }
 
 impl TableValue {
@@ -139,6 +143,9 @@ impl TableValue {
             TableType::Int => {
                 Ok(Self::Int(i32::from_conf(s, loader)?.0))
             }
+            TableType::Fraction => {
+                Ok(Self::Fraction(Rational32::from_conf(s, loader)?.0))
+            }
         }
     }
 
@@ -146,6 +153,7 @@ impl TableValue {
         match value.type_name().split("::").last().unwrap() {
             "bool" => Some(Self::Bool(value.try_cast()?)),
             "i32" => Some(Self::Int(value.try_cast()?)),
+            "Ratio<i32>" => Some(Self::Fraction(value.try_cast()?)),
             _ => None
         }
     }
@@ -153,6 +161,7 @@ impl TableValue {
         match self {
             Self::Bool(v) => v.into(),
             Self::Int(v) => v.into(),
+            Self::Fraction(v) => Dynamic::from(v),
         }
     }
 }
@@ -164,6 +173,7 @@ crate::listable_enum! {
         Unit,
         Terrain,
         Hero,
+        Movement,
     }
 }
 
@@ -172,6 +182,7 @@ pub enum TableAxisKey {
     Unit(UnitType),
     Terrain(TerrainType),
     Hero(HeroType),
+    Movement(MovementType),
 }
 
 impl TableAxisKey {
@@ -186,6 +197,9 @@ impl TableAxisKey {
             TableAxis::Hero => {
                 Ok(Self::Hero(HeroType::from_conf(s, loader)?.0))
             }
+            TableAxis::Movement => {
+                Ok(Self::Movement(MovementType::from_conf(s, loader)?.0))
+            }
         }
     }
 
@@ -194,6 +208,7 @@ impl TableAxisKey {
             "UnitType" => Some(Self::Unit(value.try_cast()?)),
             "TerrainType" => Some(Self::Terrain(value.try_cast()?)),
             "HeroType" => Some(Self::Hero(value.try_cast()?)),
+            "MovementType" => Some(Self::Movement(value.try_cast()?)),
             _ => None
         }
     }
@@ -202,6 +217,7 @@ impl TableAxisKey {
             Self::Unit(value) => Dynamic::from(value),
             Self::Terrain(value) => Dynamic::from(value),
             Self::Hero(value) => Dynamic::from(value),
+            Self::Movement(value) => Dynamic::from(value),
         }
     }
 }

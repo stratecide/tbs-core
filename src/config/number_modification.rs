@@ -13,7 +13,7 @@ pub trait MulRational32: Debug + Clone + Add<Self, Output = Self> + Sub<Self, Ou
     fn mul_r32(self, other: Rational32) -> Self;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum NumberMod<T: MulRational32 + FromConfig> {
     Keep,
     Replace(T),
@@ -73,6 +73,7 @@ impl<T: MulRational32 + FromConfig + Clone + Send + Sync + 'static> NumberMod<T>
         match self {
             Self::Replace(_) => true,
             Self::RhaiReplace(_) => true,
+            Self::Mul(value) => *value.numer() == 0,
             _ => false
         }
     }
@@ -90,8 +91,9 @@ impl<T: MulRational32 + FromConfig + Clone + Send + Sync + 'static> NumberMod<T>
             Self::Rhai(function_index) => {
                 match executor.run(function_index, (value.clone(), )) {
                     Ok(t) => t,
-                    Err(_e) => {
+                    Err(e) => {
                         // TODO: log error
+                        println!("NumberMod::Rhai {e}");
                         value
                     }
                 }
@@ -99,8 +101,9 @@ impl<T: MulRational32 + FromConfig + Clone + Send + Sync + 'static> NumberMod<T>
             Self::RhaiReplace(function_index) => {
                 match executor.run(function_index, ()) {
                     Ok(t) => t,
-                    Err(_e) => {
+                    Err(e) => {
                         // TODO: log error
+                        println!("NumberMod::RhaiReplace {e}");
                         value
                     }
                 }
@@ -108,11 +111,12 @@ impl<T: MulRational32 + FromConfig + Clone + Send + Sync + 'static> NumberMod<T>
         }
     }
 
-    pub fn update_value_repeatedly<'a>(mut value: T, iter: impl DoubleEndedIterator<Item = &'a Self>, executor: &Executor) -> T {
+    pub fn update_value_repeatedly<'a>(mut value: T, iter: impl DoubleEndedIterator<Item = Self>, executor: &Executor) -> T {
         let mut stack = Vec::new();
         for v in iter.rev() {
+            let ignores_previous = v.ignores_previous_value();
             stack.push(v);
-            if v.ignores_previous_value() {
+            if ignores_previous {
                 break;
             }
         }

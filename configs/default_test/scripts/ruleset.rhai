@@ -7,9 +7,14 @@ fn unit_movable_test() {
     !UNIT.has(FLAG_Exhausted) && !UNIT.has(FLAG_Stunned)
 }
 
-fn deal_damage_to_unit() {
-    let hp = UNIT.get(TAG_Hp);
+fn calculate_attack_damage(base_damage) {
+    base_damage * attacker_bonus("Attack", Fraction(1)) / defender_bonus("Defense", Fraction(1))
+}
+
+fn deal_damage_to_unit(unit, damage) {
+    let hp = unit.get(TAG_Hp);
     if hp != () {
-        EVENT_HANDLER.set_unit_tag(POSITION, TAG_Hp, hp - DAMAGE);
+        unit.set(TAG_Hp, hp - damage);
     }
+    unit
 }

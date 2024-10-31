@@ -87,7 +87,7 @@ impl<D: Direction> Terrain<D> {
         self.environment.config.terrain_chess(self.typ)
     }
 
-    pub fn attack_bonus(&self, unit: &Unit<D>) -> Rational32 {
+    /*pub fn attack_bonus(&self, unit: &Unit<D>) -> Rational32 {
         let bonus = self.environment.config.terrain_attack_bonus(self.typ, unit.sub_movement_type());
         bonus
     }
@@ -95,7 +95,7 @@ impl<D: Direction> Terrain<D> {
     pub fn defense_bonus(&self, unit: &Unit<D>) -> Rational32 {
         let bonus = self.environment.config.terrain_defense_bonus(self.typ, unit.sub_movement_type());
         bonus
-    }
+    }*/
 
     pub fn income_factor(&self) -> i32 {
         self.environment.config.terrain_income_factor(self.typ) as i32

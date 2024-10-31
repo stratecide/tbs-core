@@ -70,43 +70,15 @@ macro_rules! enum_with_custom {(
         $(#[$meta])*
         $vis enum $name {
             $($member),*,
-            Custom(u32)
-        }
-
-        impl $name {
-            pub const fn list_simple() -> &'static [Self] {
-                &[$($name::$member,)*]
-            }
-    
-            /*pub fn get(id: usize) -> Self {
-                if id < Self::list_simple().len() {
-                    Self::list_simple()[id]
-                } else {
-                    Self::Custom(id)
-                }
-            }
-
-            pub fn get_id(&self) -> usize {
-                if let Self::Custom(id) = self {
-                    id + Self::list_simple().len()
-                } else {
-                    Self::list_simple().iter().position(|s| s == self).unwrap()
-                }
-            }*/
+            Custom(String)
         }
 
         impl crate::config::parse::FromConfig for $name {
             fn from_conf<'a>(s: &'a str, _: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
-                if let Some(index) = s.find(|c| !char::is_numeric(c)).or(Some(s.len())).filter(|i| *i > 0) {
-                    let (number, remainder) = s.split_at(index);
-                    if let Ok(custom) = number.parse() {
-                        return Ok((Self::Custom(custom), remainder));
-                    }
-                }
                 let (base, s) = crate::config::parse::string_base(s);
                 match base {
                     $(stringify!($member) => Ok((Self::$member, s)),)*
-                    _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("{}::{base} - {s}", stringify!($name))))
+                    custom => Ok((Self::Custom(custom.to_string()), s))
                 }
             }
         }
@@ -115,7 +87,7 @@ macro_rules! enum_with_custom {(
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
                     $(Self::$member => write!(f, "{}", stringify!($member)),)*
-                    Self::Custom(c) => write!(f, "{}{c}", stringify!($name)),
+                    Self::Custom(c) => write!(f, "{}::{c}", stringify!($name)),
                 }
             }
         }

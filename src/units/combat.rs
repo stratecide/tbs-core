@@ -1,5 +1,5 @@
 use executor::Executor;
-use rhai::{Dynamic, Scope};
+use rhai::{Dynamic, NativeCallContext, Scope};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use num_rational::Rational32;
 use zipper_derive::Zippable;
@@ -748,21 +748,15 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
         } else {
             //handler.unit_heal(defender_pos, (-damage) as u8);
         }
-        // OnDamage shouldn't remove units?
+        // OnDamage shouldn't remove units, so this executor doesn't get access to the event handler
         let environment = handler.get_game().environment();
         let deal_damage_rhai = environment.deal_damage_rhai();
-        let engine = environment.get_engine_handler(handler);
-        let mut scope = Scope::new();
-        scope.push_constant(CONST_NAME_POSITION, defender_pos);
-        scope.push_constant(CONST_NAME_UNIT, defender);
-        scope.push_constant(CONST_NAME_UNIT_ID, defender_id);
-        scope.push_constant(CONST_NAME_OTHER_POSITION, attacker_pos);
-        scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
-        //scope.push_constant(CONST_NAME_OTHER_UNIT_ID, attacker_id.unwrap());
-        scope.push_constant(CONST_NAME_DAMAGE, damage as i32);
-        let executor = Executor::new(engine, scope, environment);
-        match executor.run(deal_damage_rhai, ()) {
-            Ok(()) => (),
+        let engine = environment.get_engine(&*handler.get_game());
+        let executor = Executor::new(engine, Scope::new(), environment);
+        match executor.run(deal_damage_rhai, (defender, damage as i32)) {
+            Ok(unit) => {
+                handler.unit_replace(defender_pos, unit);
+            },
             Err(e) => {
                 // TODO: log error
                 println!("unit deal_damage_rhai {deal_damage_rhai}: {e:?}");
@@ -832,14 +826,14 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
 }
 
 fn calculate_attack_damage<D: Direction>(game: &impl GameView<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, defender: &Unit<D>, defender_pos: Point, factor: Rational32, counter: Counter<D>, attacker_heroes: &[HeroInfluence<D>]) -> i32 {
-    let defensive_terrain = game.get_terrain(defender_pos).unwrap();
-    let terrain_defense = Rational32::from_integer(1) + defensive_terrain.defense_bonus(defender);
+    //let defensive_terrain = game.get_terrain(defender_pos).unwrap();
+    //let terrain_defense = Rational32::from_integer(1) + defensive_terrain.defense_bonus(defender);
     let base_attack = Rational32::from_integer(attacker.base_damage(defender.typ()).unwrap() as i32);
     /*for t in game.get_map().get_neighbors(defender_pos, crate::map::map::NeighborMode::Direct).into_iter().map(|p| game.get_map().get_terrain(p.point).unwrap()) {
         terrain_defense += t.adjacent_defense_bonus(defender);
     }*/
     let defender_heroes = Hero::hero_influence_at(game, defender_pos, defender.get_owner_id());
-    let defense_bonus = game.environment().config.unit_defense(
+    /*let defense_bonus = environment.config.unit_defense(
         game,
         defender,
         defender_pos,
@@ -848,7 +842,7 @@ fn calculate_attack_damage<D: Direction>(game: &impl GameView<D>, attacker: &Uni
         defender_heroes.as_slice(),
         counter.is_counter(),
     );
-    let attack_bonus = game.environment().config.unit_attack(
+    let attack_bonus = environment.config.unit_attack(
         game,
         attacker,
         attacker_pos,
@@ -857,9 +851,71 @@ fn calculate_attack_damage<D: Direction>(game: &impl GameView<D>, attacker: &Uni
         attacker_heroes,
         path.map(|(_, _, tb)| tb).unwrap_or(&[]),
         counter.is_counter(),
-    );
-    (base_attack * attack_bonus * factor / defense_bonus / terrain_defense)
-    .ceil().to_integer()
+    );*/
+    let environment = game.environment();
+    let calculate_attack_damage_rhai = environment.calculate_attack_damage_rhai();
+    let mut engine = environment.get_engine(game);
+    let attacker_ = attacker.clone();
+    let defender_ = defender.clone();
+    let attacker_heroes = attacker_heroes.to_vec();
+    let ballast = path.map(|(_, _, tb)| tb).unwrap_or(&[]).to_vec();
+    let is_counter = counter.is_counter();
+    engine.register_fn("attacker_bonus", move |context: NativeCallContext, column_id: &str, base_value: Rational32| {
+        with_board(context, |game| {
+            environment.config.unit_attack_bonus(
+                &column_id.to_string(),
+                base_value,
+                game,
+                &attacker_,
+                attacker_pos,
+                &defender_,
+                defender_pos,
+                &attacker_heroes,
+                &ballast,
+                is_counter,
+            )
+        })
+    });
+    let environment = game.environment();
+    let attacker_ = attacker.clone();
+    let defender_ = defender.clone();
+    engine.register_fn("defender_bonus", move |context: NativeCallContext, column_id: &str, base_value: Rational32| {
+        let def = with_board(context, |game| {
+                environment.config.unit_defense_bonus(
+                &column_id.to_string(),
+                base_value,
+                game,
+                &defender_,
+                defender_pos,
+                &attacker_,
+                attacker_pos,
+                defender_heroes.as_slice(),
+                is_counter,
+            )
+        });
+        println!("unit_defense_bonus {column_id} = {def}");
+        def
+    });
+    let environment = game.environment();
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_ATTACKER_POSITION, attacker_pos);
+    scope.push_constant(CONST_NAME_ATTACKER, attacker.clone());
+    scope.push_constant(CONST_NAME_DEFENDER_POSITION, defender_pos);
+    scope.push_constant(CONST_NAME_DEFENDER, defender.clone());
+    scope.push_constant(CONST_NAME_IS_COUNTER, is_counter);
+    scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner());
+    let executor = Executor::new(engine, scope, environment);
+    match executor.run::<Rational32>(calculate_attack_damage_rhai, (base_attack * factor,)) {
+        Ok(damage) => {
+            damage.ceil().to_integer()
+        },
+        Err(e) => {
+            // TODO: log error
+            println!("unit calculate_attack_damage_rhai {calculate_attack_damage_rhai}: {e:?}");
+            0
+        }
+    }
+    //(base_attack * attack_bonus * factor / defense_bonus).ceil().to_integer()
 }
 
 fn displace<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, mut targets: Vec<(Point, Option<D>, Rational32)>, heroes: &[HeroInfluence<D>], is_counter: bool) -> Vec<(Point, Option<D>, Rational32)> {
@@ -1055,6 +1111,38 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn hp_factor() {
+        let map = PointMap::new(4, 4, false);
+        let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
+        let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+        let mut map = Map::new2(wmap, &environment);
+        for p in map.all_points() {
+            map.set_terrain(p, TerrainType::Street.instance(&environment).build_with_defaults());
+        }
+        map.set_unit(Point::new(0, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+        map.set_unit(Point::new(1, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+        map.set_unit(Point::new(2, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+        map.set_unit(Point::new(3, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+        map.set_unit(Point::new(0, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(75).build()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(50).build()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(25).build()));
+        let settings = map.settings().unwrap().build_default();
+        let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+        for x in 0..4 {
+            game.handle_command(Command::UnitCommand(UnitCommand {
+                unload_index: None,
+                path: Path::new(Point::new(x, 1)),
+                action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+            }), Arc::new(|| 0.)).unwrap();
+        }
+        let base_damage = 100. - game.get_unit(Point::new(0, 0)).unwrap().get_hp() as f32;
+        assert!(base_damage > 0.);
+        assert_eq!(100 - (base_damage * 0.75).ceil() as u8, game.get_unit(Point::new(1, 0)).unwrap().get_hp());
+        assert_eq!(100 - (base_damage * 0.50).ceil() as u8, game.get_unit(Point::new(2, 0)).unwrap().get_hp());
+        assert_eq!(100 - (base_damage * 0.25).ceil() as u8, game.get_unit(Point::new(3, 0)).unwrap().get_hp());
+    }
 
     #[test]
     fn terrain_defense() {
@@ -1066,14 +1154,14 @@ mod tests {
         map.set_terrain(Point::new(1, 0), TerrainType::Grass.instance(&environment).build_with_defaults());
         map.set_terrain(Point::new(2, 0), TerrainType::Forest.instance(&environment).build_with_defaults());
         map.set_terrain(Point::new(3, 0), TerrainType::Mountain.instance(&environment).build_with_defaults());
-        map.set_unit(Point::new(0, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(1, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(3, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(0, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(1, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(2, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(3, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).build_with_defaults()));
+        map.set_unit(Point::new(0, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+        map.set_unit(Point::new(1, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+        map.set_unit(Point::new(2, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+        map.set_unit(Point::new(3, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+        map.set_unit(Point::new(0, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
+        map.set_unit(Point::new(1, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
+        map.set_unit(Point::new(2, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
+        map.set_unit(Point::new(3, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
         let settings = map.settings().unwrap().build_default();
         let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
         for x in 0..4 {
@@ -1084,6 +1172,7 @@ mod tests {
             }), Arc::new(|| 0.)).unwrap();
         }
         let base_damage = 100. - game.get_unit(Point::new(0, 0)).unwrap().get_hp() as f32;
+        assert!(base_damage > 0.);
         assert_eq!(100 - (base_damage / 1.1).ceil() as u8, game.get_unit(Point::new(1, 0)).unwrap().get_hp());
         assert_eq!(100 - (base_damage / 1.2).ceil() as u8, game.get_unit(Point::new(2, 0)).unwrap().get_hp());
         assert_eq!(100 - (base_damage / 1.3).ceil() as u8, game.get_unit(Point::new(3, 0)).unwrap().get_hp());

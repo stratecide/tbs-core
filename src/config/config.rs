@@ -82,8 +82,8 @@ pub struct Config {
     /*pub(super) terrain_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
     pub(super) terrain_hidden_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,*/
     pub(super) movement_cost: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    pub(super) attack_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    pub(super) defense_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
+    //pub(super) attack_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
+    //pub(super) defense_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
     /*pub(super) build: HashMap<TerrainType, Vec<UnitType>>,
     pub(super) max_capture_resistance: u8,
     pub(super) terrain_max_anger: u8,
@@ -111,6 +111,7 @@ pub struct Config {
     pub(super) functions: Vec<(usize, String)>,
     pub(super) is_unit_dead_rhai: usize,
     pub(super) is_unit_movable_rhai: usize,
+    pub(super) calculate_damage_rhai: usize,
     pub(super) deal_damage_rhai: usize,
     pub(super) custom_tables: HashMap<String, CustomTable>,
 }
@@ -438,14 +439,14 @@ impl Config {
                     let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range;
                     NumberMod::update_value_repeatedly(
                         aura_range,
-                        iter.map(|c| &c.aura_range),
+                        iter.map(|c| c.aura_range),
                         executor,
                     )
                 } else {
                     let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range_transported;
                     NumberMod::update_value_repeatedly(
                         aura_range,
-                        iter.map(|c| &c.aura_range_transported),
+                        iter.map(|c| c.aura_range_transported),
                         executor,
                     )
                 })
@@ -571,7 +572,7 @@ impl Config {
         .cloned()
     }
 
-    pub fn terrain_attack_bonus(&self, typ: TerrainType, movement_type: MovementType) -> Rational32 {
+    /*pub fn terrain_attack_bonus(&self, typ: TerrainType, movement_type: MovementType) -> Rational32 {
         self.attack_bonus.get(&typ)
         .and_then(|map| map.get(&movement_type))
         .cloned()
@@ -583,7 +584,7 @@ impl Config {
         .and_then(|map| map.get(&movement_type))
         .cloned()
         .unwrap_or(Rational32::from_integer(0))
-    }
+    }*/
 
     pub fn terrain_owner_visibility(&self, _typ: TerrainType) -> UnitVisibility {
         // TODO
@@ -615,7 +616,7 @@ impl Config {
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     self.terrain_config(terrain.typ()).vision_range,
-                    iter.map(|c| &c.vision),
+                    iter.map(|c| c.vision),
                     executor,
                 ) as i8
             }
@@ -994,7 +995,7 @@ impl Config {
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     self.base_value(unit.typ()),
-                    iter.map(|c| &c.value),
+                    iter.map(|c| c.value),
                     executor,
                 )
             }
@@ -1050,7 +1051,7 @@ impl Config {
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     self.base_vision_range(unit.typ()) as u8,
-                    iter.map(|c| &c.vision),
+                    iter.map(|c| c.vision),
                     executor,
                 )
             }
@@ -1076,7 +1077,7 @@ impl Config {
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     self.base_true_vision_range(unit.typ()) as u8,
-                    iter.map(|c| &c.true_vision),
+                    iter.map(|c| c.true_vision),
                     executor,
                 )
             }
@@ -1339,7 +1340,7 @@ impl Config {
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     self.base_movement_points(unit.typ()),
-                    iter.map(|c| &c.movement_points),
+                    iter.map(|c| c.movement_points),
                     executor,
                 )
             }
@@ -1376,8 +1377,10 @@ impl Config {
         result
     }
 
-    pub fn unit_attack<D: Direction>(
+    pub fn unit_attack_bonus<D: Direction>(
         &self,
+        column_name: &String,
+        base_value: Rational32,
         game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
@@ -1387,7 +1390,7 @@ impl Config {
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Rational32 {
-        let iter_gen = |f: Box<dyn Fn(Box<dyn DoubleEndedIterator<Item = &CommanderPowerUnitConfig>>, &Executor) -> num_rational::Ratio<i32>>| self.unit_power_configs(
+        self.unit_power_configs(
             game,
             unit,
             (unit_pos, None),
@@ -1396,31 +1399,20 @@ impl Config {
             heroes,
             temporary_ballast,
             is_counter,
-            f,
-        );
-        let factor = iter_gen(Box::new(|iter: Box<dyn DoubleEndedIterator<Item = &CommanderPowerUnitConfig>>, executor| {
-            NumberMod::update_value_repeatedly(
-                Rational32::from_integer(1),
-                iter.map(|c| &c.attack),
-                executor,
-            )
-        }));
-        // attack is reduced by the damage the attacker has already taken
-        /*let damage_factor = iter_gen(Box::new(|iter: Box<dyn DoubleEndedIterator<Item = &CommanderPowerUnitConfig>>, executor| {
-            NumberMod::update_value_repeatedly(
-                Rational32::from_integer(1),
-                iter.map(|c| &c.attack_reduced_by_damage),
-                executor,
-            )
-        }));*/
-        factor
-        /*let damage = Rational32::from_integer(100 - unit.get_hp() as i32);
-        let hp_factor = (Rational32::from_integer(100) - damage * damage_factor) / 100;
-        hp_factor * factor*/
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    base_value,
+                    iter.map(|c| c.get_fraction(column_name)),
+                    executor,
+                )
+            }
+        )
     }
 
-    pub fn unit_defense<D: Direction>(
+    pub fn unit_defense_bonus<D: Direction>(
         &self,
+        column_name: &String,
+        base_value: Rational32,
         game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
@@ -1440,8 +1432,8 @@ impl Config {
             is_counter,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
-                    Rational32::from_integer(1),
-                    iter.map(|c| &c.defense),
+                    base_value,
+                    iter.map(|c| c.get_fraction(column_name)),
                     executor,
                 )
             }
@@ -1473,13 +1465,13 @@ impl Config {
                 if min_range {
                     NumberMod::update_value_repeatedly(
                         base_range,
-                        iter.map(|c| &c.min_range),
+                        iter.map(|c| c.min_range),
                         executor,
                     )
                 } else {
                     NumberMod::update_value_repeatedly(
                         base_range,
-                        iter.map(|c| &c.max_range),
+                        iter.map(|c| c.max_range),
                         executor,
                     )
                 }
@@ -1517,7 +1509,7 @@ impl Config {
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     base_displacement.abs(),
-                    iter.map(|c| &c.displacement_distance),
+                    iter.map(|c| c.displacement_distance),
                     executor,
                 )
             }
