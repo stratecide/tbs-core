@@ -296,24 +296,8 @@ impl<D: Direction> UnitCommand<D> {
             if client.current_owner() != unit.get_owner_id() {
                 return Err(CommandError::NotYourUnit);
             }
-            {
-                // can the unit be moved?
-                let environment = unit.environment().clone();
-                let is_unit_movable_rhai = environment.is_unit_movable_rhai();
-                let engine = environment.get_engine(client);
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_POSITION, start);
-                scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                let executor = Executor::new(engine, scope, environment);
-                match executor.run(is_unit_movable_rhai, ()) {
-                    Ok(true) => (),
-                    Ok(false) => return Err(CommandError::UnitCannotMove),
-                    Err(e) => {
-                        // TODO: log error
-                        println!("unit is_unit_movable_rhai {is_unit_movable_rhai}: {e:?}");
-                        return Err(CommandError::UnitCannotMove);
-                    }
-                }
+            if !unit.can_move(client, start) {
+                return Err(CommandError::UnitCannotMove);
             }
             let ballast = search_path(client, &unit, &self.path, transporter, |path, p, can_stop_here, _| {
                 if *path == self.path && board_at_the_end {

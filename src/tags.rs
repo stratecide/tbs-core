@@ -34,11 +34,11 @@ impl<D: Direction> TagBag<D> {
     pub fn debug(&self, f: &mut std::fmt::Formatter<'_>, environment: &Environment) -> std::fmt::Result {
         write!(f, "FLAGS[")?;
         for flag in &self.flags {
-            write!(f, "{}", environment.flag_name(*flag))?;
+            write!(f, "{}", environment.config.flag_name(*flag))?;
         }
         write!(f, "], TAGS[")?;
         for (key, value) in &self.tags {
-            write!(f, "{}=", environment.tag_name(*key))?;
+            write!(f, "{}=", environment.config.tag_name(*key))?;
             match value {
                 TagValue::Unique(value) => write!(f, "{value:?}")?,
                 TagValue::Int(value) => write!(f, "{}", value.0)?,
@@ -55,12 +55,12 @@ impl<D: Direction> TagBag<D> {
     pub fn fog_replacement(&self, environment: &Environment, minimum_visibility: UnitVisibility) -> Self {
         let mut result = Self::new();
         for flag in &self.flags {
-            if environment.flag_visibility(*flag) >= minimum_visibility {
+            if environment.config.flag_visibility(*flag) >= minimum_visibility {
                 result.flags.push(*flag);
             }
         }
         for (key, value) in &self.tags {
-            if environment.tag_visibility(*key) >= minimum_visibility {
+            if environment.config.tag_visibility(*key) >= minimum_visibility {
                 result.tags.insert(*key, value.clone());
             }
         }
@@ -76,7 +76,7 @@ impl<D: Direction> TagBag<D> {
     }
 
     pub fn set_flag(&mut self, environment: &Environment, flag: usize) -> bool {
-        if flag >= environment.flag_count() {
+        if flag >= environment.config.flag_count() {
             return false;
         }
         if self.flags.contains(&flag) {
@@ -100,7 +100,7 @@ impl<D: Direction> TagBag<D> {
         self.tags.iter()
     }
 
-    pub fn is_tag_set(&self, key: usize) -> bool {
+    pub fn has_tag(&self, key: usize) -> bool {
         self.tags.contains_key(&key)
     }
 
@@ -134,12 +134,12 @@ impl<D: Direction> TagBag<D> {
 
 impl<D: Direction> SupportedZippable<&Environment> for TagBag<D> {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        let flag_bits = bits_needed_for_max_value(support.flag_count() as u32);
+        let flag_bits = bits_needed_for_max_value(support.config.flag_count() as u32);
         zipper.write_u32(self.flags.len() as u32, flag_bits);
         for flag in &self.flags {
             zipper.write_u32(*flag as u32, flag_bits);
         }
-        let tag_bits = bits_needed_for_max_value(support.tag_count() as u32);
+        let tag_bits = bits_needed_for_max_value(support.config.tag_count() as u32);
         zipper.write_u32(self.tags.len() as u32, tag_bits);
         for (key, value) in &self.tags {
             zipper.write_u32(*key as u32, tag_bits);
@@ -148,15 +148,15 @@ impl<D: Direction> SupportedZippable<&Environment> for TagBag<D> {
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let mut result = Self::new();
-        let flag_bits = bits_needed_for_max_value(support.flag_count() as u32);
-        let flag_count = unzipper.read_u32(flag_bits)?.min(support.flag_count() as u32);
+        let flag_bits = bits_needed_for_max_value(support.config.flag_count() as u32);
+        let flag_count = unzipper.read_u32(flag_bits)?.min(support.config.flag_count() as u32);
         for _ in 0..flag_count {
             result.set_flag(support, unzipper.read_u32(flag_bits)? as usize);
         }
-        let tag_bits = bits_needed_for_max_value(support.tag_count() as u32);
-        let tag_count = unzipper.read_u32(tag_bits)?.min(support.tag_count() as u32);
+        let tag_bits = bits_needed_for_max_value(support.config.tag_count() as u32);
+        let tag_count = unzipper.read_u32(tag_bits)?.min(support.config.tag_count() as u32);
         for _ in 0..tag_count {
-            let key = support.tag_count().min(unzipper.read_u32(tag_bits)? as usize);
+            let key = support.config.tag_count().min(unzipper.read_u32(tag_bits)? as usize);
             let value = TagValue::import(unzipper, support, key)?;
             result.set_tag(support, key, value);
         }
@@ -224,9 +224,9 @@ impl<D: Direction> TagValue<D> {
     }
 
     pub(crate) fn has_valid_type(&self, environment: &Environment, key: usize) -> bool {
-        match (self, environment.tag_type(key)) {
+        match (self, environment.config.tag_type(key)) {
             (Self::Unique(value), tag_type) => {
-                value.environment == *environment && environment.tag_type(value.tag) == tag_type
+                value.environment == *environment && environment.config.tag_type(value.tag) == tag_type
             },
             (Self::Point(_), TagType::Point) => true,
             (Self::Direction(_), TagType::Direction) => true,
@@ -273,7 +273,7 @@ impl<D: Direction> TagValue<D> {
         let result = match value.type_name().split("::").last().unwrap() {
             "Direction" => Some(Self::Direction(value.cast())),
             "i32" => {
-                let TagType::Int { min, max } = environment.tag_type(key) else {
+                let TagType::Int { min, max } = environment.config.tag_type(key) else {
                     return None;
                 };
                 Some(Self::Int(Int32(value.cast::<i32>().max(*min).min(*max))))
@@ -302,15 +302,15 @@ impl<D: Direction> From<i32> for TagValue<D> {
 
 impl Int32 {
     fn export(&self, zipper: &mut Zipper, environment: &Environment, tag_key: usize) {
-        let TagType::Int { min, max } = environment.tag_type(tag_key) else {
-            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.tag_name(tag_key));
+        let TagType::Int { min, max } = environment.config.tag_type(tag_key) else {
+            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.config.tag_name(tag_key));
         };
         let bits = bits_needed_for_max_value((*max - *min) as u32);
         zipper.write_u32((self.0 - *min) as u32, bits);
     }
     fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Self, ZipperError> {
-        let TagType::Int { min, max } = environment.tag_type(tag_key) else {
-            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.tag_name(tag_key));
+        let TagType::Int { min, max } = environment.config.tag_type(tag_key) else {
+            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.config.tag_name(tag_key));
         };
         let bits = bits_needed_for_max_value((*max - *min) as u32);
         Ok(Self((unzipper.read_u32(bits)? as i32 + *min).min(*max)))
@@ -376,10 +376,10 @@ pub struct FlagKey(pub usize);
 
 impl SupportedZippable<&Environment> for FlagKey {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.flag_count() as u32));
+        zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.config.flag_count() as u32));
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(support.flag_count() as u32))? as usize))
+        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(support.config.flag_count() as u32))? as usize))
     }
 }
 
@@ -398,10 +398,10 @@ pub struct TagKey(pub usize);
 
 impl SupportedZippable<&Environment> for TagKey {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.tag_count() as u32));
+        zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.config.tag_count() as u32));
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(support.tag_count() as u32))? as usize))
+        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(support.config.tag_count() as u32))? as usize))
     }
 }
 
@@ -481,24 +481,24 @@ pub mod tests {
     fn verify_tag_test_constants() {
         let config = Arc::new(Config::test_config());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
-        assert_eq!(environment.flag_name(FLAG_ZOMBIFIED), "Zombified");
-        assert_eq!(environment.flag_name(FLAG_EXHAUSTED), "Exhausted");
-        assert_eq!(environment.flag_name(FLAG_REPAIRING), "Repairing");
-        assert_eq!(environment.flag_name(FLAG_CAPTURING), "Capturing");
-        assert_eq!(environment.flag_name(FLAG_STUNNED), "Stunned");
-        assert_eq!(environment.tag_name(TAG_HP), "Hp");
-        assert_eq!(environment.tag_name(TAG_DRONE_STATION_ID), "DroneStationId");
-        assert_eq!(environment.tag_name(TAG_DRONE_ID), "DroneId");
-        assert_eq!(environment.tag_name(TAG_HERO_ORIGIN), "HeroOrigin");
-        assert_eq!(environment.tag_name(TAG_PAWN_DIRECTION), "PawnDirection");
-        assert_eq!(environment.tag_name(TAG_ANGER), "Anger");
-        assert_eq!(environment.tag_name(TAG_BUILT_THIS_TURN), "BuiltThisTurn");
-        assert_eq!(environment.tag_name(TAG_CAPTURE_OWNER), "CaptureOwner");
-        assert_eq!(environment.tag_name(TAG_CAPTURE_PROGRESS), "CaptureProgress");
-        assert_eq!(environment.tag_name(TAG_UNIT_TYPE), "UnitType");
-        assert_eq!(environment.tag_name(TAG_MOVEMENT_TYPE), "MovementType");
-        assert_eq!(environment.tag_name(TAG_SLUDGE_COUNTER), "SludgeCounter");
-        assert_eq!(environment.tag_name(TAG_COINS), "Coins");
+        assert_eq!(environment.config.flag_name(FLAG_ZOMBIFIED), "Zombified");
+        assert_eq!(environment.config.flag_name(FLAG_EXHAUSTED), "Exhausted");
+        assert_eq!(environment.config.flag_name(FLAG_REPAIRING), "Repairing");
+        assert_eq!(environment.config.flag_name(FLAG_CAPTURING), "Capturing");
+        assert_eq!(environment.config.flag_name(FLAG_STUNNED), "Stunned");
+        assert_eq!(environment.config.tag_name(TAG_HP), "Hp");
+        assert_eq!(environment.config.tag_name(TAG_DRONE_STATION_ID), "DroneStationId");
+        assert_eq!(environment.config.tag_name(TAG_DRONE_ID), "DroneId");
+        assert_eq!(environment.config.tag_name(TAG_HERO_ORIGIN), "HeroOrigin");
+        assert_eq!(environment.config.tag_name(TAG_PAWN_DIRECTION), "PawnDirection");
+        assert_eq!(environment.config.tag_name(TAG_ANGER), "Anger");
+        assert_eq!(environment.config.tag_name(TAG_BUILT_THIS_TURN), "BuiltThisTurn");
+        assert_eq!(environment.config.tag_name(TAG_CAPTURE_OWNER), "CaptureOwner");
+        assert_eq!(environment.config.tag_name(TAG_CAPTURE_PROGRESS), "CaptureProgress");
+        assert_eq!(environment.config.tag_name(TAG_UNIT_TYPE), "UnitType");
+        assert_eq!(environment.config.tag_name(TAG_MOVEMENT_TYPE), "MovementType");
+        assert_eq!(environment.config.tag_name(TAG_SLUDGE_COUNTER), "SludgeCounter");
+        assert_eq!(environment.config.tag_name(TAG_COINS), "Coins");
     }
 
     #[test]

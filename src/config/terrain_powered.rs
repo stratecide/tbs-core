@@ -15,7 +15,7 @@ use crate::units::hero::HeroInfluence;
 
 use super::file_loader::{FileLoader, TableLine};
 use super::number_modification::NumberMod;
-use super::ConfigParseError;
+use super::{ConfigParseError, OwnershipPredicate};
 
 #[derive(Debug, Clone)]
 pub(crate) enum TerrainFilter {
@@ -97,7 +97,7 @@ impl TerrainFilter {
                 && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
             Self::Type(t) => t.contains(&terrain.typ()),
-            Self::Ownable => terrain.environment().config.terrain_can_have_owner(terrain.typ()),
+            Self::Ownable => terrain.environment().config.terrain_ownership(terrain.typ()) != OwnershipPredicate::Never,
             Self::Unowned => terrain.get_owner_id() < 0,
             Self::OwnerTurn => terrain.get_owner_id() == game.current_owner(),
             Self::Flag(flags) => flags.iter().any(|flag| terrain.has_flag(flag.0)),

@@ -4,13 +4,18 @@ fn co_resurrection() {
         if BOARD.get_unit(point) != () {
             continue;
         }
-        let skull = BOARD.get_skull(point, OWNER_ID);
+        let skull = EVENT_HANDLER.remove_token(point, "Skull", OWNER_ID);
         if skull != () {
-            EVENT_HANDLER.remove_skull(point, OWNER_ID);
-            let unit = skull.build_unit()
-                .hp(50)
-                .zombified()
-                .build();
+            let unit = Unit(skull.get(TAG_UnitType));
+            unit.copy_from(skull);
+            unit.owner_id = skull.owner_id;
+            unit.remove(TAG_UnitType);
+            unit.remove(TAG_MovementType);
+            if skull.has(TAG_MovementType) {
+                unit.movement_type = skull.get(TAG_MovementType);
+            }
+            unit.set(TAG_Hp, 50);
+            unit.set(FLAG_Zombified);
             EVENT_HANDLER.place_unit(point, unit);
         }
     }

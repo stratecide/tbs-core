@@ -6,12 +6,12 @@ use crate::config::parse::*;
 use crate::terrain::*;
 
 use super::file_loader::{FileLoader, TableLine};
-use super::ConfigParseError;
+use super::{ConfigParseError, OwnershipPredicate};
 
 #[derive(Debug)]
 pub struct TerrainTypeConfig {
     pub(super) name: String,
-    pub(super) can_have_owner: bool,
+    pub(super) owned: OwnershipPredicate,
     pub(super) owner_is_playable: bool,
     /*pub(super) needs_owner: bool,
     pub(super) update_amphibious: Option<AmphibiousTyping>,
@@ -41,7 +41,7 @@ impl TableLine for TerrainTypeConfig {
         };
         let result = Self {
             name: get(H::Id)?.to_string(),
-            can_have_owner: parse_def(data, H::Ownable, false, loader)?,
+            owned: parse_def(data, H::Owned, OwnershipPredicate::Either, loader)?,
             owner_is_playable: parse_def(data, H::OwnerPlayable, false, loader)?,
             /*needs_owner: parse_def(data, H::NeedsOwner, false, loader)?,
             capture_resistance: parse_def(data, H::CaptureResistance, 0, loader)?,
@@ -85,7 +85,7 @@ crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum TerrainTypeConfigHeader {
         Id,
-        Ownable,
+        Owned,
         OwnerPlayable,
         /*NeedsOwner,
         CaptureResistance,

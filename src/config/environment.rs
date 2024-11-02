@@ -80,47 +80,18 @@ impl Environment {
         200
     }
 
-    pub fn flag_count(&self) -> usize {
-        self.config.flags.len()
-    }
-    pub fn flag_visibility(&self, index: usize) -> UnitVisibility {
-        self.config.flags[index].visibility
-    }
-    pub fn flag_name(&self, index: usize) -> &str {
-        &self.config.flags[index].name
-    }
-    pub fn flag_by_name(&self, name: &str) -> Option<usize> {
-        self.config.flags.iter().position(|flag| flag.name.as_str() == name)
-    }
-
-    pub fn tag_count(&self) -> usize {
-        self.config.tags.len()
-    }
-    pub fn tag_type(&self, index: usize) -> &TagType {
-        &self.config.tags[index].tag_type
-    }
-    pub fn tag_visibility(&self, index: usize) -> UnitVisibility {
-        self.config.tags[index].visibility
-    }
-    pub fn tag_name(&self, index: usize) -> &str {
-        &self.config.tags[index].name
-    }
-    pub fn tag_by_name(&self, name: &str) -> Option<usize> {
-        self.config.tags.iter().position(|tag| tag.name.as_str() == name)
-    }
-
     pub(crate) fn add_unique_id(&self, tag_key: usize, id: usize) {
-        if let TagType::Unique { pool } = self.tag_type(tag_key) {
+        if let TagType::Unique { pool } = self.config.tag_type(tag_key) {
             self.unique_ids.lock().unwrap().get_mut(pool).unwrap().insert(id);
         }
     }
     pub(crate) fn remove_unique_id(&self, tag_key: usize, id: usize) {
-        if let TagType::Unique { pool } = self.tag_type(tag_key) {
+        if let TagType::Unique { pool } = self.config.tag_type(tag_key) {
             self.unique_ids.lock().unwrap().get_mut(pool).unwrap().remove(&id);
         }
     }
     pub(crate) fn generate_unique_id(&self, tag_key: usize, random: f32) -> Option<usize> {
-        let TagType::Unique { pool } = self.tag_type(tag_key) else {
+        let TagType::Unique { pool } = self.config.tag_type(tag_key) else {
             return None;
         };
         let mut unique_ids = self.unique_ids.lock().unwrap();
@@ -166,8 +137,8 @@ impl Environment {
         #[allow(deprecated)]
         engine.on_var(move |name, _index, _context| {
             match name.split_once("_") {
-                Some(("TAG", name)) => return Ok(this.tag_by_name(name).map(|key| Dynamic::from(TagKey(key)))),
-                Some(("FLAG", name)) => return Ok(this.flag_by_name(name).map(|key| Dynamic::from(FlagKey(key)))),
+                Some(("TAG", name)) => return Ok(this.config.tag_by_name(name).map(|key| Dynamic::from(TagKey(key)))),
+                Some(("FLAG", name)) => return Ok(this.config.flag_by_name(name).map(|key| Dynamic::from(FlagKey(key)))),
                 Some(("MOVEMENT", name)) => return Ok(this.config.find_movement_by_name(name).map(Dynamic::from)),
                 Some(("TERRAIN", name)) => return Ok(this.config.find_terrain_by_name(name).map(Dynamic::from)),
                 Some(("TOKEN", name)) => return Ok(this.config.find_token_by_name(name).map(Dynamic::from)),

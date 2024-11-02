@@ -12,7 +12,7 @@ use crate::tokens::token::Token;
 use crate::tokens::token_types::TokenType;
 
 use super::file_loader::FileLoader;
-use super::ConfigParseError;
+use super::{ConfigParseError, OwnershipPredicate};
 
 #[derive(Debug, Clone)]
 pub(crate) enum TokenFilter {
@@ -92,7 +92,7 @@ impl TokenFilter {
                 && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
             Self::Type(t) => t.contains(&token.typ()),
-            Self::Ownable => token.environment().config.token_can_have_owner(token.typ()),
+            Self::Ownable => token.environment().config.token_ownership(token.typ()) != OwnershipPredicate::Never,
             Self::Unowned => token.get_owner_id() < 0,
             Self::OwnerTurn => token.get_owner_id() == game.current_owner(),
             Self::Flag(flags) => flags.iter().any(|flag| token.has_flag(flag.0)),

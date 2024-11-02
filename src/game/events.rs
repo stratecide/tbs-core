@@ -726,7 +726,7 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitFlag(p, FlagKey(key)) => {
                 let unit = game.get_unit(*p).unwrap();
-                if visible_unit_with_attribute(game, team, *p, unit.environment().flag_visibility(*key)) {
+                if visible_unit_with_attribute(game, team, *p, unit.environment().config.flag_visibility(*key)) {
                     Some(self.clone())
                 } else {
                     None
@@ -736,7 +736,7 @@ impl<D: Direction> Event<D> {
             Self::UnitRemoveTag(p, TagKeyValues(TagKey(key), _)) |
             Self::UnitReplaceTag(p, TagKeyValues(TagKey(key), _)) => {
                 let unit = game.get_unit(*p).unwrap();
-                if visible_unit_with_attribute(game, team, *p, unit.environment().tag_visibility(*key)) {
+                if visible_unit_with_attribute(game, team, *p, unit.environment().config.tag_visibility(*key)) {
                     Some(self.clone())
                 } else {
                     None
@@ -744,7 +744,7 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitFlagBoarded(p, unload_index, key) => {
                 let unit = game.get_unit(*p).unwrap();
-                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().flag_visibility(key.0)) {
+                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().config.flag_visibility(key.0)) {
                     Some(Self::UnitFlagBoarded(*p, unload_index.into(), *key))
                 } else {
                     None
@@ -752,7 +752,7 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitSetTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
                 let unit = game.get_unit(*p).unwrap();
-                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().tag_visibility(key.0)) {
+                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().config.tag_visibility(key.0)) {
                     Some(Self::UnitSetTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
                 } else {
                     None
@@ -760,7 +760,7 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitRemoveTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
                 let unit = game.get_unit(*p).unwrap();
-                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().tag_visibility(key.0)) {
+                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().config.tag_visibility(key.0)) {
                     Some(Self::UnitRemoveTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
                 } else {
                     None
@@ -768,7 +768,7 @@ impl<D: Direction> Event<D> {
             }
             Self::UnitReplaceTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
                 let unit = game.get_unit(*p).unwrap();
-                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().tag_visibility(key.0)) {
+                if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().config.tag_visibility(key.0)) {
                     Some(Self::UnitReplaceTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
                 } else {
                     None
@@ -838,7 +838,7 @@ impl<D: Direction> Event<D> {
             Self::TerrainFlag(p, FlagKey(key)) => {
                 // terrain is AlwaysVisible
                 // flag_visibility should be same as in Terrain::fog_replacement
-                if match game.environment().flag_visibility(*key) {
+                if match game.environment().config.flag_visibility(*key) {
                     UnitVisibility::AlwaysVisible => true,
                     UnitVisibility::Normal |
                     UnitVisibility::Stealth => game.get_fog_at(team, *p) < FogIntensity::Light,
@@ -853,7 +853,7 @@ impl<D: Direction> Event<D> {
             Self::TerrainReplaceTag(p, TagKeyValues(TagKey(key), _)) => {
                 // terrain is AlwaysVisible
                 // tag_visibility should be same as in Terrain::fog_replacement
-                if match game.environment().tag_visibility(*key) {
+                if match game.environment().config.tag_visibility(*key) {
                     UnitVisibility::AlwaysVisible => true,
                     UnitVisibility::Normal |
                     UnitVisibility::Stealth => game.get_fog_at(team, *p) < FogIntensity::Light,

@@ -95,9 +95,9 @@ impl<D: Direction> ShopItemKey<D> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShopItem<D: Direction> {
-    pub(super) key: ShopItemKey<D>,
-    pub(super) enabled: bool,
-    pub(super) costs: Vec<Option<i32>>,
+    pub key: ShopItemKey<D>,
+    pub enabled: bool,
+    pub costs: Vec<Option<i32>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -180,6 +180,32 @@ pub fn run_unit_input_script<D: Direction>(
     } else {
         CustomActionTestResult::Failure
     }
+}
+
+pub fn run_token_input_script<D: Direction>(
+    script: usize,
+    game: &Handle<Game<D>>,
+    pos: Point,
+    token: Token<D>,
+    data: &[CustomActionInput<D>],
+) -> CustomActionTestResult<D> {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_POSITION, pos);
+    scope.push_constant(CONST_NAME_TOKEN, token);
+    run_input_script(script, game, scope, data)
+}
+
+pub fn run_terrain_input_script<D: Direction>(
+    script: usize,
+    game: &Handle<Game<D>>,
+    pos: Point,
+    terrain: Terrain<D>,
+    data: &[CustomActionInput<D>],
+) -> CustomActionTestResult<D> {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_POSITION, pos);
+    scope.push_constant(CONST_NAME_TERRAIN, terrain);
+    run_input_script(script, game, scope, data)
 }
 
 pub fn run_commander_input_script<D: Direction>(

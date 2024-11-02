@@ -2,6 +2,7 @@ use rustc_hash::FxHashMap as HashMap;
 use std::error::Error;
 use num_rational::Rational32;
 
+use crate::config::OwnershipPredicate;
 use crate::game::fog::VisionMode;
 use crate::units::combat::*;
 use crate::units::movement::MovementType;
@@ -22,12 +23,11 @@ pub struct UnitTypeConfig {
     pub(super) visibility: UnitVisibility,
     pub(super) movement_pattern: MovementPattern,
     pub(super) movement_type: MovementType,
-    pub(super) water_movement_type: Option<MovementType>,
     pub(super) movement_points: Rational32,
     pub(super) vision_mode: VisionMode,
     pub(super) vision: usize,
     pub(super) true_vision: usize,
-    pub(super) needs_owner: bool,
+    pub(super) owned: OwnershipPredicate,
     pub(super) stealthy: bool,
     pub(super) can_be_moved_through: bool,
     pub(super) can_be_taken: bool,
@@ -62,15 +62,11 @@ impl TableLine for UnitTypeConfig {
             },
             movement_pattern: parse_def(data, H::MovementPattern, MovementPattern::Standard, loader)?,
             movement_type: parse(data, H::MovementType, loader)?,
-            water_movement_type: match data.get(&H::WaterMovementType) {
-                Some(s) if s.len() > 0 => Some(MovementType::from_conf(s, loader)?.0),
-                _ => None,
-            },
             movement_points: parse_def(data, H::MovementPoints, Rational32::from_integer(0), loader)?,
             vision_mode: parse_def(data, H::VisionMode, VisionMode::Normal, loader)?,
             vision: parse_def(data, H::Vision, 0 as u8, loader)? as usize,
             true_vision: parse_def(data, H::TrueVision, 0 as u8, loader)? as usize,
-            needs_owner: parse_def(data, H::NeedsOwner, false, loader)?,
+            owned: parse_def(data, H::Owned, OwnershipPredicate::Either, loader)?,
             stealthy: parse_def(data, H::Stealthy, false, loader)?,
             can_be_moved_through: parse_def(data, H::CanBeMovedThrough, false, loader)?,
             can_be_taken: parse_def(data, H::CanBeTaken, false, loader)?,
@@ -106,12 +102,11 @@ crate::listable_enum! {
         Visibility,
         MovementPattern,
         MovementType,
-        WaterMovementType,
         MovementPoints,
         VisionMode,
         Vision,
         TrueVision,
-        NeedsOwner,
+        Owned,
         Stealthy,
         CanBeMovedThrough,
         CanBeTaken,

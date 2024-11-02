@@ -5,8 +5,9 @@ fn ua_power() {
             continue;
         }
         let unit = BOARD.get_unit(position);
-        if unit?.owner_id == UNIT.owner_id && unit.status == status_exhausted() {
-            EVENT_HANDLER.set_unit_status(position, status_ready());
+        if unit?.owner_id == UNIT.owner_id && unit.has(FLAG_Exhausted) {
+            EVENT_HANDLER.remove_unit_flag(position, FLAG_Exhausted);
         }
     }
+    EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
 }

@@ -42,11 +42,12 @@ use super::commander_unit_config::CommanderPowerUnitConfig;
 use super::movement_type_config::{MovementPattern, MovementTypeConfig};
 use super::number_modification::NumberMod;
 use super::table_config::CustomTable;
-use super::tag_config::TagConfig;
+use super::tag_config::{TagConfig, TagType};
 use super::terrain_powered::TerrainPoweredConfig;
 use super::terrain_type_config::TerrainTypeConfig;
 use super::token_typ_config::TokenTypeConfig;
 use super::unit_type_config::UnitTypeConfig;
+use super::OwnershipPredicate;
 
 const DEFAULT_SPLASH: [Rational32; 1] = [Rational32::new_raw(1, 1)];
 
@@ -165,10 +166,70 @@ impl Config {
         self.max_aura_range
     }
 
+    // flags / tags
+
+    pub fn flag_count(&self) -> usize {
+        self.flags.len()
+    }
+    pub fn flag_visibility(&self, index: usize) -> UnitVisibility {
+        self.flags[index].visibility
+    }
+    pub fn flag_name(&self, index: usize) -> &str {
+        &self.flags[index].name
+    }
+    pub fn flag_by_name(&self, name: &str) -> Option<usize> {
+        self.flags.iter().position(|flag| flag.name.as_str() == name)
+    }
+
+    pub fn tag_count(&self) -> usize {
+        self.tags.len()
+    }
+    pub fn tag_type(&self, index: usize) -> &TagType {
+        &self.tags[index].tag_type
+    }
+    pub fn tag_visibility(&self, index: usize) -> UnitVisibility {
+        self.tags[index].visibility
+    }
+    pub fn tag_name(&self, index: usize) -> &str {
+        &self.tags[index].name
+    }
+    pub fn tag_by_name(&self, name: &str) -> Option<usize> {
+        self.tags.iter().position(|tag| tag.name.as_str() == name)
+    }
+
+    pub fn is_terrain_flag_normal(&self, typ: TerrainType, flag: usize) -> bool {
+        // TODO
+        true
+    }
+    pub fn is_terrain_tag_normal(&self, typ: TerrainType, tag: usize) -> bool {
+        // TODO
+        true
+    }
+    pub fn is_token_flag_normal(&self, typ: TokenType, flag: usize) -> bool {
+        // TODO
+        true
+    }
+    pub fn is_token_tag_normal(&self, typ: TokenType, tag: usize) -> bool {
+        // TODO
+        true
+    }
+    pub fn is_unit_flag_normal(&self, typ: UnitType, flag: usize) -> bool {
+        // TODO
+        true
+    }
+    pub fn is_unit_tag_normal(&self, typ: UnitType, tag: usize) -> bool {
+        // TODO
+        true
+    }
+
     // units
 
     pub fn unit_count(&self) -> usize {
         self.units.len()
+    }
+
+    pub fn unit_types(&self) -> Vec<UnitType> {
+        (0..self.unit_count()).map(|i| UnitType(i)).collect()
     }
 
     pub fn unknown_unit(&self) -> UnitType {
@@ -204,8 +265,8 @@ impl Config {
         None
     }
 
-    pub fn unit_needs_owner(&self, typ: UnitType) -> bool {
-        self.unit_config(typ).needs_owner
+    pub fn unit_ownership(&self, typ: UnitType) -> OwnershipPredicate {
+        self.unit_config(typ).owned
     }
 
     pub fn movement_pattern(&self, typ: UnitType) -> MovementPattern {
@@ -465,6 +526,10 @@ impl Config {
         self.terrains.len()
     }
 
+    pub fn terrain_types(&self) -> Vec<TerrainType> {
+        (0..self.terrain_count()).map(|i| TerrainType(i)).collect()
+    }
+
     pub(super) fn terrain_config(&self, typ: TerrainType) -> &TerrainTypeConfig {
         &self.terrains[typ.0]
     }
@@ -482,8 +547,8 @@ impl Config {
         None
     }
 
-    pub fn terrain_can_have_owner(&self, typ: TerrainType) -> bool {
-        self.terrain_config(typ).can_have_owner
+    pub fn terrain_ownership(&self, typ: TerrainType) -> OwnershipPredicate {
+        self.terrain_config(typ).owned
     }
 
     pub fn terrain_owner_is_playable(&self, typ: TerrainType) -> bool {
@@ -788,6 +853,10 @@ impl Config {
         self.tokens.len()
     }
 
+    pub fn token_types(&self) -> Vec<TokenType> {
+        (0..self.token_count()).map(|i| TokenType(i)).collect()
+    }
+
     pub(super) fn token_config(&self, typ: TokenType) -> &TokenTypeConfig {
         &self.tokens[typ.0]
     }
@@ -805,8 +874,8 @@ impl Config {
         None
     }
 
-    pub fn token_can_have_owner(&self, typ: TokenType) -> bool {
-        self.token_config(typ).can_have_owner
+    pub fn token_ownership(&self, typ: TokenType) -> OwnershipPredicate {
+        self.token_config(typ).owned
     }
 
     pub fn token_owner_is_playable(&self, typ: TokenType) -> bool {
@@ -843,6 +912,10 @@ impl Config {
 
     pub fn movement_type_count(&self) -> usize {
         self.movement_types.len()
+    }
+
+    pub fn movement_types(&self) -> Vec<MovementType> {
+        (0..self.movement_type_count()).map(|i| MovementType(i)).collect()
     }
 
     pub fn movement_type_name(&self, typ: MovementType) -> &str {

@@ -8,5 +8,5 @@ fn ua_exhausted_input() {
 }
 
 fn ua_exhausted(data) {
-    build_unit(EVENT_HANDLER, UNIT, POSITION, true, data)
+    build_unit(UNIT, POSITION, true, data)
 }

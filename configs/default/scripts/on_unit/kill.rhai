@@ -1,19 +1,32 @@
 
 fn leave_skull() {
-    EVENT_HANDLER.place_skull(OTHER_POSITION, OTHER_UNIT, UNIT.owner_id);
+    let skull = Token("Skull");
+    skull.copy_from(OTHER_UNIT);
+    skull.owner_id = UNIT.owner_id;
+    skull.set(TAG_UnitType, OTHER_UNIT.type);
+    if OTHER_UNIT.movement_type != OTHER_UNIT.movement_types[0] {
+        skull.set(TAG_MovementType, OTHER_UNIT.movement_type);
+    }
+    skull.remove(FLAG_Exhausted);
+    skull.remove(FLAG_Capturing);
+    skull.remove(FLAG_Repairing);
+    skull.remove(TAG_Hp);
+    EVENT_HANDLER.place_token(OTHER_POSITION, skull);
 }
 
 fn resurrect() {
-    let unit = CONFIG.build_unit(OTHER_UNIT.type)
-        .owner_id(UNIT.owner_id)
-        .hp(50)
-        .zombified()
-        .build();
+    let unit = Unit(OTHER_UNIT.type);
+    unit.copy_from(OTHER_UNIT);
+    unit.owner_id = UNIT.owner_id;
+    unit.movement_type = OTHER_UNIT.movement_type;
+    unit.set(TAG_Hp, 50);
+    unit.set(FLAG_Zombified);
+    unit.remove(FLAG_Exhausted);
+    unit.remove(FLAG_Capturing);
+    unit.remove(FLAG_Repairing);
     EVENT_HANDLER.place_unit(OTHER_POSITION, unit);
 }
 
 fn level_up() {
-    if UNIT.level != () {
-        EVENT_HANDLER.set_unit_level(POSITION, UNIT.level + 1);
-    }
+    EVENT_HANDLER.set_unit_tag(POSITION, TAG_Level, (UNIT.get(TAG_Level) ?? 0) + 1);
 }

@@ -1,7 +1,7 @@
 
 fn uf_can_repair() {
     let terrain = BOARD.get_terrain(POSITION);
-    UNIT.hp < 100 
+    UNIT.get(TAG_Hp) ?? 100 < 100 
         && UNIT.owner_id == terrain.owner_id
         && CONFIG.table_entry("TERRAIN_REPAIR", UNIT.type, terrain.type)
         // TODO: SludgeMonster can't repair
@@ -16,8 +16,11 @@ fn ua_self_30() {
 
 
 fn repair_unit(EVENT_HANDLER, unit, position, amount) {
-    amount = min(amount, 100 - unit.hp);
-    let full_price = unit.full_price(position);
+    let hp = unit.get(TAG_Hp) ?? 100;
+    amount = min(amount, 100 - hp);
+    let unit2 = unit;
+    unit2.set(TAG_Hp, 100);
+    let full_price = unit2.value(position);
     if full_price > 0 {
         let funds = BOARD.player_funds(unit.owner_id);
         amount = min(amount, funds * 100 / full_price);
@@ -25,7 +28,8 @@ fn repair_unit(EVENT_HANDLER, unit, position, amount) {
     if amount > 0 {
         let cost = full_price * amount / 100;
         EVENT_HANDLER.spend_money(unit.owner_id, cost);
-        EVENT_HANDLER.heal_unit(position, amount);
-        EVENT_HANDLER.set_unit_status(position, status_repairing());
+        EVENT_HANDLER.set_unit_tag(position, TAG_Hp, unit.get(TAG_Hp) + amount);
+        EVENT_HANDLER.set_unit_flag(position, FLAG_Repairing);
     }
+    EVENT_HANDLER.set_unit_flag(position, FLAG_Exhausted);
 }

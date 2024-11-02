@@ -6,6 +6,7 @@ use crate::script::get_environment;
 use crate::units::movement::MovementType;
 use crate::terrain::TerrainType;
 use crate::tags::*;
+use crate::config::OwnershipPredicate;
 
 #[export_module]
 mod terrain_type_module {
@@ -87,7 +88,7 @@ macro_rules! board_module {
 
             #[rhai_fn(pure, get = "owner_id")]
             pub fn get_owner_id(terrain: &mut Terrain) -> Dynamic {
-                if !terrain.environment().config.terrain_can_have_owner(terrain.typ()) {
+                if terrain.environment().config.terrain_ownership(terrain.typ()) == OwnershipPredicate::Never {
                     return ().into()
                 }
                 Dynamic::from(terrain.get_owner_id() as i32)

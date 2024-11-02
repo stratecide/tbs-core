@@ -9,6 +9,7 @@ use zipper::*;
 use crate::commander::commander_type::CommanderType;
 use crate::commander::Commander;
 use crate::config::environment::Environment;
+use crate::config::OwnershipPredicate;
 use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::game_view::GameView;
 use crate::game::settings::GameSettings;
@@ -19,7 +20,6 @@ use crate::player::{Owner, Player};
 use crate::tags::*;
 use crate::units::hero::HeroInfluence;
 use crate::units::movement::MovementType;
-use crate::units::unit::Unit;
 use crate::units::UnitVisibility;
 
 use super::{TerrainType, ExtraMovementOptions};
@@ -49,10 +49,14 @@ impl<D: Direction> Debug for Terrain<D> {
 
 impl<D: Direction> Terrain<D> {
     pub(super) fn new(environment: Environment, typ: TerrainType) -> Self {
+        let owner = match environment.config.terrain_ownership(typ) {
+            OwnershipPredicate::Always => environment.config.max_player_count() - 1,
+            _ => -1
+        };
         Self {
             environment,
             typ,
-            owner: Owner(-1),
+            owner: Owner(owner),
             tags: TagBag::new()
             //attributes: FxHashMap::default(),
         }
@@ -201,8 +205,13 @@ impl<D: Direction> Terrain<D> {
         self.owner.0
     }
     pub fn set_owner_id(&mut self, id: i8) {
-        if self.environment.config.terrain_can_have_owner(self.typ) {
-            self.owner = Owner(id);
+        match self.environment.config.terrain_ownership(self.typ) {
+            OwnershipPredicate::Always if id < 0 => (),
+            OwnershipPredicate::Never if id >= 0 => (),
+            _ => {
+                self.owner.0 = id;
+            }
+        }
             /*let _owner_before = self.get_owner_id();
             self.set(Owner(id.max(-1).min(self.environment.config.max_player_count() - 1)));
             /*let co_before = self.environment.config.commander_attributes(self.typ, owner_before);
@@ -213,7 +222,6 @@ impl<D: Direction> Terrain<D> {
             for key in co_after.iter().filter(|k| !co_before.contains(k)) {
                 self.attributes.insert(*key, key.default(self.typ, &self.environment));
             }*/*/
-        }
     }
 
     pub fn get_team(&self) -> ClientPerspective {
@@ -240,6 +248,9 @@ impl<D: Direction> Terrain<D> {
         for (key, value) in other.tags.tags() {
             self.set_tag(*key, value.clone());
         }
+    }
+    pub fn get_tag_bag(&self) -> &TagBag<D> {
+        &self.tags
     }
 
     pub fn has_flag(&self, key: usize) -> bool {
@@ -458,7 +469,7 @@ impl<D: Direction> Terrain<D> {
 impl<D: Direction> SupportedZippable<&Environment> for Terrain<D> {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         self.typ.export(zipper, support);
-        if support.config.terrain_can_have_owner(self.typ) {
+        if support.config.terrain_ownership(self.typ) != OwnershipPredicate::Never {
             self.owner.export(zipper, &*self.environment.config);
         }
         self.tags.export(zipper, &self.environment);
@@ -470,7 +481,7 @@ impl<D: Direction> SupportedZippable<&Environment> for Terrain<D> {
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let typ = TerrainType::import(unzipper, support)?;
-        let owner = if support.config.terrain_can_have_owner(typ) {
+        let owner = if support.config.terrain_ownership(typ) != OwnershipPredicate::Never {
             Owner::import(unzipper, &*support.config)?
         } else {
             Owner(-1)

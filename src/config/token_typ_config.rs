@@ -6,12 +6,12 @@ use crate::config::parse::*;
 use crate::units::UnitVisibility;
 
 use super::file_loader::{FileLoader, TableLine};
-use super::ConfigParseError;
+use super::{ConfigParseError, OwnershipPredicate};
 
 #[derive(Debug)]
 pub struct TokenTypeConfig {
     pub(super) name: String,
-    pub(super) can_have_owner: bool,
+    pub(super) owned: OwnershipPredicate,
     pub(super) owner_is_playable: bool,
     pub(super) visibility: UnitVisibility,
     pub(super) vision_range: i8,
@@ -29,7 +29,7 @@ impl TableLine for TokenTypeConfig {
         };
         let result = Self {
             name: get(H::Id)?.to_string(),
-            can_have_owner: parse_def(data, H::Ownable, false, loader)?,
+            owned: parse_def(data, H::Owned, OwnershipPredicate::Either, loader)?,
             owner_is_playable: parse_def(data, H::OwnerPlayable, false, loader)?,
             visibility: match data.get(&H::Visibility) {
                 Some(s) => UnitVisibility::from_conf(s, loader)?.0,
@@ -64,7 +64,7 @@ crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum TokenTypeConfigHeader {
         Id,
-        Ownable,
+        Owned,
         OwnerPlayable,
         Visibility,
         VisionRange,

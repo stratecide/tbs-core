@@ -8,5 +8,5 @@ fn ua_power_input() {
 }
 
 fn ua_power(data) {
-    EVENT_HANDLER.set_unit_status(POSITION, status_ready());
+    // simply don't add FLAG_Exhausted
 }

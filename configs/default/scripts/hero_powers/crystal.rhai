@@ -16,12 +16,13 @@ fn ua_summon_obelisk(data) {
     if BOARD.get_unit(target) != () {
         // TODO: show alert and give charge cost back
     } else {
-        let obelisk = CONFIG.build_unit("HeroCrystal")
-            .owner_id(UNIT.owner_id)
-            .hero("CrystalObelisk")
-            .build();
+        let obelisk = Unit("HeroCrystal");
+        obelisk.owner_id = UNIT.owner_id;
+        obelisk.set(TAG_Hp, 100);
+        obelisk.hero = Hero("CrystalObelisk");
         // TODO: show summoning effect
         //EVENT_HANDLER.effect(ef_summon_unit(target, obelisk))
         EVENT_HANDLER.place_unit(target, obelisk);
     }
+    EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
 }

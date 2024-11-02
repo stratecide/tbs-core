@@ -9,11 +9,13 @@ use zipper::*;
 use crate::commander::commander_type::CommanderType;
 use crate::commander::Commander;
 use crate::config::environment::Environment;
+use crate::config::OwnershipPredicate;
 use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::game_view::GameView;
 use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
+use crate::map::wrapping_map::Distortion;
 use crate::player::{Owner, Player};
 use crate::tags::*;
 use crate::units::UnitVisibility;
@@ -40,10 +42,14 @@ impl<D: Direction> Debug for Token<D> {
 
 impl<D: Direction> Token<D> {
     pub fn new(environment: Environment, typ: TokenType) -> Self {
+        let owner = match environment.config.token_ownership(typ) {
+            OwnershipPredicate::Always => environment.config.max_player_count() - 1,
+            _ => -1
+        };
         Self {
             environment,
             typ,
-            owner: Owner(-1),
+            owner: Owner(owner),
             tags: TagBag::new()
             //attributes: FxHashMap::default(),
         }
@@ -82,8 +88,12 @@ impl<D: Direction> Token<D> {
         self.owner.0
     }
     pub fn set_owner_id(&mut self, id: i8) {
-        if self.environment.config.token_can_have_owner(self.typ) {
-            self.owner = Owner(id);
+        match self.environment.config.token_ownership(self.typ) {
+            OwnershipPredicate::Always if id < 0 => (),
+            OwnershipPredicate::Never if id >= 0 => (),
+            _ => {
+                self.owner.0 = id;
+            }
         }
     }
 
@@ -138,6 +148,13 @@ impl<D: Direction> Token<D> {
     }
     pub fn remove_tag(&mut self, key: usize) {
         self.tags.remove_tag(key);
+    }
+
+    pub fn distort(&mut self, distortion: Distortion<D>) {
+        self.tags.distort(distortion);
+    }
+    pub fn translate(&mut self, translations: [D::T; 2], odd_if_hex: bool) {
+        self.tags.translate(translations, odd_if_hex);
     }
 
     pub fn vision_range(&self, game: &impl GameView<D>) -> Option<usize> {
@@ -236,14 +253,14 @@ impl<D: Direction> Token<D> {
 impl<D: Direction> SupportedZippable<&Environment> for Token<D> {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         self.typ.export(zipper, support);
-        if support.config.token_can_have_owner(self.typ) {
+        if support.config.token_ownership(self.typ) != OwnershipPredicate::Never {
             self.owner.export(zipper, &*self.environment.config);
         }
         self.tags.export(zipper, &self.environment);
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let typ = TokenType::import(unzipper, support)?;
-        let owner = if support.config.token_can_have_owner(typ) {
+        let owner = if support.config.token_ownership(typ) != OwnershipPredicate::Never {
             Owner::import(unzipper, &*support.config)?
         } else {
             Owner(-1)

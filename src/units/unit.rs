@@ -13,6 +13,7 @@ use zipper::*;
 use crate::commander::commander_type::CommanderType;
 use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
+use crate::config::OwnershipPredicate;
 use crate::game::fog::{is_unit_attribute_visible, FogIntensity, FogSetting, VisionMode};
 use crate::game::game_view::GameView;
 use crate::game::modified_view::*;
@@ -77,9 +78,13 @@ impl<D: Direction> Debug for Unit<D> {
 
 impl<D: Direction> Unit<D> {
     pub(super) fn new(environment: Environment, typ: UnitType) -> Self {
+        let owner = match environment.config.unit_ownership(typ) {
+            OwnershipPredicate::Always => environment.config.max_player_count() - 1,
+            _ => -1
+        };
         Self {
             typ,
-            owner: Owner(-1),
+            owner: Owner(owner),
             sub_movement_type: environment.config.sub_movement_types(environment.config.base_movement_type(typ))[0],
             hero: None,
             tags: TagBag::new(),
@@ -316,11 +321,14 @@ impl<D: Direction> Unit<D> {
         self.owner.0
     }
     pub fn set_owner_id(&mut self, id: i8) {
-        if id < 0 && self.environment.config.unit_needs_owner(self.typ) {
-            return;
+        match self.environment.config.unit_ownership(self.typ) {
+            OwnershipPredicate::Always if id < 0 => (),
+            OwnershipPredicate::Never if id >= 0 => (),
+            _ => {
+                self.owner.0 = id;
+                self.fix_transported();
+            }
         }
-        self.owner.0 = id;
-        self.fix_transported();
         /*if id >= 0 || !self.environment.config.unit_needs_owner(self.typ) {
             let owner_before = self.get_owner_id();
             self.set(Owner(id.max(-1).min(self.environment.config.max_player_count() - 1)));
@@ -392,14 +400,14 @@ impl<D: Direction> Unit<D> {
     // TODO: hardcoded for movement
     // replace when movement can be customized
     pub fn get_pawn_direction(&self) -> D {
-        match self.environment.tag_by_name("PawnDirection")
+        match self.environment.config.tag_by_name("PawnDirection")
         .and_then(|key| self.tags.get_tag(key)) {
             Some(TagValue::Direction(d)) => d,
             _ => D::angle_0()
         }
     }
     pub fn set_pawn_direction(&mut self, direction: D) {
-        if let Some(key) = self.environment.tag_by_name("PawnDirection") {
+        if let Some(key) = self.environment.config.tag_by_name("PawnDirection") {
             self.tags.set_tag(&self.environment, key, TagValue::Direction(direction));
         }
     }
@@ -484,10 +492,25 @@ impl<D: Direction> Unit<D> {
         if self.can_have_status(status) {
             self.set(status);
         }
-    }
-    pub fn is_exhausted(&self) -> bool {
-        self.get_status() != ActionStatus::Ready
     }*/
+    pub fn can_move(&self, board: &impl GameView<D>, pos: Point) -> bool {
+        // can the unit be moved?
+        let environment = self.environment().clone();
+        let is_unit_movable_rhai = environment.is_unit_movable_rhai();
+        let engine = environment.get_engine(board);
+        let mut scope = Scope::new();
+        scope.push_constant(CONST_NAME_POSITION, pos);
+        scope.push_constant(CONST_NAME_UNIT, self.clone());
+        let executor = Executor::new(engine, scope, environment);
+        match executor.run(is_unit_movable_rhai, ()) {
+            Ok(movable) => movable,
+            Err(e) => {
+                // TODO: log error
+                println!("unit is_unit_movable_rhai {is_unit_movable_rhai}: {e:?}");
+                false
+            }
+        }
+    }
 
     /*pub fn can_capture(&self) -> bool {
         self.can_have_status(ActionStatus::Capturing)
@@ -532,14 +555,14 @@ impl<D: Direction> Unit<D> {
     // TODO: hardcoded for movement
     // replace when movement can be customized
     pub fn get_en_passant(&self) -> Option<Point> {
-        match self.environment.tag_by_name("EnPassant")
+        match self.environment.config.tag_by_name("EnPassant")
         .and_then(|key| self.tags.get_tag(key)) {
             Some(TagValue::Point(p)) => Some(p),
             _ => None
         }
     }
     pub fn set_en_passant(&mut self, en_passant: Option<Point>) {
-        if let Some(key) = self.environment.tag_by_name("EnPassant") {
+        if let Some(key) = self.environment.config.tag_by_name("EnPassant") {
             if let Some(p) = en_passant {
                 self.tags.set_tag(&self.environment, key, TagValue::Point(p));
             } else {
