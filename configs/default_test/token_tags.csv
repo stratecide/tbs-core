@@ -1,0 +1,7 @@
+;Hp;DroneStationId;UnitType;MovementType;SludgeCounter;Coins
+CoinPile;;;;;;Always
+Skull;Always;Advanced;Always;Normal;;
+Sludge;;;;;Always;
+AirportBubble;;;;;;
+FactoryBubble;;;;;;
+PortBubble;;;;;;

@@ -424,6 +424,16 @@ impl<const K: usize, D: Direction> SupportedZippable<&Environment> for TagKeyVal
     }
 }
 
+impl FromConfig for TagKey {
+    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+        let (base, s) = crate::config::parse::string_base(s);
+        match loader.tags.iter().position(|name| name.as_str() == base) {
+            Some(i) => Ok((Self(i), s)),
+            None => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("TagKey::{}", base.to_string())))
+        }
+    }
+}
+
 
 #[export_module]
 mod tag_module {

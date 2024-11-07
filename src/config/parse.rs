@@ -16,7 +16,7 @@ use crate::terrain::TerrainType;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
-use super::custom_action_config::*;
+use super::{custom_action_config::*, editor_tag_config};
 use super::file_loader::FileLoader;
 use super::global_events::GlobalEventConfig;
 use super::hero_power_config::*;
@@ -39,7 +39,7 @@ const MOVEMENT_TYPE_CONFIG: &'static str = "movement_types.csv";
 const SUB_MOVEMENT_TYPE_CONFIG: &'static str = "sub_mt_";
 const TAG_CONFIG: &'static str = "tags.csv";
 const UNIT_CONFIG: &'static str = "units.csv";
-const UNIT_ATTRIBUTES: &'static str = "unit_attributes.csv";
+const UNIT_TAGS: &'static str = "unit_tags.csv";
 const UNIT_TRANSPORT: &'static str = "unit_transport.csv";
 const UNIT_DAMAGE: &'static str = "unit_damage.csv";
 const UNIT_STATUS: &'static str = "unit_status.csv";
@@ -48,8 +48,9 @@ const HERO_CONFIG: &'static str = "heroes.csv";
 const HERO_POWERS: &'static str = "hero_powers.csv";
 const UNIT_HEROES: &'static str = "unit_heroes.csv";
 const TERRAIN_CONFIG: &'static str = "terrain.csv";
+const TERRAIN_TAGS: &'static str = "terrain_tags.csv";
 const TOKEN_CONFIG: &'static str = "tokens.csv";
-const TERRAIN_ATTRIBUTES: &'static str = "terrain_attributes.csv";
+const TOKEN_TAGS: &'static str = "token_tags.csv";
 const MOVEMENT_CONFIG: &'static str = "movement.csv";
 const TERRAIN_ATTACK: &'static str = "terrain_attack.csv";
 const TERRAIN_DEFENSE: &'static str = "terrain_defense.csv";
@@ -131,6 +132,8 @@ impl Config {
             attack_damage: HashMap::default(),
             custom_actions: Vec::new(),
             max_transported: 0,
+            unit_flags: HashMap::default(),
+            unit_tags: HashMap::default(),
             // heroes
             hero_types: Vec::new(),
             heroes: HashMap::default(),
@@ -151,8 +154,12 @@ impl Config {
             max_capture_resistance: 0,
             terrain_max_anger: 0,
             terrain_max_built_this_turn: 0,*/
+            terrain_flags: HashMap::default(),
+            terrain_tags: HashMap::default(),
             // detail
             tokens: Vec::new(),
+            token_flags: HashMap::default(),
+            token_tags: HashMap::default(),
             //max_sludge: 1,
             // commanders
             commander_types: Vec::new(),
@@ -761,6 +768,11 @@ impl Config {
             let table = conf.build_table(&mut file_loader)?;
             result.custom_tables.insert(conf.id, table);
         }
+
+        // editor tags
+        [result.terrain_flags, result.terrain_tags] = editor_tag_config::parse(TERRAIN_TAGS, &mut file_loader)?;
+        [result.token_flags, result.token_tags] = editor_tag_config::parse(TOKEN_TAGS, &mut file_loader)?;
+        [result.unit_flags, result.unit_tags] = editor_tag_config::parse(UNIT_TAGS, &mut file_loader)?;
 
         let (asts, functions) = file_loader.finish();
         result.asts = asts;

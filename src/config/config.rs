@@ -33,6 +33,7 @@ use crate::units::hero::*;
 use crate::VERSION;
 
 use super::custom_action_config::CustomActionConfig;
+use super::editor_tag_config::TagEditorVisibility;
 use super::global_events::GlobalEventConfig;
 use super::hero_power_config::HeroPowerConfig;
 use super::hero_type_config::HeroTypeConfig;
@@ -69,6 +70,8 @@ pub struct Config {
     pub(super) attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
     pub(super) custom_actions: Vec<CustomActionConfig>,
     pub(super) max_transported: usize,
+    pub(super) unit_flags: HashMap<(usize, UnitType), TagEditorVisibility>,
+    pub(super) unit_tags: HashMap<(usize, UnitType), TagEditorVisibility>,
     // heroes
     pub(super) hero_types: Vec<HeroType>,
     pub(super) heroes: HashMap<HeroType, HeroTypeConfig>,
@@ -89,8 +92,12 @@ pub struct Config {
     pub(super) max_capture_resistance: u8,
     pub(super) terrain_max_anger: u8,
     pub(super) terrain_max_built_this_turn: u8,*/
+    pub(super) terrain_flags: HashMap<(usize, TerrainType), TagEditorVisibility>,
+    pub(super) terrain_tags: HashMap<(usize, TerrainType), TagEditorVisibility>,
     // detail
     pub(super) tokens: Vec<TokenTypeConfig>,
+    pub(super) token_flags: HashMap<(usize, TokenType), TagEditorVisibility>,
+    pub(super) token_tags: HashMap<(usize, TokenType), TagEditorVisibility>,
     //pub(super) max_sludge: u8,
     // commanders
     pub(super) commander_types: Vec<CommanderType>,
@@ -197,29 +204,23 @@ impl Config {
         self.tags.iter().position(|tag| tag.name.as_str() == name)
     }
 
-    pub fn is_terrain_flag_normal(&self, typ: TerrainType, flag: usize) -> bool {
-        // TODO
-        true
+    pub fn is_terrain_flag_normal(&self, typ: TerrainType, flag: usize) -> TagEditorVisibility {
+        self.terrain_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_terrain_tag_normal(&self, typ: TerrainType, tag: usize) -> bool {
-        // TODO
-        true
+    pub fn is_terrain_tag_normal(&self, typ: TerrainType, tag: usize) -> TagEditorVisibility {
+        self.terrain_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_token_flag_normal(&self, typ: TokenType, flag: usize) -> bool {
-        // TODO
-        true
+    pub fn is_token_flag_normal(&self, typ: TokenType, flag: usize) -> TagEditorVisibility {
+        self.token_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_token_tag_normal(&self, typ: TokenType, tag: usize) -> bool {
-        // TODO
-        true
+    pub fn is_token_tag_normal(&self, typ: TokenType, tag: usize) -> TagEditorVisibility {
+        self.token_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_unit_flag_normal(&self, typ: UnitType, flag: usize) -> bool {
-        // TODO
-        true
+    pub fn is_unit_flag_normal(&self, typ: UnitType, flag: usize) -> TagEditorVisibility {
+        self.unit_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_unit_tag_normal(&self, typ: UnitType, tag: usize) -> bool {
-        // TODO
-        true
+    pub fn is_unit_tag_normal(&self, typ: UnitType, tag: usize) -> TagEditorVisibility {
+        self.unit_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
 
     // units
