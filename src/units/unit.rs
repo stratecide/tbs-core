@@ -355,7 +355,7 @@ impl<D: Direction> Unit<D> {
     pub fn get_commander(&self, game: &impl GameView<D>) -> Commander {
         self.get_player(game)
         .and_then(|player| Some(player.commander.clone()))
-        .unwrap_or(Commander::new(&self.environment, CommanderType::None))
+        .unwrap_or(Commander::new(&self.environment, CommanderType(0)))
     }
 
     pub(super) fn copy_from(&mut self, other: &TagBag<D>) {

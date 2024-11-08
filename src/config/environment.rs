@@ -258,7 +258,7 @@ impl Environment {
                 }
             }
         }
-        CommanderType::None
+        CommanderType(0)
     }
 
     /*pub fn unit_attributes(&self, typ: UnitType, owner: i8) -> impl Iterator<Item = &AttributeKey> {

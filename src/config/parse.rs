@@ -162,9 +162,7 @@ impl Config {
             token_tags: HashMap::default(),
             //max_sludge: 1,
             // commanders
-            commander_types: Vec::new(),
-            commanders: HashMap::default(),
-            commander_powers: HashMap::default(),
+            commanders: Vec::new(),
             terrain_overrides: Vec::new(),
             unit_overrides: Vec::new(),
             //commander_unit_attributes: HashMap::default(),
@@ -281,6 +279,25 @@ impl Config {
         })?;
         for conf in &result.tokens {
             file_loader.token_types.push(conf.name.clone());
+        }
+
+        // commanders
+        let mut bonus_transported = 0;
+        file_loader.table_with_headers(COMMANDER_CONFIG, |line: CommanderTypeConfig| {
+            if result.commanders.iter().any(|conf| conf.name == line.name) {
+                // TODO: error
+            }
+            result.max_commander_charge = result.max_commander_charge.max(line.max_charge);
+            bonus_transported = bonus_transported.max(line.transport_capacity as usize);
+            result.commanders.push(line);
+            Ok(())
+        })?;
+        result.max_transported += bonus_transported;
+        for commander in &result.commanders {
+            file_loader.commander_types.push(commander.name.clone());
+        }
+        if result.commanders.len() == 0 {
+            // TODO: error
         }
 
         // unit transport
@@ -677,29 +694,16 @@ impl Config {
             }
         }*/
 
-        // commanders
-        let mut bonus_transported = 0;
-        file_loader.table_with_headers(COMMANDER_CONFIG, |line: CommanderTypeConfig| {
-            if result.commanders.contains_key(&line.id) {
-                // TODO: error
-            }
-            result.commander_types.push(line.id);
-            result.commander_powers.insert(line.id, Vec::new());
-            //result.commander_unit_attributes.insert(line.id, Vec::new());
-            result.max_commander_charge = result.max_commander_charge.max(line.max_charge);
-            bonus_transported = bonus_transported.max(line.transport_capacity as usize);
-            result.commanders.insert(line.id, line);
-            Ok(())
-        })?;
-        result.max_transported += bonus_transported;
-
         // commander powers
         file_loader.table_with_headers(COMMANDER_POWERS, |line: CommanderPowerConfig| {
-            result.commander_powers.get_mut(&line.id)
-            .ok_or(ConfigParseError::MissingCommanderForPower(line.id))?
-            .push(line);
+            result.commanders[line.id.0].powers.push(line);
             Ok(())
         })?;
+        for commander in &result.commanders {
+            if commander.powers.len() == 0 {
+                // TODO: error
+            }
+        }
 
         // commanders' unit attributes
         /*let data = file_loader.load_config(COMMANDER_ATTRIBUTES)?;

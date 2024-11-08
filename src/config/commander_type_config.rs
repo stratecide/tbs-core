@@ -2,9 +2,9 @@ use std::error::Error;
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
 
+use super::commander_power_config::CommanderPowerConfig;
 use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
 
@@ -13,10 +13,10 @@ use super::ConfigParseError;
  */
 #[derive(Debug)]
 pub struct CommanderTypeConfig {
-    pub(super) id: CommanderType,
     pub(super) name: String,
     pub(super) transport_capacity: u8,
     pub(super) max_charge: u32,
+    pub(super) powers: Vec<CommanderPowerConfig>,
 }
 
 impl TableLine for CommanderTypeConfig {
@@ -28,10 +28,10 @@ impl TableLine for CommanderTypeConfig {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let result = Self {
-            id: parse(data, H::Id, loader)?,
             name: get(H::Id)?.to_string(),
             transport_capacity: parse_def(data, H::TransportCapacity, 0, loader)?,
             max_charge: parse(data, H::Charge, loader)?,
+            powers: Vec::new(),
         };
         Ok(result)
     }
@@ -51,7 +51,6 @@ crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum CommanderTypeConfigHeader {
         Id,
-        Name,
         TransportCapacity,
         Charge,
     }

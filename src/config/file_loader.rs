@@ -24,6 +24,7 @@ pub struct FileLoader {
     pub unit_types: Vec<String>,
     pub terrain_types: Vec<String>,
     pub token_types: Vec<String>,
+    pub commander_types: Vec<String>,
     pub flags: Vec<String>,
     pub tags: Vec<String>,
 }
@@ -43,6 +44,7 @@ impl FileLoader {
             unit_types: Vec::new(),
             terrain_types: Vec::new(),
             token_types: Vec::new(),
+            commander_types: Vec::new(),
             flags: Vec::new(),
             tags: Vec::new(),
         }

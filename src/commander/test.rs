@@ -5,6 +5,8 @@ use semver::Version;
 use zipper::*;
 use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
+use crate::config::environment::Environment;
+use crate::map::point_map::MapSize;
 use crate::script::custom_action::CustomActionInput;
 use crate::tokens::token::*;
 use crate::game::commands::*;
@@ -27,6 +29,34 @@ use crate::tags::tests::*;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::VERSION;
+
+// helpers
+#[allow(non_upper_case_globals)]
+impl CommanderType {
+    pub const None: Self = Self(0);
+    pub const Zombie: Self = Self(1);
+    pub const Simo: Self = Self(2);
+    pub const Vlad: Self = Self(3);
+    pub const Tapio: Self = Self(4);
+    pub const Lageos: Self = Self(5);
+    pub const SludgeMonster: Self = Self(6);
+    pub const Celerity: Self = Self(7);
+}
+#[test]
+fn verify_commander_type_constants() {
+    let config = Arc::new(Config::test_config());
+    let environment = Environment::new_map(config, MapSize::new(5, 5));
+    assert_eq!(environment.config.commander_name(CommanderType::None), "None");
+    assert_eq!(environment.config.commander_name(CommanderType::Zombie), "Zombie");
+    assert_eq!(environment.config.commander_name(CommanderType::Simo), "Simo");
+    assert_eq!(environment.config.commander_name(CommanderType::Vlad), "Vlad");
+    assert_eq!(environment.config.commander_name(CommanderType::Tapio), "Tapio");
+    assert_eq!(environment.config.commander_name(CommanderType::Lageos), "Lageos");
+    assert_eq!(environment.config.commander_name(CommanderType::SludgeMonster), "SludgeMonster");
+    assert_eq!(environment.config.commander_name(CommanderType::Celerity), "Celerity");
+}
+
+// actual tests
 
 #[test]
 fn zombie() {

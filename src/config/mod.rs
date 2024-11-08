@@ -48,7 +48,7 @@ pub enum ConfigParseError {
     InvalidNumber(String),
     InvalidNumberModifier(String),
     MissingColumn(String),
-    MissingCommanderForAttributes(CommanderType),
+    MissingCommander(String),
     MissingCommanderForPower(CommanderType),
     MissingHeroForPower(HeroType),
     NameTooShort,

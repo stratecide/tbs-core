@@ -2,18 +2,18 @@ use zipper::*;
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;
+use crate::config::parse::FromConfig;
 
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub enum CommanderType {
-        None,
-        Vlad,
-        Zombie,
-        Simo,
-        Tapio,
-        Lageos,
-        SludgeMonster,
-        Celerity,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CommanderType(pub usize);
+
+impl FromConfig for CommanderType {
+    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+        let (base, s) = crate::config::parse::string_base(s);
+        match loader.commander_types.iter().position(|name| name.as_str() == base) {
+            Some(i) => Ok((Self(i), s)),
+            None => Err(crate::config::ConfigParseError::MissingCommander(base.to_string()))
+        }
     }
 }
 

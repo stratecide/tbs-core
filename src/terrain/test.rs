@@ -16,7 +16,7 @@ use crate::map::wrapping_map::*;
 use crate::units::combat::AttackVector;
 use crate::units::commands::{UnitCommand, UnitAction};
 use crate::units::movement::{Path, PathStep};
-use crate::tags::{tests::*, Int32, TagValue};
+use crate::tags::tests::*;
 use crate::units::unit_types::UnitType;
 
 // helpers

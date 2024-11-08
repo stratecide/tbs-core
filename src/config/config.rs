@@ -100,9 +100,7 @@ pub struct Config {
     pub(super) token_tags: HashMap<(usize, TokenType), TagEditorVisibility>,
     //pub(super) max_sludge: u8,
     // commanders
-    pub(super) commander_types: Vec<CommanderType>,
-    pub(super) commanders: HashMap<CommanderType, CommanderTypeConfig>,
-    pub(super) commander_powers: HashMap<CommanderType, Vec<CommanderPowerConfig>>,
+    pub(super) commanders: Vec<CommanderTypeConfig>,
     pub(super) terrain_overrides: Vec<TerrainPoweredConfig>,
     pub(super) unit_overrides: Vec<CommanderPowerUnitConfig>,
     //pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
@@ -243,7 +241,7 @@ impl Config {
 
     pub fn unit_max_transport_capacity(&self, typ: UnitType) -> usize {
         self.unit_config(typ).transport_capacity
-        + self.commanders.values().map(|c| c.transport_capacity as usize).max().unwrap_or(0)
+        + self.commanders.iter().map(|c| c.transport_capacity as usize).max().unwrap_or(0)
         + self.heroes.iter()
         .filter(|(hero, _)| self.hero_units.get(*hero).unwrap().contains(&typ))
         .map(|(_, c)| c.transport_capacity as usize).max().unwrap_or(0)
@@ -938,12 +936,12 @@ impl Config {
         self.commanders.len()
     }
 
-    pub fn commander_types(&self) -> &[CommanderType] {
-        &self.commander_types
+    pub fn commander_types(&self) -> Vec<CommanderType> {
+        (0..self.commander_count()).map(|i| CommanderType(i)).collect()
     }
 
     pub(super) fn commander_config(&self, typ: CommanderType) -> &CommanderTypeConfig {
-        self.commanders.get(&typ).expect(&format!("Environment doesn't contain commander type {typ:?}"))
+        &self.commanders[typ.0]
     }
 
     pub fn commander_name(&self, typ: CommanderType) -> &str {
@@ -981,16 +979,11 @@ impl Config {
     }
 
     pub fn commander_powers(&self, typ: CommanderType) -> &[CommanderPowerConfig] {
-        if let Some(powers) = self.commander_powers.get(&typ) {
-            powers
-        } else {
-            &[]
-        }
+        &self.commander_config(typ).powers
     }
 
     pub fn commander_can_gain_charge(&self, typ: CommanderType, power: usize) -> bool {
-        self.commander_powers.get(&typ)
-        .and_then(|powers| powers.get(power))
+        self.commander_powers(typ).get(power)
         .map(|power| !power.prevents_charging)
         .unwrap_or(false)
     }

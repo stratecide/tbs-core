@@ -172,14 +172,14 @@ pub struct PlayerOptions {
 impl SupportedZippable<&Config> for PlayerOptions {
     fn export(&self, zipper: &mut Zipper, config: &Config) {
         for option in config.commander_types() {
-            zipper.write_bool(self.commanders.contains(option));
+            zipper.write_bool(self.commanders.contains(&option));
         }
     }
     fn import(unzipper: &mut Unzipper, config: &Config) -> Result<Self, ZipperError> {
         let mut commanders = Vec::new();
         for option in config.commander_types() {
             if unzipper.read_bool()? {
-                commanders.push(*option);
+                commanders.push(option);
             }
         }
         Ok(Self {
@@ -246,7 +246,7 @@ impl PlayerConfig {
     pub fn build(&self, player_selection: &PlayerSelectedOptions, random: &RandomFn) -> PlayerSettings {
         let commander = player_selection.commander.unwrap_or_else(|| {
             if self.options.commanders.len() == 0 {
-                CommanderType::None
+                CommanderType(0)
             } else {
                 let index = (self.options.commanders.len() as f32 * random()).floor() as usize;
                 self.options.commanders[index]
@@ -358,9 +358,9 @@ mod tests {
     fn export_commander_options() {
         let config = Config::test_config();
         let options = PlayerOptions{
-            commanders: vec![CommanderType::None]
+            commanders: vec![CommanderType(0)]
         };
-        let co = CommanderType::None;
+        let co = CommanderType(0);
         let mut zipper = Zipper::new();
         options.export(&mut zipper, &config);
         co.export(&mut zipper, &config);
@@ -404,7 +404,7 @@ mod tests {
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
             players: vec![
                 PlayerSettings::new(0, CommanderType::Celerity),
-                PlayerSettings::new(3, CommanderType::None),
+                PlayerSettings::new(3, CommanderType(0)),
             ],
         };
         let mut zipper = Zipper::new();
