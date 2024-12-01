@@ -8,6 +8,7 @@ pub mod fog;
 pub mod game_view;
 pub mod rhai_board;
 pub mod modified_view;
+pub mod event_fx;
 
 use std::sync::Arc;
 

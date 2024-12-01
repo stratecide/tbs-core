@@ -7,6 +7,7 @@ use num_rational::Rational32;
 use rhai::*;
 use semver::Version;
 
+use crate::game::event_fx::EffectType;
 use crate::tokens::token_types::TokenType;
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
@@ -34,6 +35,7 @@ use crate::VERSION;
 
 use super::custom_action_config::CustomActionConfig;
 use super::editor_tag_config::TagEditorVisibility;
+use super::effect_config::{EffectConfig, EffectDataType, EffectVisibility};
 use super::global_events::GlobalEventConfig;
 use super::hero_power_config::HeroPowerConfig;
 use super::hero_type_config::HeroTypeConfig;
@@ -99,6 +101,8 @@ pub struct Config {
     pub(super) token_flags: HashMap<(usize, TokenType), TagEditorVisibility>,
     pub(super) token_tags: HashMap<(usize, TokenType), TagEditorVisibility>,
     //pub(super) max_sludge: u8,
+    // effects
+    pub(super) effect_types: Vec<EffectConfig>,
     // commanders
     pub(super) commanders: Vec<CommanderTypeConfig>,
     pub(super) terrain_overrides: Vec<TerrainPoweredConfig>,
@@ -112,6 +116,7 @@ pub struct Config {
     pub(super) my_package_4: MyPackage4,
     pub(super) my_package_6: MyPackage6,
     pub(super) global_module: Shared<Module>,
+    pub(super) effect_modules: Vec<Shared<Module>>,
     pub(super) global_constants: Scope<'static>,
     pub(super) asts: Vec<AST>,
     pub(super) functions: Vec<(usize, String)>,
@@ -928,6 +933,41 @@ impl Config {
             }
         }
         None
+    }
+
+    // effect
+
+    pub fn effect_count(&self) -> usize {
+        self.effect_types.len()
+    }
+
+    pub fn effect_types(&self) -> Vec<EffectType> {
+        (0..self.effect_count()).map(|i| EffectType(i)).collect()
+    }
+
+    pub fn effect_name(&self, effect: EffectType) -> &String {
+        &self.effect_types[effect.0].name
+    }
+
+    pub fn find_effect_by_name(&self, name: &str) -> Option<EffectType> {
+        for (effect_type, conf) in self.effect_types.iter().enumerate() {
+            if conf.name.as_str() == name {
+                return Some(EffectType(effect_type))
+            }
+        }
+        None
+    }
+
+    pub fn effect_is_global(&self, effect: EffectType) -> bool {
+        self.effect_types[effect.0].is_global
+    }
+
+    pub fn effect_data(&self, effect: EffectType) -> Option<EffectDataType> {
+        self.effect_types[effect.0].data_type
+    }
+
+    pub fn effect_visibility(&self, effect: EffectType) -> EffectVisibility {
+        self.effect_types[effect.0].visibility
     }
 
     // commanders

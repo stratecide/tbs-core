@@ -20,6 +20,7 @@ pub mod token_typ_config;
 pub mod global_events;
 pub mod token_filter;
 pub mod editor_tag_config;
+pub mod effect_config;
 
 use std::fmt::Debug;
 use std::fmt::Display;

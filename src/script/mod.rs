@@ -25,6 +25,7 @@ pub const CONST_NAME_BOARD: &'static str = "BOARD";
 pub const CONST_NAME_EVENT_HANDLER: &'static str = "EVENT_HANDLER";
 pub const CONST_NAME_OWNER_ID: &'static str = "OWNER_ID";
 pub const CONST_NAME_TEAM: &'static str = "TEAM";
+pub const CONST_NAME_STARTING_POSITION: &'static str = "STARTING_POSITION";
 pub const CONST_NAME_POSITION: &'static str = "POSITION";
 pub const CONST_NAME_OTHER_POSITION: &'static str = "OTHER_POSITION";
 pub const CONST_NAME_TERRAIN: &'static str = "TERRAIN";

@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use executor::Executor;
 use rhai::{Dynamic, NativeCallContext, Scope};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
@@ -8,7 +10,7 @@ use zipper::Exportable;
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::{parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
-use crate::game::events::Effect;
+use crate::game::event_fx::{Effect, EffectWithoutPosition};
 use crate::game::fog::can_see_unit_at;
 use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
@@ -503,6 +505,7 @@ impl<D: Direction> AttackVector<D> {
     ) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
         let temporary_ballast = path.map(|(_, _, t)| t).unwrap_or(&[]);
         let mut defenders = self.get_splash(attacker, &*handler.get_game(), attacker_pos, attacker_heroes, temporary_ballast, counter.clone());
+        // TODO: execute rhai script for weapon effects
         for (_, _, f) in defenders.iter_mut() {
             *f = *f * input_factor;
         }
@@ -719,6 +722,9 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
     let mut raw_damage = HashMap::default();
     let mut hero_charge = 0;
     let mut attack_script_targets = Vec::new();
+    // prepare Rhai engine for call to "deal_damage_rhai" script
+    let environment = handler.get_game().environment();
+    let deal_damage_rhai = environment.deal_damage_rhai();
     for (defender_pos, _, factor) in targets.iter().cloned() {
         let defender = handler.get_game().get_unit(defender_pos).unwrap();
         /*let hp = defender.get_hp();
@@ -730,7 +736,7 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
             continue;
         }
         let defender_id = handler.observe_unit(defender_pos, None).0;
-        handler.effect_weapon(defender_pos, attacker.weapon());
+        //handler.effect_weapon(defender_pos, attacker.weapon());
         if damage > 0 {
             if attacker.get_team() != defender.get_team() {
                 hero_charge += 1;
@@ -745,15 +751,19 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
             }
             let previous_damage = raw_damage.remove(&defender_pos).unwrap_or(0);
             raw_damage.insert(defender_pos, previous_damage + damage as u16);
-        } else {
-            //handler.unit_heal(defender_pos, (-damage) as u8);
         }
         // OnDamage shouldn't remove units, so this executor doesn't get access to the event handler
-        let environment = handler.get_game().environment();
-        let deal_damage_rhai = environment.deal_damage_rhai();
-        let engine = environment.get_engine(&*handler.get_game());
-        let executor = Executor::new(engine, Scope::new(), environment);
-        match executor.run(deal_damage_rhai, (defender, damage as i32)) {
+        let mut engine = environment.get_engine(&*handler.get_game());
+        let effects: Arc<Mutex<Vec<Vec<Effect<D>>>>> = Arc::default();
+        let effects_ = effects.clone();
+        engine.register_fn("effect", move |effect: EffectWithoutPosition<D>| {
+            effects_.lock().unwrap().push(vec![Effect::Point(effect, defender_pos)]);
+        });
+        let result = Executor::execute(&environment, &engine, &mut Scope::new(), deal_damage_rhai, (defender, damage as i32));
+        for effect in effects.lock().unwrap().drain(..) {
+            handler.effects(effect);
+        }
+        match result {
             Ok(unit) => {
                 handler.unit_replace(defender_pos, unit);
             },
@@ -769,7 +779,6 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
         (unit_id, p, unit, raw_damage, value)
     })
     .collect();
-    //handler.unit_mass_damage(&raw_damage);
     // destroy defeated units
     let environment = handler.get_game().environment();
     let is_unit_dead_rhai = environment.is_unit_dead_rhai();
@@ -1055,7 +1064,7 @@ crate::listable_enum! {
     }
 }
 
-impl WeaponType {
+/*impl WeaponType {
     pub fn effect<D: Direction>(&self, p: Point) -> Effect<D> {
         match self {
             Self::Flame => Effect::Flame(p),
@@ -1065,7 +1074,7 @@ impl WeaponType {
             _ => Effect::ShellFire(p),
         }
     }
-}
+}*/
 
 crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]

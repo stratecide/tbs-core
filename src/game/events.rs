@@ -12,7 +12,7 @@ use crate::tags::*;
 use crate::units::commands::UnloadIndex;
 use crate::units::hero::{Hero, HeroChargeChange};
 use crate::units::unit::Unit;
-use crate::units::movement::MAX_PATH_LENGTH;
+use crate::units::movement::{PathStep, MAX_PATH_LENGTH};
 use crate::units::UnitVisibility;
 use crate::{player::*, tokens};
 use crate::terrain::terrain::*;
@@ -20,9 +20,9 @@ use crate::tokens::token::Token;
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::game::fog::*;
-use crate::units::movement::PathStep;
 use crate::config::environment::Environment;
 
+use super::event_fx::*;
 use super::game_view::GameView;
 
 impl SupportedZippable<&Environment> for (Point, FogIntensity, FogIntensity) {
@@ -120,6 +120,7 @@ pub enum Event<D:Direction> {
     ReplaceToken(Point, LVec<Token<D>, {tokens::MAX_STACK_SIZE}>, LVec<Token<D>, {tokens::MAX_STACK_SIZE}>),
     // visual
     Effect(Effect<D>),
+    Effects(LVec<Effect<D>, {point_map::MAX_AREA}>),
     UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
 }
 
@@ -354,7 +355,8 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_tokens(*p, list.iter().cloned().collect());
             }
             // visual
-            Self::Effect(_) => {}
+            Self::Effect(_) |
+            Self::Effects(_) |
             Self::UnitPath(_, _) => {}
         }
     }
@@ -568,7 +570,8 @@ impl<D: Direction> Event<D> {
                 game.get_map_mut().set_tokens(*p, list.iter().cloned().collect());
             }
             // visual
-            Self::Effect(_) => {}
+            Self::Effect(_) |
+            Self::Effects(_) |
             Self::UnitPath(_, _) => {}
         }
     }
@@ -932,6 +935,20 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
+            Self::Effects(effects) => {
+                if !game.is_foggy() {
+                    Some(self.clone())
+                } else {
+                    let mut effects: Vec<_> = effects.iter()
+                    .filter_map(|e| e.fog_replacement(game, team))
+                    .collect();
+                    match effects.len() {
+                        0 => None,
+                        1 => Some(Self::Effect(effects.pop().unwrap())),
+                        _ => Some(Self::Effects(effects.try_into().unwrap()))
+                    }
+                }
+            }
             Self::UnitPath(unit, steps) => {
                 let mut unit = unit.clone().expect("UnitPath needs to have a unit before fog_replacement");
                 if unit.get_team() == team {
@@ -999,7 +1016,7 @@ impl<D: Direction> UnitStep<D> {
 
 }
 
-#[derive(Debug, Clone, PartialEq, Zippable)]
+/*#[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 8, support_ref = Environment)]
 pub enum Effect<D: Direction> {
     Laser(Point, D),
@@ -1040,7 +1057,7 @@ impl<D: Direction> Effect<D> {
             }
         }
     }
-}
+}*/
 
 fn apply_vision_changes<D: Direction>(game: &mut Game<D>, team: ClientPerspective, pos: Point, intensity: FogIntensity, change: &FieldData<D>) {
     game.set_fog(team, pos, intensity);

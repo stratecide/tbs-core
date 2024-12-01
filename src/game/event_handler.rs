@@ -17,7 +17,6 @@ use crate::script::*;
 use crate::tags::*;
 use crate::terrain::terrain::*;
 use crate::tokens::MAX_STACK_SIZE;
-use crate::units::combat::WeaponType;
 use crate::player::*;
 use crate::tokens::token::Token;
 use crate::map::direction::Direction;
@@ -26,7 +25,8 @@ use crate::game::fog::*;
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
-use super::events::{Event, Effect, UnitStep};
+use super::event_fx::Effect;
+use super::events::{Event, UnitStep};
 use super::game_view::GameView;
 
 struct EventHandlerInner<D: Direction> {
@@ -634,34 +634,39 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
+    pub fn effect(&mut self, effect: Effect<D>) {
+        self.add_event(Event::Effect(effect));
+    }
+
+    pub fn effects(&mut self, mut effects: Vec<Effect<D>>) {
+        match effects.len() {
+            0 => return,
+            1 => self.effect(effects.pop().unwrap()),
+            _ => {
+                match effects.try_into() {
+                    Ok(effects) => self.add_event(Event::Effects(effects)),
+                    Err(_) => self.effect_glitch(),
+                };
+                
+            }
+        }
+    }
+
     pub fn effect_glitch(&mut self) {
-        // TODO
+        self.add_event(Event::Effect(Effect::new_glitch()));
     }
 
     pub fn effect_fog_surprise(&mut self, position: Point) {
-        let team = match self.get_game().current_team() {
-            ClientPerspective::Team(team) => team,
-            ClientPerspective::Neutral => return, // shouldn't happen
-        };
-        self.add_event(Event::Effect(Effect::Surprise(position, team.into())));
+        self.add_event(Event::Effect(Effect::new_fog_surprise(position)));
     }
 
-    fn effect_heal(&mut self, _position: Point) {
-        // TODO: add effect
-        //self.add_event(Event::Effect(Effect::Repair(position)));
-    }
-
-    fn effect_repair(&mut self, position: Point) {
-        self.add_event(Event::Effect(Effect::Repair(position)));
-    }
-
-    pub fn effect_weapon(&mut self, position: Point, weapon: WeaponType) {
+    /*pub fn effect_weapon(&mut self, position: Point, weapon: WeaponType) {
         self.add_event(Event::Effect(weapon.effect(position)));
-    }
+    }*/
 
-    pub fn effect_chess(&mut self, _position: Point) {
+    /*pub fn effect_chess(&mut self, _position: Point) {
         // TODO: add effect for taking units
-    }
+    }*/
 
     pub fn unit_set_hero(&mut self, position: Point, hero: Hero) {
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
@@ -1158,25 +1163,11 @@ impl<D: Direction> EventHandler<D> {
         self.add_event(Event::UnitRemove(position, unit.clone()));
     }
 
-    pub fn unit_death(&mut self, position: Point) {
-        self.add_event(Event::Effect(Effect::Explode(position)));
+    fn unit_death(&mut self, position: Point) {
+        //self.add_event(Event::Effect(Effect::Explode(position)));
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         self.remove_observed_units_at(position);
         self.add_event(Event::UnitRemove(position, unit.clone()));
-    }
-
-    pub fn unit_death_boarded(&mut self, position: Point, index: usize) {
-        self.add_event(Event::Effect(Effect::Explode(position)));
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        let transported = unit.get_transported();
-        if transported.len() > index {
-            if let Some((id, _)) = self.observation_id(position, Some(index)) {
-                self.remove_observed_unit(id);
-            }
-            self.add_event(Event::UnitRemoveBoarded(position, index.into(), transported[index].clone()));
-        } else {
-            panic!("Can't damage unit at {position:?}, boarded as {index}");
-        }
     }
 
     pub fn unit_mass_death(&mut self, positions: &HashSet<Point>) {
@@ -1190,10 +1181,6 @@ impl<D: Direction> EventHandler<D> {
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         self.add_event(Event::UnitRemove(position, unit.clone()));
         self.add_event(Event::UnitAdd(position, new_unit));
-    }
-
-    pub fn effect_kraken_rage(&mut self, position: Point) {
-        self.add_event(Event::Effect(Effect::KrakenRage(position)))
     }
 
 

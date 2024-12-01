@@ -13,6 +13,7 @@ fn calculate_attack_damage(base_damage) {
 
 fn deal_damage_to_unit(unit, damage) {
     let hp = unit.get(TAG_Hp);
+    effect(FX_HpChange(-damage));
     if hp != () {
         unit.set(TAG_Hp, hp - damage);
     }

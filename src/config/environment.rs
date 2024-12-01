@@ -112,8 +112,10 @@ impl Environment {
         let mut engine = Engine::new_raw();
         if is_hex {
             self.config.my_package_6.register_into_engine(&mut engine);
+            engine.register_global_module(self.config.effect_modules[1].clone());
         } else {
             self.config.my_package_4.register_into_engine(&mut engine);
+            engine.register_global_module(self.config.effect_modules[0].clone());
         }
         engine.register_global_module(self.config.global_module.clone());
         engine

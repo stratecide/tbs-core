@@ -1,0 +1,3 @@
+Id;Global;DataType;Visibility
+HpChange;;Int(-999, 99);UnitTag(Hp)
+Explosion;;Visibility;Data

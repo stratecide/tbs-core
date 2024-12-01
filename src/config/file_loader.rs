@@ -27,6 +27,7 @@ pub struct FileLoader {
     pub commander_types: Vec<String>,
     pub flags: Vec<String>,
     pub tags: Vec<String>,
+    pub effects: Vec<String>,
 }
 
 impl FileLoader {
@@ -47,6 +48,7 @@ impl FileLoader {
             commander_types: Vec::new(),
             flags: Vec::new(),
             tags: Vec::new(),
+            effects: Vec::new(),
         }
     }
 

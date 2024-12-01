@@ -11,11 +11,14 @@ use std::usize;
 use num_rational::Rational32;
 use rhai::*;
 
+use crate::game::event_fx::effect_constructor_module;
+use crate::map::direction::{Direction4, Direction6};
 use crate::script::{create_base_engine, MyPackage4, MyPackage6};
 use crate::terrain::TerrainType;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
+use super::effect_config::{EffectConfig, EffectVisibility};
 use super::{custom_action_config::*, editor_tag_config};
 use super::file_loader::FileLoader;
 use super::global_events::GlobalEventConfig;
@@ -50,6 +53,7 @@ const UNIT_HEROES: &'static str = "unit_heroes.csv";
 const TERRAIN_CONFIG: &'static str = "terrain.csv";
 const TERRAIN_TAGS: &'static str = "terrain_tags.csv";
 const TOKEN_CONFIG: &'static str = "tokens.csv";
+const EFFECT_CONFIG: &'static str = "effects.csv";
 const TOKEN_TAGS: &'static str = "token_tags.csv";
 const MOVEMENT_CONFIG: &'static str = "movement.csv";
 const TERRAIN_ATTACK: &'static str = "terrain_attack.csv";
@@ -161,6 +165,8 @@ impl Config {
             token_flags: HashMap::default(),
             token_tags: HashMap::default(),
             //max_sludge: 1,
+            // effects
+            effect_types: Vec::new(),
             // commanders
             commanders: Vec::new(),
             terrain_overrides: Vec::new(),
@@ -174,6 +180,7 @@ impl Config {
             my_package_4: MyPackage4::new(),
             my_package_6: MyPackage6::new(),
             global_module,
+            effect_modules: Vec::with_capacity(2),
             global_constants,
             asts: Vec::new(),
             functions: Vec::new(),
@@ -280,6 +287,27 @@ impl Config {
         for conf in &result.tokens {
             file_loader.token_types.push(conf.name.clone());
         }
+
+        // simple effect data
+        result.effect_types.push(EffectConfig {
+            name: "GLITCH".to_string(),
+            is_global: true,
+            data_type: None,
+            visibility: EffectVisibility::CurrentTeam,
+        });
+        result.effect_types.push(EffectConfig {
+            name: "FOG_SURPRISE".to_string(),
+            is_global: false,
+            data_type: None,
+            visibility: EffectVisibility::CurrentTeam,
+        });
+        file_loader.table_with_headers(EFFECT_CONFIG, |line: EffectConfig| {
+            if result.effect_types.iter().any(|conf| conf.name == line.name) {
+                return Err(ConfigParseError::DuplicateEntry(format!("EffectType::{}", line.name)).into())
+            }
+            result.effect_types.push(line);
+            Ok(())
+        })?;
 
         // commanders
         let mut bonus_transported = 0;
@@ -781,6 +809,8 @@ impl Config {
         let (asts, functions) = file_loader.finish();
         result.asts = asts;
         result.functions = functions;
+        result.effect_modules.push(effect_constructor_module::<Direction4>(&result.effect_types));
+        result.effect_modules.push(effect_constructor_module::<Direction6>(&result.effect_types));
 
         Ok(result)
     }
