@@ -1,5 +1,5 @@
 use interfaces::ClientPerspective;
-use rhai::{FuncRegistration, Module};
+use rhai::{FuncRegistration, Module, NativeCallContext};
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -7,8 +7,9 @@ use crate::config::effect_config::{EffectConfig, EffectDataType};
 use crate::config::parse::FromConfig;
 use crate::handle::Handle;
 use crate::map::point::Point;
+use crate::script::with_board;
 use crate::units::unit::Unit;
-use crate::units::movement::MAX_PATH_LENGTH;
+use crate::units::movement::{Path, MAX_PATH_LENGTH};
 use crate::terrain::terrain::*;
 use crate::tokens::token::Token;
 use crate::map::direction::Direction;
@@ -274,5 +275,20 @@ pub(crate) fn effect_constructor_module<D: Direction>(definitions: &[EffectConfi
             }),
         };
     }
+    FuncRegistration::new("at").set_into_module(&mut module, move |effect: EffectWithoutPosition<D>, p: Point| {
+        Effect::Point(effect, p)
+    });
+    FuncRegistration::new("path").set_into_module(&mut module, move |context: NativeCallContext, effect: EffectWithoutPosition<D>, path: Path<D>| {
+        let mut p = path.start;
+        let mut steps = Vec::with_capacity(path.steps.len());
+        with_board(context, |board| {
+            for step in path.steps {
+                steps.push(EffectStep::Simple(p, step));
+                // invalid paths should be impossible to construct (see rhai_movement), so unwrap here should be fine
+                p = step.progress(board, p).unwrap().0;
+            }
+        });
+        Effect::Path(Some(effect), steps.try_into().unwrap())
+    });
     module.into()
 }

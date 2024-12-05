@@ -1,4 +1,5 @@
 Power;Affects;Attack;Defense;MinRange;MaxRange;Visibility;MovementPoints;Vision;TrueVision;Stealthy;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;CanBuildUnits;Value;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity;AuraRange;OnAttack;OnKill;OnDeath;OnDefend
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/death > show_explosion;on_unit/defend > show_damage_taken
 ;U(Pawn),T(ChessPawnTile);;;;;;+1;;;;;;;;;;;;;;;;;;;;;;
 ;Movement(Foot, Bike, Wheel, Treads),T(Hill);;;;;;;+1;;;;;;;;;;;;;;;;;;;;;
 ;Movement(Foot),T(Mountain);;;;;;;+2;;;;;;;;;;;;;;;;;;;;;

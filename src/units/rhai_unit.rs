@@ -7,6 +7,7 @@ use crate::units::unit_types::UnitType;
 use crate::units::hero::Hero;
 use crate::script::{with_board, get_environment};
 use crate::units::movement::MovementType;
+use crate::units::UnitVisibility;
 use crate::tags::*;
 use crate::tokens::token::Token;
 
@@ -15,6 +16,7 @@ mod unit_type_module {
 
     pub type UnitType = crate::units::unit_types::UnitType;
     pub type MovementType = crate::units::movement::MovementType;
+    pub type UnitVisibility = crate::units::UnitVisibility;
 
     #[rhai_fn(pure, name = "==")]
     pub fn eq(u1: &mut UnitType, u2: UnitType) -> bool {
@@ -34,24 +36,14 @@ mod unit_type_module {
         *u1 != u2
     }
 
-    /*pub fn status_repairing() -> ActionStatus {
-        ActionStatus::Repairing
-    }
-    pub fn status_exhausted() -> ActionStatus {
-        ActionStatus::Exhausted
-    }
-    pub fn status_ready() -> ActionStatus {
-        ActionStatus::Ready
-    }
-
     #[rhai_fn(pure, name = "==")]
-    pub fn as_eq(u1: &mut ActionStatus, u2: ActionStatus) -> bool {
+    pub fn uv_eq(u1: &mut UnitVisibility, u2: UnitVisibility) -> bool {
         *u1 == u2
     }
     #[rhai_fn(pure, name = "!=")]
-    pub fn as_neq(u1: &mut ActionStatus, u2: ActionStatus) -> bool {
+    pub fn uv_neq(u1: &mut UnitVisibility, u2: UnitVisibility) -> bool {
         *u1 != u2
-    }*/
+    }
 }
 
 macro_rules! board_module {
@@ -238,6 +230,10 @@ macro_rules! board_module {
                 unit.remove_hero()
             }
 
+            #[rhai_fn(pure, name = "visibility")]
+            pub fn get_visibility(context: NativeCallContext, unit: &mut Unit, position: Point) -> UnitVisibility {
+                with_board(context, |game| unit.visibility(game, position))
+            }
             /*#[rhai_fn(pure)]
             pub fn build_unit(environment: &mut Environment, unit_type: UnitType) -> UnitBuilder {
                 unit_type.instance::<$d>(environment)

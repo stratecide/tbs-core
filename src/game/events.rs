@@ -658,7 +658,7 @@ impl<D: Direction> Event<D> {
                     return Some(self.clone());
                 }
                 let transporter = game.get_unit(*p).unwrap();
-                let transporter_visibility = transporter.environment().config.unit_visibility(game, &transporter, *p, &[]);
+                let transporter_visibility = transporter.visibility(game, *p);
                 let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
                     return None;
@@ -695,7 +695,7 @@ impl<D: Direction> Event<D> {
                     return Some(self.clone());
                 }
                 let transporter = game.get_unit(*p).unwrap();
-                let transporter_visibility = transporter.environment().config.unit_visibility(game, &transporter, *p, &[]);
+                let transporter_visibility = transporter.visibility(game, *p);
                 let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
                     return None;
@@ -712,7 +712,7 @@ impl<D: Direction> Event<D> {
                     return Some(self.clone());
                 }
                 let transporter = game.get_unit(*p).unwrap();
-                let transporter_visibility = transporter.environment().config.unit_visibility(game, &transporter, *p, &[]);
+                let transporter_visibility = transporter.visibility(game, *p);
                 let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
                     return None;

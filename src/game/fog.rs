@@ -314,14 +314,14 @@ pub fn is_unit_attribute_visible(fog_intensity: FogIntensity, unit_visibility: U
 pub fn visible_unit_with_attribute<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, pos: Point, attribute_visibility: UnitVisibility) -> bool {
     let unit = game.get_unit(pos).unwrap();
     let fog_intensity = game.get_fog_at(team, pos);
-    let unit_visibility = unit.environment().config.unit_visibility(game, &unit, pos, &[]);
+    let unit_visibility = unit.visibility(game, pos);
     is_unit_attribute_visible(fog_intensity, unit_visibility, attribute_visibility)
 }
 
 pub fn visible_unit_with_attribute_transported<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, pos: Point, unload_index: usize, attribute_visibility: UnitVisibility) -> Option<usize> {
     let transporter = game.get_unit(pos).unwrap();
     let fog_intensity = game.get_fog_at(team, pos);
-    let transporter_visibility = transporter.environment().config.unit_visibility(game, &transporter, pos, &[]);
+    let transporter_visibility = transporter.visibility(game, pos);
     let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, pos, &[]);
     if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
         return None;
@@ -330,7 +330,7 @@ pub fn visible_unit_with_attribute_transported<D: Direction>(game: &impl GameVie
     .take(unload_index + 1)
     .enumerate()
     .filter_map(|(i, unit)| {
-        let unit_visibility = unit.environment().config.unit_visibility(game, &unit, pos, &[]);
+        let unit_visibility = unit.visibility(game, pos);
         match fog_intensity {
             FogIntensity::TrueSight => (),
             FogIntensity::NormalVision |

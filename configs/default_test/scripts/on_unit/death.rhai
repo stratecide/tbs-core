@@ -1,4 +1,8 @@
 
+fn show_explosion() {
+    EVENT_HANDLER.effect(POSITION, FX_Explosion(UNIT.visibility(POSITION)));
+}
+
 fn kraken() {
     for p in BOARD.all_positions() {
         let terrain = BOARD.get_terrain(p);

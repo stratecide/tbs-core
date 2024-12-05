@@ -13,6 +13,7 @@ use crate::units::hero::*;
 use crate::terrain::terrain::Terrain;
 use crate::tags::*;
 use crate::tokens::token::Token;
+use crate::game::event_fx::*;
 
 macro_rules! event_handler_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -328,6 +329,54 @@ macro_rules! event_handler_module {
                     handler.detail_remove(position, i);
                 }
             }*/
+
+            #[rhai_fn(name = "effect")]
+            pub fn effect_global(mut handler: Handler, effect: EffectWithoutPosition<$d>) {
+                handler.effect(Effect::Global(effect));
+            }
+            #[rhai_fn(name = "effect")]
+            pub fn effect_point(mut handler: Handler, p: Point, effect: EffectWithoutPosition<$d>) {
+                handler.effect(Effect::Point(effect, p));
+            }
+            #[rhai_fn(name = "effect")]
+            pub fn effect_path(mut handler: Handler, path: Path<$d>, effect: EffectWithoutPosition<$d>) {
+                let mut p = path.start;
+                let mut steps = Vec::with_capacity(path.steps.len());
+                {
+                    let board = handler.get_game();
+                    for step in path.steps {
+                        steps.push(EffectStep::Simple(p, step));
+                        // invalid paths should be impossible to construct (see rhai_movement), so unwrap here should be fine
+                        p = step.progress(&*board, p).unwrap().0;
+                    }
+                }
+                handler.effect(Effect::Path(Some(effect), steps.try_into().unwrap()))
+            }
+
+            pub fn effect(mut handler: Handler, effect: Effect<$d>) {
+                handler.effect(effect);
+            }
+            pub fn effects(mut handler: Handler, effects: Array) {
+                let mut list = Vec::with_capacity(effects.len());
+                for effect in effects {
+                    let effect = match effect.try_cast_result::<Effect<$d>>() {
+                        Ok(effect) => {
+                            list.push(effect);
+                            continue;
+                        }
+                        Err(effect) => effect,
+                    };
+                    let _effect = match effect.try_cast_result::<EffectWithoutPosition<$d>>() {
+                        Ok(effect) => {
+                            list.push(Effect::Global(effect));
+                            continue;
+                        }
+                        Err(effect) => effect,
+                    };
+                    // TODO: log error?
+                }
+                handler.effects(list);
+            }
         }
 
         def_package! {

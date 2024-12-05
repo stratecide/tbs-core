@@ -797,11 +797,15 @@ impl<D: Direction> Unit<D> {
         Ok(result)
     }
 
-    pub fn fog_replacement(&self, game: &impl GameView<D>, pos: Point, intensity: FogIntensity) -> Option<Self> {
+    pub fn visibility(&self, game: &impl GameView<D>, pos: Point) -> UnitVisibility {
         // for now, heroes don't affect unit visibility.
         // when they do in the future, the heroes should be given to this method instead of calculating here
         // it could also be necessary to add this unit's hero to the heroes list here manually (if it isn't already in there)
-        let visibility = self.environment.config.unit_visibility(game, self, pos, &[]);
+        self.environment.config.unit_visibility(game, self, pos, &[])
+    }
+
+    pub fn fog_replacement(&self, game: &impl GameView<D>, pos: Point, intensity: FogIntensity) -> Option<Self> {
+        let visibility = self.visibility(game, pos);
         match intensity {
             FogIntensity::TrueSight => return Some(self.clone()),
             FogIntensity::NormalVision => {
