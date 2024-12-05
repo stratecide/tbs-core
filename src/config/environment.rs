@@ -135,7 +135,6 @@ impl Environment {
     fn _get_engine<D: Direction>(&self, game: SharedGameView<D>, handler: Option<EventHandler<D>>) -> Engine {
         let mut engine = self.get_engine_base(D::is_hex());
         let this = self.clone();
-        let handler = handler.clone();
         #[allow(deprecated)]
         engine.on_var(move |name, _index, _context| {
             match name.split_once("_") {

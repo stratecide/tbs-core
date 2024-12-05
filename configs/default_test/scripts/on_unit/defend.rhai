@@ -1,8 +1,4 @@
 
-fn show_damage_taken() {
-    EVENT_HANDLER.effect(POSITION, FX_HpChange(-DAMAGE));
-}
-
 fn puffer_fish() {
     // Ricochet(10)
     let position = EVENT_HANDLER.get_unit_position(UNIT_ID);

@@ -87,10 +87,9 @@ macro_rules! event_handler_module {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {
                     return;
                 }
-                let Some(value) = TagValue::from_dynamic(value, key.0, &handler.environment()) else {
-                    return;
+                if let Some(value) = TagValue::from_dynamic(value, key.0, &handler.environment()) {
+                    handler.set_unit_tag(position, key.0, value);
                 };
-                handler.set_unit_tag(position, key.0, value);
             }
             pub fn remove_unit_tag(mut handler: Handler, position: Point, key: TagKey) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {

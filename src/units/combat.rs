@@ -20,6 +20,7 @@ use crate::map::direction::Direction;
 use crate::map::map::NeighborMode;
 use crate::map::wrapping_map::{OrientedPoint, Distortion};
 use crate::script::*;
+use crate::tags::*;
 
 use super::hero::{Hero, HeroInfluence};
 use super::movement::*;
@@ -754,19 +755,48 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
         }
         // OnDamage shouldn't remove units, so this executor doesn't get access to the event handler
         let mut engine = environment.get_engine(&*handler.get_game());
-        let effects: Arc<Mutex<Vec<Vec<Effect<D>>>>> = Arc::default();
-        let effects_ = effects.clone();
-        engine.register_fn("effect", move |effect: EffectWithoutPosition<D>| {
-            effects_.lock().unwrap().push(vec![Effect::Point(effect, defender_pos)]);
-        });
-        let result = Executor::execute(&environment, &engine, &mut Scope::new(), deal_damage_rhai, (defender, damage as i32));
-        for effect in effects.lock().unwrap().drain(..) {
-            handler.effects(effect);
+        let handler_ = Arc::new(Mutex::new(handler.clone()));
+        {
+            let handler = handler_.clone();
+            engine.register_fn("effect", move |effect: EffectWithoutPosition<D>| {
+                println!("send effect {effect:?}");
+                let mut handler = handler.lock().unwrap();
+                if handler.with_map(|map| map.environment().config.effect_is_global(effect.typ)) {
+                    handler.effect(Effect::Global(effect));
+                } else {
+                    handler.effect(Effect::Point(effect, defender_pos));
+                }
+            });
         }
-        match result {
-            Ok(unit) => {
-                handler.unit_replace(defender_pos, unit);
-            },
+        {
+            let handler = handler_.clone();
+            engine.register_fn("set", move |flag: FlagKey| {
+                handler.lock().unwrap().set_unit_flag(defender_pos, flag.0);
+            });
+        }
+        {
+            let handler = handler_.clone();
+            engine.register_fn("remove", move |flag: FlagKey| {
+                handler.lock().unwrap().remove_unit_flag(defender_pos, flag.0);
+            });
+        }
+        {
+            let handler = handler_.clone();
+            engine.register_fn("set", move |tag: TagKey, value: Dynamic| {
+                let mut handler = handler.lock().unwrap();
+                if let Some(value) = TagValue::from_dynamic(value, tag.0, &handler.environment()) {
+                    handler.set_unit_tag(defender_pos, tag.0, value);
+                };
+            });
+        }
+        {
+            let handler = handler_.clone();
+            engine.register_fn("remove", move |tag: TagKey| {
+                handler.lock().unwrap().remove_unit_tag(defender_pos, tag.0);
+            });
+        }
+        match Executor::execute(&environment, &engine, &mut Scope::new(), deal_damage_rhai, (defender, damage as i32)) {
+            Ok(()) => (), // script had no errors
             Err(e) => {
                 // TODO: log error
                 println!("unit deal_damage_rhai {deal_damage_rhai}: {e:?}");
