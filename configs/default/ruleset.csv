@@ -6,3 +6,4 @@ UnitDeathTest;ruleset > unit_death_test
 UnitMovableTest;ruleset > unit_movable_test
 CalculateAttackDamage;ruleset > calculate_attack_damage
 DealDamageToUnit;ruleset > deal_damage_to_unit
+WeaponEffects;ruleset > weapon_effects

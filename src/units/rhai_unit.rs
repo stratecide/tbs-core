@@ -140,6 +140,13 @@ macro_rules! board_module {
                 unit.copy_from(&other.get_tag_bag());
             }
 
+            #[rhai_fn(pure, name = "get_custom")]
+            pub fn get_custom(unit: &mut Unit, column_name: ImmutableString) -> Dynamic {
+                unit.environment().unit_custom_attribute(unit.typ(), column_name)
+                    .map(|result| result.into())
+                    .unwrap_or(().into())
+            }
+
             #[rhai_fn(pure, name = "has")]
             pub fn has_flag(unit: &mut Unit, flag: FlagKey) -> bool {
                 unit.has_flag(flag.0)

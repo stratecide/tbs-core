@@ -186,6 +186,10 @@ impl Environment {
         self.config.calculate_damage_rhai
     }
 
+    pub fn weapon_effects_rhai(&self) -> Option<usize> {
+        self.config.weapon_effects_rhai
+    }
+
     pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
         self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name)
@@ -280,6 +284,12 @@ impl Environment {
     pub fn unit_valid_action_status(&self, typ: UnitType, _owner: i8) -> &[ActionStatus] {
         self.config.unit_specific_statuses(typ)
     }*/
+
+    pub fn unit_custom_attribute(&self, typ: UnitType, column_name: ImmutableString) -> Option<ImmutableString> {
+        self.config.unit_config(typ).custom_columns
+            .get(&column_name)
+            .cloned()
+    }
 
     pub fn unit_transport_capacity(&self, typ: UnitType, owner: i8, hero: HeroType) -> usize {
         self.config.unit_config(typ).transport_capacity

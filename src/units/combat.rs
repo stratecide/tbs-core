@@ -10,7 +10,7 @@ use zipper::Exportable;
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::{parse_tuple2, string_base, FromConfig};
 use crate::config::ConfigParseError;
-use crate::game::event_fx::{Effect, EffectWithoutPosition};
+use crate::game::event_fx::{Effect, EffectPath, EffectWithoutPosition};
 use crate::game::fog::can_see_unit_at;
 use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
@@ -492,8 +492,8 @@ impl<D: Direction> AttackVector<D> {
 
     // set path to None if this is a counter-attack
     fn execute_attack(
-        &self, handler:
-        &mut EventHandler<D>,
+        &self,
+        handler: &mut EventHandler<D>,
         attacker: &Unit<D>,
         attacker_pos: Point,
         attacker_id: Option<usize>,
@@ -506,9 +506,87 @@ impl<D: Direction> AttackVector<D> {
     ) -> (u32, Vec<usize>, Vec<(i8, i8, u32)>) {
         let temporary_ballast = path.map(|(_, _, t)| t).unwrap_or(&[]);
         let mut defenders = self.get_splash(attacker, &*handler.get_game(), attacker_pos, attacker_heroes, temporary_ballast, counter.clone());
-        // TODO: execute rhai script for weapon effects
         for (_, _, f) in defenders.iter_mut() {
             *f = *f * input_factor;
+        }
+        let environment = handler.get_game().environment();
+        if let Some(weapon_effects_rhai) = environment.weapon_effects_rhai() {
+            // only for effects, so this executor doesn't get access to the event handler
+            let mut engine = environment.get_engine(&*handler.get_game());
+            let handler_ = Arc::new(Mutex::new(handler.clone()));
+            {
+                let handler = handler_.clone();
+                engine.register_fn("effect", move |effect: EffectWithoutPosition<D>| {
+                    handler.lock().unwrap().effect(Effect::Global(effect));
+                });
+            }
+            {
+                let handler = handler_.clone();
+                engine.register_fn("effect", move |p: Point, effect: EffectWithoutPosition<D>| {
+                    handler.lock().unwrap().effect(Effect::Point(effect, p));
+                });
+            }
+            {
+                let handler = handler_.clone();
+                engine.register_fn("effect", move |path: Path<D>, effect: EffectWithoutPosition<D>| {
+                    let mut handler = handler.lock().unwrap();
+                    let effect = {
+                        let board = handler.get_game();
+                        Effect::Path(EffectPath::new(&*board, effect.typ, effect.data, path))
+                    };
+                    handler.effect(effect);
+                });
+            }
+            {
+                let handler = handler_.clone();
+                engine.register_fn("effect", move |effect: Effect<D>| {
+                    handler.lock().unwrap().effect(effect);
+                });
+            }
+            {
+                let handler = handler_.clone();
+                engine.register_fn("effects", move |effects: rhai::Array| {
+                    let mut list = Vec::with_capacity(effects.len());
+                    for effect in effects {
+                        let effect = match effect.try_cast_result::<Effect<D>>() {
+                            Ok(effect) => {
+                                list.push(effect);
+                                continue;
+                            }
+                            Err(effect) => effect,
+                        };
+                        let _effect = match effect.try_cast_result::<EffectWithoutPosition<D>>() {
+                            Ok(effect) => {
+                                list.push(Effect::Global(effect));
+                                continue;
+                            }
+                            Err(effect) => effect,
+                        };
+                        // TODO: log error?
+                    }
+                    handler.lock().unwrap().effects(list);
+                });
+            }
+            let mut scope = Scope::new();
+            scope.push_constant(CONST_NAME_ATTACKER_POSITION, attacker_pos);
+            scope.push_constant(CONST_NAME_ATTACKER, attacker.clone());
+            let attack_dir = match self {
+                Self::Direction(d) => Dynamic::from(*d),
+                _ => ().into()
+            };
+            scope.push_constant(CONST_NAME_ATTACK_DIRECTION, attack_dir);
+            let defender_positions: rhai::Array = defenders.iter()
+                .map(|(p, _, _)| Dynamic::from(*p))
+                .collect();
+            scope.push_constant(CONST_NAME_DEFENDER_POSITIONS, defender_positions);
+            match Executor::execute(&environment, &engine, &mut scope, weapon_effects_rhai, ()) {
+                Ok(()) => (), // script had no errors
+                Err(e) => {
+                    // TODO: log error
+                    panic!("unit weapon_effects_rhai {weapon_effects_rhai}: {e:?}");
+                    handler.effect_glitch();
+                }
+            }
         }
         attack_targets(handler, attacker, attacker_pos, attacker_id, path, counter, defenders, attacker_heroes, exhaust_after_attacking, execute_scripts)
     }
@@ -759,7 +837,6 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
         {
             let handler = handler_.clone();
             engine.register_fn("effect", move |effect: EffectWithoutPosition<D>| {
-                println!("send effect {effect:?}");
                 let mut handler = handler.lock().unwrap();
                 if handler.with_map(|map| map.environment().config.effect_is_global(effect.typ)) {
                     handler.effect(Effect::Global(effect));
@@ -800,6 +877,7 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
             Err(e) => {
                 // TODO: log error
                 println!("unit deal_damage_rhai {deal_damage_rhai}: {e:?}");
+                handler.effect_glitch();
             }
         }
     }

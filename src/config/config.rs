@@ -124,6 +124,7 @@ pub struct Config {
     pub(super) is_unit_movable_rhai: usize,
     pub(super) calculate_damage_rhai: usize,
     pub(super) deal_damage_rhai: usize,
+    pub(super) weapon_effects_rhai: Option<usize>,
     pub(super) custom_tables: HashMap<String, CustomTable>,
 }
 
@@ -298,10 +299,6 @@ impl Config {
 
     pub fn can_be_taken(&self, typ: UnitType) -> bool {
         self.unit_config(typ).can_be_taken
-    }
-
-    pub fn weapon(&self, typ: UnitType) -> WeaponType {
-        self.unit_config(typ).weapon
     }
 
     pub fn can_attack(&self, typ: UnitType) -> bool {

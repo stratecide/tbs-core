@@ -4,7 +4,10 @@ use rustc_hash::FxHashSet;
 use rhai::*;
 use rhai::plugin::*;
 
+use interfaces::ClientPerspective;
+
 use crate::game::game_view::GameView;
+use crate::game::fog::FogIntensity;
 use crate::map::direction::*;
 use crate::map::map::NeighborMode;
 use crate::map::point::*;
@@ -136,6 +139,21 @@ macro_rules! board_module {
                 .map(|player| player.get_income())
                 .unwrap_or(0)
             }
+
+            #[rhai_fn(pure)]
+            pub fn is_unit_visible(board: &mut Board, p: Point, team: i32) -> bool {
+                if team >= board.environment().config.max_player_count() as i32 {
+                    return false;
+                }
+                let Some(team) = ClientPerspective::from_i16(team as i16) else {
+                    return false
+                };
+                let Some(unit) = board.get_unit(p) else {
+                    return false
+                };
+                crate::game::fog::is_unit_visible(&**board, &unit, p, team)
+            }
+
         }
 
         def_package! {

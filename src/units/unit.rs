@@ -178,10 +178,6 @@ impl<D: Direction> Unit<D> {
         && self.environment.unit_valid_action_status(self.typ, self.get_owner_id()).contains(&status)
     }*/
 
-    pub fn weapon(&self) -> WeaponType {
-        self.environment.config.weapon(self.typ)
-    }
-
     pub fn can_attack(&self) -> bool {
         self.environment.config.can_attack(self.typ)
     }

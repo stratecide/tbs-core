@@ -1,3 +1,4 @@
+use rhai::ImmutableString;
 use rustc_hash::FxHashMap as HashMap;
 use std::error::Error;
 use num_rational::Rational32;
@@ -31,7 +32,6 @@ pub struct UnitTypeConfig {
     pub(super) stealthy: bool,
     pub(super) can_be_moved_through: bool,
     pub(super) can_be_taken: bool,
-    pub(super) weapon: WeaponType,
     pub(super) can_attack_after_moving: bool,
     pub(super) attack_pattern: AttackType,
     pub(super) attack_targets: AttackTargeting,
@@ -44,6 +44,7 @@ pub struct UnitTypeConfig {
     pub(super) displacement_distance: i8, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: bool,
     pub(super) transport_capacity: usize,
+    pub(super) custom_columns: HashMap<ImmutableString, ImmutableString>,
 }
 
 impl TableLine for UnitTypeConfig {
@@ -54,6 +55,13 @@ impl TableLine for UnitTypeConfig {
         let get = |key| {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
+        let mut custom_columns = HashMap::default();
+        for (header, s) in data {
+            if let H::Custom(name) = header {
+                let s = s.trim();
+                custom_columns.insert(name.into(), s.into());
+            }
+        }
         let result = Self {
             name: get(H::Id)?.trim().to_string(),
             visibility: match data.get(&H::Visibility) {
@@ -70,7 +78,6 @@ impl TableLine for UnitTypeConfig {
             stealthy: parse_def(data, H::Stealthy, false, loader)?,
             can_be_moved_through: parse_def(data, H::CanBeMovedThrough, false, loader)?,
             can_be_taken: parse_def(data, H::CanBeTaken, false, loader)?,
-            weapon: parse_def(data, H::Weapon, WeaponType::MachineGun, loader)?,
             can_attack_after_moving: parse_def(data, H::CanAttackAfterMoving, false, loader)?,
             attack_pattern: parse_def(data, H::AttackPattern, AttackType::None, loader)?,
             attack_targets: parse_def(data, H::AttackTargets, AttackTargeting::Enemy, loader)?,
@@ -80,6 +87,7 @@ impl TableLine for UnitTypeConfig {
             displacement_distance: parse_def(data, H::DisplacementDistance, 0, loader)?,
             can_be_displaced: parse_def(data, H::CanBeDisplaced, false, loader)?,
             transport_capacity: parse_def(data, H::TransportCapacity, 0 as u8, loader)? as usize,
+            custom_columns,
         };
         Ok(result)
     }
@@ -95,8 +103,8 @@ impl TableLine for UnitTypeConfig {
     }
 }
 
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+crate::enum_with_custom! {
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum UnitTypeConfigHeader {
         Id,
         Visibility,
@@ -110,7 +118,6 @@ crate::listable_enum! {
         Stealthy,
         CanBeMovedThrough,
         CanBeTaken,
-        Weapon,
         CanAttackAfterMoving,
         AttackPattern,
         AttackTargets,

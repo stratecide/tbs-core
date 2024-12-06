@@ -1,3 +1,8 @@
 Id;Global;DataType;Visibility
 HpChange;;Int(-999, 99);UnitTag(Hp)
 Explosion;;Visibility;Data
+Attacker;;;Unit
+AttackerTeam;;Team;Data
+Flame;;;Fog(NormalVision)
+Rifle;;;Fog(NormalVision)
+Shells;;;Fog(NormalVision)

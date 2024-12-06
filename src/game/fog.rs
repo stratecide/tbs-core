@@ -291,6 +291,17 @@ pub fn find_visible_threats<D: Direction>(game: &impl GameView<D>, pos: Point, t
     result
 }
 
+pub fn is_unit_visible<D: Direction>(board: &impl GameView<D>, unit: &Unit<D>, p: Point, team: ClientPerspective) -> bool {
+    let fog_intensity = board.get_fog_at(team, p);
+    let unit_visibility = unit.visibility(board, p);
+    match fog_intensity {
+        FogIntensity::TrueSight => true,
+        FogIntensity::NormalVision => unit_visibility != UnitVisibility::Stealth,
+        FogIntensity::Light => unit_visibility == UnitVisibility::AlwaysVisible,
+        FogIntensity::Dark => unit_visibility == UnitVisibility::AlwaysVisible,
+    }
+}
+
 pub fn is_unit_attribute_visible(fog_intensity: FogIntensity, unit_visibility: UnitVisibility, attribute_visibility: UnitVisibility) -> bool {
     match fog_intensity {
         FogIntensity::TrueSight => true,

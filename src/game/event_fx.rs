@@ -7,7 +7,8 @@ use crate::config::effect_config::{EffectConfig, EffectDataType};
 use crate::config::parse::FromConfig;
 use crate::handle::Handle;
 use crate::map::point::Point;
-use crate::script::with_board;
+use crate::player::Owner;
+use crate::script::{get_environment, with_board};
 use crate::units::unit::Unit;
 use crate::units::movement::{Path, MAX_PATH_LENGTH};
 use crate::terrain::terrain::*;
@@ -54,11 +55,10 @@ impl SupportedZippable<&Environment> for EffectType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Zippable)]
-#[zippable(bits = 1, support_ref = Environment)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EffectStep<D: Direction> {
     Simple(Point, PathStep<D>),
-    Replace(Point, PathStep<D>, Option<EffectWithoutPosition<D>>),
+    Replace(Point, PathStep<D>, Option<EffectData<D>>),
 }
 
 impl<D: Direction> EffectStep<D> {
@@ -86,15 +86,17 @@ pub enum EffectData<D: Direction> {
     Token(Token<D>),
     Unit(Unit<D>),
     Visibility(UnitVisibility),
+    Team(Owner),
 }
 
 impl<D: Direction> EffectData<D> {
-    pub fn fog_replacement(&self, game: &impl GameView<D>, p: Point, fog_intensity: FogIntensity) -> Option<Self> {
+    pub fn fog_replacement(&self, game: &impl GameView<D>, p: Point, fog_intensity: FogIntensity, team: ClientPerspective) -> Option<Self> {
         match self {
-            EffectData::Terrain(inner) => Some(Self::Terrain(inner.fog_replacement(fog_intensity))),
-            EffectData::Token(inner) => Some(Self::Token(inner.fog_replacement(fog_intensity)?)),
-            EffectData::Unit(inner) => Some(Self::Unit(inner.fog_replacement(game, p, fog_intensity)?)),
-            EffectData::Visibility(inner) => inner.visible_in_fog(fog_intensity).then_some(self.clone()),
+            Self::Terrain(inner) => Some(Self::Terrain(inner.fog_replacement(fog_intensity))),
+            Self::Token(inner) => Some(Self::Token(inner.fog_replacement(fog_intensity)?)),
+            Self::Unit(inner) => Some(Self::Unit(inner.fog_replacement(game, p, fog_intensity)?)),
+            Self::Visibility(inner) => inner.visible_in_fog(fog_intensity).then_some(self.clone()),
+            Self::Team(inner) => (inner.0 < 0 || team.to_i16() == inner.0 as i16).then_some(self.clone()),
             _ => None,
         }
     }
@@ -114,6 +116,7 @@ impl<D: Direction> EffectData<D> {
             Self::Token(inner) => inner.export(zipper, environment),
             Self::Unit(inner) => inner.export(zipper, environment),
             Self::Visibility(inner) => inner.zip(zipper),
+            Self::Team(inner) => inner.export(zipper, environment),
         }
     }
 
@@ -131,6 +134,7 @@ impl<D: Direction> EffectData<D> {
             EffectDataType::Token => Self::Token(Token::import(unzipper, environment)?),
             EffectDataType::Unit => Self::Unit(Unit::import(unzipper, environment)?),
             EffectDataType::Visibility => Self::Visibility(UnitVisibility::unzip(unzipper)?),
+            EffectDataType::Team => Self::Team(Owner::import(unzipper, environment)?),
         })
     }
 }
@@ -165,12 +169,102 @@ impl<D: Direction> SupportedZippable<&Environment> for EffectWithoutPosition<D> 
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EffectPath<D: Direction> {
+    pub typ: EffectType,
+    pub initial_data: Option<EffectData<D>>,
+    pub steps: LVec<EffectStep<D>, {MAX_PATH_LENGTH}>,
+}
+
+impl<D: Direction> EffectPath<D> {
+    pub fn new(board: &impl GameView<D>, typ: EffectType, data: EffectData<D>, path: Path<D>) -> Self {
+        let mut p = path.start;
+        let mut steps = Vec::with_capacity(path.steps.len());
+        for step in path.steps {
+            steps.push(EffectStep::Simple(p, step));
+            // invalid paths should be impossible to construct (see rhai_movement), so unwrap here should be fine
+            p = step.progress(board, p).unwrap().0;
+        }
+        Self {
+            typ,
+            initial_data: Some(data),
+            steps: steps.try_into().unwrap(),
+        }
+    }
+}
+
+impl<D: Direction> SupportedZippable<&Environment> for EffectPath<D> {
+    fn export(&self, zipper: &mut Zipper, environment: &Environment) {
+        self.typ.export(zipper, environment);
+        let has_data = environment.config.effect_data(self.typ) == None;
+        let export_data = |zipper: &mut Zipper, data: &Option<EffectData<D>>| {
+            if has_data {
+                zipper.write_bool(data.is_some());
+                if let Some(data) = data {
+                    data.export(zipper, environment, self.typ);
+                }
+            }
+        };
+        export_data(zipper, &self.initial_data);
+        zipper.write_u32(self.steps.len() as u32, bits_needed_for_max_value(MAX_PATH_LENGTH));
+        for step in &self.steps {
+            if has_data {
+                zipper.write_bool(matches!(step, EffectStep::Replace(_, _, _)));
+            }
+            match step {
+                EffectStep::Simple(p, step) => {
+                    p.export(zipper, environment);
+                    step.zip(zipper);
+                }
+                EffectStep::Replace(p, step, data) => {
+                    p.export(zipper, environment);
+                    step.zip(zipper);
+                    export_data(zipper, data);
+                }
+            }
+        }
+    }
+    fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
+        let typ = EffectType::import(unzipper, environment)?;
+        let has_data = environment.config.effect_data(typ) == None;
+        let import_data = |unzipper: &mut Unzipper| {
+            if has_data && unzipper.read_bool()? {
+                Ok(Some(EffectData::import(unzipper, environment, typ)?))
+            } else {
+                Ok(None)
+            }
+        };
+        let initial_data = import_data(unzipper)?;
+        let length = unzipper.read_u32(bits_needed_for_max_value(MAX_PATH_LENGTH))? as usize;
+        let mut steps = Vec::with_capacity(length);
+        for _ in 0..length {
+            steps.push(if has_data && unzipper.read_bool()? {
+                EffectStep::Replace(
+                    Point::import(unzipper, environment)?,
+                    PathStep::unzip(unzipper)?,
+                    import_data(unzipper)?,
+                )
+            } else {
+                EffectStep::Simple(
+                    Point::import(unzipper, environment)?,
+                    PathStep::unzip(unzipper)?,
+                )
+            });
+        }
+        Ok(Self {
+            typ,
+            initial_data,
+            steps: steps.try_into().unwrap(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 2, support_ref = Environment)]
 pub enum Effect<D: Direction> {
     Global(EffectWithoutPosition<D>),
     Point(EffectWithoutPosition<D>, Point),
-    Path(Option<EffectWithoutPosition<D>>, LVec<EffectStep<D>, {MAX_PATH_LENGTH}>),
+    Path(EffectPath<D>),
 }
 
 impl<D: Direction> Effect<D> {
@@ -192,7 +286,7 @@ impl<D: Direction> Effect<D> {
         let typ = match self {
             Self::Global(eff) => eff.typ,
             Self::Point(eff, _) => eff.typ,
-            Self::Path(eff, _) => eff.as_ref().expect("fog_replacement should only be called on fully visible effect").typ,
+            Self::Path(EffectPath { typ, .. }) => *typ,
         };
         let visibility = game.environment().config.effect_visibility(typ);
         match self {
@@ -215,32 +309,36 @@ impl<D: Direction> Effect<D> {
                     *p,
                 ))
             }
-            Self::Path(eff, steps) => {
-                let eff = eff.as_ref().unwrap();
+            Self::Path(EffectPath { typ, initial_data, steps }) => {
                 let start = steps.first()?.get_start();
                 let end = steps.last()?;
                 let end = end.get_step().progress(game, end.get_start()).ok()?.0;
+                let eff = EffectWithoutPosition {
+                    typ: *typ,
+                    data: initial_data.clone()?,
+                };
                 let mut transformed = Vec::with_capacity(steps.len() + 1);
                 for step in steps {
-                    transformed.push(visibility.fog_replacement(eff, Some(start), Some(step.get_start()), game, team))
+                    transformed.push(visibility.fog_replacement(&eff, Some(start), Some(step.get_start()), game, team))
                 }
-                transformed.push(visibility.fog_replacement(eff, Some(start), Some(end), game, team));
+                transformed.push(visibility.fog_replacement(&eff, Some(start), Some(end), game, team));
                 let steps: Vec<EffectStep<D>> = steps.iter().enumerate()
                 .filter(|(i, _)| transformed[*i].is_some() || transformed[*i + 1].is_some())
                 .map(|(i, step)| {
                     if transformed[i] == transformed[i + 1] {
                         EffectStep::Simple(step.get_start(), step.get_step())
                     } else {
-                        EffectStep::Replace(step.get_start(), step.get_step(), transformed[i + 1].clone())
+                        EffectStep::Replace(step.get_start(), step.get_step(), transformed[i + 1].clone().map(|eff| eff.data))
                     }
                 }).collect();
                 if steps.len() == 0 {
                     return None;
                 }
-                Some(Self::Path(
-                    transformed.swap_remove(0),
-                    steps.try_into().unwrap(),
-                ))
+                Some(Self::Path(EffectPath {
+                    typ: *typ,
+                    initial_data: transformed.swap_remove(0).map(|eff| eff.data),
+                    steps: steps.try_into().unwrap(),
+                }))
             }
         }
     }
@@ -273,22 +371,22 @@ pub(crate) fn effect_constructor_module<D: Direction>(definitions: &[EffectConfi
             Some(EffectDataType::Visibility) => f.set_into_module(&mut module, move |value: UnitVisibility| {
                 EffectWithoutPosition::new(i, EffectData::<D>::Visibility(value))
             }),
+            Some(EffectDataType::Team) => f.set_into_module(&mut module, move |context: NativeCallContext, mut value: i32| {
+                let environment = get_environment(context);
+                if value < 0 || value >= environment.config.max_player_count() as i32 {
+                    value = -1;
+                }
+                EffectWithoutPosition::new(i, EffectData::<D>::Team(Owner(value as i8)))
+            }),
         };
     }
     FuncRegistration::new("at").set_into_module(&mut module, move |effect: EffectWithoutPosition<D>, p: Point| {
         Effect::Point(effect, p)
     });
     FuncRegistration::new("path").set_into_module(&mut module, move |context: NativeCallContext, effect: EffectWithoutPosition<D>, path: Path<D>| {
-        let mut p = path.start;
-        let mut steps = Vec::with_capacity(path.steps.len());
         with_board(context, |board| {
-            for step in path.steps {
-                steps.push(EffectStep::Simple(p, step));
-                // invalid paths should be impossible to construct (see rhai_movement), so unwrap here should be fine
-                p = step.progress(board, p).unwrap().0;
-            }
+            Effect::Path(EffectPath::new(board, effect.typ, effect.data, path))
         });
-        Effect::Path(Some(effect), steps.try_into().unwrap())
     });
     module.into()
 }

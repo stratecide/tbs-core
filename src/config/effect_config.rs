@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
 use crate::game::event_fx::EffectWithoutPosition;
-use crate::game::fog::visible_unit_with_attribute;
+use crate::game::fog::{is_unit_visible, visible_unit_with_attribute, FogIntensity};
 use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::handle::Handle;
@@ -51,6 +51,7 @@ impl TableLine for EffectConfig {
             "token" => Some(EffectDataType::Token),
             "unit" => Some(EffectDataType::Unit),
             "visibility" => Some(EffectDataType::Visibility),
+            "team" => Some(EffectDataType::Team),
             unknown => return Err(ConfigParseError::UnknownEnumMember(format!("EffectDataType::{unknown}")).into())
         };
         Ok(Self {
@@ -104,6 +105,7 @@ pub enum EffectDataType {
     Token,
     Unit,
     Visibility,
+    Team,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -111,8 +113,10 @@ pub enum EffectVisibility {
     Rhai(usize),
     CurrentTeam,
     Data,
+    Unit,
     UnitFlag(FlagKey),
     UnitTag(TagKey),
+    Fog(FogIntensity),
 }
 
 impl FromConfig for EffectVisibility {
@@ -126,6 +130,7 @@ impl FromConfig for EffectVisibility {
             }
             "CurrentTeam" => Self::CurrentTeam,
             "Data" => Self::Data,
+            "Unit" => Self::Unit,
             "UnitFlag" => {
                 let (key, r) = parse_tuple1::<FlagKey>(remainder, loader)?;
                 remainder = r;
@@ -135,6 +140,11 @@ impl FromConfig for EffectVisibility {
                 let (key, r) = parse_tuple1::<TagKey>(remainder, loader)?;
                 remainder = r;
                 Self::UnitTag(key)
+            }
+            "Fog" => {
+                let (key, r) = parse_tuple1::<FogIntensity>(remainder, loader)?;
+                remainder = r;
+                Self::Fog(key)
             }
             invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
         }, remainder))
@@ -173,11 +183,19 @@ impl EffectVisibility {
             }
             Self::Data => {
                 let fog_intensity = game.get_fog_at(team, p?);
-                let data = effect.data.fog_replacement(game, p?, fog_intensity)?;
+                let data = effect.data.fog_replacement(game, p?, fog_intensity, team)?;
                 Some(EffectWithoutPosition {
                     typ: effect.typ,
                     data,
                 })
+            }
+            Self::Unit => {
+                let unit = game.get_unit(start?)?;
+                if is_unit_visible(game, &unit, p?, team) {
+                    Some(effect.clone())
+                } else {
+                    None
+                }
             }
             Self::UnitFlag(key) => {
                 let unit = game.get_unit(start?)?;
@@ -190,6 +208,13 @@ impl EffectVisibility {
             Self::UnitTag(key) => {
                 let unit = game.get_unit(start?)?;
                 if visible_unit_with_attribute(game, team, p?, unit.environment().config.tag_visibility(key.0)) {
+                    Some(effect.clone())
+                } else {
+                    None
+                }
+            }
+            Self::Fog(fog_intensity) => {
+                if game.get_fog_at(team, p?) <= *fog_intensity {
                     Some(effect.clone())
                 } else {
                     None

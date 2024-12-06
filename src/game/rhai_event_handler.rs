@@ -339,17 +339,11 @@ macro_rules! event_handler_module {
             }
             #[rhai_fn(name = "effect")]
             pub fn effect_path(mut handler: Handler, path: Path<$d>, effect: EffectWithoutPosition<$d>) {
-                let mut p = path.start;
-                let mut steps = Vec::with_capacity(path.steps.len());
-                {
+                let effect = {
                     let board = handler.get_game();
-                    for step in path.steps {
-                        steps.push(EffectStep::Simple(p, step));
-                        // invalid paths should be impossible to construct (see rhai_movement), so unwrap here should be fine
-                        p = step.progress(&*board, p).unwrap().0;
-                    }
-                }
-                handler.effect(Effect::Path(Some(effect), steps.try_into().unwrap()))
+                    Effect::Path(EffectPath::new(&*board, effect.typ, effect.data, path))
+                };
+                handler.effect(effect);
             }
 
             pub fn effect(mut handler: Handler, effect: Effect<$d>) {
