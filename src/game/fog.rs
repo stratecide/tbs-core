@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use interfaces::ClientPerspective;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use zipper::*;
 use zipper::zipper_derive::*;
 
@@ -9,7 +9,6 @@ use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
 use crate::map::point::Point;
 use crate::units::hero::Hero;
-use crate::units::movement::Path;
 use crate::units::unit::Unit;
 use crate::units::UnitVisibility;
 
@@ -278,7 +277,7 @@ pub fn can_see_unit_at<D: Direction>(game: &impl GameView<D>, team: ClientPerspe
     }
 }
 
-pub fn find_visible_threats<D: Direction>(game: &impl GameView<D>, pos: Point, threatened: &Unit<D>, team: ClientPerspective) -> FxHashSet<Point> {
+/*pub fn find_visible_threats<D: Direction>(game: &impl GameView<D>, pos: Point, threatened: &Unit<D>, team: ClientPerspective) -> FxHashSet<Point> {
     let mut result = FxHashSet::default();
     for p in game.all_points() {
         if let Some(unit) = game.get_unit(p) {
@@ -289,7 +288,7 @@ pub fn find_visible_threats<D: Direction>(game: &impl GameView<D>, pos: Point, t
         }
     }
     result
-}
+}*/
 
 pub fn is_unit_visible<D: Direction>(board: &impl GameView<D>, unit: &Unit<D>, p: Point, team: ClientPerspective) -> bool {
     let fog_intensity = board.get_fog_at(team, p);

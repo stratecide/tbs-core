@@ -292,25 +292,6 @@ impl<D: Direction> Game<D> {
             event.undo(self);
         }
     }
-
-    /*pub fn find_visible_threats(&self, pos: Point, threatened: &Unit<D>, team: ClientPerspective) -> HashSet<Point> {
-        let mut result = HashSet::default();
-        for p in self.map.all_points() {
-            if let Some(unit) = self.map.get_unit(p) {
-                if self.can_see_unit_at(team, p, unit, false) && unit.threatens(threatened) && unit.shortest_path_to_attack(self, &Path::new(p), None, pos).is_some() {
-                    result.insert(p);
-                }
-                // TODO: also check transported units
-            }
-        }
-        result
-    }
-
-    pub fn visible_unit_with_attribute(&self, team: ClientPerspective, pos: Point, attribute: AttributeKey) -> bool {
-        self.get_map().get_unit(pos).unwrap()
-        .fog_replacement(self, pos, self.get_fog_at(team, pos))
-        .and_then(|u| Some(u.has_attribute(attribute))).unwrap_or(false)
-    }*/
 }
 
 fn export_fog(zipper: &mut Zipper, points: &Vec<Point>, fog: &HashMap<Point, FogIntensity>) {

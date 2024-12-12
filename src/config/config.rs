@@ -333,10 +333,6 @@ impl Config {
         self.unit_config(typ).displacement_distance
     }
 
-    pub fn can_be_displaced(&self, typ: UnitType) -> bool {
-        self.unit_config(typ).can_be_displaced
-    }
-
     pub fn vision_mode(&self, typ: UnitType) -> VisionMode {
         self.unit_config(typ).vision_mode
     }
@@ -348,18 +344,6 @@ impl Config {
     pub fn base_true_vision_range(&self, typ: UnitType) -> usize {
         self.unit_config(typ).true_vision
     }
-
-    /*pub fn unit_specific_attributes(&self, typ: UnitType) -> &[AttributeKey] {
-        self.unit_attributes.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
-    }
-
-    pub(crate) fn unit_specific_hidden_attributes(&self, typ: UnitType) -> &[AttributeKey] {
-        self.unit_hidden_attributes.get(&typ).expect(&format!("Environment doesn't contain unit type {typ:?}"))
-    }
-
-    pub fn unit_specific_statuses(&self, typ: UnitType) -> &[ActionStatus] {
-        self.unit_status.get(&typ).map(|v| v.as_slice()).unwrap_or(&[ActionStatus::Ready])
-    }*/
 
     pub fn unit_transportable(&self, typ: UnitType) -> &[UnitType] {
         if let Some(transportable) = self.unit_transports.get(&typ) {
@@ -1188,89 +1172,6 @@ impl Config {
         ) as usize
     }
 
-    /*pub fn unit_attribute_overrides<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: Point,
-        transporter: Option<(&Unit<D>, Point)>, // move out of this transporter and then build something
-        heroes: &[HeroInfluence<D>],
-        temporary_ballast: &[TBallast<D>],
-    ) -> HashMap<AttributeKey, AttributeOverride> {
-        let mut result = HashMap::default();
-        self.unit_power_configs(
-            game,
-            unit,
-            (unit_pos, None),
-            transporter,
-            None, heroes,
-            temporary_ballast,
-            false,
-            |iter, _executor| {
-                for config in iter {
-                    for ov in &config.build_overrides {
-                        result.insert(ov.key(), ov.clone());
-                    }
-                }
-            }
-        );
-        result
-    }*/
-
-    /*pub fn unit_start_turn_effects<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: (Point, Option<usize>),
-        transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
-    ) -> Vec<usize> {
-        let mut result = Vec::new();
-        self.unit_power_configs(
-            game,
-            unit,
-            unit_pos,
-            transporter,
-            None,
-            heroes,
-            &[],
-            false,
-            |iter, _executor| {
-                for config in iter {
-                    result.extend(config.on_start_turn.iter().cloned())
-                }
-            }
-        );
-        result
-    }
-
-    pub fn unit_end_turn_effects<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: (Point, Option<usize>),
-        transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
-    ) -> Vec<usize> {
-        let mut result = Vec::new();
-        self.unit_power_configs(
-            game,
-            unit,
-            unit_pos,
-            transporter,
-            None,
-            heroes,
-            &[],
-            false,
-            |iter, _executor| {
-                for config in iter {
-                    result.extend(config.on_end_turn.iter().cloned())
-                }
-            }
-        );
-        result
-    }*/
-
     pub fn unit_attack_effects<D: Direction>(
         &self,
         game: &impl GameView<D>,
@@ -1579,6 +1480,36 @@ impl Config {
                         executor,
                     )
                 }
+            }
+        )
+    }
+
+    pub fn unit_can_be_displaced<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        attacker: &Unit<D>,
+        attacker_pos: Point,
+        heroes: &[HeroInfluence<D>],
+        is_counter: bool,
+    ) -> bool {
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            None,
+            Some((attacker, attacker_pos)),
+            heroes,
+            &[],
+            is_counter,
+            |iter, _executor| {
+                for conf in iter.rev() {
+                    if let Some(can_be_displaced) = conf.can_be_displaced {
+                        return can_be_displaced;
+                    }
+                }
+                self.unit_config(unit.typ()).can_be_displaced
             }
         )
     }

@@ -206,8 +206,8 @@ impl<D: Direction> Unit<D> {
         self.environment.config.unit_displacement_distance(game, self, pos, transporter, heroes, temporary_ballast, is_counter)
     }
 
-    pub fn can_be_displaced(&self) -> bool {
-        self.environment.config.can_be_displaced(self.typ)
+    pub fn can_be_displaced(&self, game: &impl GameView<D>, pos: Point, attacker: &Self, attacker_pos: Point, heroes: &[HeroInfluence<D>], is_counter: bool) -> bool {
+        self.environment.config.unit_can_be_displaced(game, self, pos, attacker, attacker_pos, heroes, is_counter)
     }
 
     pub fn vision_mode(&self) -> VisionMode {
@@ -945,12 +945,12 @@ impl<D: Direction> Unit<D> {
         }
     }
 
-    pub fn could_attack(&self, defender: &Self, allow_friendly_fire: bool) -> bool {
+    pub fn could_attack(&self, p: Point, _heroes: &[HeroInfluence<D>], game: &impl GameView<D>, defender: &Self, defender_pos: Point, defender_heroes: &[HeroInfluence<D>], is_counter: bool, allow_friendly_fire: bool) -> bool {
         let base_damage = self.base_damage(defender.typ());
         if base_damage.is_none() {
             return false;
         }
-        if self.displacement() == Displacement::InsteadOfAttack && !defender.can_be_displaced() {
+        if self.displacement() == Displacement::InsteadOfAttack && !defender.can_be_displaced(game, defender_pos, self, p, defender_heroes, is_counter) {
             return false;
         }
         if self.displacement() == Displacement::None && base_damage == Some(0) {
@@ -973,12 +973,6 @@ impl<D: Direction> Unit<D> {
 
     pub fn could_take(&self, defender: &Self, takes: PathStepTakes) -> bool {
         takes != PathStepTakes::Deny && defender.can_be_taken() && self.get_team() != defender.get_team()
-    }
-
-    pub fn threatens(&self, defender: &Self) -> bool {
-        //let terrain = game.get_map().get_terrain(target_pos).unwrap();
-        //let in_water = terrain.is_water();
-        self.could_attack(defender, false) && defender.get_team() != self.get_team()
     }
 
     pub fn options_after_path(&self, game: &impl GameView<D>, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Vec<UnitAction<D>> {
