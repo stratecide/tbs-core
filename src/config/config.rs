@@ -289,10 +289,6 @@ impl Config {
         self.unit_config(typ).movement_points
     }
 
-    pub fn has_stealth(&self, typ: UnitType) -> bool {
-        self.unit_config(typ).stealthy
-    }
-
     pub fn can_be_moved_through(&self, typ: UnitType) -> bool {
         self.unit_config(typ).can_be_moved_through
     }
@@ -1348,6 +1344,34 @@ impl Config {
                     iter.map(|c| c.movement_points),
                     executor,
                 )
+            }
+        )
+    }
+
+    pub fn unit_can_pass_enemy_units<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        unit_pos: (Point, Option<usize>),
+        transporter: Option<(&Unit<D>, Point)>,
+        heroes: &[HeroInfluence<D>],
+    ) -> bool {
+        self.unit_power_configs(
+            game,
+            unit,
+            unit_pos,
+            transporter,
+            None,
+            heroes,
+            &[],
+            false,
+            |iter, _| {
+                for conf in iter.rev() {
+                    if let Some(pass_enemy_units) = conf.pass_enemy_units {
+                        return pass_enemy_units;
+                    }
+                }
+                self.unit_config(unit.typ()).pass_enemy_units
             }
         )
     }

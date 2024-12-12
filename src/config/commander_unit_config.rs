@@ -27,7 +27,7 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) movement_points: NumberMod<Rational32>,
     pub(super) vision: NumberMod<u8>,
     pub(super) true_vision: NumberMod<u8>,
-    pub(super) stealthy: Option<bool>,
+    pub(super) pass_enemy_units: Option<bool>,
     pub(super) attack_pattern: Option<AttackType>,
     pub(super) attack_targets: Option<AttackTargeting>,
     pub(super) splash_damage: Vec<Rational32>, // doesn't override if empty. contains factor per additional distance
@@ -86,7 +86,7 @@ impl TableLine for CommanderPowerUnitConfig {
             movement_points: parse_def(data, H::MovementPoints, NumberMod::Keep, loader)?,
             vision: parse_def(data, H::Vision, NumberMod::Keep, loader)?,
             true_vision: parse_def(data, H::TrueVision, NumberMod::Keep, loader)?,
-            stealthy: match data.get(&H::Stealthy) {
+            pass_enemy_units: match data.get(&H::PassEnemyUnits) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
             },
@@ -179,7 +179,7 @@ crate::enum_with_custom! {
         MovementPoints,
         Vision,
         TrueVision,
-        Stealthy,
+        PassEnemyUnits,
         CanBeMovedThrough,
         CanTake,
         CanBeTaken,

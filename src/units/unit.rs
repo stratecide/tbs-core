@@ -153,12 +153,8 @@ impl<D: Direction> Unit<D> {
         self.environment.config.base_movement_points(self.typ)
     }
 
-    pub fn has_stealth(&self) -> bool {
-        self.environment.config.has_stealth(self.typ)
-    }
-
-    pub fn has_stealth_movement(&self, game: &impl GameView<D>) -> bool {
-        self.has_stealth() && !game.is_foggy()
+    pub fn can_pass_enemy_units(&self, game: &impl GameView<D>, unit_pos: (Point, Option<usize>), transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>]) -> bool {
+        self.environment.config.unit_can_pass_enemy_units(game, self, unit_pos, transporter, heroes)
     }
 
     pub fn can_be_moved_through(&self) -> bool {

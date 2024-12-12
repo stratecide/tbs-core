@@ -892,7 +892,8 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool, &TemporaryBallast<D>) -> PathS
                     reject = false;
                 }
                 // stealth
-                if blocking_unit.can_be_moved_through() && unit.has_stealth_movement(&*game) {
+                let heroes = Hero::hero_influence_at(&*game, destination, owner_id);
+                if blocking_unit.can_be_moved_through() && unit.can_pass_enemy_units(&*game, (destination, None), transporter.map(|(t, _)| (t, path.start)), &heroes) {
                     reject = false;
                 }
                 // chess take
