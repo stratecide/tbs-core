@@ -266,25 +266,6 @@ impl Environment {
         CommanderType(0)
     }
 
-    /*pub fn unit_attributes(&self, typ: UnitType, owner: i8) -> impl Iterator<Item = &AttributeKey> {
-        // order has to be preserved here
-        // because this method is used for exporting, while
-        // unit_specific_attributes and commander_attributes are used for importing
-        self.config.unit_specific_attributes(typ).iter()
-        .chain(self.config.commander_attributes(self.get_commander(owner), typ).iter())
-    }
-
-    pub fn unit_attributes_hidden_by_fog(&self, typ: UnitType, _hero: &Hero, owner: i8) -> Vec<AttributeKey> {
-        self.config.unit_specific_hidden_attributes(typ).iter()
-        .chain(self.config.commander_attributes_hidden_by_fog(self.get_commander(owner), typ).iter())
-        .cloned()
-        .collect()
-    }
-
-    pub fn unit_valid_action_status(&self, typ: UnitType, _owner: i8) -> &[ActionStatus] {
-        self.config.unit_specific_statuses(typ)
-    }*/
-
     pub fn unit_custom_attribute(&self, typ: UnitType, column_name: ImmutableString) -> Option<ImmutableString> {
         self.config.unit_config(typ).custom_columns
             .get(&column_name)
@@ -308,13 +289,6 @@ impl Environment {
     }
 
     // terrain
-
-    /*pub fn terrain_attributes(&self, typ: TerrainType, _owner: i8) -> impl Iterator<Item = &TerrainAttributeKey> {
-        // order has to be preserved here
-        // because this method is used for exporting, while
-        // terrain_specific_attributes and commander_attributes are used for importing
-        self.config.terrain_specific_attributes(typ).iter()
-    }*/
 
     pub fn default_terrain<D: Direction>(&self) -> Terrain<D> {
         TerrainBuilder::new(self, self.config.default_terrain)

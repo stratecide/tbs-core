@@ -45,23 +45,17 @@ const UNIT_CONFIG: &'static str = "units.csv";
 const UNIT_TAGS: &'static str = "unit_tags.csv";
 const UNIT_TRANSPORT: &'static str = "unit_transport.csv";
 const UNIT_DAMAGE: &'static str = "unit_damage.csv";
-const UNIT_STATUS: &'static str = "unit_status.csv";
 const CUSTOM_ACTIONS: &'static str = "custom_actions.csv";
 const HERO_CONFIG: &'static str = "heroes.csv";
 const HERO_POWERS: &'static str = "hero_powers.csv";
-const UNIT_HEROES: &'static str = "unit_heroes.csv";
 const TERRAIN_CONFIG: &'static str = "terrain.csv";
 const TERRAIN_TAGS: &'static str = "terrain_tags.csv";
 const TOKEN_CONFIG: &'static str = "tokens.csv";
 const EFFECT_CONFIG: &'static str = "effects.csv";
 const TOKEN_TAGS: &'static str = "token_tags.csv";
 const MOVEMENT_CONFIG: &'static str = "movement.csv";
-const TERRAIN_ATTACK: &'static str = "terrain_attack.csv";
-const TERRAIN_DEFENSE: &'static str = "terrain_defense.csv";
-const TERRAIN_BUILD: &'static str = "terrain_build.csv";
 const COMMANDER_CONFIG: &'static str = "commanders.csv";
 const COMMANDER_POWERS: &'static str = "commander_powers.csv";
-const COMMANDER_ATTRIBUTES: &'static str = "commander_attributes.csv";
 const POWERED_UNITS: &'static str = "unit_powered.csv";
 const POWERED_TERRAIN: &'static str = "terrain_powered.csv";
 const GLOBAL_EVENTS: &'static str = "global_events.csv";
@@ -130,9 +124,6 @@ impl Config {
             units: Vec::new(),
             unknown_unit: UnitType(usize::MAX),
             unit_transports: HashMap::default(),
-            /*unit_attributes: HashMap::default(),
-            unit_hidden_attributes: HashMap::default(),
-            unit_status: HashMap::default(),*/
             attack_damage: HashMap::default(),
             custom_actions: Vec::new(),
             max_transported: 0,
@@ -143,35 +134,24 @@ impl Config {
             heroes: HashMap::default(),
             hero_units: HashMap::default(),
             hero_powers: HashMap::default(),
-            //hero_powered_units: HashMap::default(),
             max_hero_charge: 0,
             max_aura_range: 0,
             // terrain
             terrains: Vec::new(),
             default_terrain: TerrainType(usize::MAX),
-            /*terrain_attributes: HashMap::default(),
-            terrain_hidden_attributes: HashMap::default(),*/
             movement_cost: HashMap::default(),
-            //attack_bonus: HashMap::default(),
-            //defense_bonus: HashMap::default(),
-            /*build: HashMap::default(),
-            max_capture_resistance: 0,
-            terrain_max_anger: 0,
-            terrain_max_built_this_turn: 0,*/
             terrain_flags: HashMap::default(),
             terrain_tags: HashMap::default(),
             // detail
             tokens: Vec::new(),
             token_flags: HashMap::default(),
             token_tags: HashMap::default(),
-            //max_sludge: 1,
             // effects
             effect_types: Vec::new(),
             // commanders
             commanders: Vec::new(),
             terrain_overrides: Vec::new(),
             unit_overrides: Vec::new(),
-            //commander_unit_attributes: HashMap::default(),
             max_commander_charge: 0,
             // shared by terrain, units, commanders, ...
             global_events: Vec::new(),
@@ -264,9 +244,6 @@ impl Config {
             if result.terrains.iter().any(|conf| conf.name == line.name) {
                 return Err(ConfigParseError::DuplicateEntry(format!("TerrainType::{}", line.name)).into())
             }
-            /*result.max_capture_resistance = result.max_capture_resistance.max(line.capture_resistance);
-            result.terrain_max_anger = result.terrain_max_anger.max(line.max_anger);
-            result.terrain_max_built_this_turn = result.terrain_max_built_this_turn.max(line.max_builds_per_turn);*/
             result.terrains.push(line);
             Ok(())
         })?;
@@ -359,73 +336,6 @@ impl Config {
             }
         }
 
-        // unit attributes
-        /*let data = file_loader.load_config(UNIT_ATTRIBUTES)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        let mut attributes: Vec<AttributeKey> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
-            let header = AttributeKey::from_conf(h, &mut file_loader)?.0;
-            if attributes.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            attributes.push(header);
-        }
-        for (l, line) in reader.records().enumerate() {
-            let line = line?;
-            let mut line = line.iter();
-            let typ: UnitType = match line.next() {
-                Some(t) => UnitType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values: Vec<AttributeKey> = Vec::new();
-            let mut hidden: Vec<AttributeKey> = Vec::new();
-            for (i, val) in line.enumerate() {
-                match val {
-                    "true" => values.push(attributes[i]),
-                    "hidden" => {
-                        values.push(attributes[i]);
-                        hidden.push(attributes[i]);
-                    }
-                    "" => (),
-                    e => return Err(Box::new(ConfigParseError::InvalidCellData("unit_attribute_config", l, i, e.to_string()))),
-                }
-            }
-            values.sort();
-            result.unit_attributes.insert(typ, values);
-            result.unit_hidden_attributes.insert(typ, hidden);
-        }
-
-        // unit status
-        let data = file_loader.load_config(UNIT_STATUS)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        let mut headers: Vec<ActionStatus> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
-            let header = ActionStatus::from_conf(h, &mut file_loader)?.0;
-            if headers.contains(&header) || header == ActionStatus::Ready {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            headers.push(header);
-        }
-        for (l, line) in reader.records().enumerate() {
-            let line = line?;
-            let mut line = line.iter();
-            let typ: UnitType = match line.next() {
-                Some(t) => UnitType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values: Vec<ActionStatus> = vec![ActionStatus::Ready];
-            for (i, val) in line.enumerate() {
-                match val {
-                    "true" => values.push(headers[i]),
-                    "" => (),
-                    e => return Err(Box::new(ConfigParseError::InvalidCellData("unit_attribute_config", l, i, e.to_string()))),
-                }
-            }
-            if values.len() > 1 {
-                result.unit_status.insert(typ, values);
-            }
-        }*/
-
         // attack damage
         let data = file_loader.load_config(UNIT_DAMAGE)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
@@ -481,47 +391,6 @@ impl Config {
         })?;
         result.max_transported += bonus_transported;
 
-        // unit is allowed to have that hero
-        /*let data = file_loader.load_config(UNIT_HEROES)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut units: Vec<UnitType> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
-            let header = UnitType::from_conf(h, &mut file_loader)?.0;
-            if units.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            if let Some(attributes) = result.unit_attributes.get(&header) {
-                if !attributes.contains(&AttributeKey::Hero) {
-                    return Err(Box::new(ConfigParseError::MissingUnitAttribute(header, AttributeKey::Hero)));
-                }
-            } else {
-                return Err(Box::new(ConfigParseError::MissingUnitAttribute(header, AttributeKey::Hero)));
-            }
-            units.push(header);
-        }
-        result.hero_units.insert(HeroType::None, (0..result.units.len())
-        .map(|i| UnitType(i))
-        .filter(|i| result.unit_attributes.get(i).unwrap().contains(&AttributeKey::Hero))
-        .collect());
-        for line in reader.records() {
-            let line = line?;
-            let mut line = line.into_iter();
-            let typ: HeroType = match line.next() {
-                Some(t) => HeroType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values = HashSet::default();
-            for (i, val) in line.enumerate() {
-                if val.len() > 0 && i < units.len() {
-                    values.insert(units[i]);
-                }
-            }
-            if units.len() > 0 {
-                result.hero_units.insert(typ, values);
-            }
-        }*/
-
         // hero powers
         file_loader.table_with_headers(HERO_POWERS, |line: HeroPowerConfig| {
             result.max_aura_range = result.max_aura_range.max(line.aura_range).max(line.aura_range_transported);
@@ -530,41 +399,6 @@ impl Config {
             .push(line); // TODO: ensure that every hero has at least 1 power
             Ok(())
         })?;
-
-        // terrain attributes
-        /*let data = file_loader.load_config(TERRAIN_ATTRIBUTES)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        let mut attributes: Vec<TerrainAttributeKey> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
-            let header = TerrainAttributeKey::from_conf(h, &mut file_loader)?.0;
-            if attributes.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            attributes.push(header);
-        }
-        for (l, line) in reader.records().enumerate() {
-            let line = line?;
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => TerrainType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values: Vec<TerrainAttributeKey> = Vec::new();
-            let mut hidden: Vec<TerrainAttributeKey> = Vec::new();
-            for (i, val) in line.enumerate() {
-                match val {
-                    "true" => values.push(attributes[i]),
-                    "hidden" => {
-                        values.push(attributes[i]);
-                        hidden.push(attributes[i]);
-                    }
-                    "" => (),
-                    e => return Err(Box::new(ConfigParseError::InvalidCellData("terrain_attribute_config", l, i, e.to_string()))),
-                }
-            }
-            result.terrain_attributes.insert(typ, values);
-            result.terrain_hidden_attributes.insert(typ, hidden);
-        }*/
 
         // movement cost
         let data = file_loader.load_config(MOVEMENT_CONFIG)?;
@@ -634,96 +468,6 @@ impl Config {
             result.movement_type_transformer.insert(MovementType(i), map);
         }
 
-        // attack bonus
-        /*let data = file_loader.load_config(TERRAIN_ATTACK)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut attackers: Vec<MovementType> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
-            let header = MovementType::from_conf(h, &mut file_loader)?.0;
-            if attackers.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            attackers.push(header);
-        }
-        for line in reader.records() {
-            let line = line?;
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => TerrainType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values = HashMap::default();
-            for (i, val) in line.enumerate() {
-                if val.len() > 0 && i < attackers.len() {
-                    values.insert(attackers[i], val.parse()?);
-                }
-            }
-            if attackers.len() > 0 {
-                result.attack_bonus.insert(typ, values);
-            }
-        }
-
-        // defense bonus
-        let data = file_loader.load_config(TERRAIN_DEFENSE)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut defenders: Vec<MovementType> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
-            let header = MovementType::from_conf(h, &mut file_loader)?.0;
-            if defenders.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            defenders.push(header);
-        }
-        for line in reader.records() {
-            let line = line?;
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => TerrainType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values = HashMap::default();
-            for (i, val) in line.enumerate() {
-                if val.len() > 0 && i < defenders.len() {
-                    values.insert(defenders[i], val.parse()?);
-                }
-            }
-            if defenders.len() > 0 {
-                result.defense_bonus.insert(typ, values);
-            }
-        }*/
-
-        // terrain building / repairing
-        /*let data = file_loader.load_config(TERRAIN_BUILD)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut units: Vec<UnitType> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
-            let header = UnitType::from_conf(h, &mut file_loader)?.0;
-            if units.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            units.push(header);
-        }
-        for line in reader.records() {
-            let line = line?;
-            let mut line = line.into_iter();
-            let typ: TerrainType = match line.next() {
-                Some(t) => TerrainType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values = Vec::new();
-            for (i, val) in line.enumerate() {
-                if val.len() > 0 && i < units.len() {
-                    values.push(units[i]);
-                }
-            }
-            if units.len() > 0 {
-                result.build.insert(typ, values);
-            }
-        }*/
-
         // commander powers
         file_loader.table_with_headers(COMMANDER_POWERS, |line: CommanderPowerConfig| {
             result.commanders[line.id.0].powers.push(line);
@@ -734,45 +478,6 @@ impl Config {
                 // TODO: error
             }
         }
-
-        // commanders' unit attributes
-        /*let data = file_loader.load_config(COMMANDER_ATTRIBUTES)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        let mut attributes: Vec<AttributeKey> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(2) {
-            let header = AttributeKey::from_conf(h, &mut file_loader)?.0;
-            if attributes.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            attributes.push(header);
-        }
-        for (l, line) in reader.records().enumerate() {
-            let line = line?;
-            let mut line = line.into_iter();
-            let typ: CommanderType = match line.next() {
-                Some(t) => CommanderType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let filter: UnitTypeFilter = match line.next() {
-                Some(t) => UnitTypeFilter::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values: Vec<AttributeKey> = Vec::new();
-            let mut hidden: Vec<AttributeKey> = Vec::new();
-            for (i, val) in line.enumerate() {
-                match val {
-                    "true" => values.push(attributes[i]),
-                    "false" => {
-                        values.push(attributes[i]);
-                        hidden.push(attributes[i]);
-                    }
-                    "" => (),
-                    e => return Err(Box::new(ConfigParseError::InvalidCellData("unit_attribute_config", l, i, e.to_string()))),
-                }
-            }
-            result.commander_unit_attributes.get_mut(&typ).ok_or(ConfigParseError::MissingCommanderForAttributes(typ))?
-            .push((filter, values, hidden));
-        }*/
 
         // unit overrides, has to be after commander and hero parsing
         file_loader.table_with_headers(POWERED_UNITS, |line: CommanderPowerUnitConfig| {

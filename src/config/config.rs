@@ -66,9 +66,6 @@ pub struct Config {
     pub(super) units: Vec<UnitTypeConfig>,
     pub(super) unknown_unit: UnitType,
     pub(super) unit_transports: HashMap<UnitType, Vec<UnitType>>,
-    /*pub(super) unit_attributes: HashMap<UnitType, Vec<AttributeKey>>,
-    pub(super) unit_hidden_attributes: HashMap<UnitType, Vec<AttributeKey>>,
-    pub(super) unit_status: HashMap<UnitType, Vec<ActionStatus>>,*/
     pub(super) attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
     pub(super) custom_actions: Vec<CustomActionConfig>,
     pub(super) max_transported: usize,
@@ -79,35 +76,24 @@ pub struct Config {
     pub(super) heroes: HashMap<HeroType, HeroTypeConfig>,
     pub(super) hero_units: HashMap<HeroType, HashSet<UnitType>>,
     pub(super) hero_powers: HashMap<HeroType, Vec<HeroPowerConfig>>,
-    //pub(super) hero_powered_units: HashMap<HeroType, HashMap<Option<bool>, Vec<CommanderPowerUnitConfig>>>,
     pub(super) max_hero_charge: u8,
     pub(super) max_aura_range: i8,
     // terrain
     pub(super) terrains: Vec<TerrainTypeConfig>,
     pub(super) default_terrain: TerrainType,
-    /*pub(super) terrain_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,
-    pub(super) terrain_hidden_attributes: HashMap<TerrainType, Vec<TerrainAttributeKey>>,*/
     pub(super) movement_cost: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    //pub(super) attack_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    //pub(super) defense_bonus: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
-    /*pub(super) build: HashMap<TerrainType, Vec<UnitType>>,
-    pub(super) max_capture_resistance: u8,
-    pub(super) terrain_max_anger: u8,
-    pub(super) terrain_max_built_this_turn: u8,*/
     pub(super) terrain_flags: HashMap<(usize, TerrainType), TagEditorVisibility>,
     pub(super) terrain_tags: HashMap<(usize, TerrainType), TagEditorVisibility>,
     // detail
     pub(super) tokens: Vec<TokenTypeConfig>,
     pub(super) token_flags: HashMap<(usize, TokenType), TagEditorVisibility>,
     pub(super) token_tags: HashMap<(usize, TokenType), TagEditorVisibility>,
-    //pub(super) max_sludge: u8,
     // effects
     pub(super) effect_types: Vec<EffectConfig>,
     // commanders
     pub(super) commanders: Vec<CommanderTypeConfig>,
     pub(super) terrain_overrides: Vec<TerrainPoweredConfig>,
     pub(super) unit_overrides: Vec<CommanderPowerUnitConfig>,
-    //pub(super) commander_unit_attributes: HashMap<CommanderType, Vec<(UnitTypeFilter, Vec<AttributeKey>, Vec<AttributeKey>)>>,
     pub(super) max_commander_charge: u32,
     // global events, shared by terrain, units, commanders, ...
     pub(crate) global_events: Vec<GlobalEventConfig>,
@@ -163,15 +149,6 @@ impl Config {
     pub fn max_player_count(&self) -> i8 {
         16
     }
-
-    /*pub fn max_sludge(&self) -> u8 {
-        // TODO: parse from config. currently is just set to a fixed value
-        self.max_sludge
-    }
-
-    pub fn max_unit_level(&self) -> u8 {
-        3
-    }*/
 
     pub fn max_aura_range(&self) -> i8 {
         self.max_aura_range
@@ -536,41 +513,9 @@ impl Config {
         self.terrain_config(typ).owner_is_playable
     }
 
-    /*pub fn terrain_needs_owner(&self, typ: TerrainType) -> bool {
-        self.terrain_config(typ).needs_owner
-    }*/
-
-    /*pub fn max_capture_resistance(&self) -> u8 {
-        self.max_capture_resistance
-    }
-
-    pub fn terrain_capture_resistance(&self, typ: TerrainType) -> u8 {
-        self.terrain_config(typ).capture_resistance
-    }
-
-    pub fn terrain_amphibious(&self, typ: TerrainType) -> Option<AmphibiousTyping> {
-        self.terrain_config(typ).update_amphibious
-    }*/
-
     pub fn terrain_chess(&self, typ: TerrainType) -> bool {
         self.terrain_config(typ).chess
     }
-
-    /*pub fn terrain_max_built_this_turn(&self) -> u8 {
-        self.terrain_max_built_this_turn
-    }
-
-    pub fn terrain_max_builds_per_turn(&self, typ: TerrainType) -> u8 {
-        self.terrain_config(typ).max_builds_per_turn
-    }
-
-    pub fn terrain_max_anger(&self) -> u8 {
-        self.terrain_max_anger
-    }
-
-    pub fn terrain_anger(&self, typ: TerrainType) -> u8 {
-        self.terrain_config(typ).max_anger
-    }*/
 
     /**
      * this function could indirectly call itself!
@@ -617,20 +562,6 @@ impl Config {
         .and_then(|map| map.get(&movement_type))
         .cloned()
     }
-
-    /*pub fn terrain_attack_bonus(&self, typ: TerrainType, movement_type: MovementType) -> Rational32 {
-        self.attack_bonus.get(&typ)
-        .and_then(|map| map.get(&movement_type))
-        .cloned()
-        .unwrap_or(Rational32::from_integer(0))
-    }
-
-    pub fn terrain_defense_bonus(&self, typ: TerrainType, movement_type: MovementType) -> Rational32 {
-        self.defense_bonus.get(&typ)
-        .and_then(|map| map.get(&movement_type))
-        .cloned()
-        .unwrap_or(Rational32::from_integer(0))
-    }*/
 
     pub fn terrain_owner_visibility(&self, _typ: TerrainType) -> UnitVisibility {
         // TODO
@@ -681,119 +612,6 @@ impl Config {
         self.terrain_config(typ).income_factor
     }
 
-    /*pub fn terrain_can_build_base(&self, typ: TerrainType) -> bool {
-        self.terrain_config(typ).can_build
-    }
-
-    pub fn terrain_can_build<D: Direction>(
-        &self,
-        map: &impl GameView<D>,
-        pos: Point,
-        terrain: &Terrain<D>,
-        heroes: &[HeroInfluence<D>],
-    ) -> bool {
-        let mut result = self.terrain_can_build_base(terrain.typ());
-        self.terrain_power_configs(
-            map,
-            pos,
-            terrain,
-            false,
-            heroes,
-            |iter, _executor| {
-                for config in iter.rev() {
-                    if let Some(can_build) = config.build {
-                        result = can_build;
-                        break;
-                    }
-                }
-            }
-        );
-        result
-    }
-
-    /*pub fn terrain_can_repair(&self, typ: TerrainType) -> bool {
-        self.terrain_config(typ).can_repair
-    }*/
-
-    pub fn terrain_sells_hero(&self, typ: TerrainType) -> bool {
-        self.terrain_config(typ).can_sell_hero
-    }
-
-    pub fn terrain_build(&self, typ: TerrainType) -> &[UnitType] {
-        if let Some(units) = self.build.get(&typ) {
-            &units
-        } else {
-            &[]
-        }
-    }
-
-    pub fn terrain_specific_attributes(&self, typ: TerrainType) -> &[TerrainAttributeKey] {
-        self.terrain_attributes.get(&typ).expect(&format!("Environment doesn't contain terrain type {typ:?}"))
-    }
-
-    pub(crate) fn terrain_specific_hidden_attributes(&self, typ: TerrainType) -> &[TerrainAttributeKey] {
-        self.terrain_hidden_attributes.get(&typ).expect(&format!("Environment doesn't contain terrain type {typ:?}"))
-    }*/
-
-    /*pub fn terrain_unit_attribute_overrides<D: Direction>(
-        &self,
-        _game: &impl GameView<D>,
-        terrain: &Terrain<D>,
-        _pos: Point,
-        _heroes: &[HeroInfluence<D>],
-    ) -> HashMap<AttributeKey, AttributeOverride> {
-        let mut result = HashMap::default();
-        for ov in &self.terrain_config(terrain.typ()).build_overrides {
-            result.insert(ov.key(), ov.clone());
-        }
-        result
-    }*/
-
-    /*pub fn terrain_on_start_turn<D: Direction>(
-        &self,
-        map: &impl GameView<D>,
-        pos: Point,
-        terrain: &Terrain<D>,
-        heroes: &[HeroInfluence<D>],
-    ) -> Vec<usize> {
-        let mut result = Vec::new();
-        self.terrain_power_configs(
-            map,
-            pos,
-            terrain,
-            heroes,
-            |iter, _executor| {
-                for config in iter {
-                    result.extend(config.on_start_turn.iter().cloned())
-                }
-            }
-        );
-        result
-    }*/
-
-    /*pub fn terrain_on_build<D: Direction>(
-        &self,
-        map: &impl GameView<D>,
-        pos: Point,
-        terrain: &Terrain<D>,
-        is_bubble: bool,
-        heroes: &[HeroInfluence<D>],
-    ) -> Vec<usize> {
-        let mut result = Vec::new();
-        self.terrain_power_configs(
-            map,
-            pos,
-            terrain,
-            is_bubble,
-            heroes,
-            |iter, _executor| {
-                for config in iter {
-                    result.extend(config.on_build.iter().cloned())
-                }
-            }
-        );
-        result
-    }*/
     pub fn terrain_action_script<D: Direction>(
         &self,
         map: &impl GameView<D>,
@@ -964,28 +782,6 @@ impl Config {
     pub fn commander_name(&self, typ: CommanderType) -> &str {
         &self.commander_config(typ).name
     }
-
-    /*pub fn commander_attributes(&self, typ: CommanderType, unit: UnitType) -> &[AttributeKey] {
-        if let Some(attributes) = self.commander_unit_attributes.get(&typ) {
-            for (filter, attributes, _) in attributes {
-                if filter.check(self, unit) {
-                    return &attributes;
-                }
-            }
-        }
-        &[]
-    }
-
-    pub fn commander_attributes_hidden_by_fog(&self, typ: CommanderType, unit: UnitType) -> &[AttributeKey] {
-        if let Some(attributes) = self.commander_unit_attributes.get(&typ) {
-            for (filter, _, attributes) in attributes {
-                if filter.check(self, unit) {
-                    return &attributes;
-                }
-            }
-        }
-        &[]
-    }*/
 
     pub fn max_commander_charge(&self) -> u32 {
         self.max_commander_charge

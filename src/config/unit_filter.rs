@@ -19,43 +19,6 @@ use super::file_loader::FileLoader;
 use super::movement_type_config::MovementPattern;
 use super::parse::{parse_inner_vec, parse_inner_vec_dyn, parse_tuple1, parse_tuple2, string_base, FromConfig};
 use super::ConfigParseError;
-use super::config::Config;
-
-
-
-#[derive(Debug, Clone)]
-pub(super) enum UnitTypeFilter {
-    Unit(HashSet<UnitType>),
-    MovementPattern(HashSet<MovementPattern>),
-}
-
-impl FromConfig for UnitTypeFilter {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
-        let (base, mut remainder) = string_base(s);
-        Ok((match base {
-            "U" | "Unit" => {
-                let (list, r) = parse_inner_vec::<UnitType>(remainder, true, loader)?;
-                remainder = r;
-                Self::Unit(list.into_iter().collect())
-            }
-            "MP" | "MovementPattern" => {
-                let (list, r) = parse_inner_vec::<MovementPattern>(remainder, true, loader)?;
-                remainder = r;
-                Self::MovementPattern(list.into_iter().collect())
-            }
-            _ => return Err(ConfigParseError::UnknownEnumMember(s.to_string()))
-        }, remainder))
-    }
-}
-
-impl UnitTypeFilter {
-    pub fn check(&self, config: &Config, unit_type: UnitType) -> bool {
-        match self {
-            Self::Unit(u) => u.contains(&unit_type),
-            Self::MovementPattern(m) => m.contains(&config.movement_pattern(unit_type)),
-        }
-    }
-}
 
 /**
  * UnitFilter and custom actions are the first things to replace with Rhai
