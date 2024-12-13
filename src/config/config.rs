@@ -608,6 +608,10 @@ impl Config {
         }
     }
 
+    pub fn terrain_base_income_factor(&self, typ: TerrainType) -> Rational32 {
+        self.terrain_config(typ).income_factor
+    }
+
     pub fn terrain_income_factor<D: Direction>(
         &self,
         map: &impl GameView<D>,

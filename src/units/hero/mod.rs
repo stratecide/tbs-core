@@ -174,6 +174,7 @@ impl Hero {
         result
     }
 
+    // TODO: turn only_owner_id into an option and only return all heroes if it's None instead of negative
     pub fn hero_influence_at<D: Direction>(map: &impl GameView<D>, point: Point, only_owner_id: i8) -> Vec<HeroInfluence<D>> {
         let mut result = Vec::new();
         for p in map.all_points() {
