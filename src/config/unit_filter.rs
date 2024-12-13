@@ -48,15 +48,9 @@ pub(crate) enum UnitFilter {
     Terrain(HashSet<TerrainType>),
     Token(HashSet<TokenType>),
     Fog(HashSet<FogIntensity>),
+    Moved, // as in: it moved along a path with at least 1 step
     // recursive
     Not(Vec<Self>),
-    // replace with Rhai
-    Moved,
-    /*Hp(u8),
-    Status(HashSet<ActionStatus>),
-    Sludge,
-    TerrainOwner,
-    Level(u8),*/
 }
 
 impl FromConfig for UnitFilter {
@@ -135,12 +129,6 @@ impl FromConfig for UnitFilter {
             }
             "Moved" => Self::Moved,
             "Unowned" => Self::Unowned,
-            /*"S" | "Status" => {
-                let (list, r) = parse_inner_vec::<ActionStatus>(remainder, true, loader)?;
-                remainder = r;
-                Self::Status(list.into_iter().collect())
-            }
-            "Sludge" => Self::Sludge,*/
             "Commander" | "Co" => {
                 if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
                     remainder = r;
@@ -151,20 +139,9 @@ impl FromConfig for UnitFilter {
                     Self::Commander(commander, None)
                 }
             }
-            /*"Hp" => {
-                let (hp, r) = parse_tuple1(remainder, loader)?;
-                remainder = r;
-                Self::Hp(hp)
-            }
-            "TerrainOwner" => Self::TerrainOwner,*/
             "OwnerTurn" => Self::OwnerTurn,
             "Carried" => Self::Carried,
             "Counter" => Self::Counter,
-            /*"Level" => {
-                let (level, r) = parse_tuple1(remainder, loader)?;
-                remainder = r;
-                Self::Level(level)
-            }*/
             "Not" => {
                 let (list, r) = parse_inner_vec_dyn::<Self>(remainder, true, |s| Self::from_conf(s, loader))?;
                 remainder = r;
@@ -266,30 +243,14 @@ impl UnitFilter {
                 temporary_ballast.len() > 0
             }
             Self::Unowned => unit.get_owner_id() < 0,
-            /*Self::Status(status) => {
-                let s = unit.get_status();
-                status.iter().any(|a| *a == s)
-            }
-            Self::Sludge => {
-                game.get_details(unit_pos.0).iter()
-                .any(|d| match d {
-                    Detail::SludgeToken(_) => true,
-                    _ => false
-                })
-            }*/
             Self::Commander(commander_type, power) => {
                 let commander = unit.get_commander(game);
                 commander.typ() == *commander_type
                 && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
-            /*Self::Hp(hp) => unit.get_hp() >= *hp,
-            Self::TerrainOwner => {
-                game.get_terrain(unit_pos.0).unwrap().get_owner_id() == unit.get_owner_id()
-            }*/
             Self::OwnerTurn => unit.get_owner_id() == game.current_owner(),
             Self::Carried => transporter.is_some(),
             Self::Counter => is_counter,
-            //Self::Level(level) => unit.get_level() >= *level,
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead

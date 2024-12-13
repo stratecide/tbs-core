@@ -18,9 +18,6 @@ use super::parse::*;
 #[derive(Debug)]
 pub struct UnitTypeConfig {
     pub(super) name: String,
-    //pub(super) attribute_keys: Vec<AttributeKey>,
-    //pub(super) attribute_keys_hidden_by_fog: Vec<AttributeKey>,
-    //pub(super) valid_action_status: Vec<ActionStatus>,
     pub(super) visibility: UnitVisibility,
     pub(super) movement_pattern: MovementPattern,
     pub(super) movement_type: MovementType,
@@ -35,9 +32,6 @@ pub struct UnitTypeConfig {
     pub(super) can_attack_after_moving: bool,
     pub(super) attack_pattern: AttackType,
     pub(super) attack_targets: AttackTargeting,
-    //#[serde(default)]
-    //pub(super) splash_range: usize,
-    //pub(super) splash_factor: Rational32,
     pub(super) splash_damage: Vec<Rational32>, // empty if no splash damage. contains factor per additional distance
     pub(super) value: i32,
     pub(super) displacement: Displacement, // implies that attack_pattern is Adjacent or Straight
@@ -129,36 +123,3 @@ crate::enum_with_custom! {
         TransportCapacity,
     }
 }
-
-/*pub mod tests {
-    use crate::units::attributes::AttributeKey;
-
-    use super::UnitTypeConfig;
-
-    impl UnitTypeConfig {
-        pub(crate) fn test(&self) {
-            let keys = &self.attribute_keys;
-            for key in keys {
-                // no double-entries
-                assert_eq!(1, keys.iter().filter(|a| *a == key).count());
-            }
-            let hidden_keys = &self.attribute_keys_hidden_by_fog;
-            for key in hidden_keys {
-                assert!(keys.contains(key));
-                // no double-entries
-                assert_eq!(1, hidden_keys.iter().filter(|a| *a == key).count());
-            }
-            if self.needs_owner {
-                assert!(keys.contains(&AttributeKey::Owner));
-                assert!(!hidden_keys.contains(&AttributeKey::Owner));
-            }
-            assert_eq!(
-                self.transport.is_some(),
-                keys.contains(&AttributeKey::Transported)
-            );
-            if keys.contains(&AttributeKey::Owner) {
-                assert_eq!(keys[0], AttributeKey::Owner);
-            }
-        }
-    }
-}*/

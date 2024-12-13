@@ -271,7 +271,6 @@ impl<D: Direction> UnitCommand<D> {
             client_game = Handle::new(*Game::import_client(data.public, secret, &handler.environment().config, version).unwrap());
             &client_game
         } else {
-            // shouldn't need to clone here, actually
             &*borrowed_game
         };
         let board_at_the_end = self.action == UnitAction::Enter;
