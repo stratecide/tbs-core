@@ -105,33 +105,6 @@ macro_rules! event_handler_module {
                 handler.unit_set_hero(position, hero);
             }
 
-            /*pub fn heal_unit(mut handler: Handler, position: Point, amount: i32) {
-                if amount > 0 && handler.with_map(|map| map.get_unit(position).is_some()) {
-                    handler.unit_heal(position, amount.min(100) as u8);
-                }
-            }
-
-            pub fn damage_unit(mut handler: Handler, position: Point, amount: i32) {
-                if amount > 0 && handler.with_map(|map| map.get_unit(position).is_some()) {
-                    handler.unit_damage(position, amount.min(999) as u16);
-                }
-            }
-
-            pub fn damage_units(mut handler: Handler, map: FxHashMap<Point, i32>) {
-                let map = map.into_iter()
-                    .filter(|(_, damage)| *damage > 0)
-                    .map(|(p, damage)| (p, damage.min(999) as u16))
-                    .collect();
-                handler.unit_mass_damage(&map);
-            }
-            pub fn heal_units(mut handler: Handler, map: FxHashMap<Point, i32>) {
-                let map = map.into_iter()
-                    .filter(|(_, heal)| *heal > 0)
-                    .map(|(p, heal)| (p, heal.min(100) as u8))
-                    .collect();
-                handler.unit_mass_heal(map);
-            }*/
-
             #[rhai_fn(name = "sneak_attack")]
             pub fn sneak_attack(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32, attacker_id: usize) {
                 vector.execute(
@@ -170,12 +143,6 @@ macro_rules! event_handler_module {
             pub fn sneak_attack4(handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: i32) {
                 sneak_attack3(handler, vector, p, attacker, Rational32::from_integer(factor))
             }
-
-            /*pub fn set_unit_status(mut handler: Handler, position: Point, status: ActionStatus) {
-                if handler.with_map(|map| map.get_unit(position).is_some()) {
-                    handler.unit_status(position, status);
-                }
-            }*/
 
             pub fn place_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {
@@ -217,29 +184,6 @@ macro_rules! event_handler_module {
             pub fn move_unit2(handler: Handler, path: Path<$d>) {
                 move_unit(handler, path, false);
             }
-
-            /*pub fn set_unit_level(mut handler: Handler, position: Point, level: i32) {
-                let level = level.max(0).min(handler.environment().config.max_unit_level() as i32) as u8;
-                let has_attribute = handler.with_map(|map| {
-                    map.get_unit(position)
-                    .map(|unit| unit.has_attribute(AttributeKey::Level))
-                    .unwrap_or(false)
-                });
-                if has_attribute {
-                    handler.unit_level(position, level);
-                }
-            }
-
-            pub fn set_terrain_anger(mut handler: Handler, position: Point, anger: i32) {
-                let anger = anger.max(0).min(handler.environment().config.terrain_max_anger() as i32) as u8;
-                let has_attribute = handler.with_map(|map| {
-                    map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position))
-                    .has_attribute(TerrainAttributeKey::Anger)
-                });
-                if has_attribute {
-                    handler.terrain_anger(position, anger);
-                }
-            }*/
 
             pub fn replace_terrain(mut handler: Handler, position: Point, terrain: Terrain<$d>) {
                 handler.terrain_replace(position, terrain);
@@ -286,49 +230,6 @@ macro_rules! event_handler_module {
                 remove_token(handler, position, token.name(), token.get_owner_id() as i32)
             }
 
-            /*pub fn place_token(mut handler: Handler, position: Point, of_unit: Unit<$d>, owner_id: i32) {
-                let environment = handler.environment();
-                if owner_id < 0 || owner_id >= environment.config.max_player_count() as i32 {
-                    return;
-                }
-                let owner_id = owner_id as i8;
-                if environment.unit_attributes(of_unit.typ(), owner_id).any(|a| *a == AttributeKey::Zombified) {
-                    handler.detail_add(position, Detail::Skull(SkullData::new(&of_unit, owner_id)));
-                }
-            }
-            pub fn remove_skull(mut handler: Handler, position: Point, owner_id: i32) {
-                if let Some(i) = handler.with_map(|map| {
-                    map.get_details(position).iter()
-                    .enumerate()
-                    .find(|(_, detail)| {
-                        matches!(detail, Detail::Skull(skull) if skull.get_owner_id() as i32 == owner_id)
-                    }).map(|(i, _)| i)
-                }) {
-                    handler.detail_remove(position, i);
-                }
-            }
-
-            pub fn place_sludge(mut handler: Handler, position: Point, owner_id: i32, counter: i32) {
-                let environment = handler.environment();
-                if owner_id < 0 || owner_id >= environment.config.max_player_count() as i32 {
-                    return;
-                }
-                let owner_id = owner_id as i8;
-                let counter = counter.max(0).min(environment.config.max_sludge() as i32) as u8;
-                handler.detail_add(position, Detail::SludgeToken(SludgeToken::new(&environment.config, owner_id, counter)));
-            }
-            pub fn remove_sludge(mut handler: Handler, position: Point, owner_id: i32) {
-                if let Some(i) = handler.with_map(|map| {
-                    map.get_details(position).iter()
-                    .enumerate()
-                    .find(|(_, detail)| {
-                        matches!(detail, Detail::SludgeToken(token) if token.get_owner_id() as i32 == owner_id)
-                    }).map(|(i, _)| i)
-                }) {
-                    handler.detail_remove(position, i);
-                }
-            }*/
-
             #[rhai_fn(name = "effect")]
             pub fn effect_global(mut handler: Handler, effect: EffectWithoutPosition<$d>) {
                 handler.effect(Effect::Global(effect));
@@ -366,7 +267,7 @@ macro_rules! event_handler_module {
                         }
                         Err(effect) => effect,
                     };
-                    // TODO: log error?
+                    // TODO: log error, add glitch effect (at most one)
                 }
                 handler.effects(list);
             }

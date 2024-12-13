@@ -104,10 +104,6 @@ impl<D: Direction> EventHandlerInner<D> {
         }
     }
 
-    fn remove_observed_unit(&mut self, id: usize) {
-        self.observed_units.remove(&id);
-    }
-
     fn move_observed_unit(&mut self, id: usize, p: Point, unload_index: Option<usize>, distortion: Distortion<D>) {
         self.observed_units.insert(id, (p, unload_index, distortion));
     }
@@ -195,16 +191,8 @@ impl<D: Direction> EventHandler<D> {
         self.with(|eh| eh.get_observed_unit_pos(id))
     }
 
-    fn observation_id(&self, position: Point, unload_index: Option<usize>) -> Option<(usize, Distortion<D>)> {
-        self.with(|eh| eh.observation_id(position, unload_index))
-    }
-
     fn remove_observed_units_at(&mut self, position: Point) {
         self.with_mut(|eh| eh.remove_observed_units_at(position))
-    }
-
-    fn remove_observed_unit(&mut self, id: usize) {
-        self.with_mut(|eh| eh.remove_observed_unit(id))
     }
 
     fn move_observed_unit(&mut self, id: usize, p: Point, unload_index: Option<usize>, distortion: Distortion<D>) {
@@ -212,55 +200,8 @@ impl<D: Direction> EventHandler<D> {
     }
     
     pub fn end_turn(&mut self) {
-        // un-exhaust units
-        /*for p in self.with_map(|map| map.all_points()) {
-            if let Some(unit) = self.with_map(|map| map.get_unit(p).cloned()) {
-                if unit.get_owner_id() == owner_id {
-                    match unit.get_status() {
-                        ActionStatus::Exhausted => self.unit_status(p, ActionStatus::Ready),
-                        _ => (),
-                    }
-                    for (index, u) in unit.get_transported().iter().enumerate() {
-                        if u.is_exhausted() {
-                            self.unit_status_boarded(p, index, ActionStatus::Ready);
-                        }
-                    }
-                }
-            }
-        }*/
 
-        // unit end turn event
-        /*self.trigger_all_unit_scripts(
-            |game, unit, unit_pos, transporter, heroes| {
-                unit.on_end_turn(game, unit_pos, transporter, heroes)
-            },
-            |_observation_id| {},
-            |handler, scripts, unit_pos, unit, _observation_id| {
-                if scripts.len() > 0 {
-                    let mut scope = Scope::new();
-                    scope.push_constant(CONST_NAME_POSITION, unit_pos);
-                    scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    let environment = handler.get_game().environment();
-                    let engine = environment.get_engine_handler(&handler);
-                    let executor = Executor::new(engine, scope, environment);
-                    for function_index in scripts {
-                        match executor.run(function_index, ()) {
-                            Ok(()) => (),
-                            Err(e) => {
-                                // TODO: log error
-                                println!("unit OnEndTurn {function_index}: {e:?}");
-                            }
-                        }
-                    }
-                }
-            }
-        );*/
         self.trigger_all_global_events(|conf| conf.on_end_turn);
-
-        // reset built_this_turn-counter for realties
-        /*for p in self.with_map(|map| map.all_points()) {
-            self.terrain_built_this_turn(p, 0);
-        }*/
 
         let fog_before = if self.get_game().is_foggy() {
             let team = self.with_game(|game| {
@@ -274,49 +215,6 @@ impl<D: Direction> EventHandler<D> {
 
         self.next_turn();
         let owner_id = self.get_game().current_owner();
-
-        // reset status for repairing units
-        /*for p in self.with_map(|map| map.all_points()) {
-            if self.with_map(|map| map.get_unit(p)
-            .filter(|u| u.get_owner_id() == owner_id && u.get_status() == ActionStatus::Repairing)
-            .is_some()) {
-                self.unit_status(p, ActionStatus::Ready);
-            }
-        }
-
-        // reset capture-progress / finish capturing
-        for p in self.with_map(|map| map.all_points()) {
-            let terrain = self.with_map(|map| map.get_terrain(p).unwrap().clone());
-            if let Some((new_owner, progress)) = terrain.get_capture_progress() {
-                if new_owner.0 == owner_id {
-                    if let Some(unit) = self.with_map(|map| map.get_unit(p)
-                    .filter(|u| u.get_owner_id() == owner_id && u.can_capture()).cloned()) {
-                        if unit.get_status() == ActionStatus::Capturing {
-                            let max_progress = terrain.get_capture_resistance();
-                            let progress = progress as u16 + (unit.get_hp() as f32 / 10.).ceil() as u16;
-                            if progress < max_progress as u16 {
-                                self.terrain_capture_progress(p, Some((new_owner, (progress as u8).into())));
-                            } else {
-                                // captured
-                                let terrain = TerrainBuilder::new(&self.environment(), terrain.typ())
-                                .copy_from(&terrain)
-                                .set_capture_progress(None)
-                                .set_owner_id(new_owner.0)
-                                .build_with_defaults();
-                                self.terrain_replace(p, terrain);
-                            }
-                        }
-                    } else {
-                        self.terrain_capture_progress(p, None);
-                    }
-                }
-            }
-            if self.with_map(|map| map.get_unit(p)
-            .filter(|u| u.get_owner_id() == owner_id && u.get_status() == ActionStatus::Capturing)
-            .is_some()) {
-                self.unit_status(p, ActionStatus::Ready);
-            }
-        }*/
 
         if let Some((power_index, function_index, charge_cost)) = self.with_game(|game| {
             let commander = &game.current_player().commander;
@@ -379,109 +277,6 @@ impl<D: Direction> EventHandler<D> {
         }
 
         let owner_id = self.get_game().current_owner();
-        // return drones to their origin if possible or destroy them
-        /*let mut drone_parents: HashMap<u16, (Point, usize)> = self.with_map(|map| map.all_points())
-        .into_iter()
-        .filter_map(|p| self.with_map(|map| map.get_unit(p).and_then(|u| Some((p, u.clone())))))
-        .filter(|(_, u)| u.get_owner_id() == owner_id)
-        .filter_map(|(p, unit)| {
-            if let Some(drone_id) = unit.get_drone_station_id() {
-                Some((drone_id, (p, unit.remaining_transport_capacity())))
-            } else {
-                None
-            }
-        }).collect();
-        let mut dead_drones = HashSet::default();
-        for p in self.with_map(|map| map.all_points()) {
-            if let Some(unit) = self.with_map(|map| map.get_unit(p).filter(|u| u.get_owner_id() == owner_id).cloned()) {
-                if let Some(drone_id) = unit.get_drone_id() {
-                    if let Some((destination, capacity)) = drone_parents.get_mut(&drone_id) {
-                        // move drone back aboard its parent
-                        if let Some((id, distortion)) = self.observation_id(p, None) {
-                            self.move_observed_unit(id, *destination, Some(self.with_map(|map| map.get_unit(*destination).unwrap().get_transported().len())), distortion);
-                        }
-                        let mut u = unit.clone();
-                        self.add_event(Event::UnitRemove(p, u.clone()));
-                        u.set_en_passant(None);
-                        self.add_event(Event::UnitAddBoarded(*destination, u));
-                        // one less space in parent
-                        *capacity -= 1;
-                        if *capacity == 0 {
-                            drone_parents.remove(&drone_id);
-                        }
-                    } else {
-                        // no parent available, self-destruct
-                        // should this even trigger on_death effects?
-                        // yes, but add some DeathCause enum to the script filter so the script-writer can filter this one away
-                        dead_drones.insert(p);
-                    }
-                } else if unit.has_attribute(AttributeKey::EnPassant) {
-                    // for drones en-passant is removed before boarding its station instead
-                    self.unit_en_passant_opportunity(p, None);
-                }
-            }
-        }*/
-
-        /*self.trigger_all_unit_scripts(
-            |game, unit, unit_pos, transporter, heroes| {
-                if dead_drones.contains(&unit_pos) {
-                    unit.on_death(game, unit_pos, transporter, None, heroes, &[])
-                } else {
-                    Vec::new()
-                }
-            },
-            |handler| handler.unit_mass_death(&dead_drones),
-            |handler, scripts, unit_pos, unit, _observation_id| {
-                if scripts.len() > 0 {
-                    let mut scope = Scope::new();
-                    scope.push_constant(CONST_NAME_POSITION, unit_pos);
-                    scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    let environment = handler.get_game().environment();
-                    let engine = environment.get_engine_handler(handler);
-                    let executor = Executor::new(engine, scope, environment);
-                    for function_index in scripts {
-                        match executor.run(function_index, ()) {
-                            Ok(()) => (),
-                            Err(e) => {
-                                // TODO: log error
-                                println!("unit OnDeath {function_index}: {e:?}");
-                            }
-                        }
-                    }
-                }
-            }
-        );*/
-
-        /*self.trigger_all_terrain_scripts(
-            |game, p, terrain, heroes| {
-                terrain.on_start_turn(game, p, heroes)
-            },
-            |_| {},
-            |handler, scripts, p, terrain| {
-                if scripts.len() > 0 {
-                    let mut scope = Scope::new();
-                    scope.push_constant(CONST_NAME_POSITION, p);
-                    scope.push_constant(CONST_NAME_TERRAIN, terrain);
-                    scope.push_constant(CONST_NAME_OWNER_ID, owner_id as i32);
-                    let environment = handler.get_game().environment();
-                    let engine = environment.get_engine_handler(handler);
-                    let executor = Executor::new(engine, scope, environment);
-                    for function_index in scripts {
-                        match executor.run(function_index, ()) {
-                            Ok(()) => (),
-                            Err(e) => {
-                                // TODO: log error
-                                println!("terrain OnStartTurn {function_index}: {e:?}");
-                            }
-                        }
-                    }
-                }
-            }
-        );*/
-
-        // has to be recalculated before structures, because the effects of some structures on
-        // other players should maybe not be visible
-        //self.recalculate_fog(false);
 
         let income = Rational32::from_integer(self.with_game(|game| game.current_player().get_income())) * Map::get_income_factor(&*self.get_game(), owner_id);
         let income = income.to_integer();
@@ -489,57 +284,7 @@ impl<D: Direction> EventHandler<D> {
             self.money_income(owner_id, income);
         }
 
-        // unit start turn event
-        /*self.trigger_all_unit_scripts(
-            |game, unit, unit_pos, transporter, heroes| {
-                if unit.get_owner_id() == owner_id {
-                    unit.on_start_turn(game, unit_pos, transporter, heroes)
-                } else {
-                    Vec::new()
-                }
-            },
-            |_| {},
-            |handler, scripts, unit_pos, unit, _observation_id| {
-                if scripts.len() > 0 {
-                    let mut scope = Scope::new();
-                    scope.push_constant(CONST_NAME_POSITION, unit_pos);
-                    scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    scope.push_constant(CONST_NAME_OWNER_ID, owner_id as i32);
-                    let environment = handler.get_game().environment();
-                    let engine = environment.get_engine_handler(handler);
-                    let executor = Executor::new(engine, scope, environment);
-                    for function_index in scripts {
-                        match executor.run(function_index, ()) {
-                            Ok(()) => (),
-                            Err(e) => {
-                                // TODO: log error
-                                println!("unit OnStartTurn {function_index}: {e:?}");
-                            }
-                        }
-                    }
-                }
-            }
-        );*/
         self.trigger_all_global_events(|conf| conf.on_start_turn);
-
-        /*// tick sludge tokens
-        for p in self.with_map(|map| map.all_points()) {
-            for (index, d) in self.with_map(|map| map.get_tokens(p).to_vec().into_iter().enumerate()) {
-                match d {
-                    Token::SludgeToken(token) => {
-                        if token.get_owner_id() == owner_id {
-                            let counter = token.get_counter();
-                            self.token_remove(p, index);
-                            if counter > 0 {
-                                self.token_add(p, Token::SludgeToken(SludgeToken::new(&self.environment().config, owner_id, counter - 1)));
-                            }
-                        }
-                        break;
-                    },
-                    _ => ()
-                }
-            }
-        }*/
 
         // structures may have destroyed some units, vision may be reduced due to merc powers ending
         self.recalculate_fog();
@@ -662,14 +407,6 @@ impl<D: Direction> EventHandler<D> {
         self.add_event(Event::Effect(Effect::new_fog_surprise(position)));
     }
 
-    /*pub fn effect_weapon(&mut self, position: Point, weapon: WeaponType) {
-        self.add_event(Event::Effect(weapon.effect(position)));
-    }*/
-
-    /*pub fn effect_chess(&mut self, _position: Point) {
-        // TODO: add effect for taking units
-    }*/
-
     pub fn unit_set_hero(&mut self, position: Point, hero: Hero) {
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         if !unit.is_hero() {
@@ -779,27 +516,6 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    /*pub fn terrain_anger(&mut self, position: Point, anger: u8) {
-        let old_anger = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).get_anger());
-        self.add_event(Event::TerrainAnger(position, old_anger.into(), anger.into()));
-    }
-
-    pub fn terrain_capture_progress(&mut self, position: Point, progress: CaptureProgress) {
-        let terrain = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone());
-        let old = terrain.get_capture_progress();
-        if terrain.has_attribute(TerrainAttributeKey::CaptureProgress) && old != progress {
-            self.add_event(Event::CaptureProgress(position, old, progress));
-        }
-    }
-
-    pub fn terrain_built_this_turn(&mut self, position: Point, built_this_turn: u8) {
-        let terrain = self.with_map(|map| map.get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone());
-        let old = terrain.get_built_this_turn();
-        if terrain.has_attribute(TerrainAttributeKey::BuiltThisTurn) && old != built_this_turn {
-            self.add_event(Event::UpdateBuiltThisTurn(position, old.into(), built_this_turn.into()));
-        }
-    }*/
-
     pub fn unit_creation(&mut self, position: Point, unit: Unit<D>) {
         if let ClientPerspective::Team(team) = unit.get_team() {
             if self.get_game().is_foggy() && self.with_game(|game| game.is_team_alive(team)) {
@@ -849,8 +565,6 @@ impl<D: Direction> EventHandler<D> {
         // update fog in case unit influences other units' vision range
         self.recalculate_fog();
         // remove tokens that were destroyed by the unit moving over them
-        /*let income = self.with_game(|game| game.get_owning_player(unit.get_owner_id()).map(|player| player.get_income()))
-            .filter(|income| *income != 0);*/
         let mut token_scripts = Vec::new();
         for p in self.with(|eh| path.points(&eh.game)).unwrap() {
             for token in self.get_game().get_tokens(p) {
@@ -858,46 +572,11 @@ impl<D: Direction> EventHandler<D> {
                     token_scripts.push((function_index, p, token));
                 }
             }
-            /*let tokens: Vec<Token<D>> = old_tokens.clone().into_iter().filter(|token| {
-                match token {
-                    Token::Pipe(_) => true,
-                    Token::Coins1 => {
-                        if let Some(income) = income {
-                            self.money_change(unit.get_owner_id(), income / 2);
-                        }
-                        false
-                    }
-                    Token::Coins2 => {
-                        if let Some(income) = income {
-                            self.money_change(unit.get_owner_id(), income);
-                        }
-                        false
-                    }
-                    Token::Coins3 => {
-                        if let Some(income) = income {
-                            self.money_change(unit.get_owner_id(), income * 3 / 2);
-                        }
-                        false
-                    }
-                    Token::Bubble(owner, _) => {
-                        owner.0 == unit.get_owner_id()
-                    }
-                    /*Token::Skull(skull) => {
-                        skull.get_owner_id() == unit.get_owner_id()
-                    }*/
-                    Token::SludgeToken(_) => true,
-                }
-            }).collect();
-            if tokens != old_tokens {
-                self.add_event(Event::ReplaceToken(p, old_tokens.try_into().unwrap(), tokens.try_into().unwrap()));
-            }*/
         }
         if token_scripts.len() > 0 {
             let environment = self.environment();
             let mut scope = Scope::new();
-            //scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.as_ref().map(|_| Dynamic::from(path.start)).unwrap_or(().into()));
-            //scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|u| Dynamic::from(u)).unwrap_or(().into()));
-            //scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
+            // TODO: information about the transporter the unit moved out of?
             scope.push_constant(CONST_NAME_PATH, path.clone());
             scope.push_constant(CONST_NAME_UNIT, unit);
             scope.push_constant(CONST_NAME_UNIT_ID, unit_id);
@@ -920,7 +599,6 @@ impl<D: Direction> EventHandler<D> {
         let owner_id = unit.get_owner_id();
         let heroes = Hero::map_influence(&*self.get_game(), owner_id);
         let mut current = path.start;
-        //let mut previous = None;
         let mut transformed_unit = unit.clone();
         transformed_unit.set_en_passant(None);
         let mut steps = Vec::new();
@@ -944,7 +622,6 @@ impl<D: Direction> EventHandler<D> {
             } else {
                 steps.push(UnitStep::Simple(current, *step));
             }
-            //previous = Some(current);
             current = next;
         }
         if self.get_game().is_foggy() {
@@ -960,9 +637,6 @@ impl<D: Direction> EventHandler<D> {
             }
         }
         self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
-        /*if transformed_unit.has_attribute(AttributeKey::EnPassant) && path.steps.len() >= 2 {
-            transformed_unit.set_en_passant(previous);
-        }*/
         if self.get_game().is_foggy() {
             if unit_team != self.get_game().current_team() {
                 self.recalculate_fog_for(unit_team);
@@ -1052,113 +726,6 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    /*pub fn unit_moved_this_game(&mut self, position: Point) {
-        let _ = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        self.add_event(Event::UnitMovedThisGame(position));
-    }
-
-    pub fn unit_en_passant_opportunity(&mut self, position: Point, targetable: Option<Point>) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        if unit.get_en_passant() != targetable {
-            self.add_event(Event::EnPassantOpportunity(position, unit.get_en_passant(), targetable));
-        }
-    }
-
-    pub fn unit_direction(&mut self, position: Point, direction: D) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        if unit.has_attribute(AttributeKey::Direction) {
-            let starting_dir = unit.get_direction();
-            self.add_event(Event::UnitDirection(position, starting_dir, direction));
-        }
-    }
-
-    pub fn unit_status(&mut self, position: Point, status: ActionStatus) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        if unit.can_have_status(status) && status != unit.get_status() {
-            self.add_event(Event::UnitActionStatus(position, unit.get_status(), status));
-        }
-    }
-
-    pub fn unit_status_boarded(&mut self, position: Point, index: usize, status: ActionStatus) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        let unit = unit.get_transported().get(index).unwrap();
-        if unit.can_have_status(status) && status != unit.get_status() {
-            self.add_event(Event::UnitActionStatusBoarded(position, index.into(), unit.get_status(), status));
-        }
-    }
-
-    pub fn unit_level(&mut self, position: Point, level: u8) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        let level = level.min(self.environment().config.max_unit_level());
-        if unit.has_attribute(AttributeKey::Level) && level != unit.get_level() {
-            self.add_event(Event::UnitLevel(position, unit.get_level().into(), level.into()));
-        }
-    }
-
-    pub fn unit_damage(&mut self, position: Point, damage: u16) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        self.add_event(Event::UnitHpChange(position, (-(damage.min(unit.get_hp() as u16) as i32)).into(), (-(damage as i32)).max(-999).into()));
-    }
-
-    pub fn unit_mass_damage(&mut self, amounts: &HashMap<Point, u16>) {
-        //let mut list = Vec::new();
-        for (position, damage) in amounts {
-            /*let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-            let damage = -(damage as i32);
-            list.push((position, damage.max(-(unit.get_hp() as i32)).into(), damage.max(-999).into()));*/
-            self.unit_damage(*position, *damage);
-        }
-        //self.add_event(Event::UnitMassHpChange(list.try_into().unwrap()));
-    }
-
-    pub fn unit_repair(&mut self, position: Point, heal: u8) {
-        let hp = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).get_hp());
-        self.effect_repair(position);
-        self.add_event(Event::UnitHpChange(position, (heal.min(100 - hp) as i32).into(), (heal.min(100) as i32).into()));
-    }
-
-    pub fn unit_heal(&mut self, position: Point, heal: u8) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        if !unit.has_attribute(AttributeKey::Hp) {
-            return;
-        }
-        let hp = unit.get_hp();
-        self.effect_heal(position);
-        self.add_event(Event::UnitHpChange(position, (heal.min(100 - hp) as i32).into(), (heal.min(100) as i32).into()));
-    }
-
-    pub fn unit_mass_heal(&mut self, amounts: HashMap<Point, u8>) {
-        for (position, damage) in amounts {
-            self.unit_heal(position, damage);
-        }
-    }
-
-    pub fn unit_heal_boarded(&mut self, position: Point, index: usize, heal: u8) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        let transported = unit.get_transported();
-        if transported.len() > index {
-            let hp = transported[index].get_hp();
-            if hp < 100 {
-                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), (heal.min(100 - hp) as i32).into()));
-            }
-        } else {
-            panic!("Can't heal unit at {position:?}, boarded as {index}");
-        }
-    }
-
-    pub fn unit_damage_boarded(&mut self, position: Point, index: usize, damage: u8) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
-        let transported = unit.get_transported();
-        if transported.len() > index {
-            let hp = transported[index].get_hp();
-            if hp > 0 {
-                self.add_event(Event::UnitHpChangeBoarded(position, index.into(), (-(damage.min(hp) as i32)).into()));
-            }
-        } else {
-            panic!("Can't damage unit at {position:?}, boarded as {index}");
-        }
-    }*/
-
     pub fn unit_remove(&mut self, position: Point) {
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         self.remove_observed_units_at(position);
@@ -1166,14 +733,12 @@ impl<D: Direction> EventHandler<D> {
     }
 
     fn unit_death(&mut self, position: Point) {
-        //self.add_event(Event::Effect(Effect::Explode(position)));
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         self.remove_observed_units_at(position);
         self.add_event(Event::UnitRemove(position, unit.clone()));
     }
 
     pub fn unit_mass_death(&mut self, positions: &HashSet<Point>) {
-        // TODO: mass-effect
         for position in positions {
             self.unit_death(*position);
         }

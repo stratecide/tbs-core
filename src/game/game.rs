@@ -167,43 +167,6 @@ impl<D: Direction> Game<D> {
         self.fog.get(&team).and_then(|fog| fog.get(&position)).cloned().unwrap_or(FogIntensity::TrueSight)
     }
 
-    /*pub fn recalculate_fog(&self, perspective: ClientPerspective) -> HashMap<Point, FogIntensity> {
-        let mut fog = HashMap::default();
-        let strongest_intensity = self.fog_mode.fog_setting(self.current_turn as usize, self.players.len()).intensity();
-        for p in self.get_map().all_points() {
-            fog.insert(p, strongest_intensity);
-        }
-        if !self.is_foggy() {
-            return fog;
-        }
-        let heroes = Hero::map_influence(self, -1);
-        for p in self.get_map().all_points() {
-            let terrain = self.get_map().get_terrain(p).unwrap();
-            let terrain_heroes = if terrain.get_team() != ClientPerspective::Neutral {
-                heroes.get(&(p, terrain.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[])
-            } else {
-                &[]
-            };
-            for (p, v) in terrain.get_vision(self, p, terrain_heroes, perspective) {
-                fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
-            }
-            if let Some(unit) = self.get_map().get_unit(p) {
-                if perspective != ClientPerspective::Neutral && perspective == unit.get_team() {
-                    let heroes = heroes.get(&(p, unit.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
-                    for (p, v) in unit.get_vision(self, p, heroes) {
-                        fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
-                    }
-                }
-            }
-            for det in self.get_map().get_tokens(p) {
-                for (p, v) in det.get_vision(self, p, perspective) {
-                    fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
-                }
-            }
-        }
-        fog
-    }*/
-
     pub fn get_map(&self) -> &Map<D> {
         &self.map
     }
@@ -270,13 +233,6 @@ impl<D: Direction> Game<D> {
     pub fn get_fog(&self) -> &HashMap<ClientPerspective, HashMap<Point, FogIntensity>> {
         &self.fog
     }
-
-    /*pub fn can_see_unit_at(&self, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {
-        match unit.fog_replacement(self, position, self.get_fog_at(team, position)) {
-            None => false,
-            Some(unit) => accept_unknowns || unit.typ() != UnitType::Unknown,
-        }
-    }*/
 
     pub fn set_fog(&mut self, team: ClientPerspective, pos: Point, intensity: FogIntensity) {
         let fog = self.fog.get_mut(&team).expect(&format!("attempted to set fog for {:?} at {:?}: {:?}", team, pos, intensity));

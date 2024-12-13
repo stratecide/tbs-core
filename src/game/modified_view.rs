@@ -253,14 +253,6 @@ impl<D: Direction> UnitMovementView<D> {
         if let Some(mut unit) = self.remove_unit(path.start, unload_index) {
             // TODO: update fog, funds after path, ...
             // would be better to somehow wrap EventHandler, i guess?
-            /*if let Some(player) = unit.get_player(self) {
-                let funds = player.funds_after_path(self, path);
-                if funds != *player.funds {
-                    let mut player = player.clone();
-                    player.funds = funds.into();
-                    self.players.insert(player.get_owner_id(), player);
-                }
-            }*/
             let (end, _) = path.end(self).unwrap();
             unit.transformed_by_path(self, path);
             Some((end, unit))

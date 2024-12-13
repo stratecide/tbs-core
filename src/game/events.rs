@@ -98,23 +98,12 @@ pub enum Event<D:Direction> {
     UnitRemoveTagBoarded(Point, UnloadIndex, TagKeyValues<1, D>),
     UnitReplaceTag(Point, TagKeyValues<2, D>),
     UnitReplaceTagBoarded(Point, UnloadIndex, TagKeyValues<2, D>),
-    /*UnitHpChange(Point, I<-100, 99>, I<-999, 100>),
-    UnitHpChangeBoarded(Point, UnloadIndex, I<-100, 99>),
-    UnitActionStatus(Point, ActionStatus, ActionStatus),
-    UnitActionStatusBoarded(Point, UnloadIndex, ActionStatus, ActionStatus),
-    UnitMovedThisGame(Point),
-    EnPassantOpportunity(Point, Option<Point>, Option<Point>),
-    UnitDirection(Point, D, D),
-    UnitLevel(Point, Level, Level),*/
     // terrain events
     TerrainChange(Point, Terrain<D>, Terrain<D>),
     TerrainFlag(Point, FlagKey),
     TerrainSetTag(Point, TagKeyValues<1, D>),
     TerrainRemoveTag(Point, TagKeyValues<1, D>),
     TerrainReplaceTag(Point, TagKeyValues<2, D>),
-    /*TerrainAnger(Point, Anger, Anger),
-    CaptureProgress(Point, CaptureProgress, CaptureProgress),
-    UpdateBuiltThisTurn(Point, BuiltThisTurn, BuiltThisTurn),*/
     // token events
     RemoveToken(Point, U<{tokens::MAX_STACK_SIZE as i32 - 1}>, Token<D>),
     ReplaceToken(Point, LVec<Token<D>, {tokens::MAX_STACK_SIZE}>, LVec<Token<D>, {tokens::MAX_STACK_SIZE}>),
@@ -271,53 +260,6 @@ impl<D: Direction> Event<D> {
                     unit.remove_tag(key.0);
                 }
             }
-            /*Self::UnitActionStatus(pos, _, action_status) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
-                    unit.set_status(*action_status);
-                }
-            }
-            Self::UnitActionStatusBoarded(pos, index, _, action_status) => {
-                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
-                let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(index.0) {
-                    boarded.set_status(*action_status);
-                }
-            }
-            Self::UnitHpChange(pos, hp_change, _) => {
-                let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
-                if unit.has_attribute(AttributeKey::Hp) {
-                    let hp = unit.get_hp() as i8;
-                    unit.set_hp((hp + **hp_change as i8) as u8);
-                }
-            }
-            Self::UnitHpChangeBoarded(pos, index, hp_change) => {
-                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
-                let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(index.0).filter(|u| u.has_attribute(AttributeKey::Hp)) {
-                    let hp = boarded.get_hp() as i8;
-                    boarded.set_hp((hp + **hp_change as i8) as u8);
-                }
-            }
-            Self::UnitMovedThisGame(p) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
-                    unit.set_unmoved(!unit.get_unmoved());
-                }
-            }
-            Self::EnPassantOpportunity(pos, _, en_passant) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
-                    unit.set_en_passant(*en_passant);
-                }
-            }
-            Self::UnitDirection(p, _, new_dir) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
-                    unit.set_direction(*new_dir);
-                }
-            }
-            Self::UnitLevel(p, _, level) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
-                    unit.set_level(level.0);
-                }
-            }*/
             // terrain
             Self::TerrainChange(pos, _, terrain) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
@@ -338,15 +280,6 @@ impl<D: Direction> Event<D> {
                     terrain.remove_tag(key.0);
                 }
             }
-            /*Self::TerrainAnger(pos, _, anger) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(anger.0);
-            }
-            Self::CaptureProgress(pos, _, progress) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_capture_progress(*progress);
-            }
-            Self::UpdateBuiltThisTurn(pos, _, built_this_turn) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(built_this_turn.0);
-            }*/
             // token
             Self::RemoveToken(p, index, _) => {
                 game.get_map_mut().remove_token(*p, **index as usize);
@@ -486,53 +419,6 @@ impl<D: Direction> Event<D> {
                     unit.set_tag(key.0, value.clone());
                 }
             }
-            /*Self::UnitActionStatus(pos, action_status, _) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
-                    unit.set_status(*action_status);
-                }
-            }
-            Self::UnitActionStatusBoarded(pos, index, action_status, _) => {
-                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
-                let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(index.0) {
-                    boarded.set_status(*action_status);
-                }
-            }
-            Self::UnitHpChange(pos, hp_change, _) => {
-                let unit = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a unit at {:?} to change hp by {}!", pos, hp_change));
-                if unit.has_attribute(AttributeKey::Hp) {
-                    let hp = unit.get_hp() as i8;
-                    unit.set_hp((hp - **hp_change as i8) as u8);
-                }
-            }
-            Self::UnitHpChangeBoarded(pos, index, hp_change) => {
-                let transporter = game.get_map_mut().get_unit_mut(*pos).expect(&format!("expected a transport at {:?} to change hp!", pos));
-                let mut transported = transporter.get_transported_mut().expect(&format!("unit at {:?} doesn't transport units", pos));
-                if let Some(boarded) = transported.get_mut(index.0).filter(|u| u.has_attribute(AttributeKey::Hp)) {
-                    let hp = boarded.get_hp() as i8;
-                    boarded.set_hp((hp - **hp_change as i8) as u8);
-                }
-            }
-            Self::UnitMovedThisGame(p) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
-                    unit.set_unmoved(!unit.get_unmoved());
-                }
-            }
-            Self::EnPassantOpportunity(pos, en_passant, _) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*pos) {
-                    unit.set_en_passant(*en_passant);
-                }
-            }
-            Self::UnitDirection(p, old_dir, _) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
-                    unit.set_direction(*old_dir);
-                }
-            }
-            Self::UnitLevel(p, level, _) => {
-                if let Some(unit) = game.get_map_mut().get_unit_mut(*p) {
-                    unit.set_level(level.0);
-                }
-            }*/
             // terrain
             Self::TerrainChange(pos, terrain, _) => {
                 game.get_map_mut().set_terrain(*pos, terrain.clone());
@@ -553,15 +439,6 @@ impl<D: Direction> Event<D> {
                     terrain.set_tag(key.0, value.clone());
                 }
             }
-            /*Self::TerrainAnger(pos, anger, _) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_anger(anger.0);
-            }
-            Self::CaptureProgress(pos, progress, _) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_capture_progress(*progress);
-            }
-            Self::UpdateBuiltThisTurn(pos, built_this_turn, _) => {
-                game.get_map_mut().get_terrain_mut(*pos).unwrap().set_built_this_turn(built_this_turn.0);
-            }*/
             // token
             Self::RemoveToken(p, index, token) => {
                 game.get_map_mut().insert_token(*p, **index as usize, token.clone());
@@ -777,56 +654,6 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            /*Self::UnitActionStatus(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::ActionStatus) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitHpChange(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Hp) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitActionStatusBoarded(p, _, _, _) |
-            Self::UnitHpChangeBoarded(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Transported) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitMovedThisGame(p) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Unmoved) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::EnPassantOpportunity(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::EnPassant) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitDirection(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Direction) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::UnitLevel(p, _, _) => {
-                if visible_unit_with_attribute(game, team, *p, AttributeKey::Level) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }*/
             // terrain
             Self::TerrainChange(pos, before, after) => {
                 let fog_intensity = game.get_fog_at(team, *pos);
@@ -866,27 +693,6 @@ impl<D: Direction> Event<D> {
                     None
                 }
             }
-            /*Self::TerrainAnger(_, _, _) => {
-                Some(self.clone())
-            }
-            Self::CaptureProgress(pos, _, _) => {
-                match game.get_fog_at(team, *pos) {
-                    FogIntensity::TrueSight |
-                    FogIntensity::NormalVision => {
-                        Some(self.clone())
-                    }
-                    _ => {
-                        None
-                    }
-                }
-            }
-            Self::UpdateBuiltThisTurn(p, _, _) => {
-                match game.get_fog_at(team, *p) {
-                    FogIntensity::TrueSight |
-                    FogIntensity::NormalVision => Some(self.clone()),
-                    _ => None,
-                }
-            }*/
             // token
             Self::RemoveToken(p, index, token) => {
                 let fog_intensity = game.get_fog_at(team, *p);
@@ -1016,53 +822,9 @@ impl<D: Direction> UnitStep<D> {
 
 }
 
-/*#[derive(Debug, Clone, PartialEq, Zippable)]
-#[zippable(bits = 8, support_ref = Environment)]
-pub enum Effect<D: Direction> {
-    Laser(Point, D),
-    Lightning(Point),
-    // unit effects - only visible if the affected unit is visible
-    Flame(Point),
-    GunFire(Point),
-    ShellFire(Point),
-    Repair(Point),
-    Explode(Point),
-    KrakenRage(Point),
-    Surprise(Point, Team),
-}
-impl<D: Direction> Effect<D> {
-    pub fn fog_replacement(&self, game: &impl GameView<D>, team: ClientPerspective) -> Option<Self> {
-        match self {
-            Self::Flame(p) |
-            Self::GunFire(p) |
-            Self::Repair(p) |
-            Self::Explode(p) |
-            Self::ShellFire(p) => {
-                let fog_intensity = game.get_fog_at(team, *p);
-                if fog_intensity <= FogIntensity::NormalVision {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::KrakenRage(_) => Some(self.clone()),
-            Self::Lightning(_) |
-            Self::Laser(_, _) => Some(self.clone()),
-            Self::Surprise(_, t) => {
-                if team == ClientPerspective::Team(t.0) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-        }
-    }
-}*/
-
 fn apply_vision_changes<D: Direction>(game: &mut Game<D>, team: ClientPerspective, pos: Point, intensity: FogIntensity, change: &FieldData<D>) {
     game.set_fog(team, pos, intensity);
     game.get_map_mut().set_terrain(pos, change.terrain.clone());
     game.get_map_mut().set_tokens(pos, change.tokens.to_vec());
     game.get_map_mut().set_unit(pos, change.unit.clone());
 }
-

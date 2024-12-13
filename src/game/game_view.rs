@@ -11,7 +11,7 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::{Distortion, OrientedPoint, WrappingMap};
 use crate::player::Player;
 use crate::terrain::terrain::Terrain;
-use crate::units::hero::{HeroInfluence, HeroType};
+use crate::units::hero::HeroInfluence;
 use crate::units::unit::Unit;
 
 use super::fog::{FogIntensity, FogSetting};
@@ -64,24 +64,6 @@ pub trait GameView<D: Direction>: Send + Sync {
     }
     fn get_fog_setting(&self) -> FogSetting;
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity;
-    //fn get_fog(&self, position: Point) -> FogIntensity;
-
-    /*fn available_heroes(&self, player: &Player) -> Vec<HeroType> {
-        let mut used = HashSet::default();
-        used.insert(HeroType::None);
-        for p in self.all_points() {
-            if let Some(unit) = self.get_unit(p) {
-                if unit.get_owner_id() == player.get_owner_id() && unit.is_hero() {
-                    used.insert(unit.get_hero().unwrap().typ());
-                }
-            }
-        }
-        self.environment().config.hero_types()
-        .into_iter()
-        .filter(|m| !used.contains(m))
-        .cloned()
-        .collect()
-    }*/
 
     fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>>;
     fn additional_hero_influence_at(&self, _point: Point, _only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
@@ -97,34 +79,3 @@ pub trait GameView<D: Direction>: Send + Sync {
     fn get_terrain_config_limit(&self) -> Option<usize>;
     fn set_terrain_config_limit(&self, limit: Option<usize>);
 }
-
-/*impl<'a, D: Direction, G: GameView<D>> GameView<D> for Box<&'a G> {
-    fn get_owning_player(&self, owner: i8) -> Option<Player> {
-        (**self).get_owning_player(owner)
-    }
-
-    fn fog_intensity(&self) -> FogIntensity {
-        (**self).fog_intensity()
-    }
-
-    fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
-        (**self).get_fog_at(team, position)
-    }
-
-    fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>> {
-        (**self).get_visible_unit(team, p)
-    }
-
-    fn get_unit_config_limit(&self) -> Option<usize> {
-        (**self).get_unit_config_limit()
-    }
-    fn set_unit_config_limit(&self, limit: Option<usize>) {
-        (**self).set_unit_config_limit(limit);
-    }
-    fn get_terrain_config_limit(&self) -> Option<usize> {
-        (**self).get_terrain_config_limit()
-    }
-    fn set_terrain_config_limit(&self, limit: Option<usize>) {
-        (**self).set_terrain_config_limit(limit);
-    }
-}*/
