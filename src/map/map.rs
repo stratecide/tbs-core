@@ -245,30 +245,6 @@ impl<D: Direction> Map<D> {
      */
     pub fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
         if let Some((point, mut distortion)) = self.wrapping_logic().get_neighbor(p, d) {
-            /*for det in self.get_tokens(point) {
-                match det {
-                    Detail::Pipe(pipe_state) => {
-                        if !pipe_state.is_open(distortion.update_direction(d).opposite_direction()) {
-                            continue;
-                        }
-                        if let Some(_disto) = pipe_state.distortion(distortion.update_direction(d)) {
-                        //if pipe_state.transform_direction(n.1.update_direction(d)).is_some() {
-                            //distortion += disto;
-                            let mut current = point;
-                            while let Some((next, disto)) = self.next_pipe_tile(current, distortion.update_direction(d)) {
-                                current = next;
-                                distortion += disto;
-                                if current == point {
-                                    // infinite loop, abort
-                                    return None;
-                                }
-                            }
-                            return Some((current, distortion));
-                        }
-                    }
-                    _ => (),
-                }
-            }*/
             // look for pipe to enter
             if self.pipes.get(&point)
             .map(|pipes| pipes.iter().any(|pipe_state| pipe_state.distortion(distortion.update_direction(d)).is_some()))
@@ -413,19 +389,6 @@ impl<D: Direction> Map<D> {
         result
     }
 
-    /*
-     * maybe in the future
-     *
-    pub fn available_player_actions(&self, point: Point, player: Owner) -> bool {
-        if let Some(unit) = self.get_unit(point) {
-            return unit.can_act(player);
-        }
-        for det in self.tokens.get(&point).unwrap_or(&vec![]) {
-            if det.can_act(player) {
-            }
-        }
-    }*/
-
     pub fn fix_errors_tokens(&self) -> HashMap<Point, Vec<Token<D>>> {
         let mut corrected = HashMap::default();
         for p in self.all_points() {
@@ -434,20 +397,6 @@ impl<D: Direction> Map<D> {
                 corrected.insert(p, stack);
             }
         }
-        /*// fix_self can depend on surrounding tokens
-        // so Token::correct_stack which can remove tokens has to be in a separate loop before this one
-        for p in self.all_points() {
-            let stack = corrected.remove(&p).unwrap_or(self.get_tokens(p).to_vec())
-            .into_iter()
-            .map(|mut det| {
-                det.fix_self(self, p);
-                det
-            })
-            .collect();
-            if *self.tokens.get(&p).unwrap_or(&stack) != stack {
-                corrected.insert(p, stack);
-            }
-        }*/
         corrected
     }
     
@@ -480,14 +429,6 @@ impl<D: Direction> Map<D> {
                 if token.get_owner_id() >= 0 && self.environment.config.token_owner_is_playable(token.typ()) {
                     owners.insert(token.get_owner_id() as u8);
                 }
-                /*match token {
-                    Detail::Bubble(owner, _) => {
-                        if owner.0 >= 0 {
-                            owners.insert(owner.0 as u8);
-                        }
-                    }
-                    _ => {}
-                }*/
             }
         }
         let mut owners: Vec<u8> = owners.into_iter().collect();
@@ -523,15 +464,6 @@ impl<D: Direction> Map<D> {
             if let Some(unit) = fd.unit {
                 units.insert(p, unit);
             }
-            /*terrain.insert(p, Terrain::import(unzipper, environment)?);
-            let det = LVec::<Token<D>, MAX_STACK_SIZE>::import(unzipper, environment)?;
-            if det.len() > 0 {
-                tokens.insert(p, det.into());
-            }
-            // could be more memory-efficient by returning Option<Unit> from import and removing this read_bool
-            if unzipper.read_bool()? {
-                units.insert(p, Unit::unzip(unzipper, environment, false)?);
-            }*/
         }
         Ok(Self {
             environment: environment.clone(),
@@ -743,8 +675,9 @@ impl<D: Direction> MapInterface for Handle<Map<D>> {
         self.with(|map| map.get_viable_player_ids(self).len()) as u16
     }
 
+    // TODO: add metrics. metrics maybe should be floats instead of integers
     fn metrics(&self) -> std::collections::HashMap<String, i32> {
-        let mut result = std::collections::HashMap::default();
+        let result = std::collections::HashMap::default();
         /*let mut income = 0;
         self.with(|map| {
             for t in map.terrain.values() {

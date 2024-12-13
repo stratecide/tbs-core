@@ -12,17 +12,14 @@ use super::wrapping_map::Distortion;
 
 pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display {
     type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + SupportedZippable<u16> + Rem<Output = Self::T>;
-    //type P: PipeState<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + Zippable;
     fn is_hex() -> bool;
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
-    //fn pipe_entry(&self) -> Self::P;
     fn list() -> Vec<Self>; // TODO: turn into &'static[Self]
     /**
      * swaps left and right, keeps up and down
      */
     fn mirror_horizontally(&self) -> Self;
-    //fn rotate_point_map(&self, map: &PointMap) -> PointMap;
     fn get_global_neighbor(&self, point: GlobalPoint, odd_if_hex: bool) -> GlobalPoint {
         self.translation(1).translate_point(&point, odd_if_hex)
     }
@@ -82,26 +79,8 @@ pub enum Direction4 {
     D270,
 }
 
-/*impl TryFrom<Attribute<Direction4>> for Direction4 {
-    type Error = AttributeError;
-    fn try_from(value: Attribute<Direction4>) -> Result<Self, Self::Error> {
-        if let Attribute::Direction(value) = value {
-            Ok(value)
-        } else {
-            Err(AttributeError { requested: AttributeKey::Direction, received: Some(value.key()) })
-        }
-    }
-}
-
-impl From<Direction4> for Attribute<Direction4> {
-    fn from(value: Direction4) -> Self {
-        Attribute::Direction(value)
-    }
-}*/
-
 impl Direction for Direction4 {
     type T = Translation4;
-    //type P = PipeState4;
     fn is_hex() -> bool {
         false
     }
@@ -111,12 +90,6 @@ impl Direction for Direction4 {
     fn translation(&self, distance: i16) -> Translation4 {
         Translation4::new(*self, distance)
     }
-    /*fn pipe_entry(&self) -> Self::P {
-        PipeState4 {
-            d1: self.clone(),
-            d2: self.clone(),
-        }
-    }*/
     fn list() -> Vec<Self> {
         vec![
             Self::D0,
@@ -155,26 +128,8 @@ pub enum Direction6 {
     D300,
 }
 
-/*impl TryFrom<Attribute<Direction6>> for Direction6 {
-    type Error = AttributeError;
-    fn try_from(value: Attribute<Direction6>) -> Result<Self, Self::Error> {
-        if let Attribute::Direction(value) = value {
-            Ok(value)
-        } else {
-            Err(AttributeError { requested: AttributeKey::Direction, received: Some(value.key()) })
-        }
-    }
-}
-
-impl From<Direction6> for Attribute<Direction6> {
-    fn from(value: Direction6) -> Self {
-        Attribute::Direction(value)
-    }
-}*/
-
 impl Direction for Direction6 {
     type T = Translation6;
-    //type P = PipeState6;
     fn is_hex() -> bool {
         true
     }
@@ -184,12 +139,6 @@ impl Direction for Direction6 {
     fn translation(&self, distance: i16) -> Translation6 {
         Translation6::new(*self, distance)
     }
-    /*fn pipe_entry(&self) -> Self::P {
-        PipeState6 {
-            d1: self.clone(),
-            d2: self.clone(),
-        }
-    }*/
     fn list() -> Vec<Self> {
         vec![
             Self::D0,

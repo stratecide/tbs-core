@@ -83,11 +83,6 @@ mod tests {
         let map = WMBuilder::<Direction4>::with_transformations(map, vec![Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(6))]).unwrap();
         let mut map = Map::new(map.build(), &config);
         let map_env = map.environment().clone();
-        /*for x in 0..8 {
-            for y in 0..5 {
-                map.set_terrain(Point::new(x, y), TerrainType::ChessTile.instance(&map_env).build_with_defaults());
-            }
-        }*/
         map.set_pipes(Point::new(7, 3), vec![PipeState::new(Direction4::D0, Direction4::D90).unwrap()]);
         map.set_pipes(Point::new(2, 4), vec![PipeState::new(Direction4::D180, Direction4::D90).unwrap()]);
         assert_eq!(

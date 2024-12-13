@@ -11,14 +11,6 @@ pub mod custom_action;
 mod rhai_environment;
 mod rhai_action_data;
 mod rhai_fraction;
-//pub mod custom_power;
-/*pub mod defend;
-pub mod unit;
-pub mod player;
-pub mod attack;
-pub mod kill;
-pub mod terrain;
-pub mod death;*/
 
 pub const CONST_NAME_CONFIG: &'static str = "CONFIG";
 pub const CONST_NAME_BOARD: &'static str = "BOARD";

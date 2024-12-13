@@ -628,16 +628,6 @@ where D: Direction {
 
 impl<D> WrappingMap<D>
 where D: Direction {
-    /*fn new(builder: WrappingMapBuilder<D>) -> Self {
-        WrappingMap {
-            #[cfg(feature = "rendering")]
-            screen_wrap_vectors: builder.screen_wrap_vectors(),
-            pointmap: builder.map,
-            seed_transformations: builder.seed_transformations,
-            wrapped_neighbors: builder.wrapped_neighbors,
-        }
-    }*/
-
     #[cfg(feature = "rendering")]
     pub fn screen_wrap_vectors(&self) -> &Vec<D::T> {
         &self.screen_wrap_vectors
@@ -647,9 +637,6 @@ where D: Direction {
         &self.pointmap
     }
 
-    /*pub fn odd_if_hex(&self) -> bool {
-        self.pointmap.odd_if_hex() == ((self.pointmap.height() / 2) % 2 == 0)
-    }*/
     pub fn max_translation(map_size: MapSize) -> u16 {
         if D::is_hex() {
             map_size.width().max(map_size.height()) as u16 * 2
@@ -748,7 +735,6 @@ mod tests {
         }
         for t in &transformations {
             for t2 in &transformations {
-                //assert_eq!(*t, *t2 + (*t - *t2), "{t2:?} + {:?}", *t - *t2);
                 for t3 in &transformations {
                     assert_eq!((*t + *t2) + *t3, *t + (*t2 + *t3), "order of addition shouldn't matter {t:?} + {t2:?} + {t3:?}");
                 }
@@ -762,10 +748,6 @@ mod tests {
                 Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(8) + Direction4::D90.translation(-7)));
         assert_eq!(-Transformation::new(Distortion::new(true, Direction4::D90), Direction4::D0.translation(5) + Direction4::D90.translation(-6)),
                 Transformation::new(Distortion::new(true, Direction4::D90), Direction4::D0.translation(-6) + Direction4::D90.translation(5)));
-        /*println!("{:?}", -Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(-994) + Direction4::D90.translation(-20)));
-        assert_eq!(Transformation::new(Distortion::new(false, Direction4::D0), Direction4::D0.translation(-990))
-                    - Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(-994) + Direction4::D90.translation(-20)),
-                Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(-4) + Direction4::D90.translation(20)));*/
     }
 
     #[test]
