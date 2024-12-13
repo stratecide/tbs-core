@@ -113,7 +113,6 @@ fn build_unit() {
     settings.players[0].set_income(1000);
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     assert_eq!(1000, game.with(|game| *game.current_player().funds));
-    //game.handle_command(Command::BuyUnit(Point::new(0, 0), UnitType::marine(), Direction4::D0), Arc::new(|| 0.)).unwrap();
     game.handle_command(Command::TerrainAction(Point::new(0, 0), vec![
         CustomActionInput::ShopItem(0.into()),
     ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();

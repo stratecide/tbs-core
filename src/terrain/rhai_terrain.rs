@@ -55,7 +55,6 @@ macro_rules! board_module {
         #[export_module]
         mod $name {
             pub type Terrain = crate::terrain::terrain::Terrain<$d>;
-            //pub type TerrainBuilder = crate::terrain::terrain::TerrainBuilder<$d>;
 
             #[rhai_fn(pure, name = "==")]
             pub fn t_eq(t1: &mut Terrain, t2: Terrain) -> bool {
@@ -146,33 +145,6 @@ macro_rules! board_module {
                     .unwrap_or(().into())
             }
 
-            /*#[rhai_fn(pure, name="build_terrain")]
-            pub fn build_terrain(environment: &mut Environment, terrain_type: TerrainType) -> TerrainBuilder {
-                terrain_type.instance(environment)
-            }
-            #[rhai_fn(return_raw, pure, name="build_terrain")]
-            pub fn build_terrain2(environment: &mut Environment, terrain_type: &str) -> Result<TerrainBuilder, Box<EvalAltResult>> {
-                if let Some(terrain_type) = environment.config.find_terrain_by_name(terrain_type) {
-                    Ok(build_terrain(environment, terrain_type))
-                } else {
-                    Err(format!("Unknown terrain type '{terrain_type}'").into())
-                }
-            }
-
-            #[rhai_fn(name = "copy_from")]
-            pub fn builder_copy_from(builder: TerrainBuilder, terrain: Terrain) -> TerrainBuilder {
-                builder.copy_from(&terrain)
-            }
-
-            #[rhai_fn(name = "owner_id")]
-            pub fn builder_owner_id(builder: TerrainBuilder, owner_id: i32) -> TerrainBuilder {
-                builder.set_owner_id(owner_id.max(-1).min(i8::MAX as i32) as i8)
-            }
-
-            #[rhai_fn(name = "build")]
-            pub fn builder_build(builder: TerrainBuilder) -> Terrain {
-                builder.build_with_defaults()
-            }*/
         }
 
         def_package! {

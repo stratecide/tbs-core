@@ -51,7 +51,6 @@ impl<D: Direction> Token<D> {
             typ,
             owner: Owner(owner),
             tags: TagBag::new()
-            //attributes: FxHashMap::default(),
         }
     }
 
@@ -231,7 +230,6 @@ impl<D: Direction> Token<D> {
                 }
             }
             FogIntensity::Dark => {
-                // normal units don't have AlwaysVisible so far, but doesn't hurt
                 if visibility != UnitVisibility::AlwaysVisible {
                     return None
                 } else {
@@ -239,7 +237,7 @@ impl<D: Direction> Token<D> {
                 }
             }
         };
-        // unit is visible, hide some attributes maybe
+        // token is visible, hide some attributes maybe
         let mut result = self.typ.instance(&self.environment);
         result.tags = self.tags.fog_replacement(&self.environment, minimum_visibility);
         if self.environment.config.token_owner_visibility(self.typ) >= minimum_visibility {
