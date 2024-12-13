@@ -2,6 +2,7 @@
 use std::sync::{Arc, MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 
 use interfaces::{ClientPerspective, Perspective as IPerspective, RandomFn};
+use num_rational::Rational32;
 use rhai::{Dynamic, Scope};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
@@ -482,7 +483,8 @@ impl<D: Direction> EventHandler<D> {
         // other players should maybe not be visible
         //self.recalculate_fog(false);
 
-        let income = self.with_game(|game| game.current_player().get_income()) * self.with_map(|map| map.get_income_factor(owner_id));
+        let income = Rational32::from_integer(self.with_game(|game| game.current_player().get_income())) * Map::get_income_factor(&*self.get_game(), owner_id);
+        let income = income.to_integer();
         if income != 0 {
             self.money_income(owner_id, income);
         }

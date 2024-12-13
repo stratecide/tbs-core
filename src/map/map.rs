@@ -1,3 +1,4 @@
+use num_rational::Rational32;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display};
@@ -20,6 +21,7 @@ use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::player::Player;
+use crate::units::hero::Hero;
 use crate::VERSION;
 use crate::tokens;
 use crate::terrain::terrain::Terrain;
@@ -446,13 +448,14 @@ impl<D: Direction> Map<D> {
         corrected
     }
     
-    pub fn get_income_factor(&self, owner_id: i8) -> i32 {
+    pub fn get_income_factor(map: &impl GameView<D>, owner_id: i8) -> Rational32 {
         // income from properties
-        let mut income_factor = 0;
-        for p in self.all_points() {
-            let t = self.get_terrain(p).unwrap();
+        let mut income_factor = Rational32::from_integer(0);
+        let hero_map = Hero::map_influence(map, owner_id);
+        for p in map.all_points() {
+            let t = map.get_terrain(p).unwrap();
             if t.get_owner_id() == owner_id {
-                income_factor += t.income_factor();
+                income_factor += t.income_factor(map, p, hero_map.get(&(p, owner_id)).map(|h| h.as_slice()).unwrap_or(&[]));
             }
         }
         income_factor
@@ -739,13 +742,13 @@ impl<D: Direction> MapInterface for Handle<Map<D>> {
 
     fn metrics(&self) -> std::collections::HashMap<String, i32> {
         let mut result = std::collections::HashMap::default();
-        let mut income = 0;
+        /*let mut income = 0;
         self.with(|map| {
             for t in map.terrain.values() {
                 income += t.income_factor();
             }
         });
-        result.insert("Total Income".to_string(), income);
+        result.insert("Total Income".to_string(), income);*/
         result
     }
 

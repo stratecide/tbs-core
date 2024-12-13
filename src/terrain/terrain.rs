@@ -101,8 +101,14 @@ impl<D: Direction> Terrain<D> {
         bonus
     }*/
 
-    pub fn income_factor(&self) -> i32 {
-        self.environment.config.terrain_income_factor(self.typ) as i32
+    pub fn income_factor(
+        &self,
+        game: &impl GameView<D>,
+        pos: Point,
+        // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
+        heroes: &[HeroInfluence<D>],
+    ) -> Rational32 {
+        self.environment.config.terrain_income_factor(game, pos, self, heroes)
     }
 
     pub fn vision_range(

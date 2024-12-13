@@ -1,5 +1,6 @@
 use std::error::Error;
 
+use num_rational::Rational32;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::commander::commander_type::CommanderType;
@@ -115,14 +116,7 @@ impl TerrainFilter {
 pub(super) struct TerrainPoweredConfig {
     pub(super) affects: Vec<TerrainFilter>,
     pub(super) vision: NumberMod<i8>,
-    /*pub(super) income: NumberMod<Rational32>,
-    pub(super) repair: Option<bool>,
-    pub(super) build: Option<bool>,
-    pub(super) sells_hero: Option<bool>,*/
-    //pub(super) build_overrides: HashSet<AttributeOverride>,
-    //pub(super) on_start_turn: Option<usize>,
-    //pub(super) on_end_turn: Option<usize>,
-    //pub(super) on_build: Option<usize>,
+    pub(super) income_factor: NumberMod<Rational32>,
     pub(super) action_script: Option<(usize, usize)>,
 }
 
@@ -135,32 +129,7 @@ impl TableLine for TerrainPoweredConfig {
         let result = Self {
             affects: power.into_iter().chain(affects.into_iter()).collect(),
             vision: parse_def(data, H::Vision, NumberMod::Keep, loader)?,
-            /*income: parse_def(data, H::Income, NumberMod::Keep, loader)?,
-            repair: match data.get(&H::Repair) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
-                _ => None,
-            },
-            build: match data.get(&H::Build) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
-                _ => None,
-            },
-            sells_hero: match data.get(&H::SellsHero) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
-                _ => None,
-            },*/
-            //build_overrides: parse_vec_def(data, H::BuildOverrides, Vec::new(), loader)?.into_iter().collect(),
-            /*on_start_turn: match data.get(&H::OnStartTurn) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
-                _ => None,
-            },*/
-            /*on_build: match data.get(&H::OnBuild) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
-                _ => None,
-            },*/
-            /*on_end_turn: match data.get(&H::OnEndTurn) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
-                _ => None,
-            },*/
+            income_factor: parse_def(data, H::IncomeFactor, NumberMod::Keep, loader)?,
             action_script: match data.get(&H::ActionScript) {
                 Some(s) if s.len() > 0 => {
                     let exe = loader.rhai_function(s, 1..=1)?;
@@ -174,12 +143,6 @@ impl TableLine for TerrainPoweredConfig {
     }
 
     fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
-        /*let mut overrides = HashSet::default();
-        for key in self.build_overrides.iter().map(AttributeOverride::key) {
-            if !overrides.insert(key) {
-                // TODO: return error
-            }
-        }*/
         Ok(())
     }
 }
@@ -190,14 +153,7 @@ crate::listable_enum! {
         Power,
         Affects,
         Vision,
-        /*Income,
-        Repair,
-        Build,
-        SellsHero,*/
-        //BuildOverrides,
-        //OnStartTurn,
-        //OnEndTurn,
-        //OnBuild,
+        IncomeFactor,
         ActionScript,
     }
 }

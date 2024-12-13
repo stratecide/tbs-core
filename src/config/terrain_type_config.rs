@@ -1,5 +1,6 @@
 use std::error::Error;
 
+use num_rational::Rational32;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
@@ -15,7 +16,7 @@ pub struct TerrainTypeConfig {
     pub(super) owner_is_playable: bool,
     pub(super) chess: bool,
     // can be modified by commander / hero aura
-    pub(super) income_factor: i16,
+    pub(super) income_factor: Rational32,
     pub(super) vision_range: i8,
     pub(super) extra_movement_options: ExtraMovementOptions,
     #[cfg(feature = "rendering")]
@@ -35,7 +36,7 @@ impl TableLine for TerrainTypeConfig {
             owned: parse_def(data, H::Owned, OwnershipPredicate::Either, loader)?,
             owner_is_playable: parse_def(data, H::OwnerPlayable, false, loader)?,
             vision_range: parse_def(data, H::VisionRange, -1, loader)?,
-            income_factor: parse_def(data, H::IncomeFactor, 0, loader)?,
+            income_factor: parse_def(data, H::IncomeFactor, Rational32::from_integer(0), loader)?,
             chess: parse_def(data, H::Chess, false, loader)?,
             extra_movement_options: parse_def(data, H::MovementOptions, ExtraMovementOptions::None, loader)?,
             #[cfg(feature = "rendering")]

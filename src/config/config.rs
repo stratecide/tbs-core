@@ -608,8 +608,26 @@ impl Config {
         }
     }
 
-    pub fn terrain_income_factor(&self, typ: TerrainType) -> i16 {
-        self.terrain_config(typ).income_factor
+    pub fn terrain_income_factor<D: Direction>(
+        &self,
+        map: &impl GameView<D>,
+        pos: Point,
+        terrain: &Terrain<D>,
+        heroes: &[HeroInfluence<D>],
+    ) -> Rational32 {
+        self.terrain_power_configs(
+            map,
+            pos,
+            terrain,
+            heroes,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    self.terrain_config(terrain.typ()).income_factor,
+                    iter.map(|c| c.income_factor),
+                    executor,
+                )
+            }
+        )
     }
 
     pub fn terrain_action_script<D: Direction>(
