@@ -49,7 +49,6 @@ impl SupportedZippable<&Environment> for HeroType {
     }
 }
 
-// TODO: implement Display
 /**
  * Hero purposefully doesn't have Environment.
  * This way, it's easier to create a dummy unit without access to Environment/Config

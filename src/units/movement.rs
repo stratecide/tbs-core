@@ -65,7 +65,6 @@ pub enum PathStep<D: Direction> {
     Jump(D), // jumps 2 fields, caused by Fountains
     Diagonal(D), // moves diagonally, for chess units
     Knight(D, bool),
-    //Point(Point),
 }
 impl<D: Direction> PathStep<D> {
     pub fn progress(&self, map: &impl GameView<D>, pos: Point) -> Result<(Point, Distortion<D>), CommandError> {
@@ -88,7 +87,6 @@ impl<D: Direction> PathStep<D> {
                 get_knight_neighbor(map, pos, d, turn_left)
                 .ok_or(CommandError::InvalidPath)
             }
-            //Self::Point(p) => Ok((OrientedPoint::new(*p, false, D::list()[0]), Self::Point(pos))),
         }
     }
 
@@ -172,17 +170,6 @@ impl<D: Direction> Path<D> {
         }
         Ok(points)
     }
-
-    /*pub fn end_ballast(&self, map: &Map<D>) -> Result<TemporaryBallast<D>, CommandError> {
-        let mut current = self.start;
-        let mut distortion = Distortion::neutral();
-        for step in &self.steps {
-            let c = step.progress(map, current)?;
-            current = c.0;
-            distortion += c.1;
-        }
-        Ok((current, distortion))
-    }*/
 }
 
 // rotated slightly counter-clockwise compared to dir
@@ -230,14 +217,12 @@ pub enum TBallast<D: Direction> {
     DiagonalDirection(Option<D>),
     ForbiddenDirection(Option<D>),
     Takes(PathStepTakes),
-    //StepCount(usize),
 }
 
 impl<D: Direction> TBallast<D> {
     fn heap_order(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Self::MovementPoints(m1), Self::MovementPoints(m2)) => m1.cmp(m2),
-            //(Self::StepCount(m1), Self::StepCount(m2)) => m1.cmp(m2),
             (Self::Direction(_d1), Self::Direction(_d2)) => {
                 Ordering::Equal
                 // TODO: wouldn't the following be more correct?
@@ -283,12 +268,6 @@ impl<D: Direction> TBallast<D> {
                     _ => panic!("TemporaryBallast have incompatible types: {self:?} - {other:?}")
                 })
             }
-            /*Self::StepCount(mp) => {
-                others.all(|other| match other {
-                    Self::StepCount(other) => mp < other,
-                    _ => panic!("TemporaryBallast have incompatible types: {self:?} - {other:?}")
-                })
-            }*/
             Self::Direction(dir) => {
                 others.all(|other| match other {
                     Self::Direction(other) => other.is_some() && dir != other,
@@ -401,43 +380,6 @@ impl<D: Direction> TemporaryBallast<D> {
     pub fn get_entries(&self) -> &[TBallast<D>] {
         &self.entries
     }
-
-    /*fn update_on_step(&self, map: &Map<D>, point: Point, step: &PathStep<D>) -> Option<Self> {
-        let distortion = match step.progress(map, point) {
-            Ok((point, distortion)) => distortion,
-            _ => return None
-        };
-        if let Some(cost) = permanent_ballast.movement_cost(terrain, unit) {
-            let cost = transform_movement_cost(cost, unit);
-        }
-        let mut ballast = Vec::new();
-        for p in self.entries.iter() {
-            ballast.push(match p {
-                TBallast::Direction(_) => {
-                    TBallast::Direction(step.dir().map(|d| distortion.update_direction(d)))
-                }
-                TBallast::DiagonalDirection(_) => {
-                    TBallast::DiagonalDirection(step.diagonal_dir().map(|d| distortion.update_diagonal_direction(d)))
-                }
-                TBallast::ForbiddenDirection(_) => {
-                    TBallast::ForbiddenDirection(step.dir().map(|d| distortion.update_direction(d.opposite_direction())))
-                }
-                TBallast::MovementPoints(mp) => {
-                    if cost > *mp {
-                        return None;
-                    }
-                    TBallast::MovementPoints(*mp - cost)
-                }
-                TBallast::StepCount(step_count) => {
-                    if *step_count == 0 {
-                        return None;
-                    }
-                    TBallast::StepCount(*step_count - 1)
-                }
-            });
-        }
-        Some(Self::new(ballast))
-    }*/
 }
 
 /**
@@ -481,9 +423,6 @@ impl<D: Direction> PermanentBallast<D> {
     }
 
     fn worse_or_equal(&self, other: &Self, map: &impl GameView<D>, point: Point) -> bool {
-        /*if self.unit_type != other.unit_type {
-            return false;
-        }*/
         if self.entries.len() != other.entries.len() {
             panic!("PermanentBallast have different list sizes: {:?} - {:?}", self.entries, other.entries);
         }
@@ -905,29 +844,6 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool, &TemporaryBallast<D>) -> PathS
                 if reject {
                     return PathSearchFeedback::Rejected;
                 }
-                /*match unit {
-                    UnitType::Normal(unit) => {
-                        if !blocking_unit.can_be_moved_through(unit, game) {
-                            return PathSearchFeedback::Rejected;
-                        }
-                    }
-                    UnitType::Chess(ChessUnit { typ: ChessUnits::Pawn(_, _), owner, .. }) => {
-                        if let Some(PathStep::Dir(_)) = path.steps.last() {
-                            return PathSearchFeedback::Rejected;
-                        }
-                        if !blocking_unit.killable_by_chess(game.get_team(Some(*owner)), game) {
-                            return PathSearchFeedback::Rejected;
-                        }
-                        can_continue = false;
-                    }
-                    UnitType::Chess(unit) => {
-                        if !blocking_unit.killable_by_chess(game.get_team(Some(unit.owner)), game) {
-                            return PathSearchFeedback::Rejected;
-                        }
-                        can_continue = false;
-                    }
-                    _ => (),
-                }*/
             } else if takes == PathStepTakes::Force {
                 can_continue = false;
                 let mut reject = true;
@@ -1045,43 +961,3 @@ where F: Fn(&Path<D>, Point, bool, &TemporaryBallast<D>) -> PathSearchFeedback {
     });
     result
 }
-
-/*pub(crate) struct HeroMap<'a, D: Direction> {
-    map: ModifiedView<'a, D>,
-    base: HashMap<Point, Vec<HeroInfluence<D>>>,
-    hero_unit: Option<Unit<D>>,
-}
-
-impl<'a, D: Direction> HeroMap<'a, D> {
-    fn new(map: &'a impl GameView<D>, unit: &Unit<D>, ignore_unit_at: Option<(Point, Option<usize>)>) -> Self {
-        let base = Hero::map_influence(map, unit.get_owner_id())
-        .into_iter()
-        .map(|((p, _), value)| (p, value))
-        .collect();
-        let mut hero_unit = None;
-        if unit.is_hero() {
-            hero_unit =  Some(unit.clone());
-        }
-        let mut modifiable = ModifiedView::new(map);
-        if let Some((pos, unload_index)) = ignore_unit_at {
-            modifiable.remove_unit(pos, unload_index);
-        }
-        Self {
-            map: modifiable,
-            base,
-            hero_unit,
-        }
-    }
-
-    pub fn get(&self, pos: Point, round: usize, permanent: &PermanentBallast<D>, transporter: Option<(&Unit<D>, usize)>) -> Vec<HeroInfluence<D>> {
-        let mut heroes = self.base.get(&pos).unwrap().clone();
-        if let Some(mut unit) = self.hero_unit.clone() {
-            permanent.update_unit(&mut unit);
-            let hero = unit.get_hero();
-            if Hero::aura_range(&self.map, &unit, pos, transporter).is_some() {
-                heroes.push((unit, hero, pos, transporter.map(|(_, unload_index)| unload_index)));
-            }
-        }
-        heroes
-    }
-}*/

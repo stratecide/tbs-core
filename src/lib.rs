@@ -5,7 +5,6 @@ pub mod terrain;
 pub mod units;
 pub mod tokens;
 pub mod game;
-//pub mod commanders;
 pub mod commander;
 pub mod config;
 pub mod script;

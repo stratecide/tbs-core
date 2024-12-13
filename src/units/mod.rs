@@ -3,7 +3,6 @@ pub mod movement;
 pub mod rhai_movement;
 pub mod combat;
 pub mod rhai_combat;
-//pub mod attributes;
 pub mod hero;
 pub mod unit_types;
 pub mod unit;

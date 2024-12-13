@@ -330,7 +330,6 @@ impl<D: Direction> UnitCommand<D> {
             // so far the code mainly checks whether it looks correct from the user perspective
             self.action.execute(handler, unit_id, end, &path_taken, transporter, ballast, action_data);
         }
-        //exhaust_all_on_chess_board(handler, path_taken.start);
         Ok(())
     }
 }

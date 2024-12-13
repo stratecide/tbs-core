@@ -587,8 +587,8 @@ impl<D: Direction> AttackVector<D> {
                 Ok(()) => (), // script had no errors
                 Err(e) => {
                     // TODO: log error
-                    panic!("unit weapon_effects_rhai {weapon_effects_rhai}: {e:?}");
                     handler.effect_glitch();
+                    panic!("unit weapon_effects_rhai {weapon_effects_rhai}: {e:?}");
                 }
             }
         }
@@ -652,11 +652,6 @@ fn attack_targets<D: Direction>(
     let mut defenders = Vec::new();
 
     if exhaust_after_attacking && attacker_id.is_some() {
-        /*match attacker_id.and_then(|id| handler.get_observed_unit_pos(id)) {
-            Some((p, None)) => handler.unit_status(p, ActionStatus::Exhausted),
-            Some((p, Some(index))) => handler.unit_status_boarded(p, index, ActionStatus::Exhausted),
-            None => (),
-        }*/
         let (path, ballast) = path.map(|(path, _, ballast)| (path.clone(), ballast))
         .unwrap_or((Path::new(attacker_pos), &[]));
         handler.on_unit_normal_action(attacker_id.unwrap(), path, false, &attacker_heroes, ballast);
@@ -811,16 +806,11 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
     let deal_damage_rhai = environment.deal_damage_rhai();
     for (defender_pos, _, factor) in targets.iter().cloned() {
         let defender = handler.get_game().get_unit(defender_pos).unwrap();
-        /*let hp = defender.get_hp();
-        if hp == 0 {
-            continue;
-        }*/
         let damage = calculate_attack_damage(&*handler.get_game(), attacker, attacker_pos, path, &defender, defender_pos, factor, counter.clone(), attacker_heroes);
         if damage == 0 {
             continue;
         }
         let defender_id = handler.observe_unit(defender_pos, None).0;
-        //handler.effect_weapon(defender_pos, attacker.weapon());
         if damage > 0 {
             if attacker.get_team() != defender.get_team() {
                 hero_charge += 1;
@@ -948,32 +938,8 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
 }
 
 fn calculate_attack_damage<D: Direction>(game: &impl GameView<D>, attacker: &Unit<D>, attacker_pos: Point, path: Option<(&Path<D>, Option<(&Unit<D>, Point)>, &[TBallast<D>])>, defender: &Unit<D>, defender_pos: Point, factor: Rational32, counter: Counter<D>, attacker_heroes: &[HeroInfluence<D>]) -> i32 {
-    //let defensive_terrain = game.get_terrain(defender_pos).unwrap();
-    //let terrain_defense = Rational32::from_integer(1) + defensive_terrain.defense_bonus(defender);
     let base_attack = Rational32::from_integer(attacker.base_damage(defender.typ()).unwrap() as i32);
-    /*for t in game.get_map().get_neighbors(defender_pos, crate::map::map::NeighborMode::Direct).into_iter().map(|p| game.get_map().get_terrain(p.point).unwrap()) {
-        terrain_defense += t.adjacent_defense_bonus(defender);
-    }*/
     let defender_heroes = Hero::hero_influence_at(game, defender_pos, defender.get_owner_id());
-    /*let defense_bonus = environment.config.unit_defense(
-        game,
-        defender,
-        defender_pos,
-        attacker,
-        attacker_pos,
-        defender_heroes.as_slice(),
-        counter.is_counter(),
-    );
-    let attack_bonus = environment.config.unit_attack(
-        game,
-        attacker,
-        attacker_pos,
-        defender,
-        defender_pos,
-        attacker_heroes,
-        path.map(|(_, _, tb)| tb).unwrap_or(&[]),
-        counter.is_counter(),
-    );*/
     let environment = game.environment();
     let calculate_attack_damage_rhai = environment.calculate_attack_damage_rhai();
     let mut engine = environment.get_engine(game);
@@ -1181,18 +1147,6 @@ crate::listable_enum! {
         AirMissiles,
     }
 }
-
-/*impl WeaponType {
-    pub fn effect<D: Direction>(&self, p: Point) -> Effect<D> {
-        match self {
-            Self::Flame => Effect::Flame(p),
-            Self::MachineGun => Effect::GunFire(p),
-            Self::Rifle => Effect::GunFire(p),
-            Self::Shells => Effect::ShellFire(p),
-            _ => Effect::ShellFire(p),
-        }
-    }
-}*/
 
 crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]

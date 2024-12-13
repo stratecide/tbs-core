@@ -95,43 +95,6 @@ macro_rules! board_module {
                 unit.get_team().to_i16() as i32
             }
 
-            /*#[rhai_fn(pure, get = "hp")]
-            pub fn get_hp(unit: &mut Unit) -> i32 {
-                unit.get_hp() as i32
-            }
-
-            #[rhai_fn(pure, get = "status")]
-            pub fn get_status(unit: &mut Unit) -> ActionStatus {
-                unit.get_status()
-            }
-            #[rhai_fn(set = "status")]
-            pub fn set_status(unit: &mut Unit, status: ActionStatus) {
-                unit.set_status(status)
-            }
-
-            #[rhai_fn(pure, get = "level")]
-            pub fn get_level(unit: &mut Unit) -> Dynamic {
-                if unit.has_attribute(AttributeKey::Level) {
-                    (unit.get_level() as i32).into()
-                } else {
-                    ().into()
-                }
-            }
-
-            #[rhai_fn(pure, get = "drone_station_id")]
-            pub fn get_drone_station_id(unit: &mut Unit) -> Dynamic {
-                unit.get_drone_station_id()
-                .map(|id| (id as i32).into())
-                .unwrap_or(().into())
-            }
-
-            #[rhai_fn(pure, get = "drone_id")]
-            pub fn get_drone_id(unit: &mut Unit) -> Dynamic {
-                unit.get_drone_id()
-                .map(|id| (id as i32).into())
-                .unwrap_or(().into())
-            }*/
-
             pub fn copy_from(unit: &mut Unit, other: Unit) {
                 unit.copy_from(other.get_tag_bag());
             }
@@ -241,66 +204,6 @@ macro_rules! board_module {
             pub fn get_visibility(context: NativeCallContext, unit: &mut Unit, position: Point) -> UnitVisibility {
                 with_board(context, |game| unit.visibility(game, position))
             }
-            /*#[rhai_fn(pure)]
-            pub fn build_unit(environment: &mut Environment, unit_type: UnitType) -> UnitBuilder {
-                unit_type.instance::<$d>(environment)
-            }
-            #[rhai_fn(return_raw, pure, name = "build_unit")]
-            pub fn build_unit_name(environment: &mut Environment, name: &str) -> Result<UnitBuilder, Box<EvalAltResult>> {
-                if let Some(unit_type) = environment.config.find_unit_by_name(name) {
-                    Ok(build_unit(environment, unit_type))
-                } else {
-                    Err(format!("Unknown unit type '{name}'").into())
-                }
-            }
-
-            #[rhai_fn(name = "copy_from")]
-            pub fn builder_copy_from(builder: UnitBuilder, unit: Unit) -> UnitBuilder {
-                builder.copy_from(&unit)
-            }
-
-            #[rhai_fn(name = "owner_id")]
-            pub fn builder_owner_id(builder: UnitBuilder, owner_id: i32) -> UnitBuilder {
-                builder.set_owner_id(owner_id.max(-1).min(i8::MAX as i32) as i8)
-            }
-
-            #[rhai_fn(return_raw, name = "hero")]
-            pub fn builder_hero_type(builder: UnitBuilder, name: &str) -> Result<UnitBuilder, Box<EvalAltResult>> {
-                if let Some(hero_type) = builder.environment().config.find_hero_by_name(name) {
-                    Ok(builder.set_hero(Hero::new(hero_type)))
-                } else {
-                    Err(format!("Unknown hero type '{name}'").into())
-                }
-            }
-
-            #[rhai_fn(name = "set")]
-            pub fn builder_flag(builder: UnitBuilder, flag: FlagKey) -> UnitBuilder {
-                builder.set_flag(flag.0)
-            }
-
-            #[rhai_fn(name = "set")]
-            pub fn builder_tag_i32(builder: UnitBuilder, key: TagKey, value: i32) -> UnitBuilder {
-                builder.set_tag(key.0, value.into())
-            }
-
-            /*#[rhai_fn(name = "hp")]
-            pub fn builder_hp(builder: UnitBuilder, hp: i32) -> UnitBuilder {
-                builder.set_hp(hp.max(0).min(100) as u8)
-            }
-
-            #[rhai_fn(name = "zombified")]
-            pub fn builder_zombified(builder: UnitBuilder, zombified: bool) -> UnitBuilder {
-                builder.set_zombified(zombified)
-            }
-            #[rhai_fn(name = "zombified")]
-            pub fn builder_zombified2(builder: UnitBuilder) -> UnitBuilder {
-                builder_zombified(builder, true)
-            }*/
-
-            #[rhai_fn(name = "build")]
-            pub fn builder_build(builder: UnitBuilder) -> Unit {
-                builder.build_with_defaults()
-            }*/
         }
 
         def_package! {
