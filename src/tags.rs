@@ -219,7 +219,7 @@ impl<D: Direction> TagValue<D> {
             4 => Ok(Self::UnitType(UnitType::import(unzipper, environment)?)),
             5 => Ok(Self::TerrainType(TerrainType::import(unzipper, environment)?)),
             6 => Ok(Self::MovementType(MovementType::import(unzipper, environment)?)),
-            e => Err(ZipperError::EnumOutOfBounds(format!("TagValue::{e}")))
+            e => Err(ZipperError::EnumOutOfBounds(format!("TagValue::{e} for tag {}", environment.config.tag_name(tag_key))))
         }
     }
 

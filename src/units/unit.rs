@@ -721,7 +721,7 @@ impl<D: Direction> Unit<D> {
         self.hero.export(zipper, &self.environment);
         self.tags.export(zipper, &self.environment);
         if !transported && self.transport_capacity() > 0 {
-            zipper.write_u32(self.transport_capacity() as u32, bits_needed_for_max_value(self.transport_capacity() as u32));
+            zipper.write_u32(self.transport.len() as u32, bits_needed_for_max_value(self.transport_capacity() as u32));
             for unit in &self.transport {
                 unit.zip(zipper, true);
             }

@@ -22,7 +22,7 @@ use crate::tokens::token::Token;
 use crate::tokens::token_types::TokenType;
 use crate::units::combat::AttackVector;
 use crate::units::commands::*;
-use crate::units::movement::Path;
+use crate::units::movement::{Path, PathStep};
 use crate::units::unit::*;
 use crate::units::unit_types::UnitType;
 
@@ -369,4 +369,35 @@ fn marine_movement_types() {
         CustomActionInput::ShopItem(0.into()),
     ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(100).set_movement_type(MovementType::AMPHIBIOUS).build()));
+}
+
+#[test]
+fn enter_transporter() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(4, 4, false);
+    let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+    let mut map = Map::new(wmap, &config);
+    let map_env = map.environment().clone();
+    // map setup
+    map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(2, 0), Some(UnitType::transport_heli().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    // create game
+    let settings = map.settings().unwrap();
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let environment = game.environment();
+    // test
+    let transporter = game.get_unit(Point::new(2, 0)).unwrap();
+    assert_eq!(transporter.get_transported().len(), 0);
+    let path = Path::with_steps(Point::new(0, 0), vec![PathStep::Dir(Direction4::D0), PathStep::Dir(Direction4::D0)]);
+    assert!(game.get_unit(Point::new(0, 0)).unwrap().options_after_path(&*game, &path, None, &[]).contains(&UnitAction::Enter));
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path,
+        action: UnitAction::Enter,
+    }), Arc::new(|| 0.)).unwrap();
+    let transporter = game.get_unit(Point::new(2, 0)).unwrap();
+    assert_eq!(transporter.typ(), UnitType::transport_heli());
+    assert_eq!(transporter.get_transported().len(), 1);
+    assert_eq!(transporter.get_transported()[0].typ(), UnitType::sniper());
 }
