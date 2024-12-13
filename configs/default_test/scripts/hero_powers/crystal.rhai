@@ -24,5 +24,6 @@ fn ua_summon_obelisk(data) {
         //EVENT_HANDLER.effect(ef_summon_unit(target, obelisk))
         EVENT_HANDLER.place_unit(target, obelisk);
     }
+    exhaust_all_on_chess_board(PATH.start, UNIT.owner_id);
     EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
 }

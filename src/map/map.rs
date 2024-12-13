@@ -339,6 +339,7 @@ impl<D: Direction> Map<D> {
 
     pub fn width_search(&self, start: Point, mut f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
         let mut result = HashSet::default();
+        let mut rejected = HashSet::default();
         let mut to_check = HashSet::default();
         to_check.insert(start);
         while to_check.len() > 0 {
@@ -347,10 +348,12 @@ impl<D: Direction> Map<D> {
                 if f(p) {
                     result.insert(p);
                     for p in self.get_neighbors(p, NeighborMode::Direct) {
-                        if !result.contains(&p.point) {
+                        if !result.contains(&p.point) && !rejected.contains(&p.point) {
                             next.insert(p.point);
                         }
                     }
+                } else {
+                    rejected.insert(p);
                 }
             }
             to_check = next;

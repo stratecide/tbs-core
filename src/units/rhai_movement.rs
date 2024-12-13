@@ -47,6 +47,10 @@ macro_rules! movement_module {
                 path.len() as i32
             }
 
+            #[rhai_fn(pure, get = "start")]
+            pub fn start(path: &mut Path) -> Point {
+                path.start
+            }
             #[rhai_fn(pure, get = "end")]
             pub fn end(context: NativeCallContext, path: &mut Path) -> Point {
                 with_board(context, |board| path.end(board).expect("User should not be able to create an invalid path").0)

@@ -12,6 +12,7 @@ use crate::map::direction::*;
 use crate::map::map::Map;
 use crate::map::point::*;
 use crate::map::point_map::PointMap;
+use crate::map::test::chess_board;
 use crate::map::wrapping_map::*;
 use crate::script::custom_action::test::{CA_UNIT_BUILD_UNIT, CA_UNIT_REPAIR};
 use crate::script::custom_action::CustomActionInput;
@@ -400,4 +401,28 @@ fn enter_transporter() {
     assert_eq!(transporter.typ(), UnitType::transport_heli());
     assert_eq!(transporter.get_transported().len(), 1);
     assert_eq!(transporter.get_transported()[0].typ(), UnitType::sniper());
+    assert_eq!(game.get_unit(Point::new(0, 0)), None);
+}
+
+#[test]
+fn chess_movement_exhausts_all() {
+    let map = chess_board();
+    let settings = map.settings().unwrap();
+    let mut server = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.)).0;
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(0, 6), vec![PathStep::Dir(Direction4::D90), PathStep::Dir(Direction4::D90)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    assert!(server.get_unit(Point::new(0, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
+    for x in 0..8 {
+        println!("x = {x}");
+        assert!(!server.get_unit(Point::new(x, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
+        assert!(!server.get_unit(Point::new(x, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
+        if x > 0 {
+            assert!(server.get_unit(Point::new(x, 6)).unwrap().has_flag(FLAG_EXHAUSTED));
+        }
+        assert!(server.get_unit(Point::new(x, 7)).unwrap().has_flag(FLAG_EXHAUSTED));
+    }
+    assert_eq!(server.get_unit(Point::new(0, 6)), None);
 }

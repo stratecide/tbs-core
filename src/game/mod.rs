@@ -68,43 +68,8 @@ mod tests {
     #[test]
     fn export_import_chess() {
         let version = Version::parse(VERSION).unwrap();
-        let config = Arc::new(Config::test_config());
-        let map = PointMap::new(8, 8, false);
-        let map = WMBuilder::<Direction4>::new(map);
-        let mut map = Map::new(map.build(), &config);
-        let environment = map.environment().clone();
-        for p in map.all_points() {
-            if p.y == 1 || p.y == 6 {
-                map.set_terrain(p, TerrainType::ChessPawnTile.instance(&environment).build_with_defaults());
-            } else {
-                map.set_terrain(p, TerrainType::ChessTile.instance(&environment).build_with_defaults());
-            }
-        }
-        map.set_unit(Point::new(0, 0), Some(UnitType::rook().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(7, 0), Some(UnitType::rook().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(0, 7), Some(UnitType::rook().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(7, 7), Some(UnitType::rook().instance(&environment).set_owner_id(0).build_with_defaults()));
-        
-        map.set_unit(Point::new(1, 0), Some(UnitType::knight().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(6, 0), Some(UnitType::knight().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(1, 7), Some(UnitType::knight().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(6, 7), Some(UnitType::knight().instance(&environment).set_owner_id(0).build_with_defaults()));
-        
-        map.set_unit(Point::new(2, 0), Some(UnitType::bishop().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(5, 0), Some(UnitType::bishop().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(2, 7), Some(UnitType::bishop().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(5, 7), Some(UnitType::bishop().instance(&environment).set_owner_id(0).build_with_defaults()));
-
-        map.set_unit(Point::new(3, 0), Some(UnitType::queen().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(4, 0), Some(UnitType::king().instance(&environment).set_owner_id(1).build_with_defaults()));
-        map.set_unit(Point::new(3, 7), Some(UnitType::queen().instance(&environment).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(4, 7), Some(UnitType::king().instance(&environment).set_owner_id(0).build_with_defaults()));
-        
-        for x in 0..8 {
-            map.set_unit(Point::new(x, 1), Some(UnitType::pawn().instance(&environment).set_tag(TAG_PAWN_DIRECTION, crate::tags::TagValue::Direction(Direction4::D270)).set_owner_id(1).build_with_defaults()));
-            map.set_unit(Point::new(x, 6), Some(UnitType::pawn().instance(&environment).set_tag(TAG_PAWN_DIRECTION, crate::tags::TagValue::Direction(Direction4::D90)).set_owner_id(0).build_with_defaults()));
-        }
-
+        let map = crate::map::test::chess_board();
+        let config = map.environment().config.clone();
         let settings = map.settings().unwrap();
 
         for fog_setting in [FogSetting::None, FogSetting::Sharp(0)] {

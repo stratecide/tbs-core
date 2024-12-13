@@ -19,6 +19,7 @@ fn ua_power_input() {
 }
 
 fn ua_power(data) {
+    exhaust_all_on_chess_board(PATH.start, UNIT.owner_id);
     EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
     let target1 = data[0];
     let target2 = data[1];

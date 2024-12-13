@@ -87,6 +87,29 @@ macro_rules! board_module {
                 .collect()
             }
 
+            #[rhai_fn(return_raw, pure)]
+            pub fn spread_search(context: NativeCallContext, board: &mut Board, start: Point, callback: FnPtr) -> Result<Array, Box<EvalAltResult>> {
+                let mut error = None;
+                let result = board.width_search(start, Box::new(&mut |p| {
+                    if !error.is_none() {
+                        return false;
+                    }
+                    match callback.call_within_context(&context, (p, )) {
+                        Ok(accepted) => accepted,
+                        Err(e) => {
+                            error = Some(e);
+                            false
+                        }
+                    }
+                }));
+                if let Some(error) = error {
+                    return Err(error);
+                }
+                Ok(result.into_iter()
+                    .map(|p| Dynamic::from(p))
+                    .collect())
+            }
+
             #[rhai_fn(pure)]
             pub fn get_unit(board: &mut Board, p: Point) -> Dynamic {
                 board.get_unit(p)

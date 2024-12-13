@@ -109,3 +109,15 @@ fn terrain_buy_unit(position, owner_id, data, exhaust_unit) {
     EVENT_HANDLER.spend_money(owner_id, cost);
     EVENT_HANDLER.place_unit(position, unit);
 }
+
+fn exhaust_all_on_chess_board(start_position, owner_id) {
+    let positions = BOARD.spread_search(start_position, |p| {
+        let terrain = BOARD.get_terrain(p);
+        terrain.type == TERRAIN_ChessTile || terrain.type == TERRAIN_ChessPawnTile
+    });
+    for p in positions {
+        if BOARD.get_unit(p)?.owner_id == owner_id {
+            EVENT_HANDLER.set_unit_flag(p, FLAG_Exhausted);
+        }
+    }
+}

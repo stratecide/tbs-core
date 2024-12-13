@@ -36,11 +36,8 @@ pub enum UnitAction<D: Direction> {
     Wait,
     Take,
     Enter,
-    //Capture,
     Attack(AttackVector<D>),
-    //BuyHero(HeroType),
     HeroPower(HeroPowerIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
-    //PawnUpgrade(UnitType),
     Custom(CustomActionIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
 }
 
@@ -50,11 +47,8 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
             Self::Wait => write!(f, "Wait"),
             Self::Take => write!(f, "Take"),
             Self::Enter => write!(f, "Enter"),
-            //Self::Capture => write!(f, "Capture"),
             Self::Attack(p) => write!(f, "Attack {:?}", p),
-            //Self::BuyHero(_) => write!(f, "Buy Mercenary"),
             Self::HeroPower(index, _) => write!(f, "Hero Power {}", index.0),
-            //Self::PawnUpgrade(u) => write!(f, "Upgrade unit to {u:?}"),
             Self::Custom(index, _) => write!(f, "Custom {}", index.0),
         }
     }
@@ -159,25 +153,6 @@ impl<D: Direction> UnitAction<D> {
                 }
                 true
             }
-            /*Self::Enter => {
-                let transporter = handler.get_game().get_unit(end).unwrap();
-                let index = transporter.get_transported().len() - 1;
-                handler.unit_status_boarded(end, index, ActionStatus::Exhausted);
-                false
-            }*/
-            /*Self::Capture => {
-                let terrain = handler.get_game().get_terrain(end).unwrap();
-                if let Some(new_progress) = match terrain.get_capture_progress() {
-                    Some((capturing_owner, _)) if capturing_owner.0 == handler.get_game().current_owner() => {
-                        None
-                    }
-                    _ => Some((handler.get_game().current_owner().into(), 0.into()))
-                } {
-                    handler.terrain_capture_progress(end, Some(new_progress));
-                }
-                handler.unit_status(end, ActionStatus::Capturing);
-                false
-            }*/
             Self::Attack(attack_vector) => {
                 let attacker = handler.get_game().get_unit(end).unwrap();
                 let transporter = transporter.map(|(u, _)| (u, path.start));
@@ -193,28 +168,8 @@ impl<D: Direction> UnitAction<D> {
                     Rational32::from_integer(1),
                     Counter::AllowCounter,
                 );
-                false
+                true
             }
-            /*Self::BuyHero(hero_type) => {
-                let unit = handler.get_game().get_unit(end).unwrap();
-                let owner_id = unit.get_owner_id();
-                // TODO: cost could be put into the enum so it doesn't have to be re-calculated here
-                // the move's validity has already been tested after all
-                let cost = handler.environment().config.hero_price_after_moving(&*handler.get_game(), *hero_type, &path, end, unit, transporter.map(|(_, i)| i));
-                if let Some(cost) = cost {
-                    handler.money_change(owner_id, -cost);
-                    handler.unit_set_hero(end, Hero::new(*hero_type));
-                }
-                true
-            }*/
-            /*Self::PawnUpgrade(unit_type) => {
-                let old_unit = handler.get_game().get_unit(end).unwrap();
-                let new_unit = unit_type.instance(&handler.environment())
-                .copy_from(&old_unit)
-                .build_with_defaults();
-                handler.unit_replace(end, new_unit);
-                true
-            }*/
             Self::HeroPower(index, _) => {
                 let unit = handler.get_game().get_unit(end).unwrap().clone();
                 let hero = unit.get_hero().unwrap();
@@ -223,7 +178,6 @@ impl<D: Direction> UnitAction<D> {
                 handler.hero_charge_sub(end, None, power.required_charge.into());
                 handler.hero_power(end, index.0);
                 let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
-                //handler.unit_status(end, ActionStatus::Exhausted);
                 if let Some((input_script, function_index)) = power.script {
                     let action_data = input_script.map(|_| action_data);
                     execute_unit_script(function_index, handler, &unit, path, end, transporter, &heroes, ballast, action_data);
@@ -235,14 +189,12 @@ impl<D: Direction> UnitAction<D> {
                 let config = handler.environment().config.clone();
                 let custom_action = &config.custom_actions()[index.0];
                 let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
-                //handler.unit_status(end, ActionStatus::Exhausted);
                 let action_data = custom_action.script.0.map(|_| action_data);
                 execute_unit_script(custom_action.script.1, handler, &unit, path, end, transporter, &heroes, ballast, action_data);
                 false
             }
         };
         if needs_to_exhaust {
-            //handler.unit_status(end, ActionStatus::Exhausted);
             let heroes = Hero::hero_influence_at(&*handler.get_game(), end, owner_id);
             handler.on_unit_normal_action(unit_id, path.clone(), false, &heroes, ballast);
         }
@@ -371,13 +323,6 @@ impl<D: Direction> UnitCommand<D> {
             }
             // fog trap
             handler.effect_fog_surprise(fog_trap);
-            /*// special case of a unit being unable to move that's loaded in a transport
-            if path_taken.steps.len() == 0 && self.unload_index.is_some() {
-                handler.unit_status_boarded(path_taken.start, self.unload_index.unwrap().0, ActionStatus::Exhausted);
-            } else {
-                let p = path_taken.end(&*handler.get_game())?.0;
-                handler.unit_status(p, ActionStatus::Exhausted);
-            }*/
             let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
             handler.on_unit_normal_action(unit_id, path_taken.clone(), true, &heroes, ballast);
         } else {
@@ -389,27 +334,6 @@ impl<D: Direction> UnitCommand<D> {
         Ok(())
     }
 }
-
-/*pub fn exhaust_all_on_chess_board<D: Direction>(handler: &mut EventHandler<D>, pos: Point) {
-    if !handler.get_game().get_terrain(pos).and_then(|t| Some(t.is_chess())).unwrap_or(false) {
-        return;
-    }
-    let owner_id = handler.get_game().current_owner();
-    let mut to_exhaust = HashSet::default();
-    handler.get_game().width_search(pos, Box::new(&mut |p| {
-        let is_chess = handler.get_game().get_terrain(p).and_then(|t| Some(t.is_chess())).unwrap_or(false);
-        if let Some(unit) = handler.get_game().get_unit(p) {
-            if !unit.is_exhausted() && unit.get_owner_id() == owner_id && unit.can_have_status(ActionStatus::Exhausted) {
-                to_exhaust.insert(p);
-            }
-        }
-        is_chess
-    }));
-    // order doesn't matter
-    for p in to_exhaust {
-        handler.unit_status(p, ActionStatus::Exhausted);
-    }
-}*/
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UnloadIndex(pub usize);

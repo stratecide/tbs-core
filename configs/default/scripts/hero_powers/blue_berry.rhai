@@ -9,5 +9,6 @@ fn ua_power() {
             EVENT_HANDLER.remove_unit_flag(position, FLAG_Exhausted);
         }
     }
+    exhaust_all_on_chess_board(PATH.start, UNIT.owner_id);
     EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
 }
