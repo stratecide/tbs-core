@@ -196,12 +196,17 @@ impl<D: Direction> Terrain<D> {
         heroes: &[HeroInfluence<D>],
         team: ClientPerspective
     ) -> HashMap<Point, FogIntensity> {
-        if self.get_team() != team && self.get_team() != ClientPerspective::Neutral {
+        let allow_vision = if self.environment.config.terrain_ownership(self.typ) == OwnershipPredicate::Never {
+            // terrain can never be owned, so its vision is provided to all
+            true
+        } else {
+            // terrain can be owned. it's vision is only provided to the team that owns it
+            self.get_team() == team && team != ClientPerspective::Neutral
+        };
+        if !allow_vision {
             return HashMap::new();
         }
-        let vision_range = if let Some(v) = self.vision_range(game, pos, heroes) {
-            v
-        } else {
+        let Some(vision_range) = self.vision_range(game, pos, heroes) else {
             return HashMap::new();
         };
         let mut result = HashMap::new();

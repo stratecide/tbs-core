@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::game::commands::Command;
+use crate::game::fog::*;
 use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::map::direction::*;
@@ -22,6 +24,7 @@ use crate::units::unit_types::UnitType;
 // helpers
 #[allow(non_upper_case_globals)]
 impl TerrainType {
+    pub const Airport: Self = Self(0);
     pub const ChessPawnTile: Self = Self(3);
     pub const ChessTile: Self = Self(4);
     pub const City: Self = Self(5);
@@ -160,4 +163,40 @@ fn kraken() {
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), None);
     assert_eq!(game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_ANGER), Some(2.into()));
     assert!(game.get_unit(Point::new(3, 2)).unwrap().get_hp() < 100);
+}
+
+#[test]
+fn terrain_vision() {
+    let map = PointMap::new(4, 4, false);
+    let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
+    let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+    let mut map = Map::new2(wmap, &environment);
+    map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build_with_defaults());
+    map.set_terrain(Point::new(3, 0), TerrainType::City.instance(&environment).set_owner_id(0).build_with_defaults());
+    map.set_terrain(Point::new(0, 3), TerrainType::Airport.instance(&environment).set_owner_id(1).build_with_defaults());
+    map.set_terrain(Point::new(3, 3), TerrainType::City.instance(&environment).set_owner_id(-1).build_with_defaults());
+    let mut settings = map.settings().unwrap();
+    settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
+    let mut settings = settings.build_default();
+    settings.players[0].set_commander(CommanderType::Lageos);
+    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    // neutral city gives no vision to anybody
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(3, 3)));
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(3, 3)));
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(3, 3)));
+    // player 0's factory gives true vision, but only to its owner
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(0, 0)));
+    assert_eq!(FogIntensity::TrueSight, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(0, 0)));
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(0, 0)));
+    // player 0's factory doesn't give vision next to itself, even if the commander's units have +1 vision
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(1, 0)));
+    // player 1's airport gives true vision, but only to its owner
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(0, 3)));
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(0, 3)));
+    assert_eq!(FogIntensity::TrueSight, game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(0, 3)));
+    // player 0's city gives vision, but only to its owner
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(3, 0)));
+    assert!(FogIntensity::Dark > game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(3, 0)));
+    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(3, 0)));
 }
