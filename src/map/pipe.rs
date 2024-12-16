@@ -82,7 +82,6 @@ mod tests {
         let map = PointMap::new(8, 5, false);
         let map = WMBuilder::<Direction4>::with_transformations(map, vec![Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(6))]).unwrap();
         let mut map = Map::new(map.build(), &config);
-        let map_env = map.environment().clone();
         map.set_pipes(Point::new(7, 3), vec![PipeState::new(Direction4::D0, Direction4::D90).unwrap()]);
         map.set_pipes(Point::new(2, 4), vec![PipeState::new(Direction4::D180, Direction4::D90).unwrap()]);
         assert_eq!(

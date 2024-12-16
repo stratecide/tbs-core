@@ -119,7 +119,7 @@ impl<D: Direction> Unit<D> {
         self.transportable_units().contains(&other)
     }
     pub fn transport_capacity(&self) -> usize {
-        self.environment.unit_transport_capacity(self.typ, self.get_owner_id(), self.get_hero().map(|hero| hero.typ()).unwrap_or(HeroType::None))
+        self.environment.unit_transport_capacity(self.typ, self.get_owner_id(), self.get_hero().map(|hero| hero.typ()))
     }
 
     pub fn movement_pattern(&self) -> MovementPattern {

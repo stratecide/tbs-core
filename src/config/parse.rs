@@ -130,12 +130,10 @@ impl Config {
             unit_flags: HashMap::default(),
             unit_tags: HashMap::default(),
             // heroes
-            hero_types: Vec::new(),
-            heroes: HashMap::default(),
-            hero_units: HashMap::default(),
-            hero_powers: HashMap::default(),
+            heroes: Vec::new(),
             max_hero_charge: 0,
             max_aura_range: 0,
+            max_hero_transport_bonus: 0,
             // terrain
             terrains: Vec::new(),
             default_terrain: TerrainType(usize::MAX),
@@ -307,6 +305,24 @@ impl Config {
             // TODO: error
         }
 
+        // simple hero data
+        file_loader.table_with_headers(HERO_CONFIG, |line: HeroTypeConfig| {
+            if result.heroes.iter().any(|conf| conf.name == line.name) {
+                // TODO: error
+            }
+            if line.charge > i8::MAX as u8 {
+                return Err(Box::new(ConfigParseError::HeroMaxChargeExceeded(i8::MAX as u8)));
+            }
+            result.max_hero_charge = result.max_hero_charge.max(line.charge);
+            result.max_hero_transport_bonus = result.max_hero_transport_bonus.max(line.transport_capacity as usize);
+            result.heroes.push(line);
+            Ok(())
+        })?;
+        result.max_transported += result.max_hero_transport_bonus;
+        for hero in &result.heroes {
+            file_loader.hero_types.push(hero.name.clone());
+        }
+
         // unit transport
         let data = file_loader.load_config(UNIT_TRANSPORT)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
@@ -372,34 +388,17 @@ impl Config {
             Ok(())
         })?;
 
-        // simple hero data
-        let mut bonus_transported = 0;
-        file_loader.table_with_headers(HERO_CONFIG, |line: HeroTypeConfig| {
-            if result.heroes.contains_key(&line.id) {
-                // TODO: error
-            }
-            result.hero_types.push(line.id);
-            result.hero_powers.insert(line.id, Vec::new());
-            //result.hero_powered_units.insert(line.id, HashMap::default());
-            if line.charge > i8::MAX as u8 {
-                return Err(Box::new(ConfigParseError::HeroMaxChargeExceeded(i8::MAX as u8)));
-            }
-            result.max_hero_charge = result.max_hero_charge.max(line.charge);
-            bonus_transported = bonus_transported.max(line.transport_capacity as usize);
-            result.heroes.insert(line.id, line);
-            Ok(())
-        })?;
-        result.max_transported += bonus_transported;
-
         // hero powers
         file_loader.table_with_headers(HERO_POWERS, |line: HeroPowerConfig| {
-            result.max_aura_range = result.max_aura_range.max(line.aura_range).max(line.aura_range_transported);
-            result.hero_powers.get_mut(&line.hero)
-            .ok_or(ConfigParseError::MissingHeroForPower(line.hero))?
-            .push(line); // TODO: ensure that every hero has at least 1 power
+            result.heroes[line.hero.0].powers.push(line);
             Ok(())
         })?;
-
+        for hero in &result.heroes {
+            if hero.powers.len() == 0 {
+                // TODO: error
+            }
+        }
+    
         // movement cost
         let data = file_loader.load_config(MOVEMENT_CONFIG)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());

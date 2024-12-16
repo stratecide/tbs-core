@@ -1,4 +1,4 @@
-use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use rustc_hash::FxHashMap as HashMap;
 use std::error::Error;
 use std::sync::Arc;
 
@@ -72,12 +72,10 @@ pub struct Config {
     pub(super) unit_flags: HashMap<(usize, UnitType), TagEditorVisibility>,
     pub(super) unit_tags: HashMap<(usize, UnitType), TagEditorVisibility>,
     // heroes
-    pub(super) hero_types: Vec<HeroType>,
-    pub(super) heroes: HashMap<HeroType, HeroTypeConfig>,
-    pub(super) hero_units: HashMap<HeroType, HashSet<UnitType>>,
-    pub(super) hero_powers: HashMap<HeroType, Vec<HeroPowerConfig>>,
+    pub(super) heroes: Vec<HeroTypeConfig>,
     pub(super) max_hero_charge: u8,
     pub(super) max_aura_range: i8,
+    pub(super) max_hero_transport_bonus: usize,
     // terrain
     pub(super) terrains: Vec<TerrainTypeConfig>,
     pub(super) default_terrain: TerrainType,
@@ -225,9 +223,7 @@ impl Config {
     pub fn unit_max_transport_capacity(&self, typ: UnitType) -> usize {
         self.unit_config(typ).transport_capacity
         + self.commanders.iter().map(|c| c.transport_capacity as usize).max().unwrap_or(0)
-        + self.heroes.iter()
-        .filter(|(hero, _)| self.hero_units.get(*hero).unwrap().contains(&typ))
-        .map(|(_, c)| c.transport_capacity as usize).max().unwrap_or(0)
+        + self.max_hero_transport_bonus
     }
 
     pub(super) fn unit_config(&self, typ: UnitType) -> &UnitTypeConfig {
@@ -336,12 +332,12 @@ impl Config {
         self.heroes.len()
     }
 
-    pub fn hero_types(&self) -> &[HeroType] {
-        &self.hero_types
+    pub fn hero_types(&self) -> Vec<HeroType> {
+        (0..self.hero_count()).map(|i| HeroType(i)).collect()
     }
 
     pub(super) fn hero_config(&self, typ: HeroType) -> &HeroTypeConfig {
-        self.heroes.get(&typ).expect(&format!("Environment doesn't contain hero type {typ:?}"))
+        &self.heroes[typ.0]
     }
 
     pub fn hero_name(&self, typ: HeroType) -> &str {
@@ -349,18 +345,12 @@ impl Config {
     }
 
     pub fn find_hero_by_name(&self, name: &str) -> Option<HeroType> {
-        for (hero_type, conf) in &self.heroes {
+        for (hero_type, conf) in self.heroes.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(*hero_type)
+                return Some(HeroType(hero_type))
             }
         }
         None
-    }
-
-    pub fn hero_unit_compatible(&self, typ: HeroType, unit: UnitType) -> bool {
-        self.hero_units.get(&typ)
-        .map(|units| units.contains(&unit))
-        .unwrap_or(false)
     }
 
     pub fn hero_price<D: Direction>(
@@ -387,9 +377,6 @@ impl Config {
         transport_index: Option<usize>,
     ) -> Option<i32> {
         let unit_type = unit.typ();
-        if !self.hero_unit_compatible(hero, unit_type) {
-            return None
-        }
         let mut scope = Scope::new();
         scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u)).unwrap_or(().into()));
         scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
@@ -420,18 +407,11 @@ impl Config {
     }
 
     pub fn hero_powers(&self, typ: HeroType) -> &[HeroPowerConfig] {
-        if let Some(powers) = self.hero_powers.get(&typ) {
-            powers
-        } else {
-            &[]
-        }
+        &self.heroes[typ.0].powers
     }
 
     pub fn hero_can_gain_charge(&self, typ: HeroType, power: usize) -> bool {
-        self.hero_powers.get(&typ)
-        .and_then(|powers| powers.get(power))
-        .map(|power| !power.prevents_charging)
-        .unwrap_or(false)
+        !self.hero_powers(typ)[power].prevents_charging
     }
 
     pub fn hero_aura_range<D: Direction>(
@@ -455,14 +435,14 @@ impl Config {
             false,
             |iter, executor| -> Option<i8> {
                 Some(if transporter.is_none() {
-                    let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range;
+                    let aura_range = self.hero_powers(hero.typ())[hero.get_active_power()].aura_range;
                     NumberMod::update_value_repeatedly(
                         aura_range,
                         iter.map(|c| c.aura_range),
                         executor,
                     )
                 } else {
-                    let aura_range = self.hero_powers.get(&hero.typ())?.get(hero.get_active_power())?.aura_range_transported;
+                    let aura_range = self.hero_powers(hero.typ())[hero.get_active_power()].aura_range_transported;
                     NumberMod::update_value_repeatedly(
                         aura_range,
                         iter.map(|c| c.aura_range_transported),

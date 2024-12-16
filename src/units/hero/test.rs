@@ -22,6 +22,16 @@ use crate::units::movement::*;
 use crate::tags::tests::*;
 use crate::units::unit_types::UnitType;
 
+#[allow(non_upper_case_globals)]
+impl HeroType {
+    pub const Crystal: Self = Self(0);
+    pub const CrystalObelisk: Self = Self(1);
+    pub const EarlGrey: Self = Self(2);
+    pub const BlueBerry: Self = Self(3);
+    pub const Tess: Self = Self(4);
+    pub const Edwin: Self = Self(5);
+}
+
 #[test]
 fn buy_hero() {
     let config = Arc::new(Config::test_config());

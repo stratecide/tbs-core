@@ -51,18 +51,8 @@ mod tests {
     use interfaces::game_interface::*;
     use interfaces::Perspective;
     use semver::Version;
-    use crate::config::config::Config;
     use crate::game::game::*;
     use crate::game::fog::*;
-    use crate::map::direction::*;
-    use crate::map::map::Map;
-    use crate::map::point::Point;
-    use crate::map::point::Position;
-    use crate::map::point_map::PointMap;
-    use crate::map::wrapping_map::WMBuilder;
-    use crate::terrain::TerrainType;
-    use crate::tags::tests::TAG_PAWN_DIRECTION;
-    use crate::units::unit_types::UnitType;
     use crate::VERSION;
 
     #[test]

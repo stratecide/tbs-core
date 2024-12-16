@@ -272,10 +272,10 @@ impl Environment {
             .cloned()
     }
 
-    pub fn unit_transport_capacity(&self, typ: UnitType, owner: i8, hero: HeroType) -> usize {
+    pub fn unit_transport_capacity(&self, typ: UnitType, owner: i8, hero: Option<HeroType>) -> usize {
         self.config.unit_config(typ).transport_capacity
         + self.config.commander_config(self.get_commander(owner)).transport_capacity as usize
-        + hero.transport_capacity(self)
+        + hero.map(|hero| hero.transport_capacity(self)).unwrap_or(0)
     }
 
     pub fn unit_transport_visibility<D: Direction>(&self, _game: &impl GameView<D>, _unit: &Unit<D>, _p: Point, _heroes: &[HeroInfluence<D>]) -> UnitVisibility {

@@ -386,7 +386,6 @@ fn enter_transporter() {
     // create game
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
-    let environment = game.environment();
     // test
     let transporter = game.get_unit(Point::new(2, 0)).unwrap();
     assert_eq!(transporter.get_transported().len(), 0);

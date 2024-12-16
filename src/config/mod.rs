@@ -51,6 +51,7 @@ pub enum ConfigParseError {
     MissingColumn(String),
     MissingCommander(String),
     MissingCommanderForPower(CommanderType),
+    MissingHero(String),
     MissingHeroForPower(HeroType),
     NameTooShort,
     NotEnoughValues(String),

@@ -222,8 +222,7 @@ impl UnitFilter {
                 if let Some(hero) = unit.get_hero() {
                     let power = hero.get_active_power() as u8;
                     let hero = hero.typ();
-                    h.len() == 0 && hero != HeroType::None
-                    || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
+                    h.len() == 0 || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
                 } else {
                     false
                 }

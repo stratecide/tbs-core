@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
-use semver::Version;
-
 use crate::config::config::Config;
 use crate::tags::tests::*;
 use crate::terrain::TerrainType;
 use crate::units::unit_types::UnitType;
-use crate::VERSION;
 
 use super::direction::*;
 use super::map::Map;
@@ -15,7 +12,6 @@ use super::point_map::PointMap;
 use super::wrapping_map::{Distortion, WMBuilder};
 
 pub fn chess_board() -> Map<Direction4> {
-    let version = Version::parse(VERSION).unwrap();
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(8, 8, false);
     let map = WMBuilder::<Direction4>::new(map);
