@@ -578,9 +578,6 @@ impl Config {
                 ) as i8
             }
         );
-        /*if result < 0 && self.terrain_can_build(map, pos, terrain, heroes) {
-            result = 0;
-        }*/
         if result < 0 {
             None
         } else {
