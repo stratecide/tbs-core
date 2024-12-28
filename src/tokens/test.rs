@@ -52,8 +52,8 @@ fn collect_coin_tokens() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
-    map.set_unit(Point::new(4, 4), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build()));
+    map.set_unit(Point::new(4, 4), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     let coins = [1, 2].map(|factor| {
         let mut coins = Token::new(map_env.clone(), TokenType::COINS);
         coins.set_tag(TAG_COINS, factor.into());
@@ -92,8 +92,8 @@ fn bubble_token() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
-    map.set_unit(Point::new(4, 4), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build()));
+    map.set_unit(Point::new(4, 4), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     let mut bubble = Token::new(map_env.clone(), TokenType::BUBBLE_FACTORY);
     bubble.set_owner_id(0);
     map.set_tokens(Point::new(1, 0), vec![bubble.clone()]);

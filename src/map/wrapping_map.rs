@@ -899,11 +899,11 @@ mod tests {
         let map_env = map.environment().clone();
         for x in 0..8 {
             for y in 0..5 {
-                map.set_terrain(Point::new(x, y), TerrainType::ChessTile.instance(&map_env).build_with_defaults());
+                map.set_terrain(Point::new(x, y), TerrainType::ChessTile.instance(&map_env).build());
             }
         }
-        map.set_unit(Point::new(3, 2), Some(UnitType::rook().instance(&map_env).set_owner_id(0).build_with_defaults()));
-        map.set_unit(Point::new(4, 0), Some(UnitType::marine().instance(&map_env).set_owner_id(1).build_with_defaults()));
+        map.set_unit(Point::new(3, 2), Some(UnitType::rook().instance(&map_env).set_owner_id(0).build()));
+        map.set_unit(Point::new(4, 0), Some(UnitType::marine().instance(&map_env).set_owner_id(1).build()));
         assert_eq!(
             map.wrapping_logic().get_neighbor(Point::new(3, 0), Direction4::D90),
             Some((Point::new(7, 3), Distortion::new(false, Direction4::D90)))
@@ -921,7 +921,7 @@ mod tests {
         let settings = map.settings().unwrap();
         let (game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
         let environment = game.environment();
-        let rook = UnitType::rook().instance(&environment).set_owner_id(0).build_with_defaults();
+        let rook = UnitType::rook().instance(&environment).set_owner_id(0).build();
         rook.shortest_path_to(&*game, &Path::new(Point::new(3, 2)), None, Point::new(0, 3)).unwrap();
     }
 }

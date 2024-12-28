@@ -613,7 +613,7 @@ impl<D: Direction> Unit<D> {
                         .filter(|hero| self.environment.hero_visibility(game, &self, pos, hero.typ()) >= UnitVisibility::AlwaysVisible) {
                             builder = builder.set_hero(hero.clone());
                         }
-                        return Some(builder.build_with_defaults())
+                        return Some(builder.build())
                     }
                     UnitVisibility::AlwaysVisible => (),
                 }
@@ -639,7 +639,7 @@ impl<D: Direction> Unit<D> {
             let transport = Vec::new();
             builder = builder.set_transported(transport);
         }
-        Some(builder.build_with_defaults())
+        Some(builder.build())
     }
 
     pub fn movable_positions(&self, game: &impl GameView<D>, path_so_far: &Path<D>, transporter: Option<(&Unit<D>, usize)>) -> HashSet<Point> {
@@ -931,14 +931,10 @@ impl<D: Direction> UnitBuilder<D> {
         self
     }
 
-    pub fn build(&self) -> Unit<D> {
-        self.unit.clone()
-    }
-
     /**
      * TODO: call rhai script to get default flags/tag values?
      */
-    pub fn build_with_defaults(&self) -> Unit<D> {
+    pub fn build(&self) -> Unit<D> {
         self.unit.clone()
     }
 }

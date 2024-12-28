@@ -246,7 +246,7 @@ impl<D: Direction> Terrain<D> {
         if self.environment.config.terrain_owner_visibility(self.typ) >= visibility {
             builder = builder.set_owner_id(self.owner.0);
         }
-        builder.build_with_defaults()
+        builder.build()
     }
 
     pub fn distort(&mut self, distortion: Distortion<D>) {
@@ -325,14 +325,10 @@ impl<D: Direction> TerrainBuilder<D> {
         self
     }
 
-    pub fn build(&self) -> Terrain<D> {
-        self.terrain.clone()
-    }
-
     /**
      * TODO: call rhai script to get default flags/tag values?
      */
-    pub fn build_with_defaults(&self) -> Terrain<D> {
+    pub fn build(&self) -> Terrain<D> {
         self.terrain.clone()
     }
 }

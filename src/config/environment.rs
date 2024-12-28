@@ -292,7 +292,7 @@ impl Environment {
 
     pub fn default_terrain<D: Direction>(&self) -> Terrain<D> {
         TerrainBuilder::new(self, self.config.default_terrain)
-        .build_with_defaults()
+        .build()
     }
 
 }

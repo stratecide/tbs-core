@@ -65,10 +65,10 @@ fn zombie() {
     let map = WMBuilder::<Direction6>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build_with_defaults()));
-    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
 
-    map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
 
     let mut skull = Token::new(map_env.clone(), TokenType::SKULL);
     skull.set_owner_id(0);
@@ -81,7 +81,7 @@ fn zombie() {
     skull2.set_tag(TAG_MOVEMENT_TYPE, TagValue::MovementType(MovementType::FOOT));
     map.set_tokens(Point::new(1, 4), vec![skull2]);
 
-    map.set_terrain(Point::new(3, 1), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
+    map.set_terrain(Point::new(3, 1), TerrainType::Factory.instance(&map_env).set_owner_id(0).build());
 
     let settings = map.settings().unwrap();
 
@@ -101,8 +101,8 @@ fn zombie() {
     // small power
     server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build_with_defaults()));
-    assert_eq!(server.get_unit(Point::new(1, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::FOOT).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
+    assert_eq!(server.get_unit(Point::new(1, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::FOOT).build()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
@@ -117,14 +117,14 @@ fn zombie() {
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(2, 1)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(2, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).build_with_defaults()));
+    assert_eq!(server.get_unit(Point::new(2, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).build()));
     // buy unit
     let mut server = unchanged.clone();
     server.with_mut(|server| {
@@ -149,14 +149,14 @@ fn simo() {
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
     let arty_pos = Point::new(0, 1);
-    map.set_unit(arty_pos, Some(UnitType::artillery().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
+    map.set_unit(arty_pos, Some(UnitType::artillery().instance(&map_env).set_owner_id(0).set_hp(50).build()));
 
     let target_close = Point::new(3, 1);
-    map.set_unit(target_close, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(target_close, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     let target_far = Point::new(4, 1);
-    map.set_unit(target_far, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(target_far, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     let target_farthest = Point::new(5, 1);
-    map.set_unit(target_farthest, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(target_farthest, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
 
     let settings = map.settings().unwrap();
 
@@ -263,13 +263,13 @@ fn vlad() {
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
     let arty_pos = Point::new(0, 1);
-    map.set_unit(arty_pos, Some(UnitType::artillery().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
+    map.set_unit(arty_pos, Some(UnitType::artillery().instance(&map_env).set_owner_id(0).set_hp(50).build()));
 
     let target_close = Point::new(3, 1);
-    map.set_unit(target_close, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(50).build_with_defaults()));
-    map.set_terrain(target_close, TerrainType::Flame.instance(&map_env).build_with_defaults());
+    map.set_unit(target_close, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(50).build()));
+    map.set_terrain(target_close, TerrainType::Flame.instance(&map_env).build());
     let target_far = Point::new(5, 4);
-    map.set_unit(target_far, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(50).build_with_defaults()));
+    map.set_unit(target_far, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(50).build()));
 
     let mut settings = map.settings().unwrap();
     for player in &settings.players {
@@ -327,23 +327,23 @@ fn tapio() {
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
     for p in map.all_points() {
-        map.set_terrain(p, TerrainType::Street.instance(&map_env).build_with_defaults());
+        map.set_terrain(p, TerrainType::Street.instance(&map_env).build());
     }
-    map.set_terrain(Point::new(0, 1), TerrainType::Grass.instance(&map_env).build_with_defaults());
-    map.set_terrain(Point::new(0, 2), TerrainType::Forest.instance(&map_env).build_with_defaults());
-    map.set_terrain(Point::new(0, 3), TerrainType::FairyForest.instance(&map_env).set_owner_id(0).build_with_defaults());
+    map.set_terrain(Point::new(0, 1), TerrainType::Grass.instance(&map_env).build());
+    map.set_terrain(Point::new(0, 2), TerrainType::Forest.instance(&map_env).build());
+    map.set_terrain(Point::new(0, 3), TerrainType::FairyForest.instance(&map_env).set_owner_id(0).build());
     for i in 0..4 {
-        map.set_unit(Point::new(0, i), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
-        map.set_unit(Point::new(1, i), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
-        map.set_terrain(Point::new(2, i), TerrainType::Grass.instance(&map_env).build_with_defaults());
+        map.set_unit(Point::new(0, i), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+        map.set_unit(Point::new(1, i), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+        map.set_terrain(Point::new(2, i), TerrainType::Grass.instance(&map_env).build());
     }
 
-    map.set_terrain(Point::new(5, 3), TerrainType::FairyForest.instance(&map_env).set_owner_id(0).build_with_defaults());
-    map.set_terrain(Point::new(5, 4), TerrainType::FairyForest.instance(&map_env).set_owner_id(0).build_with_defaults());
-    map.set_unit(Point::new(5, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_terrain(Point::new(5, 3), TerrainType::FairyForest.instance(&map_env).set_owner_id(0).build());
+    map.set_terrain(Point::new(5, 4), TerrainType::FairyForest.instance(&map_env).set_owner_id(0).build());
+    map.set_unit(Point::new(5, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
 
-    map.set_terrain(Point::new(3, 0), TerrainType::FairyForest.instance(&map_env).set_owner_id(1).build_with_defaults());
-    map.set_unit(Point::new(3, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_terrain(Point::new(3, 0), TerrainType::FairyForest.instance(&map_env).set_owner_id(1).build());
+    map.set_unit(Point::new(3, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
 
     let mut settings = map.settings().unwrap();
     for player in &settings.players {
@@ -423,17 +423,17 @@ fn sludge_monster() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_terrain(Point::new(1, 0), TerrainType::City.instance(&map_env).set_owner_id(0).build_with_defaults());
-    map.set_unit(Point::new(1, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
+    map.set_terrain(Point::new(1, 0), TerrainType::City.instance(&map_env).set_owner_id(0).build());
+    map.set_unit(Point::new(1, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build()));
     let mut sludge = Token::new(map_env.clone(), TokenType::SLUDGE);
     sludge.set_owner_id(1);
     sludge.set_tag(TAG_SLUDGE_COUNTER, 0.into());
     map.set_tokens(Point::new(2, 1), vec![sludge]);
-    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(60).build_with_defaults()));
-    map.set_terrain(Point::new(1, 2), TerrainType::OilPlatform.instance(&map_env).build_with_defaults());
-    map.set_unit(Point::new(1, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build_with_defaults()));
-    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(60).build()));
+    map.set_terrain(Point::new(1, 2), TerrainType::OilPlatform.instance(&map_env).build());
+    map.set_unit(Point::new(1, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
 
     let settings = map.settings().unwrap();
 
@@ -538,20 +538,20 @@ fn celerity() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(1).build()));
 
     map.set_unit(Point::new(4, 0), Some(UnitType::convoy().instance(&map_env).set_owner_id(0).set_hp(100).set_transported(vec![
-        UnitType::marine().instance(&map_env).set_hp(34).build_with_defaults(),
-        UnitType::sniper().instance(&map_env).set_hp(69).build_with_defaults(),
-    ]).set_hp(89).build_with_defaults()));
+        UnitType::marine().instance(&map_env).set_hp(34).build(),
+        UnitType::sniper().instance(&map_env).set_hp(69).build(),
+    ]).set_hp(89).build()));
 
-    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(1, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
-    map.set_unit(Point::new(2, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
-    map.set_unit(Point::new(3, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
-    map.set_unit(Point::new(2, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build_with_defaults()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
+    map.set_unit(Point::new(1, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
+    map.set_unit(Point::new(2, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(3, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(2, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
 
-    map.set_terrain(Point::new(0, 4), TerrainType::Factory.instance(&map_env).set_owner_id(0).build_with_defaults());
+    map.set_terrain(Point::new(0, 4), TerrainType::Factory.instance(&map_env).set_owner_id(0).build());
 
     let settings = map.settings().unwrap();
 
@@ -638,9 +638,9 @@ fn celerity() {
     assert_eq!(attack_damage[3], 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
 
     let convoy: Unit<Direction6> = UnitType::convoy().instance(&environment).set_owner_id(0).set_transported(vec![
-        UnitType::marine().instance(&environment).set_hp(34).build_with_defaults(),
-        UnitType::sniper().instance(&environment).set_hp(69).build_with_defaults(),
-    ]).set_hp(89).build_with_defaults();
+        UnitType::marine().instance(&environment).set_hp(34).build(),
+        UnitType::sniper().instance(&environment).set_hp(69).build(),
+    ]).set_hp(89).build();
 
     let mut zipper = Zipper::new();
     convoy.zip(&mut zipper, false);
@@ -652,9 +652,9 @@ fn celerity() {
     let imported = *Game::import_server(exported, &config, Version::parse(VERSION).unwrap()).unwrap();
     unchanged.with(|unchanged| assert_eq!(imported, *unchanged));
     assert_eq!(server.get_unit(Point::new(4, 0)), Some(UnitType::convoy().instance(&environment).set_owner_id(0).set_transported(vec![
-        UnitType::marine().instance(&environment).set_hp(34).build_with_defaults(),
-        UnitType::sniper().instance(&environment).set_hp(69).build_with_defaults(),
-    ]).set_hp(89).build_with_defaults()));
+        UnitType::marine().instance(&environment).set_hp(34).build(),
+        UnitType::sniper().instance(&environment).set_hp(69).build(),
+    ]).set_hp(89).build()));
 }
 
 #[test]
@@ -664,10 +664,10 @@ fn lageos() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
-    map.set_unit(Point::new(0, 1), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
-    map.set_unit(Point::new(1, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
-    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(1, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build()));
 
     let settings = map.settings().unwrap();
     for player in &settings.players {

@@ -72,9 +72,9 @@ fn capture_city() {
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
-    map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build_with_defaults());
-    map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0). set_hp(55).build_with_defaults()));
-    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build_with_defaults()));
+    map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build());
+    map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).set_hp(55).build()));
+    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
     let settings = map.settings().unwrap().build_default();
     let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -109,9 +109,9 @@ fn build_unit() {
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
-    map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build_with_defaults());
-    map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build_with_defaults());
-    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build_with_defaults()));
+    map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());
+    map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build());
+    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
     let mut settings = map.settings().unwrap();
     settings.players[0].set_income(1000);
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
@@ -134,18 +134,18 @@ fn kraken() {
     let mut map = Map::new2(wmap, &map_env);
     for x in 0..map.width() {
         for y in 0..map.height() {
-            map.set_terrain(Point::new(x, y), TerrainType::TentacleDepths.instance(&map_env).build_with_defaults());
+            map.set_terrain(Point::new(x, y), TerrainType::TentacleDepths.instance(&map_env).build());
         }
     }
-    map.set_terrain(Point::new(2, 2), TerrainType::Kraken.instance(&map_env).set_tag(TAG_ANGER, 7.into()).build_with_defaults());
-    map.set_terrain(Point::new(0, 0), TerrainType::Kraken.instance(&map_env).build_with_defaults());
-    map.set_unit(Point::new(2, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build_with_defaults()));
-    map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
-    map.set_unit(Point::new(3, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build_with_defaults()));
+    map.set_terrain(Point::new(2, 2), TerrainType::Kraken.instance(&map_env).set_tag(TAG_ANGER, 7.into()).build());
+    map.set_terrain(Point::new(0, 0), TerrainType::Kraken.instance(&map_env).build());
+    map.set_unit(Point::new(2, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(3, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
     let environment = game.environment();
-    assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::tentacle().instance(&environment).set_hp(100).build_with_defaults()));
+    assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::tentacle().instance(&environment).set_hp(100).build()));
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(7.into()));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -171,10 +171,10 @@ fn terrain_vision() {
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
-    map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build_with_defaults());
-    map.set_terrain(Point::new(3, 0), TerrainType::City.instance(&environment).set_owner_id(0).build_with_defaults());
-    map.set_terrain(Point::new(0, 3), TerrainType::Airport.instance(&environment).set_owner_id(1).build_with_defaults());
-    map.set_terrain(Point::new(3, 3), TerrainType::City.instance(&environment).set_owner_id(-1).build_with_defaults());
+    map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());
+    map.set_terrain(Point::new(3, 0), TerrainType::City.instance(&environment).set_owner_id(0).build());
+    map.set_terrain(Point::new(0, 3), TerrainType::Airport.instance(&environment).set_owner_id(1).build());
+    map.set_terrain(Point::new(3, 3), TerrainType::City.instance(&environment).set_owner_id(-1).build());
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
     let mut settings = settings.build_default();
