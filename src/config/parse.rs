@@ -278,6 +278,12 @@ impl Config {
             data_type: None,
             visibility: EffectVisibility::CurrentTeam,
         });
+        result.effect_types.push(EffectConfig {
+            name: "UNIT_PATH".to_string(),
+            is_global: false,
+            data_type: Some(super::effect_config::EffectDataType::Unit),
+            visibility: EffectVisibility::Data,
+        });
         file_loader.table_with_headers(EFFECT_CONFIG, |line: EffectConfig| {
             if result.effect_types.iter().any(|conf| conf.name == line.name) {
                 return Err(ConfigParseError::DuplicateEntry(format!("EffectType::{}", line.name)).into())

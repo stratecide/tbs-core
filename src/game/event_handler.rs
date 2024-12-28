@@ -26,8 +26,8 @@ use crate::game::fog::*;
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
-use super::event_fx::Effect;
-use super::events::{Event, UnitStep};
+use super::event_fx::*;
+use super::events::Event;
 use super::game_view::GameView;
 
 struct EventHandlerInner<D: Direction> {
@@ -625,9 +625,9 @@ impl<D: Direction> EventHandler<D> {
             }
             let (next, distortion) = step.progress(&*self.get_game(), current).unwrap();
             if !involuntarily && transformed_unit.transformed_by_movement(&*self.get_game(), current, next, distortion) {
-                steps.push(UnitStep::Transform(current, *step, Some(transformed_unit.clone())));
+                steps.push(EffectStep::Replace(current, *step, Some(EffectData::Unit(transformed_unit.clone()))));
             } else {
-                steps.push(UnitStep::Simple(current, *step));
+                steps.push(EffectStep::Simple(current, *step));
             }
             current = next;
         }
@@ -643,7 +643,7 @@ impl<D: Direction> EventHandler<D> {
                 }
             }
         }
-        self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
+        self.add_event(Event::Effect(Effect::new_unit_path(unit.clone(), steps)));
         (transformed_unit, vision_changes)
     }
 

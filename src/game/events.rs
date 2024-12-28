@@ -12,7 +12,6 @@ use crate::tags::*;
 use crate::units::commands::UnloadIndex;
 use crate::units::hero::{Hero, HeroChargeChange};
 use crate::units::unit::Unit;
-use crate::units::movement::{PathStep, MAX_PATH_LENGTH};
 use crate::units::UnitVisibility;
 use crate::{player::*, tokens};
 use crate::terrain::terrain::*;
@@ -110,7 +109,6 @@ pub enum Event<D:Direction> {
     // visual
     Effect(Effect<D>),
     Effects(LVec<Effect<D>, {point_map::MAX_AREA}>),
-    UnitPath(Option<Unit<D>>, LVec<UnitStep<D>, {MAX_PATH_LENGTH}>),
 }
 
 impl<D: Direction> Event<D> {
@@ -289,8 +287,7 @@ impl<D: Direction> Event<D> {
             }
             // visual
             Self::Effect(_) |
-            Self::Effects(_) |
-            Self::UnitPath(_, _) => {}
+            Self::Effects(_) => {}
         }
     }
     pub fn undo(&self, game: &mut Game<D>) {
@@ -448,8 +445,7 @@ impl<D: Direction> Event<D> {
             }
             // visual
             Self::Effect(_) |
-            Self::Effects(_) |
-            Self::UnitPath(_, _) => {}
+            Self::Effects(_) => {}
         }
     }
     pub fn fog_replacement(&self, game: &Handle<Game<D>>, team: ClientPerspective) -> Option<Event<D>> {
@@ -755,72 +751,10 @@ impl<D: Direction> Event<D> {
                     }
                 }
             }
-            Self::UnitPath(unit, steps) => {
-                let mut unit = unit.clone().expect("UnitPath needs to have a unit before fog_replacement");
-                if unit.get_team() == team {
-                    return Some(self.clone());
-                }
-                let mut result = Vec::new();
-                for step in steps {
-                    if let Some(step) = step.replace_unit_path(game, team, &mut unit) {
-                        result.push(step);
-                    }
-                }
-                if result.len() == 0 {
-                    None
-                } else {
-                    let start = result[0].get_start();
-                    let unit = unit.fog_replacement(game, start, game.get_fog_at(team, start));
-                    Some(Self::UnitPath(unit, result.try_into().unwrap()))
-                }
-            }
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Zippable)]
-#[zippable(bits = 1, support_ref = Environment)]
-pub enum UnitStep<D: Direction> {
-    Simple(Point, PathStep<D>),
-    Transform(Point, PathStep<D>, Option<Unit<D>>),
-}
-
-impl<D: Direction> UnitStep<D> {
-    pub fn get_start(&self) -> Point {
-        match self {
-            Self::Simple(p, _) => *p,
-            Self::Transform(p, _, _) => *p,
-        }
-    }
-
-    pub fn get_step(&self) -> PathStep<D> {
-        match self {
-            Self::Simple(_, step) => *step,
-            Self::Transform(_, step, _) => *step,
-        }
-    }
-
-    fn replace_unit_path(&self, game: &impl GameView<D>, team: ClientPerspective, unit: &mut Unit<D>) -> Option<Self> {
-        let (p, step, unit2) = match self {
-            Self::Simple(p, step) => (*p, *step, Some(unit.clone())),
-            Self::Transform(p, step, unit2) => (*p, *step, unit2.clone()),
-        };
-        let p2 = step.progress(game, p).unwrap().0;
-        let unit1 = unit.fog_replacement(game, p, game.get_fog_at(team, p));
-        let unit2 = unit2.and_then(|unit| unit.fog_replacement(game, p2, game.get_fog_at(team, p2)));
-        if let Some(unit2) = unit2.clone() {
-            *unit = unit2;
-        }
-        if unit1 == None && unit2 == None {
-            None
-        } else if unit1 == unit2 {
-            Some(Self::Simple(p, step))
-        } else {
-            Some(Self::Transform(p, step, unit2))
-        }
-    }
-
-}
 
 fn apply_vision_changes<D: Direction>(game: &mut Game<D>, team: ClientPerspective, pos: Point, intensity: FogIntensity, change: &FieldData<D>) {
     game.set_fog(team, pos, intensity);

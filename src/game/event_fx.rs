@@ -28,6 +28,7 @@ pub struct EffectType(pub usize);
 impl EffectType {
     const GLITCH: Self = Self(0);
     const FOG_SURPRISE: Self = Self(1);
+    const UNIT_PATH: Self = Self(2);
 }
 
 impl FromConfig for EffectType {
@@ -282,6 +283,14 @@ impl<D: Direction> Effect<D> {
         }, p)
     }
 
+    pub fn new_unit_path(unit: Unit<D>, steps: Vec<EffectStep<D>>) -> Self {
+        Self::Path(EffectPath {
+            typ: EffectType::UNIT_PATH,
+            initial_data: Some(EffectData::Unit(unit)),
+            steps: steps.try_into().unwrap(),
+        })
+    }
+
     pub fn fog_replacement(&self, game: &Handle<Game<D>>, team: ClientPerspective) -> Option<Self> {
         let typ = match self {
             Self::Global(eff) => eff.typ,
@@ -313,15 +322,22 @@ impl<D: Direction> Effect<D> {
                 let start = steps.first()?.get_start();
                 let end = steps.last()?;
                 let end = end.get_step().progress(game, end.get_start()).ok()?.0;
-                let eff = EffectWithoutPosition {
-                    typ: *typ,
-                    data: initial_data.clone()?,
-                };
-                let mut transformed = Vec::with_capacity(steps.len() + 1);
+                let mut points = Vec::with_capacity(steps.len() + 1);
                 for step in steps {
-                    transformed.push(visibility.fog_replacement(&eff, Some(start), Some(step.get_start()), game, team))
+                    points.push(step.get_start());
                 }
-                transformed.push(visibility.fog_replacement(&eff, Some(start), Some(end), game, team));
+                points.push(end);
+                let mut data = initial_data.clone();
+                let mut transformed = Vec::with_capacity(steps.len() + 1);
+                for (i, p) in points.into_iter().enumerate() {
+                    transformed.push(data.clone().map(|data| visibility.fog_replacement(&EffectWithoutPosition {
+                        typ: *typ,
+                        data: data,
+                    }, Some(start), Some(p), game, team)).flatten());
+                    if let Some(EffectStep::Replace(_, _, d)) = steps.get(i) {
+                        data = d.clone();
+                    }
+                }
                 let steps: Vec<EffectStep<D>> = steps.iter().enumerate()
                 .filter(|(i, _)| transformed[*i].is_some() || transformed[*i + 1].is_some())
                 .map(|(i, step)| {
