@@ -548,8 +548,9 @@ impl<D: Direction> EventHandler<D> {
         } else {
             self.add_event(Event::UnitRemove(path.start, unit.clone()));
         }
+        let unit_team = unit.get_team();
         let (unit_id, disto) = self.observe_unit(path.start, unload_index);
-        let transformed_unit = self.animate_unit_path(&unit, path, involuntarily);
+        let (transformed_unit, vision_changes) = self.animate_unit_path(&unit, path, involuntarily);
         let (path_end, distortion) = path.end(&*self.get_game()).unwrap();
         if board_at_the_end {
             self.move_observed_unit(unit_id, path_end, Some(self.with_map(|map| map.get_unit(path_end).unwrap().get_transported().len())), disto + distortion);
@@ -562,8 +563,14 @@ impl<D: Direction> EventHandler<D> {
             self.move_observed_unit(unit_id, path_end, None, disto + distortion);
             self.add_event(Event::UnitAdd(path_end, transformed_unit));
         }
-        // update fog in case unit influences other units' vision range
-        self.recalculate_fog();
+        if self.get_game().is_foggy() {
+            // provide vision along the unit's path
+            if unit_team == self.get_game().current_team() {
+                self.change_fog(unit_team, vision_changes);
+            }
+            // update fog in case unit influences other units' vision range
+            self.recalculate_fog();
+        }
         // remove tokens that were destroyed by the unit moving over them
         let mut token_scripts = Vec::new();
         for p in self.with(|eh| path.points(&eh.game)).unwrap() {
@@ -594,7 +601,7 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    pub fn animate_unit_path(&mut self, unit: &Unit<D>, path: &Path<D>, involuntarily: bool) -> Unit<D> {
+    fn animate_unit_path(&mut self, unit: &Unit<D>, path: &Path<D>, involuntarily: bool) -> (Unit<D>, HashMap<Point, FogIntensity>) {
         let unit_team = unit.get_team();
         let owner_id = unit.get_owner_id();
         let heroes = Hero::map_influence(&*self.get_game(), owner_id);
@@ -637,14 +644,7 @@ impl<D: Direction> EventHandler<D> {
             }
         }
         self.add_event(Event::UnitPath(Some(unit.clone()), steps.try_into().unwrap()));
-        if self.get_game().is_foggy() {
-            if unit_team != self.get_game().current_team() {
-                self.recalculate_fog_for(unit_team);
-            } else {
-                self.change_fog(unit_team, vision_changes);
-            }
-        }
-        transformed_unit
+        (transformed_unit, vision_changes)
     }
 
     pub fn on_unit_normal_action(&mut self, id: usize, path: Path<D>, interrupted: bool, heroes: &[HeroInfluence<D>], ballast: &[TBallast<D>]) {
