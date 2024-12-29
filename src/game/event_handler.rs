@@ -557,8 +557,8 @@ impl<D: Direction> EventHandler<D> {
             self.add_event(Event::UnitAddBoarded(path_end, transformed_unit));
         } else {
             if self.with_map(|map| map.get_unit(path_end).is_some()) {
-                // TODO: this shouldn't happen at all
-                panic!("Path would overwrite unit at {path_end:?}");
+                // chess unit takes
+                self.unit_death(path_end);
             }
             self.move_observed_unit(unit_id, path_end, None, disto + distortion);
             self.add_event(Event::UnitAdd(path_end, transformed_unit));
@@ -607,7 +607,7 @@ impl<D: Direction> EventHandler<D> {
         let heroes = Hero::map_influence(&*self.get_game(), owner_id);
         let mut current = path.start;
         let mut transformed_unit = unit.clone();
-        transformed_unit.set_en_passant(None);
+        //transformed_unit.set_en_passant(None);
         let mut steps = Vec::new();
         let mut vision_changes = HashMap::default();
         for (i, step) in path.steps.iter().enumerate() {

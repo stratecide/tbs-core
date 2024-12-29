@@ -1,6 +1,8 @@
 Power;Affects;Attack;Defense;MinRange;MaxRange;Visibility;MovementPoints;Vision;TrueVision;PassEnemyUnits;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;CanBuildUnits;Value;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity;AuraRange;OnAttack;OnKill;OnDeath;OnDefend;OnNormalAction
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/death > show_explosion;;on_unit/after_normal_action > exhaust
 ;U(Pawn),T(ChessPawnTile);;;;;;+1;;;;;;;;;;;;;;;;;;;;;;;
+;U(Pawn);;;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/after_normal_action > setup_en_passant
+;U(King), OtherUnit(Rook);;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/defend > remove_unmoved;
 ;Movement(Foot, Bike, Wheel, Treads),T(Hill);;;;;;;+1;;;;;;;;;;;;;;;;;;;;;;
 ;Movement(Foot),T(Mountain);;;;;;;+2;;;;;;;;;;;;;;;;;;;;;;
 ;Movement(Foot, Bike, Wheel, Treads),T(Forest, FairyForest);;;;;Stealth;;;;;;;;;;;;;;;;;;;;;;;;
@@ -68,4 +70,3 @@ Co(Celerity, 2);MovementPattern(Standard), AttackType(Adjacent), Not(U(Marine, S
 ;;Rhai(unit_powered > multiply_hp);Rhai(unit_powered > terrain_defense);;;;;;;;;;;;;;;;;Rhai(unit_powered > multiply_hp);;;;;;;;;;
 ;U(BattleShip, Sniper, Blimp), Moved, Not(Counter);*7/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Flag(Capturing, Repairing);;*6/10;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;U(King), OtherUnit(Rook);;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/defend > remove_unmoved;

@@ -478,6 +478,7 @@ pub mod tests {
     pub const TAG_DRONE_STATION_ID: usize = 1;
     pub const TAG_DRONE_ID: usize = 2;
     pub const TAG_LEVEL: usize = 3;
+    pub const TAG_EN_PASSANT: usize = 4;
     pub const TAG_HERO_ORIGIN: usize = 5;
     pub const TAG_PAWN_DIRECTION: usize = 6;
     pub const TAG_ANGER: usize = 8;
@@ -493,6 +494,7 @@ pub mod tests {
         let config = Arc::new(Config::test_config());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
         assert_eq!(environment.config.flag_name(FLAG_ZOMBIFIED), "Zombified");
+        assert_eq!(environment.config.flag_name(FLAG_UNMOVED), "Unmoved");
         assert_eq!(environment.config.flag_name(FLAG_EXHAUSTED), "Exhausted");
         assert_eq!(environment.config.flag_name(FLAG_REPAIRING), "Repairing");
         assert_eq!(environment.config.flag_name(FLAG_CAPTURING), "Capturing");
@@ -500,6 +502,8 @@ pub mod tests {
         assert_eq!(environment.config.tag_name(TAG_HP), "Hp");
         assert_eq!(environment.config.tag_name(TAG_DRONE_STATION_ID), "DroneStationId");
         assert_eq!(environment.config.tag_name(TAG_DRONE_ID), "DroneId");
+        assert_eq!(environment.config.tag_name(TAG_LEVEL), "Level");
+        assert_eq!(environment.config.tag_name(TAG_EN_PASSANT), "EnPassant");
         assert_eq!(environment.config.tag_name(TAG_HERO_ORIGIN), "HeroOrigin");
         assert_eq!(environment.config.tag_name(TAG_PAWN_DIRECTION), "PawnDirection");
         assert_eq!(environment.config.tag_name(TAG_ANGER), "Anger");

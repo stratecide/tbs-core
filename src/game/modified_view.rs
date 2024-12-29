@@ -268,8 +268,11 @@ impl<D: Direction> ModifiedView<D> for UnitMovementView<D> {
     }
 
     fn get_unit(&self, p: Point) -> Option<Unit<D>> {
-        self.units.get(&p).map(|u| u.clone())
-        .unwrap_or(self.get_inner_view().get_unit(p))
+        if let Some(entry) = self.units.get(&p) {
+            entry.clone()
+        } else {
+            self.get_inner_view().get_unit(p)
+        }
     }
 
     fn get_owning_player(&self, owner: i8) -> Option<Player> {

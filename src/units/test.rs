@@ -468,3 +468,118 @@ fn chess_castling() {
     assert!(!server.get_unit(Point::new(2, 0)).unwrap().has_flag(FLAG_UNMOVED));
     assert!(!server.get_unit(Point::new(0, 4)).unwrap().has_flag(FLAG_UNMOVED));
 }
+
+#[test]
+fn chess_en_passant() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(5, 5, false);
+    let map = WMBuilder::<Direction4>::new(map);
+    let mut map = Map::new(map.build(), &config);
+    let map_env = map.environment().clone();
+
+    for p in map.all_points() {
+        map.set_terrain(p, TerrainType::ChessPawnTile.instance(&map_env).build());
+    }
+    map.set_unit(Point::new(0, 0), Some(UnitType::pawn().instance(&map_env).set_owner_id(0).set_tag(TAG_PAWN_DIRECTION, TagValue::Direction(Direction4::D270)).set_hp(100).build()));
+    map.set_unit(Point::new(1, 2), Some(UnitType::pawn().instance(&map_env).set_owner_id(1).set_tag(TAG_PAWN_DIRECTION, TagValue::Direction(Direction4::D90)).set_hp(100).build()));
+    map.set_unit(Point::new(4, 3), Some(UnitType::rook().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(4, 4), Some(UnitType::rook().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+
+    let mut settings = map.settings().unwrap();
+    settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let unchanged = server.clone();
+    // take pawn normally
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(0, 0), vec![PathStep::Dir(Direction4::D270)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    assert!(server.get_unit(Point::new(0, 1)).unwrap().get_tag(TAG_EN_PASSANT).is_none());
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(1, 2), vec![PathStep::Diagonal(Direction4::D90)]),
+        action: UnitAction::Take,
+    }), Arc::new(|| 0.)).unwrap();
+    // unable to take pawn that wasn't moved (out of range)
+    let mut server = unchanged.clone();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(4, 3), vec![PathStep::Dir(Direction4::D180)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(1, 2), vec![PathStep::Diagonal(Direction4::D90)]),
+        action: UnitAction::Take,
+    }), Arc::new(|| 0.)).unwrap_err();
+    // en passant
+    let mut server = unchanged.clone();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(0, 0), vec![PathStep::Dir(Direction4::D270), PathStep::Dir(Direction4::D270)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_unit(Point::new(0, 2)).unwrap().get_tag(TAG_EN_PASSANT), Some(TagValue::Point(Point::new(0, 1))));
+    assert_eq!(server.get_unit(Point::new(0, 2)).unwrap().get_en_passant(), Some(Point::new(0, 1)));
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(1, 2), vec![PathStep::Diagonal(Direction4::D90)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    // pawn moved twice, no en passant possible
+    let mut server = unchanged.clone();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(0, 0), vec![PathStep::Dir(Direction4::D270)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(4, 4), vec![PathStep::Dir(Direction4::D180)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(0, 1), vec![PathStep::Dir(Direction4::D270)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(1, 2), vec![PathStep::Diagonal(Direction4::D90)]),
+        action: UnitAction::Take,
+    }), Arc::new(|| 0.)).unwrap_err();
+    // en passant not possible when tried one turn later
+    let mut server = unchanged.clone();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(0, 0), vec![PathStep::Dir(Direction4::D270), PathStep::Dir(Direction4::D270)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(4, 4), vec![PathStep::Dir(Direction4::D180)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_unit(Point::new(0, 2)).unwrap().get_tag(TAG_EN_PASSANT), Some(TagValue::Point(Point::new(0, 1))));
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    assert!(server.get_unit(Point::new(0, 2)).unwrap().get_tag(TAG_EN_PASSANT).is_none());
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(4, 3), vec![PathStep::Dir(Direction4::D180)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(1, 2), vec![PathStep::Diagonal(Direction4::D90)]),
+        action: UnitAction::Take,
+    }), Arc::new(|| 0.)).unwrap_err();
+}

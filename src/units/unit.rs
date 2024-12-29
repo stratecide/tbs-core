@@ -436,19 +436,10 @@ impl<D: Direction> Unit<D> {
     // TODO: hardcoded for movement
     // replace when movement can be customized
     pub fn get_en_passant(&self) -> Option<Point> {
-        match self.environment.config.tag_by_name("EnPassant")
-        .and_then(|key| self.tags.get_tag(key)) {
+        let key = self.environment.config.tag_by_name("EnPassant")?;
+        match self.tags.get_tag(key) {
             Some(TagValue::Point(p)) => Some(p),
             _ => None
-        }
-    }
-    pub fn set_en_passant(&mut self, en_passant: Option<Point>) {
-        if let Some(key) = self.environment.config.tag_by_name("EnPassant") {
-            if let Some(p) = en_passant {
-                self.tags.set_tag(&self.environment, key, TagValue::Point(p));
-            } else {
-                self.tags.remove_tag(key);
-            }
         }
     }
 
