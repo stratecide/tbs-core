@@ -28,8 +28,8 @@ fn repair_unit(EVENT_HANDLER, unit, position, amount) {
     if amount > 0 {
         let cost = full_price * amount / 100;
         EVENT_HANDLER.spend_money(unit.owner_id, cost);
-        EVENT_HANDLER.set_unit_tag(position, TAG_Hp, unit.get(TAG_Hp) + amount);
         EVENT_HANDLER.set_unit_flag(position, FLAG_Repairing);
+        EVENT_HANDLER.effect(change_unit_hp(position, amount));
     }
     EVENT_HANDLER.set_unit_flag(position, FLAG_Exhausted);
 }

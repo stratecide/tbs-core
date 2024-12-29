@@ -25,13 +25,15 @@ fn co_fairy_fury() {
     for point in BOARD.all_positions() {
         let terrain = BOARD.get_terrain(point);
         if terrain.type == "FairyForest" && terrain.owner_id == OWNER_ID {
+            let effects = [];
             for point in BOARD.positions_in_range(point, 2) {
                 let unit = BOARD.get_unit(point);
                 if unit?.owner_id >= 0 && unit.team != TEAM && !damages.contains(point) {
                     damages.push(point);
-                    EVENT_HANDLER.set_unit_tag(point, TAG_Hp, unit.get(TAG_Hp) - 10);
+                    effects.push(change_unit_hp(point, -20));
                 }
             }
+            EVENT_HANDLER.effects(effects);
             EVENT_HANDLER.replace_terrain(point, Terrain("Grass"));
         }
     }

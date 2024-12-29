@@ -121,3 +121,9 @@ fn exhaust_all_on_chess_board(start_position, owner_id) {
         }
     }
 }
+
+fn change_unit_hp(position, change) {
+    let unit = BOARD.get_unit(position);
+    EVENT_HANDLER.set_unit_tag(position, TAG_Hp, unit.get(TAG_Hp) + change);
+    FX_HpChange(change).at(position)
+}

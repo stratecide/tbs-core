@@ -24,8 +24,7 @@ fn kraken() {
         for point in BOARD.positions_in_range(p, KRAKEN_ATTACK_RANGE) {
             let unit = BOARD.get_unit(point);
             if unit?.owner_id >= 0 && unit.has(TAG_Hp) {
-                EVENT_HANDLER.set_unit_tag(point, TAG_Hp, unit.get(TAG_Hp) - KRAKEN_DAMAGE);
-                effects.push(FX_HpChange(-KRAKEN_DAMAGE).at(point));
+                effects.push(change_unit_hp(point, -KRAKEN_DAMAGE));
             }
         }
         // animate HP losses
