@@ -111,6 +111,7 @@ pub enum EffectDataType {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EffectVisibility {
     Rhai(usize),
+    Full,
     CurrentTeam,
     Data,
     Unit,
@@ -128,6 +129,7 @@ impl FromConfig for EffectVisibility {
                 remainder = r;
                 Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
             }
+            "Full" => Self::Full,
             "CurrentTeam" => Self::CurrentTeam,
             "Data" => Self::Data,
             "Unit" => Self::Unit,
@@ -174,6 +176,7 @@ impl EffectVisibility {
                     }
                 }
             }
+            Self::Full => Some(effect.clone()),
             Self::CurrentTeam => {
                 if game.current_team() == team {
                     Some(effect.clone())

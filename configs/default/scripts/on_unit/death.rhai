@@ -14,13 +14,22 @@ fn kraken() {
             EVENT_HANDLER.set_terrain_tag(p, TAG_Anger, anger);
             continue;
         }
-        // TODO: show effect
+        // show kraken raging
+        let effects = [];
+        for point in BOARD.positions_in_range(p, KRAKEN_ATTACK_RANGE) {
+            effects.push(FX_KrakenRage().at(point));
+        }
+        EVENT_HANDLER.effects(effects);
+        let effects = [];
         for point in BOARD.positions_in_range(p, KRAKEN_ATTACK_RANGE) {
             let unit = BOARD.get_unit(point);
             if unit?.owner_id >= 0 && unit.has(TAG_Hp) {
                 EVENT_HANDLER.set_unit_tag(point, TAG_Hp, unit.get(TAG_Hp) - KRAKEN_DAMAGE);
+                effects.push(FX_HpChange(-KRAKEN_DAMAGE).at(point));
             }
         }
+        // animate HP losses
+        EVENT_HANDLER.effects(effects);
         EVENT_HANDLER.remove_terrain_tag(p, TAG_Anger);
     }
 }

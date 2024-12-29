@@ -348,6 +348,10 @@ impl UniqueId {
         }))
     }
 
+    pub fn get_id(&self) -> usize {
+        self.id
+    }
+
     fn export(&self, zipper: &mut Zipper) {
         let bits = bits_needed_for_max_value(Self::MAX_VALUE as u32);
         zipper.write_u32(self.id as u32, bits);
