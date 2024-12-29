@@ -617,7 +617,7 @@ fn attack_targets<D: Direction>(
         })
     }).collect();
     let hero_charge;
-    let attacked_units;
+    let mut attacked_units;
     let killed_units;
     let hero_map = Hero::map_influence(&*handler.get_game(), -1);
     match attacker.displacement() {
@@ -635,7 +635,7 @@ fn attack_targets<D: Direction>(
         Displacement::InsteadOfAttack => {
             defenders = displace(handler, attacker, attacker_pos, path, defenders, attacker_heroes, counter.is_counter());
             let mut collided = Vec::new();
-            for (p, d, ratio) in defenders {
+            for (p, d, ratio) in defenders.iter().cloned() {
                 if let Some(d) = d {
                     collided.push((p, None, ratio));
                     if let Some((p, _)) = handler.get_game().get_neighbor(p, d) {
@@ -647,6 +647,12 @@ fn attack_targets<D: Direction>(
             }
             // units that couldn't be fully displaced take damage
             (_, hero_charge, attacked_units, killed_units) = deal_damage(handler, attacker, attacker_pos, path, collided, counter.clone(), attacker_heroes);
+            // TODO: causes attacked_units to be in different order than defenders
+            for (p, _, _) in defenders {
+                if attacked_units.iter().all(|au| au.1 != p) {
+                    attacked_units.push((handler.observe_unit(p, None).0, p, handler.get_game().get_unit(p).unwrap(), 0, 0));
+                }
+            }
         }
     }
     let mut defenders = Vec::new();
@@ -1159,17 +1165,12 @@ crate::listable_enum! {
     }
 }
 
-crate::listable_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub enum AttackTargeting {
-        Enemy,
-        Friendly,
-        Owned,
-        All,
-        // special case for King-Castling
-        // same owner + both unmoved
-        //OwnedBothUnmoved,
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttackTargeting {
+    Enemy,
+    Friendly,
+    All,
+    Rhai(usize),
 }
 
 #[cfg(test)]

@@ -27,3 +27,8 @@ fn puffer_fish() {
         EVENT_HANDLER.sneak_attack(AttackVector(position), position, UNIT, damage_factor, UNIT_ID);
     }
 }
+
+fn remove_unmoved() {
+    let position = EVENT_HANDLER.get_unit_position(UNIT_ID);
+    EVENT_HANDLER.remove_unit_flag(position, FLAG_Unmoved);
+}

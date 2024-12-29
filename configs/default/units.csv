@@ -1,4 +1,4 @@
-Id;Visibility;MovementPattern;MovementType;MovementPoints;VisionMode;Vision;TrueVision;Owned;Stealthy;CanBeMovedThrough;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;Value;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity
+Id;Visibility;MovementPattern;MovementType;MovementPoints;VisionMode;Vision;TrueVision;Owned;PassEnemyUnits;CanBeMovedThrough;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;AttackTargets;SplashDamage;Value;Displacement;DisplacementDistance;CanBeDisplaced;TransportCapacity
 Marine;Normal;Standard;Marine;3;Normal;2;1;Always;;true;true;MachineGun;true;Adjacent;;;150;BetweenAttacks;;true;
 Sniper;Normal;Standard;Bike;9/2;Normal;3;1;Always;;true;true;Rifle;true;Ranged(1,1);;;250;BetweenAttacks;;true;
 Bazooka;Normal;Standard;Foot;5/2;Normal;2;1;Always;;true;true;Shells;true;Adjacent;;;350;BetweenAttacks;;true;
@@ -37,7 +37,7 @@ LifeCrystal;AlwaysVisible;None;None;;Normal;;;Always;;;;;;;;;0;;;;
 Tentacle;AlwaysVisible;None;None;;;;;Never;;;true;;;;;;0;;;;
 PufferFish;AlwaysVisible;None;Ship;;;;;Never;;;;Bonk;;Ranged(0,0);;0, 1;0;;;true;
 Pawn;Normal;Pawn;Chess2;1;Movement;;;Always;;;true;;;;;;300;;;true;
-Rook;Normal;Straight;Chess;8;Movement;;;Always;;;true;;true;Adjacent;;;800;InsteadOfAttack;-2;true;
+Rook;Normal;Straight;Chess;8;Movement;;;Always;;;true;;true;Adjacent;ruleset > attack_target_rook;;800;InsteadOfAttack;-2;true;
 Bishop;Normal;Diagonal;Chess;8;Movement;;;Always;;;true;;;;;;800;;;true;
 Knight;Normal;Knight;Chess2;1;Movement;;;Always;;;true;;;;;;800;;;true;
 Queen;Normal;Rays;Chess;8;Movement;;;Always;;;true;;;;;;1600;;;true;

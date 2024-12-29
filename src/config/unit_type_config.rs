@@ -123,3 +123,17 @@ crate::enum_with_custom! {
         TransportCapacity,
     }
 }
+
+impl FromConfig for AttackTargeting {
+    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+        Ok((match s.trim() {
+            "" => Self::Enemy,
+            "Enemy" => Self::Enemy,
+            "Friendly" => Self::Friendly,
+            "All" => Self::All,
+            name => {
+                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+            }
+        }, ""))
+    }
+}

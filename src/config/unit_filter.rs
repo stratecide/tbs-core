@@ -42,6 +42,7 @@ pub(crate) enum UnitFilter {
     AttackType(HashSet<AttackTypeKey>),
     Unowned,
     // situation/environment
+    OtherUnit(HashSet<UnitType>),
     OwnerTurn,
     Carried,
     Counter,
@@ -138,6 +139,11 @@ impl FromConfig for UnitFilter {
                     remainder = r;
                     Self::Commander(commander, None)
                 }
+            }
+            "OtherUnit" => {
+                let (list, r) = parse_inner_vec::<UnitType>(remainder, true, loader)?;
+                remainder = r;
+                Self::OtherUnit(list.into_iter().collect())
             }
             "OwnerTurn" => Self::OwnerTurn,
             "Carried" => Self::Carried,
@@ -247,6 +253,7 @@ impl UnitFilter {
                 commander.typ() == *commander_type
                 && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
+            Self::OtherUnit(u) => other_unit.map(|(unit, _)| u.contains(&unit.typ())).unwrap_or(false),
             Self::OwnerTurn => unit.get_owner_id() == game.current_owner(),
             Self::Carried => transporter.is_some(),
             Self::Counter => is_counter,

@@ -68,3 +68,4 @@ Co(Celerity, 2);MovementPattern(Standard), AttackType(Adjacent), Not(U(Marine, S
 ;;Rhai(unit_powered > multiply_hp);Rhai(unit_powered > terrain_defense);;;;;;;;;;;;;;;;;Rhai(unit_powered > multiply_hp);;;;;;;;;;
 ;U(BattleShip, Sniper, Blimp), Moved, Not(Counter);*7/10;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Flag(Capturing, Repairing);;*6/10;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;U(King), OtherUnit(Rook);;;;;;;;;;;;;;;;;;;;;;;;;;;;on_unit/defend > remove_unmoved;

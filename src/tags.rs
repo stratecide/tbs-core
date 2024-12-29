@@ -468,6 +468,7 @@ pub mod tests {
     use super::UniqueId;
 
     pub const FLAG_ZOMBIFIED: usize = 0;
+    pub const FLAG_UNMOVED: usize = 1;
     pub const FLAG_EXHAUSTED: usize = 2;
     pub const FLAG_REPAIRING: usize = 3;
     pub const FLAG_CAPTURING: usize = 4;

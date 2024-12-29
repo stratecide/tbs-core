@@ -741,7 +741,23 @@ impl<D: Direction> Unit<D> {
             AttackTargeting::All => true,
             AttackTargeting::Enemy => self.get_team() != defender.get_team(),
             AttackTargeting::Friendly => self.get_team() == defender.get_team(),
-            AttackTargeting::Owned => self.get_owner_id() == defender.get_owner_id(),
+            AttackTargeting::Rhai(function_index) => {
+                let mut scope = Scope::new();
+                scope.push_constant(CONST_NAME_UNIT, self.clone());
+                scope.push_constant(CONST_NAME_POSITION, p);
+                scope.push_constant(CONST_NAME_OTHER_UNIT, defender.clone());
+                scope.push_constant(CONST_NAME_OTHER_POSITION, defender_pos);
+                let engine = game.environment().get_engine(game);
+                let executor = Executor::new(engine, scope, game.environment());
+                match executor.run(function_index, ()) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        // TODO: log error
+                        println!("AttackTargeting::Rhai {e}");
+                        false
+                    }
+                }
+            },
         } {
             return false;
         }

@@ -84,3 +84,7 @@ fn weapon_effects() {
         }
     }
 }
+
+fn attack_target_rook() {
+    UNIT.owner_id == OTHER_UNIT.owner_id && UNIT.has(FLAG_Unmoved) && OTHER_UNIT.has(FLAG_Unmoved)
+}

@@ -425,3 +425,46 @@ fn chess_movement_exhausts_all() {
     }
     assert_eq!(server.get_unit(Point::new(0, 6)), None);
 }
+
+#[test]
+fn chess_castling() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(5, 5, false);
+    let map = WMBuilder::<Direction4>::new(map);
+    let mut map = Map::new(map.build(), &config);
+    let map_env = map.environment().clone();
+
+    for p in map.all_points() {
+        map.set_terrain(p, TerrainType::ChessTile.instance(&map_env).build());
+    }
+    map.set_unit(Point::new(0, 0), Some(UnitType::king().instance(&map_env).set_owner_id(0).set_flag(FLAG_UNMOVED).build()));
+    map.set_unit(Point::new(4, 0), Some(UnitType::rook().instance(&map_env).set_owner_id(0).set_flag(FLAG_UNMOVED).build()));
+    map.set_unit(Point::new(4, 4), Some(UnitType::rook().instance(&map_env).set_owner_id(0).set_flag(FLAG_UNMOVED).build()));
+    map.set_unit(Point::new(2, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
+
+    let settings = map.settings().unwrap();
+    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(4, 4), vec![PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    assert!(server.get_unit(Point::new(0, 0)).unwrap().has_flag(FLAG_UNMOVED));
+    assert!(server.get_unit(Point::new(4, 0)).unwrap().has_flag(FLAG_UNMOVED));
+    assert!(!server.get_unit(Point::new(0, 4)).unwrap().has_flag(FLAG_UNMOVED));
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(0, 4), vec![PathStep::Dir(Direction4::D90), PathStep::Dir(Direction4::D90), PathStep::Dir(Direction4::D90)]),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+    }), Arc::new(|| 0.)).unwrap_err();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(Point::new(4, 0), vec![PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180)]),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D180)),
+    }), Arc::new(|| 0.)).unwrap();
+    assert!(!server.get_unit(Point::new(1, 0)).unwrap().has_flag(FLAG_UNMOVED));
+    assert!(!server.get_unit(Point::new(2, 0)).unwrap().has_flag(FLAG_UNMOVED));
+    assert!(!server.get_unit(Point::new(0, 4)).unwrap().has_flag(FLAG_UNMOVED));
+}
