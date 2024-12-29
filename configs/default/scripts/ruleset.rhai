@@ -8,7 +8,13 @@ fn unit_movable_test() {
 }
 
 fn calculate_attack_damage(base_damage) {
-    base_damage * attacker_bonus("Attack", Fraction(1)) / defender_bonus("Defense", Fraction(1))
+    let defense = defender_bonus("Defense", Fraction(1));
+    let damage = base_damage * attacker_bonus("Attack", Fraction(1));
+    if defense > Fraction(1) {
+        damage / defense
+    } else {
+        damage * (Fraction(2) - defense)
+    }
 }
 
 fn deal_damage_to_unit(unit, damage) {
