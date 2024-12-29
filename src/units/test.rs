@@ -10,6 +10,7 @@ use crate::game::game_view::GameView;
 use crate::handle::Handle;
 use crate::map::direction::*;
 use crate::map::map::Map;
+use crate::map::pipe::PipeState;
 use crate::map::point::*;
 use crate::map::point_map::PointMap;
 use crate::map::test::chess_board;
@@ -582,4 +583,28 @@ fn chess_en_passant() {
         path: Path::with_steps(Point::new(1, 2), vec![PathStep::Diagonal(Direction4::D90)]),
         action: UnitAction::Take,
     }), Arc::new(|| 0.)).unwrap_err();
+}
+
+#[test]
+fn magnet_pulls_through_pipe() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(5, 4, false);
+    let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+    let mut map = Map::new(wmap, &config);
+    let map_env = map.environment().clone();
+    map.set_pipes(Point::new(1, 0), vec![PipeState::new(Direction4::D0, Direction4::D270).unwrap()]);
+    map.set_pipes(Point::new(2, 0), vec![PipeState::new(Direction4::D0, Direction4::D180).unwrap()]);
+    map.set_unit(Point::new(1, 2), Some(UnitType::magnet().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(3, 0), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    let settings = map.settings().unwrap().build_default();
+    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(1, 2)),
+        action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+    }), Arc::new(|| 0.)).unwrap();
+    assert!(game.get_unit(Point::new(1, 1)).is_some());
+    assert!(game.get_unit(Point::new(1, 2)).is_some());
+    assert_eq!(None, game.get_unit(Point::new(3, 0)));
 }
