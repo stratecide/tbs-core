@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use interfaces::{Perspective, GameEventsMap};
 
+use crate::combat::AttackInput;
 use crate::config::config::Config;
 use crate::game::commands::Command;
 use crate::game::fog::*;
@@ -22,7 +23,6 @@ use crate::tags::tests::*;
 use crate::terrain::TerrainType;
 use crate::tokens::token::Token;
 use crate::tokens::token_types::TokenType;
-use crate::units::combat::AttackVector;
 use crate::units::commands::*;
 use crate::units::movement::{Path, PathStep};
 use crate::units::unit::*;
@@ -186,7 +186,7 @@ fn end_game() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 1), Direction4::D270))),
     }), Arc::new(|| 0.)).unwrap();
     game.with(|game| {
         assert_eq!(game.get_map().get_unit(Point::new(0, 1)), None);
@@ -212,7 +212,7 @@ fn defeat_player_of_3() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 1), Direction4::D270))),
     }), Arc::new(|| 0.)).unwrap();
     game.with(|game| {
         assert!(!game.has_ended());
@@ -243,8 +243,9 @@ fn on_death_lose_game() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 1), Direction4::D270))),
     }), Arc::new(|| 0.)).unwrap();
+    assert!(game.get_unit(Point::new(0, 1)).is_none());
     game.with(|game| {
         assert!(game.has_ended());
         for (i, player) in game.players.iter().enumerate() {
@@ -273,7 +274,7 @@ fn puffer_fish() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().typ(), UnitType::puffer_fish());
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_hp(), 100);
@@ -283,7 +284,7 @@ fn puffer_fish() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 2)),
-        action: UnitAction::Attack(AttackVector::Point(Point::new(2, 1))),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().get_hp(), 100);
     assert!(game.get_unit(Point::new(2, 0)).unwrap().get_hp() < hp);
@@ -306,13 +307,13 @@ fn capture_pyramid() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 1), Direction4::D270))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_owner_id(), -1);
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 2)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 1), Direction4::D90))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_owner_id(), 0);
 }
@@ -458,12 +459,12 @@ fn chess_castling() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(0, 4), vec![PathStep::Dir(Direction4::D90), PathStep::Dir(Direction4::D90), PathStep::Dir(Direction4::D90)]),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 3), Direction4::D90))),
     }), Arc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(4, 0), vec![PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180)]),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D180)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 0), Direction4::D180))),
     }), Arc::new(|| 0.)).unwrap();
     assert!(!server.get_unit(Point::new(1, 0)).unwrap().has_flag(FLAG_UNMOVED));
     assert!(!server.get_unit(Point::new(2, 0)).unwrap().has_flag(FLAG_UNMOVED));
@@ -602,7 +603,7 @@ fn magnet_pulls_through_pipe() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 2)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 0), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert!(game.get_unit(Point::new(1, 1)).is_some());
     assert!(game.get_unit(Point::new(1, 2)).is_some());

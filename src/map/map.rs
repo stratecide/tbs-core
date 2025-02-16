@@ -21,7 +21,7 @@ use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::player::Player;
-use crate::units::hero::Hero;
+use crate::units::hero::HeroMap;
 use crate::VERSION;
 use crate::tokens;
 use crate::terrain::terrain::Terrain;
@@ -403,11 +403,11 @@ impl<D: Direction> Map<D> {
     pub fn get_income_factor(map: &impl GameView<D>, owner_id: i8) -> Rational32 {
         // income from properties
         let mut income_factor = Rational32::from_integer(0);
-        let hero_map = Hero::map_influence(map, owner_id);
+        let hero_map = HeroMap::new(map, Some(owner_id));
         for p in map.all_points() {
             let t = map.get_terrain(p).unwrap();
             if t.get_owner_id() == owner_id {
-                income_factor += t.income_factor(map, p, hero_map.get(&(p, owner_id)).map(|h| h.as_slice()).unwrap_or(&[]));
+                income_factor += t.income_factor(map, p, hero_map.get(p, owner_id));
             }
         }
         income_factor
@@ -794,8 +794,168 @@ impl<D: Direction> GameCreationInterface for GameCreation<D> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NeighborMode {
     Direct,
     FollowPipes,
+}
+
+pub fn get_unit<D: Direction>(map: &impl GameView<D>, p: Point, unload_index: Option<usize>) -> Option<Unit<D>> {
+    let mut unit = map.get_unit(p)?;
+    match unload_index {
+        Some(index) => {
+            let mut transported = unit.get_transported_mut();
+            if transported.len() > index {
+                Some(transported.swap_remove(index))
+            } else {
+                None
+            }
+        }
+        None => Some(unit),
+    }
+}
+
+/**
+ * returns (up to) range+1 Points reached by moving from 'start' in direction 'd' in a straight line
+ * the Distortions already include previous distortions
+ * the result may be shorter than range+1 if not enough points could be found
+ */
+pub fn get_line<D: Direction>(map: &impl GameView<D>, start: Point, d: D, range: usize, mode: NeighborMode) -> Vec<(Point, Distortion<D>)> {
+    let mut result = vec![(start, Distortion::neutral())];
+    let wrapping_logic: crate::handle::BorrowedHandle<'_, WrappingMap<D>>;
+    let get_next: Box<dyn Fn(Point, D) -> Option<(Point, Distortion<D>)>> = match mode {
+        NeighborMode::Direct => {
+            wrapping_logic = map.wrapping_logic();
+            Box::new(|p, d| wrapping_logic.get_neighbor(p, d))
+        }
+        NeighborMode::FollowPipes => Box::new(|p, d| map.get_neighbor(p, d))
+    };
+    for i in 0..range {
+        if let Some((p, distortion)) = get_next(result[i].0, result[i].1.update_direction(d)) {
+            result.push((p, result[i].1 + distortion));
+        } else {
+            break;
+        }
+    }
+    result
+}
+
+/**
+ * returns points that can be reached by moving to neighbors while only moving outwards from the center
+ * returns range+1 sets. the same point can be in multiple sets
+ * when searching in all directions, set diagonal_directions to D::list()
+ * setting diagonal_directions to Direction4::0 only searches towards the top-right
+ */
+pub fn range_in_layers<D: Direction>(map: &impl GameView<D>, center: Point, range: usize, diagonal_directions: &[D]) -> Vec<HashSet<(Point, Distortion<D>)>> {
+    let mut result = Vec::new();
+    for _ in 0..=range {
+        result.push(HashSet::default());
+    }
+    result[0].insert((center, Distortion::neutral()));
+    for d in diagonal_directions {
+        let d2 = d.rotate(true);
+        let mut previous_layer = result[0].clone();
+        let mut layer = HashSet::default();
+        for i in 1..=range {
+            for (p, distortion) in previous_layer {
+                for d in [*d, d2] {
+                    if let Some((p, new_distortion)) = map.get_neighbor(p, distortion.update_direction(d)) {
+                        layer.insert((p, distortion + new_distortion));
+                    }
+                }
+            }
+            result[i].extend(layer.iter().cloned());
+            previous_layer = layer;
+            layer = HashSet::default();
+        }
+    }
+    result
+}
+
+/**
+ * returns points that can be reached by moving to neighbors while only moving along allowed directions and their diagonals
+ * returns range+1 sets. the same point can be in multiple sets
+ * when searching in all directions, set directions to D::list()
+ * setting directions to Direction4::0 only searches towards the right
+ */
+pub fn cannon_range_in_layers<D: Direction>(map: &impl GameView<D>, center: Point, range: usize, directions: &[D]) -> Vec<HashSet<(Point, Distortion<D>)>> {
+    let mut result = Vec::new();
+    for _ in 0..=range {
+        result.push(HashSet::default());
+    }
+    result[0].insert((center, Distortion::neutral()));
+    if D::is_hex() {
+        for d in directions {
+            let d2 = d.rotate(true);
+            let d3 = d.rotate(false);
+            let mut previous_back = result[0].clone();
+            let mut back = HashSet::default();
+            let mut previous_forward: HashMap<(Point, Distortion<D>), u8> = HashMap::default();
+            let mut forward: HashMap<(Point, Distortion<D>), u8> = HashMap::default();
+            for i in 1..=range {
+                for (p, distortion) in previous_back {
+                    if let Some((p, new_distortion)) = map.get_neighbor(p, distortion.update_direction(*d)) {
+                        let distortion = distortion + new_distortion;
+                        // move forward
+                        back.insert((p, distortion));
+                        // move sideways
+                        for d in [d2, d3] {
+                            if let Some((p, new_distortion)) = map.get_neighbor(p, distortion.update_direction(d)) {
+                                let key = (p, distortion + new_distortion);
+                                let old_value = forward.remove(&key).unwrap_or(0u8);
+                                forward.insert(key, old_value + 1);
+                            }
+                        }
+                    }
+                }
+                for ((p, distortion), strength) in previous_forward {
+                    if let Some((p, new_distortion)) = map.get_neighbor(p, distortion.update_direction(*d)) {
+                        let distortion = distortion + new_distortion;
+                        // move forward
+                        forward.insert((p, distortion), 2);
+                    }
+                    if strength >= 2 {
+                        // move sideways
+                        for d in [d2, d3] {
+                            if let Some((p, new_distortion)) = map.get_neighbor(p, distortion.update_direction(d)) {
+                                back.insert((p, distortion + new_distortion));
+                            }
+                        }
+                    }
+                }
+                result[i].extend(back.iter().cloned());
+                result[i].extend(forward.keys().cloned());
+                previous_back = back;
+                previous_forward = forward;
+                back = HashSet::default();
+                forward = HashMap::default();
+            }
+        }
+    } else {
+        for d in directions {
+            let d2 = d.rotate(true);
+            let d3 = d.rotate(false);
+            let mut previous_layer = result[0].clone();
+            let mut layer = HashSet::default();
+            for i in 1..=range {
+                for (p, distortion) in previous_layer {
+                    if let Some((p, new_distortion)) = map.get_neighbor(p, distortion.update_direction(*d)) {
+                        let distortion = distortion + new_distortion;
+                        // move forward
+                        layer.insert((p, distortion));
+                        // move sideways
+                        for d in [d2, d3] {
+                            if let Some((p, new_distortion)) = map.get_neighbor(p, distortion.update_direction(d)) {
+                                layer.insert((p, distortion + new_distortion));
+                            }
+                        }
+                    }
+                }
+                result[i].extend(layer.iter().cloned());
+                previous_layer = layer;
+                layer = HashSet::default();
+            }
+        }
+    }
+    result
 }

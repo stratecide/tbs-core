@@ -18,6 +18,8 @@ use crate::terrain::TerrainType;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
+use super::attack_config::{AttackConfig, AttackSplashConfig};
+use super::attack_powered::AttackPoweredConfig;
 use super::effect_config::{EffectConfig, EffectVisibility};
 use super::{custom_action_config::*, editor_tag_config};
 use super::file_loader::FileLoader;
@@ -44,7 +46,10 @@ const TAG_CONFIG: &'static str = "tags.csv";
 const UNIT_CONFIG: &'static str = "units.csv";
 const UNIT_TAGS: &'static str = "unit_tags.csv";
 const UNIT_TRANSPORT: &'static str = "unit_transport.csv";
-const UNIT_DAMAGE: &'static str = "unit_damage.csv";
+//const UNIT_DAMAGE: &'static str = "unit_damage.csv";
+const ATTACK_TYPES: &'static str = "attack_types.csv";
+const ATTACK_SPLASH: &'static str = "attack_splash.csv";
+const ATTACK_POWERED: &'static str = "attack_powered.csv";
 const CUSTOM_ACTIONS: &'static str = "custom_actions.csv";
 const HERO_CONFIG: &'static str = "heroes.csv";
 const HERO_POWERS: &'static str = "hero_powers.csv";
@@ -124,11 +129,13 @@ impl Config {
             units: Vec::new(),
             unknown_unit: UnitType(usize::MAX),
             unit_transports: HashMap::default(),
-            attack_damage: HashMap::default(),
             custom_actions: Vec::new(),
             max_transported: 0,
             unit_flags: HashMap::default(),
             unit_tags: HashMap::default(),
+            attack_types: Vec::new(),
+            splash_types: Vec::new(),
+            attack_overrides: Vec::new(),
             // heroes
             heroes: Vec::new(),
             max_hero_charge: 0,
@@ -185,7 +192,7 @@ impl Config {
                 }
                 "UnknownUnit" => unknown_unit = value.to_string(),
                 "DefaultTerrain" => default_terrain = value.to_string(),
-                "UnitDeathTest" => result.is_unit_dead_rhai = file_loader.rhai_function(value, 2..=2)?.index,
+                "UnitDeathTest" => result.is_unit_dead_rhai = file_loader.rhai_function(value, 1..=1)?.index,
                 "UnitMovableTest" => result.is_unit_movable_rhai = file_loader.rhai_function(value, 0..=0)?.index,
                 "CalculateAttackDamage" => result.calculate_damage_rhai = file_loader.rhai_function(value, 1..=1)?.index,
                 "DealDamageToUnit" => result.deal_damage_rhai = file_loader.rhai_function(value, 2..=2)?.index,
@@ -219,6 +226,32 @@ impl Config {
             result.movement_types.push(line);
             Ok(())
         })?;
+
+        // splash types
+        let mut splash_types = Vec::new();
+        file_loader.table_with_headers(ATTACK_SPLASH, |line: AttackSplashConfig| {
+            splash_types.push(line);
+            Ok(())
+        })?;
+        for name in &file_loader.splash_types {
+            result.splash_types.push((name.clone(), Vec::new()));
+        }
+        for splash_type in splash_types {
+            result.splash_types[splash_type.splash_type.0].1.push(splash_type);
+        }
+
+        // attack types
+        let mut attack_types = Vec::new();
+        file_loader.table_with_headers(ATTACK_TYPES, |line: AttackConfig| {
+            attack_types.push(line);
+            Ok(())
+        })?;
+        for name in &file_loader.attack_types {
+            result.attack_types.push((name.clone(), Vec::new()));
+        }
+        for attack_type in attack_types {
+            result.attack_types[attack_type.attack_type.0.unwrap()].1.push(attack_type);
+        }
 
         // simple unit data
         file_loader.table_with_headers(UNIT_CONFIG, |line: UnitTypeConfig| {
@@ -358,36 +391,6 @@ impl Config {
             }
         }
 
-        // attack damage
-        let data = file_loader.load_config(UNIT_DAMAGE)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
-        // TODO: ensure uniqueness of column and row IDs
-        let mut defenders: Vec<UnitType> = Vec::new();
-        for h in reader.headers()?.into_iter().skip(1) {
-            let header = UnitType::from_conf(h, &mut file_loader)?.0;
-            if defenders.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
-            }
-            defenders.push(header);
-        }
-        for line in reader.records() {
-            let line = line?;
-            let mut line = line.into_iter();
-            let typ: UnitType = match line.next() {
-                Some(t) => UnitType::from_conf(t, &mut file_loader)?.0,
-                _ => continue,
-            };
-            let mut values = HashMap::default();
-            for (i, val) in line.enumerate() {
-                if val.len() > 0 && i < defenders.len() {
-                    values.insert(defenders[i], val.parse()?);
-                }
-            }
-            if defenders.len() > 0 {
-                result.attack_damage.insert(typ, values);
-            }
-        }
-
         // custom actions
         file_loader.table_with_headers(CUSTOM_ACTIONS, |line: CustomActionConfig| {
             result.custom_actions.push(line);
@@ -482,6 +485,24 @@ impl Config {
             if commander.powers.len() == 0 {
                 // TODO: error
             }
+        }
+
+        // attack overrides, has to be after commander and hero parsing
+        file_loader.table_with_headers(ATTACK_POWERED, |line: AttackPoweredConfig| {
+            result.attack_overrides.push(line);
+            Ok(())
+        })?;
+
+        // parse attack conditions now that all other attack data and simple units, ... are loaded
+        for attack_type in result.attack_types.iter_mut()
+        .map(|(_, at)| at)
+        .flatten() {
+            attack_type.parse_deferred(&mut file_loader)?;
+        }
+        for splash_type in result.splash_types.iter_mut()
+        .map(|(_, at)| at)
+        .flatten() {
+            splash_type.parse_deferred(&mut file_loader)?;
         }
 
         // unit overrides, has to be after commander and hero parsing

@@ -49,6 +49,15 @@ pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zip
             list[(index + 1) % list.len()]
         }
     }
+    fn rotate_times(&self, clockwise: bool, times: usize) -> Self {
+        let list = Self::list();
+        let index = self.list_index();
+        if clockwise {
+            list[(index + list.len() * times - times) % list.len()]
+        } else {
+            list[(index + times) % list.len()]
+        }
+    }
     fn rotate_by(&self, other: Self) -> Self {
         let list = Self::list();
         let index = self.list_index();

@@ -17,6 +17,8 @@ pub trait MulRational32: Debug + Clone + Add<Self, Output = Self> + Sub<Self, Ou
 pub enum NumberMod<T: MulRational32 + FromConfig> {
     Keep,
     Replace(T),
+    Min(T),
+    Max(T),
     Add(T),
     Sub(T),
     Mul(Rational32),
@@ -33,6 +35,8 @@ impl<T: MulRational32 + FromConfig> FromConfig for NumberMod<T> {
         }
         match s.get(..1) {
             Some("=") => T::from_conf(&s[1..], loader).map(|(n, s)| (Self::Replace(n), s)),
+            Some("<") => T::from_conf(&s[1..], loader).map(|(n, s)| (Self::Min(n), s)),
+            Some(">") => T::from_conf(&s[1..], loader).map(|(n, s)| (Self::Max(n), s)),
             Some("+") => T::from_conf(&s[1..], loader).map(|(n, s)| (Self::Add(n), s)),
             Some("-") => T::from_conf(&s[1..], loader).map(|(n, s)| (Self::Sub(n), s)),
             Some("*") => {
@@ -53,14 +57,14 @@ impl<T: MulRational32 + FromConfig> FromConfig for NumberMod<T> {
                     "Rhai" | "Script" => {
                         let (name, s) = parse_tuple1::<String>(s, loader)?;
                         let f = loader.rhai_function(&name, 0..=1)?;
-                        if f.parameter_count == 0 {
+                        if f.parameters.len() == 0 {
                             Ok((Self::RhaiReplace(f.index), s))
                         } else {
                             Ok((Self::Rhai(f.index), s))
                         }
                     }
                     _ => {
-                        return Err(ConfigParseError::InvalidNumberModifier(s.to_string()))
+                        return Err(ConfigParseError::InvalidNumberModifier(base.to_string()))
                     }
                 }
             }
@@ -68,7 +72,7 @@ impl<T: MulRational32 + FromConfig> FromConfig for NumberMod<T> {
     }
 }
 
-impl<T: MulRational32 + FromConfig + Clone + Send + Sync + 'static> NumberMod<T> {
+impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> NumberMod<T> {
     pub fn ignores_previous_value(&self) -> bool {
         match self {
             Self::Replace(_) => true,
@@ -83,6 +87,8 @@ impl<T: MulRational32 + FromConfig + Clone + Send + Sync + 'static> NumberMod<T>
         match self.clone() {
             Self::Keep => value,
             Self::Replace(v) => v,
+            Self::Min(v) => v.min(value),
+            Self::Max(v) => v.max(value),
             Self::Add(a) => value + a,
             Self::Sub(a) => value - a,
             Self::Mul(a) => value.mul_r32(a),

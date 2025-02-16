@@ -225,7 +225,7 @@ fn run_input_script<D: Direction>(
     let invalid_data = Arc::new(Mutex::new(false));
     let data = data.to_vec();
     let environment = game.environment();
-    let mut engine = environment.get_engine(game);
+    let mut engine = environment.get_engine_board(game);
     engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<Dynamic, Box<EvalAltResult>> {
         let mut index = index.lock().unwrap();
         let i = *index;
@@ -339,7 +339,7 @@ fn is_script_input_valid<D: Direction>(
     let data_len = data.len();
     let data = data.to_vec();
     let environment = game.environment();
-    let mut engine = environment.get_engine(game);
+    let mut engine = environment.get_engine_board(game);
     engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<Dynamic, Box<EvalAltResult>> {
         let mut index = index.lock().unwrap();
         let i = *index;

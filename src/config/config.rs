@@ -7,6 +7,7 @@ use num_rational::Rational32;
 use rhai::*;
 use semver::Version;
 
+use crate::combat::*;
 use crate::game::event_fx::EffectType;
 use crate::tokens::token_types::TokenType;
 use crate::game::fog::VisionMode;
@@ -26,13 +27,15 @@ use crate::script::executor::Executor;
 use crate::script::*;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::*;
-use crate::units::{combat::*, UnitVisibility};
+use crate::units::UnitVisibility;
 use crate::units::movement::*;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::units::hero::*;
 use crate::VERSION;
 
+use super::attack_config::{AttackConfig, AttackSplashConfig};
+use super::attack_powered::AttackPoweredConfig;
 use super::custom_action_config::CustomActionConfig;
 use super::editor_tag_config::TagEditorVisibility;
 use super::effect_config::{EffectConfig, EffectDataType, EffectVisibility};
@@ -66,11 +69,14 @@ pub struct Config {
     pub(super) units: Vec<UnitTypeConfig>,
     pub(super) unknown_unit: UnitType,
     pub(super) unit_transports: HashMap<UnitType, Vec<UnitType>>,
-    pub(super) attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
+    //pub(super) attack_damage: HashMap<UnitType, HashMap<UnitType, u16>>,
     pub(super) custom_actions: Vec<CustomActionConfig>,
     pub(super) max_transported: usize,
     pub(super) unit_flags: HashMap<(usize, UnitType), TagEditorVisibility>,
     pub(super) unit_tags: HashMap<(usize, UnitType), TagEditorVisibility>,
+    pub(super) attack_types: Vec<(String, Vec<AttackConfig>)>,
+    pub(super) splash_types: Vec<(String, Vec<AttackSplashConfig>)>,
+    pub(super) attack_overrides: Vec<AttackPoweredConfig>,
     // heroes
     pub(super) heroes: Vec<HeroTypeConfig>,
     pub(super) max_hero_charge: u8,
@@ -270,36 +276,24 @@ impl Config {
         self.unit_config(typ).can_be_taken
     }
 
-    pub fn can_attack(&self, typ: UnitType) -> bool {
-        self.attack_damage.contains_key(&typ)
-    }
-
     pub fn can_attack_after_moving(&self, typ: UnitType) -> bool {
         self.unit_config(typ).can_attack_after_moving
     }
 
-    pub fn default_attack_pattern(&self, typ: UnitType) -> AttackType {
-        self.unit_config(typ).attack_pattern
+    pub fn default_attack_pattern(&self, typ: UnitType) -> AttackPattern {
+        self.unit_config(typ).attack_pattern.clone()
     }
 
-    pub fn attack_targeting(&self, typ: UnitType) -> AttackTargeting {
+    pub fn default_attack_direction(&self, typ: UnitType) -> AllowedAttackInputDirectionSource {
+        self.unit_config(typ).attack_direction
+    }
+
+    pub fn valid_attack_targets(&self, typ: UnitType) -> ValidAttackTargets {
         self.unit_config(typ).attack_targets
-    }
-
-    pub fn base_damage(&self, attacker: UnitType, defender: UnitType) -> Option<u16> {
-        self.attack_damage.get(&attacker)?.get(&defender).cloned()
     }
 
     pub fn base_value(&self, typ: UnitType) -> i32 {
         self.unit_config(typ).value as i32
-    }
-
-    pub fn displacement(&self, typ: UnitType) -> Displacement {
-        self.unit_config(typ).displacement
-    }
-
-    pub fn base_displacement_distance(&self, typ: UnitType) -> i8 {
-        self.unit_config(typ).displacement_distance
     }
 
     pub fn vision_mode(&self, typ: UnitType) -> VisionMode {
@@ -384,7 +378,7 @@ impl Config {
         scope.push_constant(CONST_NAME_PATH, path.clone());
         scope.push_constant(CONST_NAME_UNIT, unit);
         scope.push_constant(CONST_NAME_POSITION, unit_pos);
-        let engine = game.environment().get_engine(game);
+        let engine = game.environment().get_engine_board(game);
         let executor = Executor::new(engine, scope, game.environment());
         let cost = self.hero_config(hero).price.update_value(self.base_value(unit_type), &executor);
         if cost < 0 {
@@ -510,7 +504,7 @@ impl Config {
         heroes: &'a [HeroInfluence<D>],
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a TerrainPoweredConfig> + 'a>, &Executor) -> R,
     ) -> R {
-        let engine = game.environment().get_engine(game);
+        let engine = game.environment().get_engine_board(game);
         let mut scope = Scope::new();
         // build scope
         scope.push_constant(CONST_NAME_POSITION, pos);
@@ -816,7 +810,7 @@ impl Config {
         // when moving out of a transporter, or start_turn for transported units
         transporter: Option<(&'a Unit<D>, Point)>,
         // the attacked unit, the unit this one was destroyed by, ...
-        other_unit: Option<(&'a Unit<D>, Point)>,
+        other_unit: Option<(&'a Unit<D>, Point, Option<usize>, &'a [HeroInfluence<D>])>,
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
         heroes: &'a [HeroInfluence<D>],
         // empty if the unit hasn't moved
@@ -825,7 +819,7 @@ impl Config {
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> + 'a>, &Executor) -> R,
     ) -> R {
         // get engine...
-        let engine = game.environment().get_engine(game);
+        let engine = game.environment().get_engine_board(game);
         let mut scope = Scope::new();
         // build scope
         scope.push_constant(CONST_NAME_UNIT, unit.clone());
@@ -833,8 +827,8 @@ impl Config {
         scope.push_constant(CONST_NAME_TRANSPORT_INDEX, unit_pos.1.map(|i| i as i32));
         scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
         scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.map(|(_, p)| p));
-        scope.push_constant(CONST_NAME_OTHER_UNIT, other_unit.map(|(t, _)| t.clone()));
-        scope.push_constant(CONST_NAME_OTHER_POSITION, other_unit.map(|(_, p)| p));
+        scope.push_constant(CONST_NAME_OTHER_UNIT, other_unit.map(|(t, _, _, _)| t.clone()));
+        scope.push_constant(CONST_NAME_OTHER_POSITION, other_unit.map(|(_, p, _, _)| p));
         // TODO: heroes and ballast (put them into Arc<>s)
         scope.push_constant(CONST_NAME_IS_COUNTER,is_counter);
         let executor = Arc::new(Executor::new(engine, scope, game.environment()));
@@ -963,7 +957,7 @@ impl Config {
         ) as usize
     }
 
-    pub fn unit_attack_effects<D: Direction>(
+    /*pub fn unit_attack_effects<D: Direction>(
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
@@ -971,7 +965,7 @@ impl Config {
         defender: &Unit<D>,
         defender_pos: Point,
         transporter: Option<(&Unit<D>, Point)>, // if the attacker moved out of a transporter to attack
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Vec<usize> {
@@ -981,8 +975,8 @@ impl Config {
             unit,
             (unit_pos, None),
             transporter,
-            Some((defender, defender_pos)),
-            heroes,
+            Some((defender, defender_pos, None, heroes.get(defender_pos, defender.get_owner_id()))),
+            heroes.get(unit_pos, unit.get_owner_id()),
             temporary_ballast,
             is_counter,
             |iter, _executor| {
@@ -1002,7 +996,7 @@ impl Config {
         attacker: &Unit<D>,
         attacker_pos: Point,
         transporter: Option<(&Unit<D>, Point)>, // if the defender moved out of a transporter to attack + defend
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
         is_counter: bool
     ) -> Vec<usize> {
@@ -1012,8 +1006,8 @@ impl Config {
             unit,
             (unit_pos, None),
             transporter,
-            Some((attacker, attacker_pos)),
-            heroes,
+            Some((attacker, attacker_pos, None, heroes.get(attacker_pos, attacker.get_owner_id()))),
+            heroes.get(unit_pos, unit.get_owner_id()),
             temporary_ballast,
             is_counter,
             |iter, _executor| {
@@ -1023,7 +1017,7 @@ impl Config {
             }
         );
         result
-    }
+    }*/
 
     pub fn unit_kill_effects<D: Direction>(
         &self,
@@ -1033,7 +1027,7 @@ impl Config {
         defender: &Unit<D>,
         defender_pos: Point,
         transporter: Option<(&Unit<D>, Point)>, // if the attacker moved out of a transporter to attack
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Vec<usize> {
@@ -1043,8 +1037,8 @@ impl Config {
             unit,
             (unit_pos, None),
             transporter,
-            Some((defender, defender_pos)),
-            heroes,
+            Some((defender, defender_pos, None, heroes.get(defender_pos, defender.get_owner_id()))),
+            heroes.get(unit_pos, unit.get_owner_id()),
             temporary_ballast,
             is_counter,
             |iter, _executor| {
@@ -1063,7 +1057,7 @@ impl Config {
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
         attacker: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<usize> {
         let mut result = Vec::new();
@@ -1072,8 +1066,8 @@ impl Config {
             unit,
             unit_pos,
             transporter,
-            attacker,
-            heroes,
+            attacker.map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id()))),
+            heroes.get(unit_pos.0, unit.get_owner_id()),
             temporary_ballast,
             false,
             |iter, _executor| {
@@ -1094,7 +1088,7 @@ impl Config {
         transporter: Option<(&Unit<D>, Point)>,
         // the unit this unit moved on top of
         other_unit: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<usize> {
         let mut result = Vec::new();
@@ -1103,8 +1097,8 @@ impl Config {
             unit,
             unit_pos,
             transporter,
-            other_unit,
-            heroes,
+            other_unit.map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id()))),
+            heroes.get(unit_pos.0, unit.get_owner_id()),
             temporary_ballast,
             false,
             |iter, _executor| {
@@ -1171,34 +1165,264 @@ impl Config {
         )
     }
 
+    fn attack_power_configs<'a, D: Direction, R>(
+        &'a self,
+        game: &'a impl GameView<D>,
+        outer_scope: &'a Scope,
+        attack: ConfiguredAttack,
+        splash: Option<AttackInstance>,
+        unit: &'a Unit<D>,
+        unit_pos: (Point, Option<usize>),
+        // when moving out of a transporter, or start_turn for transported units
+        transporter: Option<(&'a Unit<D>, Point)>,
+        // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
+        heroes: &'a HeroMap<D>,
+        // empty if the unit hasn't moved
+        temporary_ballast: &'a [TBallast<D>],
+        counter: &'a AttackCounterState<D>,
+        f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a AttackPoweredConfig> + 'a>, &Executor) -> R,
+    ) -> R {
+        // get engine...
+        let engine = game.environment().get_engine_board(game);
+        let mut scope = Scope::new();
+        for (name, _, value) in outer_scope.iter() {
+            scope.push_constant_dynamic(name, value);
+        }
+        let executor = Arc::new(Executor::new(engine, scope, game.environment()));
+        let executor_ = executor.clone();
+        let it = self.attack_overrides.iter()
+        .filter(move |config| {
+            config.affects.iter().all(|filter| filter.check(game, &attack, splash.as_ref(), unit, unit_pos, transporter, heroes, temporary_ballast, counter, &executor))
+        });
+        let r = f(Box::new(it), &executor_);
+        r
+    }
+
+    pub fn unit_configured_attacks<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        transporter: Option<(&Unit<D>, Point)>,
+        counter: AttackCounterState<D>,
+        heroes: &HeroMap<D>,
+        temporary_ballast: &[TBallast<D>],
+    ) -> Vec<ConfiguredAttack> {
+        let is_counter = counter.is_counter();
+        let other_unit = counter.attacker()
+            .map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id())));
+        let AttackType(Some(attack_type)) = self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            None,
+            other_unit,
+            heroes.get(unit_pos, unit.get_owner_id()),
+            temporary_ballast,
+            is_counter,
+            |iter, _| {
+                for conf in iter.rev() {
+                    if let Some(attack_type) = conf.attack_type {
+                        return attack_type;
+                    }
+                }
+                self.unit_config(unit.typ()).attack_type
+            }
+        ) else {
+            return Vec::new();
+        };
+        let mut scope = Scope::new();
+        /*scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u)).unwrap_or(().into()));
+        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
+        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));*/
+        scope.push_constant(CONST_NAME_UNIT, unit.clone());
+        scope.push_constant(CONST_NAME_POSITION, unit_pos);
+        scope.push_constant(CONST_NAME_IS_COUNTER, is_counter);
+        let engine = game.environment().get_engine_board(game);
+        let executor = Executor::new(engine, scope.clone(), game.environment());
+        let mut result = Vec::new();
+        for attack in &self.attack_types[attack_type].1 {
+            let mut atk = ConfiguredAttack {
+                typ: AttackType(Some(attack_type)),
+                splash_pattern: attack.splash_pattern,
+                splash_range: attack.splash_range,
+                priority: attack.priority,
+                splash: Vec::new(),
+                focus: attack.focus,
+            };
+            if attack.condition.iter().all(|cond| cond.check(
+                game,
+                &atk,
+                None,
+                unit,
+                (unit_pos, None),
+                transporter,
+                heroes,
+                temporary_ballast,
+                &counter,
+                &executor,
+            )) {
+                self.attack_power_configs(
+                    game,
+                    &scope,
+                    atk.clone(),
+                    None,
+                    unit,
+                    (unit_pos, None),
+                    None,
+                    heroes,
+                    temporary_ballast,
+                    &counter,
+                    |iter, executor| {
+                        for conf in iter {
+                            atk.priority = conf.attack_priority.update_value(atk.priority, executor);
+                            atk.splash_range = conf.splash_range.update_value(atk.splash_range, executor);
+                            if let Some(focus) = conf.focus {
+                                atk.focus = focus;
+                            }
+                        }
+                    }
+                );
+                for splash_distance in 0..=atk.splash_range {
+                    for splash in &self.splash_types[attack.splash_type.0].1 {
+                        let mut spl = AttackInstance {
+                            allows_counter_attack: splash.allows_counter_attack,
+                            splash_distance: splash_distance as usize,
+                            priority: splash.priority,
+                            direction_modifier: splash.direction_modifier,
+                            script: splash.script,
+                        };
+                        if splash.condition.iter().all(|cond| cond.check(
+                            game,
+                            &atk,
+                            Some(&spl),
+                            unit,
+                            (unit_pos, None),
+                            transporter,
+                            heroes,
+                            temporary_ballast,
+                            &counter,
+                            &executor,
+                        )) {
+                            self.attack_power_configs(
+                                game,
+                                &scope,
+                                atk.clone(),
+                                Some(spl.clone()),
+                                unit,
+                                (unit_pos, None),
+                                None,
+                                heroes,
+                                temporary_ballast,
+                                &counter,
+                                |iter, executor| {
+                                    for conf in iter {
+                                        spl.priority = conf.splash_priority.update_value(spl.priority, executor);
+                                        if let Some(allows_counter_attack) = conf.allows_counter_attack {
+                                            spl.allows_counter_attack = allows_counter_attack;
+                                        }
+                                        if let Some(direction_modifier) = conf.direction_modifier {
+                                            spl.direction_modifier = direction_modifier;
+                                        }
+                                    }
+                                }
+                            );
+                            atk.splash.push(spl);
+                        }
+                    }
+                }
+                if atk.splash.len() > 0 {
+                    result.push(atk);
+                }
+            }
+        }
+        result.sort_by_key(|attack| attack.priority);
+        result
+    }
+
     pub fn unit_attack_pattern<D: Direction>(
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
         unit_pos: Point,
-        counter: Counter<D>,
-        heroes: &[HeroInfluence<D>],
+        counter: AttackCounterState<D>,
+        heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
-    ) -> AttackType {
+    ) -> AttackPattern {
+        let is_counter = counter.is_counter();
+        let other_unit = counter.attacker()
+            .map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id())));
         let mut result = self.default_attack_pattern(unit.typ());
         self.unit_power_configs(
             game,
             unit,
             (unit_pos, None),
             None,
-            counter.attacker(),
-            heroes,
+            other_unit,
+            heroes.get(unit_pos, unit.get_owner_id()),
             temporary_ballast,
-            counter.is_counter(),
+            is_counter,
             |iter, _executor| {
                 for conf in iter {
-                    if let Some(pattern) = conf.attack_pattern {
-                        result = pattern;
+                    if let Some(pattern) = &conf.attack_pattern {
+                        result = pattern.clone();
                     }
                 }
             }
         );
+        for (name, value) in result.parameters() {
+            *value = self.unit_power_configs(
+                game,
+                unit,
+                (unit_pos, None),
+                None,
+                other_unit,
+                heroes.get(unit_pos, unit.get_owner_id()),
+                temporary_ballast,
+                is_counter,
+                |iter, executor| {
+                    NumberMod::update_value_repeatedly(
+                        *value,
+                        iter.map(|c| c.get_fraction(&name)),
+                        executor,
+                    )
+                }
+            )
+        }
         result
+    }
+
+    pub fn unit_attack_directions<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        counter: AttackCounterState<D>,
+        heroes: &HeroMap<D>,
+        temporary_ballast: &[TBallast<D>],
+    ) -> AllowedAttackInputDirectionSource {
+        let is_counter = counter.is_counter();
+        let other_unit = counter.attacker()
+            .map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id())));
+        let mut result = self.default_attack_direction(unit.typ());
+        self.unit_power_configs(
+            game,
+            unit,
+            (unit_pos, None),
+            None,
+            other_unit,
+            heroes.get(unit_pos, unit.get_owner_id()),
+            temporary_ballast,
+            is_counter,
+            |iter, _executor| {
+                for conf in iter {
+                    if let Some(attack_direction) = conf.attack_direction {
+                        return attack_direction;
+                    }
+                }
+                self.default_attack_direction(unit.typ())
+            }
+        )
     }
 
     pub fn unit_attack_bonus<D: Direction>(
@@ -1209,8 +1433,8 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: Point,
         defender: &Unit<D>,
-        defender_pos: Point,
-        heroes: &[HeroInfluence<D>],
+        (defender_pos, defender_unload_index): (Point, Option<usize>),
+        heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
         is_counter: bool,
     ) -> Rational32 {
@@ -1219,8 +1443,8 @@ impl Config {
             unit,
             (unit_pos, None),
             None,
-            Some((defender, defender_pos)),
-            heroes,
+            Some((defender, defender_pos, defender_unload_index, heroes.get(defender_pos, defender.get_owner_id()))),
+            heroes.get(unit_pos, unit.get_owner_id()),
             temporary_ballast,
             is_counter,
             |iter, executor| {
@@ -1239,19 +1463,19 @@ impl Config {
         base_value: Rational32,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
+        unit_pos: (Point, Option<usize>),
         attacker: &Unit<D>,
         attacker_pos: Point,
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
         is_counter: bool,
     ) -> Rational32 {
         self.unit_power_configs(
             game,
             unit,
-            (unit_pos, None),
+            unit_pos,
             None,
-            Some((attacker, attacker_pos)),
-            heroes,
+            Some((attacker, attacker_pos, None, heroes.get(attacker_pos, attacker.get_owner_id()))),
+            heroes.get(unit_pos.0, unit.get_owner_id()),
             &[],
             is_counter,
             |iter, executor| {
@@ -1310,7 +1534,7 @@ impl Config {
         unit_pos: Point,
         attacker: &Unit<D>,
         attacker_pos: Point,
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
         is_counter: bool,
     ) -> bool {
         self.unit_power_configs(
@@ -1318,8 +1542,8 @@ impl Config {
             unit,
             (unit_pos, None),
             None,
-            Some((attacker, attacker_pos)),
-            heroes,
+            Some((attacker, attacker_pos, None, heroes.get(attacker_pos, attacker.get_owner_id()))),
+            heroes.get(unit_pos, unit.get_owner_id()),
             &[],
             is_counter,
             |iter, _executor| {
@@ -1331,80 +1555,6 @@ impl Config {
                 self.unit_config(unit.typ()).can_be_displaced
             }
         )
-    }
-
-    pub fn unit_displacement_distance<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: Point,
-        transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
-        temporary_ballast: &[TBallast<D>],
-        is_counter: bool,
-    ) -> i8 {
-        let base_displacement = self.base_displacement_distance(unit.typ());
-        // manipulating the absolute value is more intuitive
-        // but that means the sign has to be multiplied with at the end
-        let sign = if base_displacement < 0 {
-            -1
-        } else {
-            1
-        };
-        self.unit_power_configs(
-            game,
-            unit,
-            (unit_pos, None),
-            transporter,
-            None,
-            heroes,
-            temporary_ballast,
-            is_counter,
-            |iter, executor| {
-                NumberMod::update_value_repeatedly(
-                    base_displacement.abs(),
-                    iter.map(|c| c.displacement_distance),
-                    executor,
-                )
-            }
-        ) * sign
-    }
-
-    pub fn unit_splash_damage<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: Point,
-        heroes: &[HeroInfluence<D>],
-        temporary_ballast: &[TBallast<D>],
-        is_counter: bool,
-    ) -> Vec<Rational32> {
-        let mut result: &[Rational32] = &[];
-        self.unit_power_configs(
-            game,
-            unit,
-            (unit_pos, None),
-            None,
-            None,
-            heroes,
-            temporary_ballast,
-            is_counter,
-            |iter, _executor| {
-                for config in iter.rev() {
-                    if config.splash_damage.len() > 0 {
-                        result = config.splash_damage.as_slice();
-                        break;
-                    }
-                }
-            }
-        );
-        if result.len() == 0 {
-            result = &self.unit_config(unit.typ()).splash_damage;
-        }
-        if result.len() == 0 {
-            result = &DEFAULT_SPLASH
-        }
-        result.to_vec()
     }
 
 }

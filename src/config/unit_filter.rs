@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::combat::AttackPatternType;
 use crate::commander::commander_type::CommanderType;
 use crate::game::fog::FogIntensity;
 use crate::game::game_view::GameView;
@@ -8,7 +9,6 @@ use crate::script::executor::Executor;
 use crate::tags::FlagKey;
 use crate::terrain::TerrainType;
 use crate::tokens::token_types::TokenType;
-use crate::units::combat::AttackTypeKey;
 use crate::units::hero::{HeroInfluence, HeroType};
 use crate::units::movement::{MovementType, TBallast};
 use crate::units::unit::Unit;
@@ -39,7 +39,7 @@ pub(crate) enum UnitFilter {
     Movement(HashSet<MovementType>),
     SubMovement(HashSet<MovementType>),
     MovementPattern(HashSet<MovementPattern>),
-    AttackType(HashSet<AttackTypeKey>),
+    AttackPattern(HashSet<AttackPatternType>),
     Unowned,
     // situation/environment
     OtherUnit(HashSet<UnitType>),
@@ -113,10 +113,10 @@ impl FromConfig for UnitFilter {
                 remainder = r;
                 Self::IsHero(list.into_iter().collect())
             }
-            "A" | "AttackType" => {
-                let (list, r) = parse_inner_vec::<AttackTypeKey>(remainder, true, loader)?;
+            "AP" | "AttackPattern" => {
+                let (list, r) = parse_inner_vec::<AttackPatternType>(remainder, true, loader)?;
                 remainder = r;
-                Self::AttackType(list.into_iter().collect())
+                Self::AttackPattern(list.into_iter().collect())
             }
             "CC" | "CommanderCharge" => {
                 let (charge, r) = parse_tuple1(remainder, loader)?;
@@ -167,7 +167,7 @@ impl UnitFilter {
         // when moving out of a transporter, or start_turn for transported units
         transporter: Option<(&Unit<D>, Point)>,
         // the attacked unit, the unit this one was destroyed by, ...
-        other_unit: Option<(&Unit<D>, Point)>,
+        other_unit: Option<(&Unit<D>, Point, Option<usize>, &[HeroInfluence<D>])>,
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
         // empty if the unit hasn't moved
@@ -233,8 +233,8 @@ impl UnitFilter {
                     false
                 }
             }
-            Self::AttackType(a) => {
-                let attack_type = game.environment().config.default_attack_pattern(unit.typ()).key();
+            Self::AttackPattern(a) => {
+                let attack_type = game.environment().config.default_attack_pattern(unit.typ()).typ(&game.environment());
                 a.iter().any(|a| *a == attack_type)
             }
             Self::CommanderCharge(charge) => {
@@ -253,7 +253,7 @@ impl UnitFilter {
                 commander.typ() == *commander_type
                 && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
-            Self::OtherUnit(u) => other_unit.map(|(unit, _)| u.contains(&unit.typ())).unwrap_or(false),
+            Self::OtherUnit(u) => other_unit.map(|(unit, _, _, _)| u.contains(&unit.typ())).unwrap_or(false),
             Self::OwnerTurn => unit.get_owner_id() == game.current_owner(),
             Self::Carried => transporter.is_some(),
             Self::Counter => is_counter,

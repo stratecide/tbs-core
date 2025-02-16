@@ -1,0 +1,8 @@
+AttackType;Condition;Priority;Strength;SplashType;SplashRange;SplashPattern;SplashDirection;Targeting
+Adjacent;;0;1;Default;;Straight;AttackInput;Unit
+Ranged;;0;1;Default;;Straight;AllDirections;Unit
+DragonHead;;0;1;Default;;AttackPattern;AttackInput;Unit
+Magnet;;0;1;Magnet;;Straight;AttackInput;Unit
+Cannon;;0;1;NoCounter;;AttackPattern;AttackInput;Unit
+Erupt;;0;1;Erupt;;AttackPattern;AttackInput;Unit
+Rook;;0;1;Rook;;Straight;AttackInput;Unit

@@ -81,7 +81,7 @@ trait ModifiedView<D: Direction> {
     fn additional_hero_influence_at(&self, point: Point, only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
         self.get_inner_view().additional_hero_influence_at(point, only_owner_id)
     }
-    fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
+    fn additional_hero_influence_map(&self, only_owner_id: Option<i8>) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
         self.get_inner_view().additional_hero_influence_map(only_owner_id)
     }
 }
@@ -159,7 +159,7 @@ macro_rules! impl_game_view {
             fn additional_hero_influence_at(&self, point: Point, only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
                 ModifiedView::additional_hero_influence_at(self, point, only_owner_id)
             }
-            fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
+            fn additional_hero_influence_map(&self, only_owner_id: Option<i8>) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
                 ModifiedView::additional_hero_influence_map(self, only_owner_id)
             }
 
@@ -357,8 +357,8 @@ impl<D: Direction> ModifiedView<D> for MovingHeroView<D> {
         }
     }
 
-    fn additional_hero_influence_map(&self, only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
-        if !self.hero_unit.is_hero() || self.hero_unit.get_owner_id() != only_owner_id {
+    fn additional_hero_influence_map(&self, only_owner_id: Option<i8>) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
+        if !self.hero_unit.is_hero() || only_owner_id.is_some() && Some(self.hero_unit.get_owner_id()) != only_owner_id {
             return None;
         }
         let pos = self.hero_pos?;

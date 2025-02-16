@@ -12,14 +12,14 @@ use super::ConfigParseError;
 
 pub struct FunctionPointer {
     pub index: usize,
-    pub parameter_count: usize,
+    pub parameters: Shared<Vec<String>>,
 }
 
 pub struct FileLoader {
     load_file: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>,
     engine: Engine,
     unoptimized_asts: HashMap<String, Shared<AST>>,
-    rhai_functions: Vec<(String, String, usize)>,
+    rhai_functions: Vec<(String, String, Shared<Vec<String>>)>,
     pub movement_types: Vec<String>,
     pub unit_types: Vec<String>,
     pub terrain_types: Vec<String>,
@@ -29,6 +29,8 @@ pub struct FileLoader {
     pub flags: Vec<String>,
     pub tags: Vec<String>,
     pub effects: Vec<String>,
+    pub attack_types: Vec<String>,
+    pub splash_types: Vec<String>,
 }
 
 impl FileLoader {
@@ -51,6 +53,8 @@ impl FileLoader {
             flags: Vec::new(),
             tags: Vec::new(),
             effects: Vec::new(),
+            attack_types: Vec::new(),
+            splash_types: Vec::new(),
         }
     }
 
@@ -95,7 +99,7 @@ impl FileLoader {
             let mut map = HashMap::default();
             let line = line?;
             for (i, s) in line.iter().enumerate().take(headers.len()) {
-                map.insert(headers[i].clone(), s);
+                map.insert(headers[i].clone(), s.trim());
             }
             let line = Line::parse(&map, self)?;
             line.simple_validation()?;
@@ -104,7 +108,7 @@ impl FileLoader {
         Ok(())
     }
 
-    pub(super) fn rhai_function(&mut self, name: &str, parameter_count: RangeInclusive<usize>) -> Result<FunctionPointer, ConfigParseError> {
+    pub(crate) fn rhai_function(&mut self, name: &str, parameter_count: RangeInclusive<usize>) -> Result<FunctionPointer, ConfigParseError> {
         let Some((filename, name)) = name.split_once('>') else {
             return Err(ConfigParseError::ScriptNeedsFileAndFunctionName(name.to_string()));
         };
@@ -113,30 +117,28 @@ impl FileLoader {
         if filename == GLOBAL_SCRIPT {
             return Err(ConfigParseError::DontCallGlobalScriptDirectly(name.to_string()));
         }
-        if let Some(index) = self.rhai_functions.iter()
-        .position(|(f, n, pc)| f.as_str() == filename && n.as_str() == name && parameter_count.contains(pc)) {
-            Ok(FunctionPointer {
-                index,
-                parameter_count: self.rhai_functions[index].2,
-            })
+        let index = if let Some(index) = self.rhai_functions.iter()
+        .position(|(f, n, parameters)| f.as_str() == filename && n.as_str() == name && parameter_count.contains(&parameters.len())) {
+            index
         } else {
             let filename = filename.to_string();
             let ast = self.load_rhai_module(&filename)?;
             // check if a function with that name and correct parameter-count exists (parameter types can't be verified)
-            let Some(parameter_count) = ast.iter_functions()
+            let Some(parameters) = ast.iter_functions()
             .filter(|f| f.name == name)
-            .map(|f| f.params.len())
-            .filter(|count| parameter_count.contains(count))
+            .map(|f| f.params.iter().map(|s| s.to_string()).collect())
+            .filter(|parameters: &Vec<String>| parameter_count.contains(&parameters.len()))
             .next() else {
                 return Err(ConfigParseError::ScriptFunctionNotFound(filename, name.to_string()));
             };
-            self.rhai_functions.push((filename, name.to_string(), parameter_count));
-            Ok(FunctionPointer {
-                index: self.rhai_functions.len() - 1,
-                parameter_count,
-            })
-        }
-    }
+            self.rhai_functions.push((filename, name.to_string(), Shared::new(parameters)));
+            self.rhai_functions.len() - 1
+        };
+        Ok(FunctionPointer {
+            index,
+            parameters: self.rhai_functions[index].2.clone(),
+        })
+}
 
     pub(super) fn load_rhai_module(&mut self, filename: &String) -> Result<Shared<AST>, ConfigParseError> {
         if let Some(ast) = self.unoptimized_asts.get(filename) {

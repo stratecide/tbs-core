@@ -27,9 +27,11 @@ pub const CONST_NAME_UNIT_ID: &'static str = "UNIT_ID";
 pub const CONST_NAME_OTHER_UNIT: &'static str = "OTHER_UNIT";
 pub const CONST_NAME_OTHER_UNIT_ID: &'static str = "OTHER_UNIT_ID";
 pub const CONST_NAME_ATTACKER: &'static str = "ATTACKER";
+pub const CONST_NAME_ATTACKER_ID: &'static str = "ATTACKER_ID";
 pub const CONST_NAME_ATTACKER_POSITION: &'static str = "ATTACKER_POSITION";
 pub const CONST_NAME_ATTACK_DIRECTION: &'static str = "ATTACK_DIRECTION";
 pub const CONST_NAME_DEFENDER: &'static str = "DEFENDER";
+pub const CONST_NAME_DEFENDER_ID: &'static str = "DEFENDER_ID";
 pub const CONST_NAME_DEFENDER_POSITION: &'static str = "DEFENDER_POSITION";
 pub const CONST_NAME_DEFENDER_POSITIONS: &'static str = "DEFENDER_POSITIONS";
 pub const CONST_NAME_PATH: &'static str = "PATH";
@@ -37,8 +39,10 @@ pub const CONST_NAME_TRANSPORTER: &'static str = "TRANSPORTER";
 pub const CONST_NAME_TRANSPORT_INDEX: &'static str = "TRANSPORT_INDEX";
 pub const CONST_NAME_TRANSPORTER_POSITION: &'static str = "TRANSPORTER_POSITION";
 pub const CONST_NAME_IS_COUNTER: &'static str = "IS_COUNTER";
+pub const CONST_NAME_MIRRORED: &'static str = "MIRRORED";
 pub const CONST_NAME_DAMAGE: &'static str = "DAMAGE";
 pub const CONST_NAME_INTERRUPTED: &'static str = "INTERRUPTED";
+pub const CONST_NAME_TARGETS: &'static str = "TARGETS";
 
 pub const FUNCTION_NAME_INPUT_CHOICE: &'static str = "user_selection";
 pub const FUNCTION_NAME_BLAST_DIRECTION: &'static str = "get_blast_direction";
@@ -77,10 +81,10 @@ def_package! {
         crate::map::rhai_direction::DirectionPackage4,
         crate::game::rhai_board::BoardPackage4,
         crate::units::rhai_unit::UnitPackage4,
-        crate::units::rhai_combat::CombatPackage4,
         crate::units::rhai_movement::MovementPackage4,
         crate::units::hero::rhai_hero::HeroPackage,
         crate::tokens::rhai_token::TokenPackage4,
+        crate::combat::rhai_combat::CombatPackage4,
         crate::game::rhai_event_handler::EventHandlerPackage4 {}
 }
 
@@ -98,10 +102,10 @@ def_package! {
         crate::map::rhai_direction::DirectionPackage6,
         crate::game::rhai_board::BoardPackage6,
         crate::units::rhai_unit::UnitPackage6,
-        crate::units::rhai_combat::CombatPackage6,
         crate::units::rhai_movement::MovementPackage6,
         crate::units::hero::rhai_hero::HeroPackage,
         crate::tokens::rhai_token::TokenPackage6,
+        crate::combat::rhai_combat::CombatPackage6,
         crate::game::rhai_event_handler::EventHandlerPackage6 {}
 }
 

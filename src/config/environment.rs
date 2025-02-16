@@ -121,18 +121,22 @@ impl Environment {
         engine
     }
 
-    pub fn get_engine<D: Direction>(&self, game: &impl GameView<D>) -> Engine {
+    pub fn get_engine<D: Direction>(&self) -> Engine {
+        self._get_engine::<D>(None, None)
+    }
+
+    pub fn get_engine_board<D: Direction>(&self, game: &impl GameView<D>) -> Engine {
         let game = game.as_shared();
-        self._get_engine(game, None)
+        self._get_engine(Some(game), None)
     }
 
     pub fn get_engine_handler<D: Direction>(&self, handler: &EventHandler<D>) -> Engine {
         let game = handler.get_game().as_shared();
         let handler = handler.clone();
-        self._get_engine(game, Some(handler))
+        self._get_engine(Some(game), Some(handler))
     }
 
-    fn _get_engine<D: Direction>(&self, game: SharedGameView<D>, handler: Option<EventHandler<D>>) -> Engine {
+    pub fn _get_engine<D: Direction>(&self, game: Option<SharedGameView<D>>, handler: Option<EventHandler<D>>) -> Engine {
         let mut engine = self.get_engine_base(D::is_hex());
         let this = self.clone();
         #[allow(deprecated)]
@@ -148,7 +152,7 @@ impl Environment {
             }
             match name {
                 CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
-                CONST_NAME_BOARD => Ok(Some(Dynamic::from(game.clone()))),
+                CONST_NAME_BOARD => Ok(game.clone().map(Dynamic::from)),
                 CONST_NAME_EVENT_HANDLER => Ok(handler.clone().map(Dynamic::from)),
                 _ => Ok(None)
             }
@@ -156,7 +160,11 @@ impl Environment {
         engine
     }
 
-    pub fn rhai_function_name(&self, engine: &Engine, index: usize) -> (Shared<AST>, &String) {
+    pub fn get_rhai_function_name(&self, index: usize) -> &String {
+        &self.config.functions[index].1
+    }
+
+    pub fn get_rhai_function(&self, engine: &Engine, index: usize) -> (Shared<AST>, &String) {
         let (ast_index, name) = &self.config.functions[index];
         let mut asts = self.compiled_asts.lock().unwrap();
         let ast = if let Some(ast) = asts.get(ast_index) {

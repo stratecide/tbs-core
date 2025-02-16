@@ -164,7 +164,7 @@ impl EffectVisibility {
                 if let Some(p) = p {
                     scope.push_constant(CONST_NAME_POSITION, p);
                 }
-                let engine = game.environment().get_engine(game);
+                let engine = game.environment().get_engine_board(game);
                 let executor = Executor::new(engine, scope, game.environment());
                 match executor.run(*function_index, ()) {
                     Ok(result) => result,

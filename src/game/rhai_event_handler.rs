@@ -7,7 +7,6 @@ use super::event_handler::EventHandler;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit::Unit;
-use crate::units::combat::*;
 use crate::units::movement::*;
 use crate::units::hero::*;
 use crate::terrain::terrain::Terrain;
@@ -20,17 +19,18 @@ macro_rules! event_handler_module {
         #[export_module]
         mod $name {
             pub type Handler = EventHandler<$d>;
+            pub type UnitId = crate::units::UnitId<$d>;
 
             #[rhai_fn(pure)]
-            pub fn get_unit_position(handler: &mut Handler, id: usize) -> Dynamic {
-                handler.get_observed_unit_pos(id)
+            pub fn get_unit_position(handler: &mut Handler, id: UnitId) -> Dynamic {
+                handler.get_observed_unit_pos(id.0)
                 .map(|(p, _)| Dynamic::from(p))
                 .unwrap_or(().into())
             }
 
             #[rhai_fn(pure)]
-            pub fn get_unit_transport_index(handler: &mut Handler, id: usize) -> Dynamic {
-                handler.get_observed_unit_pos(id)
+            pub fn get_unit_transport_index(handler: &mut Handler, id: UnitId) -> Dynamic {
+                handler.get_observed_unit_pos(id.0)
                 .and_then(|(_, index)| index)
                 .map(|index| Dynamic::from(index as i32))
                 .unwrap_or(().into())
@@ -98,6 +98,50 @@ macro_rules! event_handler_module {
                 handler.remove_unit_tag(position, key.0);
             }
 
+            #[rhai_fn(name = "remove")]
+            pub fn remove_unit_id_flag(mut handler: Handler, id: UnitId, key: FlagKey) {
+                match handler.get_observed_unit_pos(id.0) {
+                    Some((p, None)) => handler.remove_unit_flag(p, key.0),
+                    Some((p, Some(unload_index))) => handler.remove_unit_flag_boarded(p, unload_index, key.0),
+                    None => (),
+                };
+            }
+            #[rhai_fn(name = "set")]
+            pub fn set_unit_id_flag(mut handler: Handler, id: UnitId, key: FlagKey) {
+                match handler.get_observed_unit_pos(id.0) {
+                    Some((p, None)) => handler.set_unit_flag(p, key.0),
+                    Some((p, Some(unload_index))) => handler.set_unit_flag_boarded(p, unload_index, key.0),
+                    None => (),
+                };
+            }
+
+            #[rhai_fn(pure, name = "get")]
+            pub fn get_unit_id_tag(handler: &mut Handler, id: UnitId, key: TagKey) -> Dynamic {
+                if let Some((p, unload_index)) = handler.get_observed_unit_pos(id.0) {
+                    handler.with_map(|map| {
+                        let unit = map.get_unit(p).unwrap();
+                        if let Some(index) = unload_index {
+                            unit.get_transported()[index].get_tag(key.0)
+                        } else {
+                            unit.get_tag(key.0)
+                        }
+                    }).map(|value| value.into_dynamic())
+                    .unwrap_or(().into())
+                } else {
+                    ().into()
+                }
+            }
+            #[rhai_fn(name = "set")]
+            pub fn set_unit_id_tag(mut handler: Handler, id: UnitId, key: TagKey, value: Dynamic) {
+                if let Some(value) = TagValue::from_dynamic(value, key.0, &handler.environment()) {
+                    match handler.get_observed_unit_pos(id.0) {
+                        Some((p, None)) => handler.set_unit_tag(p, key.0, value),
+                        Some((p, Some(unload_index))) => handler.set_unit_tag_boarded(p, unload_index, key.0, value),
+                        None => (),
+                    };
+                }
+            }
+
             pub fn set_hero(mut handler: Handler, position: Point, hero: Hero) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {
                     return;
@@ -105,7 +149,7 @@ macro_rules! event_handler_module {
                 handler.unit_set_hero(position, hero);
             }
 
-            #[rhai_fn(name = "sneak_attack")]
+            /*#[rhai_fn(name = "sneak_attack")]
             pub fn sneak_attack(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32, attacker_id: usize) {
                 vector.execute(
                     &mut handler,
@@ -142,7 +186,7 @@ macro_rules! event_handler_module {
             #[rhai_fn(name = "sneak_attack")]
             pub fn sneak_attack4(handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: i32) {
                 sneak_attack3(handler, vector, p, attacker, Rational32::from_integer(factor))
-            }
+            }*/
 
             pub fn place_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::combat::AttackInput;
 use crate::config::config::Config;
 use crate::game::commands::*;
 use crate::game::fog::*;
@@ -10,12 +11,12 @@ use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::map::point::Position;
 use crate::map::point_map::PointMap;
+use crate::map::wrapping_map::OrientedPoint;
 use crate::map::wrapping_map::WMBuilder;
 use crate::script::custom_action::test::CA_UNIT_BUY_HERO;
 use crate::script::custom_action::CustomActionInput;
 use crate::tags::TagValue;
 use crate::terrain::TerrainType;
-use crate::units::combat::AttackVector;
 use crate::units::commands::*;
 use crate::units::hero::*;
 use crate::units::movement::*;
@@ -106,7 +107,7 @@ fn crystal() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let power_aura_damage = 100 - server.get_unit(Point::new(3, 1)).unwrap().get_hp();
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
@@ -121,7 +122,7 @@ fn crystal() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let aura_damage = 100 - server.get_unit(Point::new(3, 1)).unwrap().get_hp();
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
@@ -144,7 +145,7 @@ fn crystal() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let normal_damage = 100 - server.get_unit(Point::new(3, 1)).unwrap().get_hp();
 
@@ -314,7 +315,7 @@ fn edwin() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 2), Direction4::D270))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(2, 2)), None);
     assert!(server.get_unit(Point::new(2, 3)).is_some());
@@ -324,7 +325,7 @@ fn edwin() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(3, 1)), None);
     assert!(server.get_unit(Point::new(2, 1)).is_some());

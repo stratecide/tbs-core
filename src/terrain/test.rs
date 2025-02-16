@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::combat::AttackInput;
 use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
@@ -15,7 +16,6 @@ use crate::script::custom_action::test::CA_UNIT_CAPTURE;
 use crate::script::custom_action::CustomActionInput;
 use crate::terrain::TerrainType;
 use crate::map::wrapping_map::*;
-use crate::units::combat::AttackVector;
 use crate::units::commands::{UnitCommand, UnitAction};
 use crate::units::movement::{Path, PathStep};
 use crate::tags::tests::*;
@@ -150,7 +150,7 @@ fn kraken() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 2)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(4, 2), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(4, 2)), None);
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(8.into()));
@@ -158,7 +158,7 @@ fn kraken() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 2)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D180)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 2), Direction4::D180))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), None);
     assert_eq!(game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_ANGER), Some(2.into()));

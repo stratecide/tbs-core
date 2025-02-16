@@ -1,8 +1,8 @@
 use rhai::*;
 use rhai::plugin::*;
-use super::point::Point;
+use super::point::{Point, PointWithDistortion};
 use super::direction::*;
-use super::wrapping_map::OrientedPoint;
+use super::wrapping_map::{Distortion, OrientedPoint};
 
 #[export_module]
 mod tile_position_module {
@@ -23,6 +23,7 @@ macro_rules! oriented_point_module {
         #[export_module]
         mod $name {
             pub type OrientedPosition = OrientedPoint<$d>;
+            pub type PositionWithDistortion = PointWithDistortion<$d>;
 
             #[rhai_fn(pure, name = "==")]
             pub fn eq(d1: &mut OrientedPosition, d2: OrientedPosition) -> bool {
@@ -33,9 +34,23 @@ macro_rules! oriented_point_module {
                 *p1 != p2
             }
         
+            #[rhai_fn(pure, name = "==")]
+            pub fn eq_pwd(d1: &mut PositionWithDistortion, d2: PositionWithDistortion) -> bool {
+                *d1 == d2
+            }
+            #[rhai_fn(pure, name = "!=")]
+            pub fn neq_pwd(p1: &mut PositionWithDistortion, p2: PositionWithDistortion) -> bool {
+                *p1 != p2
+            }
+        
             #[rhai_fn(pure)]
             pub fn with_orientation(p: &mut Point) -> OrientedPosition {
                 OrientedPosition::new(*p, false, <$d>::angle_0())
+            }
+        
+            #[rhai_fn(pure)]
+            pub fn with_distortion(p: &mut Point) -> PositionWithDistortion {
+                PositionWithDistortion::new(*p, Distortion::neutral())
             }
         
             #[rhai_fn(pure, get = "point")]
@@ -49,6 +64,15 @@ macro_rules! oriented_point_module {
             #[rhai_fn(pure, get = "mirrored")]
             pub fn get_mirrored(p: &mut OrientedPosition) -> bool {
                 p.mirrored
+            }
+        
+            #[rhai_fn(pure, get = "point")]
+            pub fn get_point_pwd(p: &mut PositionWithDistortion) -> Point {
+                p.point
+            }
+            #[rhai_fn(pure, get = "distortion")]
+            pub fn get_distortion(p: &mut PositionWithDistortion) -> Distortion<$d> {
+                p.distortion
             }
         }
 

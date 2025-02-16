@@ -4,11 +4,11 @@ use rhai::Scope;
 use rustc_hash::FxHashSet as HashSet;
 use std::fmt;
 
-use num_rational::Rational32;
 use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
 
+use crate::combat::*;
 use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
 use crate::game::commands::*;
@@ -22,7 +22,6 @@ use crate::script::custom_action::*;
 use crate::script::*;
 use crate::VERSION;
 
-use super::combat::*;
 use super::hero::*;
 use super::movement::*;
 use super::unit::Unit;
@@ -36,7 +35,7 @@ pub enum UnitAction<D: Direction> {
     Wait,
     Take,
     Enter,
-    Attack(AttackVector<D>),
+    Attack(AttackInput<D>),
     HeroPower(HeroPowerIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
     Custom(CustomActionIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
 }
@@ -104,7 +103,6 @@ impl<D: Direction> UnitAction<D> {
     }
 
     pub fn execute(&self, handler: &mut EventHandler<D>, unit_id: usize, end: Point, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>], action_data: Vec<CustomActionData<D>>) {
-        let owner_id = handler.get_game().current_owner();
         let needs_to_exhaust = match self {
             Self::Wait => true,
             Self::Enter => true,
@@ -153,21 +151,13 @@ impl<D: Direction> UnitAction<D> {
                 }
                 true
             }
-            Self::Attack(attack_vector) => {
-                let attacker = handler.get_game().get_unit(end).unwrap();
+            Self::Attack(input) => {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
-                attack_vector.execute(
-                    handler,
-                    end,
-                    attacker,
-                    Some(unit_id),
-                    Some((path, transporter, ballast)),
-                    true,
-                    true,
-                    true,
-                    Rational32::from_integer(1),
-                    Counter::AllowCounter,
-                );
+                let attacker_position = AttackerPosition::Real {
+                    id: unit_id,
+                    distortion: handler.get_observed_unit(unit_id).unwrap().2,
+                };
+                execute_attack(handler, attacker_position, *input, transporter, ballast, AttackCounterState::AllowCounter, true);
                 true
             }
             Self::HeroPower(index, _) => {
@@ -195,7 +185,7 @@ impl<D: Direction> UnitAction<D> {
             }
         };
         if needs_to_exhaust {
-            let heroes = Hero::hero_influence_at(&*handler.get_game(), end, owner_id);
+            let heroes = HeroMap::new(&*handler.get_game(), None);
             handler.on_unit_normal_action(unit_id, path.clone(), false, &heroes, ballast);
         }
     }
@@ -323,7 +313,7 @@ impl<D: Direction> UnitCommand<D> {
             }
             // fog trap
             handler.effect_fog_surprise(fog_trap);
-            let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
+            let heroes = HeroMap::new(&*handler.get_game(), None);
             handler.on_unit_normal_action(unit_id, path_taken.clone(), true, &heroes, ballast);
         } else {
             // TODO: need to check whether action can really be executed

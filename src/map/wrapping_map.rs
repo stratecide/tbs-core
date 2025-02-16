@@ -1,3 +1,4 @@
+use crate::config::environment::Environment;
 use crate::map::direction::*;
 use crate::map::point_map::*;
 use crate::map::point::*;
@@ -598,13 +599,15 @@ fn wrap_point<D: Direction>(point: &mut D::T, wrapping_vectors: &[D::T]) {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Zippable)]
+#[zippable(support_ref = Environment)]
 pub struct OrientedPoint<D>
 where D: Direction {
     pub point: Point,
     pub mirrored: bool,
     pub direction: D,
 }
+
 impl<D>OrientedPoint<D>
 where D: Direction {
     pub fn new(point: Point, mirrored: bool, direction: D) -> Self {

@@ -6,7 +6,7 @@ mod commander_type_config;
 mod commander_power_config;
 mod commander_unit_config;
 mod unit_filter;
-mod number_modification;
+pub mod number_modification;
 pub mod config;
 pub mod parse;
 pub mod environment;
@@ -21,6 +21,8 @@ pub mod global_events;
 pub mod token_filter;
 pub mod editor_tag_config;
 pub mod effect_config;
+pub mod attack_config;
+pub mod attack_powered;
 
 use std::fmt::Debug;
 use std::fmt::Display;

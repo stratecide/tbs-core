@@ -34,7 +34,7 @@ impl TableLine for CustomActionConfig {
         let script = match data.get(&H::Script) {
             Some(s) if s.len() > 0 => {
                 let exe = loader.rhai_function(s, 0..=1)?;
-                let input = if exe.parameter_count > 0 {
+                let input = if exe.parameters.len() > 0 {
                     Some(loader.rhai_function(&format!("{s}_input"), 0..=0)?.index)
                 } else {
                     None
@@ -78,7 +78,7 @@ impl CustomActionConfig {
         // when moving out of a transporter, or start_turn for transported units
         transporter: Option<(&Unit<D>, usize)>,
         // the attacked unit, the unit this one was destroyed by, ...
-        other_unit: Option<(&Unit<D>, Point)>,
+        other_unit: Option<(&Unit<D>, Point, Option<usize>, &[HeroInfluence<D>])>,
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
         // empty if the unit hasn't moved

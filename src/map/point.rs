@@ -2,7 +2,7 @@ use zipper::*;
 use zipper_derive::Zippable;
 use crate::config::environment::Environment;
 
-use super::direction::{Direction, Translation};
+use super::{direction::{Direction, Translation}, wrapping_map::Distortion};
 
 pub trait Position<T> {
     fn new(x: T, y: T) -> Self;
@@ -64,3 +64,20 @@ impl Position<i16> for GlobalPoint {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct PointWithDistortion<D: Direction> {
+    pub point: Point,
+    pub distortion: Distortion<D>,
+}
+
+impl<D: Direction> PointWithDistortion<D> {
+    pub fn new(point: Point, distortion: Distortion<D>) -> Self {
+        Self {
+            point,
+            distortion,
+        }
+    }
+    pub fn as_tuple(&self) -> (Point, Distortion<D>) {
+        (self.point, self.distortion)
+    }
+}

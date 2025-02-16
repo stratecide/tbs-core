@@ -3,9 +3,9 @@ use rustc_hash::FxHashMap as HashMap;
 use std::error::Error;
 use num_rational::Rational32;
 
+use crate::combat::*;
 use crate::config::OwnershipPredicate;
 use crate::game::fog::VisionMode;
-use crate::units::combat::*;
 use crate::units::movement::MovementType;
 use crate::units::UnitVisibility;
 
@@ -30,12 +30,11 @@ pub struct UnitTypeConfig {
     pub(super) can_be_moved_through: bool,
     pub(super) can_be_taken: bool,
     pub(super) can_attack_after_moving: bool,
-    pub(super) attack_pattern: AttackType,
-    pub(super) attack_targets: AttackTargeting,
-    pub(super) splash_damage: Vec<Rational32>, // empty if no splash damage. contains factor per additional distance
+    pub(super) attack_pattern: AttackPattern,
+    pub(super) attack_type: AttackType,
+    pub(super) attack_targets: ValidAttackTargets,
+    pub(super) attack_direction: AllowedAttackInputDirectionSource,
     pub(super) value: i32,
-    pub(super) displacement: Displacement, // implies that attack_pattern is Adjacent or Straight
-    pub(super) displacement_distance: i8, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: bool,
     pub(super) transport_capacity: usize,
     pub(super) custom_columns: HashMap<ImmutableString, ImmutableString>,
@@ -73,12 +72,17 @@ impl TableLine for UnitTypeConfig {
             can_be_moved_through: parse_def(data, H::CanBeMovedThrough, false, loader)?,
             can_be_taken: parse_def(data, H::CanBeTaken, false, loader)?,
             can_attack_after_moving: parse_def(data, H::CanAttackAfterMoving, false, loader)?,
-            attack_pattern: parse_def(data, H::AttackPattern, AttackType::None, loader)?,
-            attack_targets: parse_def(data, H::AttackTargets, AttackTargeting::Enemy, loader)?,
-            splash_damage: parse_vec_def(data, H::SplashDamage, vec![Rational32::from_integer(1)], loader)?,
+            attack_pattern: match data.get(&H::AttackPattern) {
+                Some(s) if s.len() > 0 => AttackPattern::from_conf(s, loader)?.0,
+                _ => AttackPattern::None,
+            },
+            attack_direction: parse_def(data, H::AttackDirection, AllowedAttackInputDirectionSource::AllDirections, loader)?,
+            attack_targets: parse_def(data, H::AttackTargets, ValidAttackTargets::Enemy, loader)?,
+            attack_type: match data.get(&H::AttackType) {
+                Some(s) if s.len() > 0 => AttackType::from_conf(s, loader)?.0,
+                _ => AttackType(None),
+            },
             value: parse(data, H::Value, loader)?,
-            displacement: parse_def(data, H::Displacement, Displacement::None, loader)?,
-            displacement_distance: parse_def(data, H::DisplacementDistance, 0, loader)?,
             can_be_displaced: parse_def(data, H::CanBeDisplaced, false, loader)?,
             transport_capacity: parse_def(data, H::TransportCapacity, 0 as u8, loader)? as usize,
             custom_columns,
@@ -114,26 +118,11 @@ crate::enum_with_custom! {
         CanBeTaken,
         CanAttackAfterMoving,
         AttackPattern,
+        AttackDirection,
         AttackTargets,
-        SplashDamage,
+        AttackType,
         Value,
-        Displacement,
-        DisplacementDistance,
         CanBeDisplaced,
         TransportCapacity,
-    }
-}
-
-impl FromConfig for AttackTargeting {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
-        Ok((match s.trim() {
-            "" => Self::Enemy,
-            "Enemy" => Self::Enemy,
-            "Friendly" => Self::Friendly,
-            "All" => Self::All,
-            name => {
-                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
-            }
-        }, ""))
     }
 }

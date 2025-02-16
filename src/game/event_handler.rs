@@ -23,9 +23,11 @@ use crate::tokens::token::Token;
 use crate::map::direction::Direction;
 use crate::game::game::*;
 use crate::game::fog::*;
+use crate::units::hero::HeroMap;
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
+use crate::units::UnitId;
 use super::event_fx::*;
 use super::events::Event;
 use super::game_view::GameView;
@@ -67,15 +69,21 @@ impl<D: Direction> EventHandlerInner<D> {
         self.events.get_mut(&IPerspective::Server).unwrap().push(event);
     }
 
-    fn observe_unit(&mut self, position: Point, unload_index: Option<usize>) -> (usize, Distortion<D>) {
+    fn observe_unit(&mut self, position: Point, unload_index: Option<usize>) -> UnitId<D> {
         if let Some((id, (_, _, distortion))) = self.observed_units.iter()
         .find(|(_, (p, i, _))| *p == position && *i == unload_index) {
-            (*id, *distortion)
+            UnitId(*id, *distortion)
         } else {
             self.observed_units.insert(self.next_observed_unit_id, (position, unload_index, Distortion::neutral()));
             self.next_observed_unit_id += 1;
-            (self.next_observed_unit_id - 1, Distortion::neutral())
+            UnitId(self.next_observed_unit_id - 1, Distortion::neutral())
         }
+    }
+
+    fn get_observed_unit_id(&self, position: Point, unload_index: Option<usize>) -> Option<UnitId<D>> {
+        self.observed_units.iter()
+            .find(|(_, (p, i, _))| *p == position && *i == unload_index)
+            .map(|(id, (_, _, distortion))| UnitId(*id, *distortion))
     }
 
     fn get_observed_unit(&self, id: usize) -> Option<(Point, Option<usize>, Distortion<D>)> {
@@ -87,18 +95,18 @@ impl<D: Direction> EventHandlerInner<D> {
         .map(|(p, unload_index, _)| (*p, *unload_index))
     }
 
-    fn observation_id(&self, position: Point, unload_index: Option<usize>) -> Option<(usize, Distortion<D>)> {
+    fn observation_id(&self, position: Point, unload_index: Option<usize>) -> Option<UnitId<D>> {
         self.observed_units.iter()
         .find(|(_, (p, i, _))| *p == position && *i == unload_index)
-        .map(|(id, (_, _, distortion))| (*id, *distortion))
+        .map(|(id, (_, _, distortion))| UnitId(*id, *distortion))
     }
 
     fn remove_observed_units_at(&mut self, position: Point) {
-        if let Some((id, _)) = self.observation_id(position, None) {
+        if let Some(UnitId(id, _)) = self.observation_id(position, None) {
             self.observed_units.remove(&id);
         }
         for i in 0..self.game.environment().config.max_transported() {
-            if let Some((id, _)) = self.observation_id(position, Some(i)) {
+            if let Some(UnitId(id, _)) = self.observation_id(position, Some(i)) {
                 self.observed_units.remove(&id);
             }
         }
@@ -179,8 +187,12 @@ impl<D: Direction> EventHandler<D> {
         })
     }
 
-    pub fn observe_unit(&mut self, position: Point, unload_index: Option<usize>) -> (usize, Distortion<D>) {
+    pub fn observe_unit(&mut self, position: Point, unload_index: Option<usize>) -> UnitId<D> {
         self.with_mut(|eh| eh.observe_unit(position, unload_index))
+    }
+
+    pub fn get_observed_unit_id(&self, position: Point, unload_index: Option<usize>) -> Option<UnitId<D>> {
+        self.with(|eh| eh.get_observed_unit_id(position, unload_index))
     }
 
     pub fn get_observed_unit(&self, id: usize) -> Option<(Point, Option<usize>, Distortion<D>)> {
@@ -195,7 +207,7 @@ impl<D: Direction> EventHandler<D> {
         self.with_mut(|eh| eh.remove_observed_units_at(position))
     }
 
-    fn move_observed_unit(&mut self, id: usize, p: Point, unload_index: Option<usize>, distortion: Distortion<D>) {
+    pub fn move_observed_unit(&mut self, id: usize, p: Point, unload_index: Option<usize>, distortion: Distortion<D>) {
         self.with_mut(|eh| eh.move_observed_unit(id, p, unload_index, distortion))
     }
     
@@ -549,8 +561,9 @@ impl<D: Direction> EventHandler<D> {
             self.add_event(Event::UnitRemove(path.start, unit.clone()));
         }
         let unit_team = unit.get_team();
-        let (unit_id, disto) = self.observe_unit(path.start, unload_index);
-        let (transformed_unit, vision_changes) = self.animate_unit_path(&unit, path, involuntarily);
+        let UnitId(unit_id, disto) = self.observe_unit(path.start, unload_index);
+        let (effect, transformed_unit, vision_changes) = self.animate_unit_path(&unit, path, involuntarily);
+        self.effect(effect);
         let (path_end, distortion) = path.end(&*self.get_game()).unwrap();
         if board_at_the_end {
             self.move_observed_unit(unit_id, path_end, Some(self.with_map(|map| map.get_unit(path_end).unwrap().get_transported().len())), disto + distortion);
@@ -601,10 +614,10 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    fn animate_unit_path(&mut self, unit: &Unit<D>, path: &Path<D>, involuntarily: bool) -> (Unit<D>, HashMap<Point, FogIntensity>) {
+    pub fn animate_unit_path(&self, unit: &Unit<D>, path: &Path<D>, involuntarily: bool) -> (Effect<D>, Unit<D>, HashMap<Point, FogIntensity>) {
         let unit_team = unit.get_team();
         let owner_id = unit.get_owner_id();
-        let heroes = Hero::map_influence(&*self.get_game(), owner_id);
+        let heroes = HeroMap::new(&*self.get_game(), Some(owner_id));
         let mut current = path.start;
         let mut transformed_unit = unit.clone();
         //transformed_unit.set_en_passant(None);
@@ -612,7 +625,7 @@ impl<D: Direction> EventHandler<D> {
         let mut vision_changes = HashMap::default();
         for (i, step) in path.steps.iter().enumerate() {
             if self.get_game().is_foggy() && !involuntarily && (i == 0 || unit.vision_mode().see_while_moving()) {
-                let mut heroes = heroes.get(&(current, owner_id)).map(|h| h.clone()).unwrap_or(Vec::new());
+                let mut heroes = heroes.get(current, owner_id).to_vec();
                 if let Some(strength) = Hero::aura_range(&*self.get_game(), &transformed_unit, current, None) {
                     heroes.push((transformed_unit.clone(), transformed_unit.get_hero().unwrap().clone(), current, None, strength as u8));
                 }
@@ -632,7 +645,7 @@ impl<D: Direction> EventHandler<D> {
             current = next;
         }
         if self.get_game().is_foggy() {
-            let mut heroes = heroes.get(&(current, owner_id)).map(|h| h.clone()).unwrap_or(Vec::new());
+            let mut heroes = heroes.get(current, owner_id).to_vec();
             if let Some(strength) = Hero::aura_range(&*self.get_game(), &transformed_unit, current, None) {
                 heroes.push((transformed_unit.clone(), transformed_unit.get_hero().unwrap().clone(), current, None, strength as u8));
             }
@@ -643,11 +656,11 @@ impl<D: Direction> EventHandler<D> {
                 }
             }
         }
-        self.add_event(Event::Effect(Effect::new_unit_path(unit.clone(), steps)));
-        (transformed_unit, vision_changes)
+        //self.add_event(Event::Effect(Effect::new_unit_path(unit.clone(), steps)));
+        (Effect::new_unit_path(unit.clone(), steps), transformed_unit, vision_changes)
     }
 
-    pub fn on_unit_normal_action(&mut self, id: usize, path: Path<D>, interrupted: bool, heroes: &[HeroInfluence<D>], ballast: &[TBallast<D>]) {
+    pub fn on_unit_normal_action(&mut self, id: usize, path: Path<D>, interrupted: bool, heroes: &HeroMap<D>, ballast: &[TBallast<D>]) {
         let Some((p, unload_index)) = self.get_observed_unit_pos(id) else {
             return;
         };
@@ -709,10 +722,10 @@ impl<D: Direction> EventHandler<D> {
     }
 
     pub fn set_unit_tag(&mut self, position: Point, key: usize, value: TagValue<D>) {
-        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         if !value.has_valid_type(&self.environment(), key) {
             return;
         }
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         if let Some(old) = unit.get_tag(key) {
             self.add_event(Event::UnitReplaceTag(position, TagKeyValues(TagKey(key), [old, value])));
         } else {
@@ -726,16 +739,47 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
+    pub fn set_unit_flag_boarded(&mut self, position: Point, unload_index: usize, flag: usize) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        if !unit.get_transported()[unload_index].has_flag(flag) {
+            self.add_event(Event::UnitFlagBoarded(position, unload_index.into(), FlagKey(flag)));
+        }
+    }
+    pub fn remove_unit_flag_boarded(&mut self, position: Point, unload_index: usize, flag: usize) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        if unit.get_transported()[unload_index].has_flag(flag) {
+            self.add_event(Event::UnitFlagBoarded(position, unload_index.into(), FlagKey(flag)));
+        }
+    }
+
+    pub fn set_unit_tag_boarded(&mut self, position: Point, unload_index: usize, key: usize, value: TagValue<D>) {
+        if !value.has_valid_type(&self.environment(), key) {
+            return;
+        }
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        if let Some(old) = unit.get_transported()[unload_index].get_tag(key) {
+            self.add_event(Event::UnitReplaceTagBoarded(position, unload_index.into(), TagKeyValues(TagKey(key), [old, value])));
+        } else {
+            self.add_event(Event::UnitSetTagBoarded(position, unload_index.into(), TagKeyValues(TagKey(key), [value])));
+        }
+    }
+    pub fn remove_unit_tag_boarded(&mut self, position: Point, unload_index: usize, key: usize) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        if let Some(old) = unit.get_transported()[unload_index].get_tag(key) {
+            self.add_event(Event::UnitRemoveTagBoarded(position, unload_index.into(), TagKeyValues(TagKey(key), [old])));
+        }
+    }
+
     pub fn unit_remove(&mut self, position: Point) {
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         self.remove_observed_units_at(position);
-        self.add_event(Event::UnitRemove(position, unit.clone()));
+        self.add_event(Event::UnitRemove(position, unit));
     }
 
     fn unit_death(&mut self, position: Point) {
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         self.remove_observed_units_at(position);
-        self.add_event(Event::UnitRemove(position, unit.clone()));
+        self.add_event(Event::UnitRemove(position, unit));
     }
 
     pub fn unit_mass_death(&mut self, positions: &HashSet<Point>) {
@@ -757,11 +801,11 @@ impl<D: Direction> EventHandler<D> {
         before_executing: impl FnOnce(&mut Self),
         execute_script: impl Fn(&mut Self, Vec<usize>, Point, Terrain<D>),
     ) {
-        let hero_auras = Hero::map_influence(&*self.get_game(), -1);
+        let hero_auras = HeroMap::new(&*self.get_game(), None);
         let mut scripts = Vec::new();
         for p in self.with_map(|map| map.all_points()) {
             let terrain = self.get_game().get_terrain(p).unwrap();
-            let heroes = hero_auras.get(&(p, terrain.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
+            let heroes = hero_auras.get(p, terrain.get_owner_id());
             let script = get_script(&*self.get_game(), p, &terrain, heroes);
             if script.len() > 0 {
                 scripts.push((script, p, terrain));
@@ -776,22 +820,21 @@ impl<D: Direction> EventHandler<D> {
 
     pub fn trigger_all_unit_scripts(
         &mut self,
-        get_script: impl Fn(&Handle<Game<D>>, &Unit<D>, Point, Option<(&Unit<D>, usize)>, &[HeroInfluence<D>]) -> Vec<usize>,
+        get_script: impl Fn(&Handle<Game<D>>, &Unit<D>, Point, Option<(&Unit<D>, usize)>, &HeroMap<D>) -> Vec<usize>,
         before_executing: impl FnOnce(&mut Self),
         execute_script: impl Fn(&mut Self, Vec<usize>, Point, &Unit<D>, usize),
     ) {
-        let hero_auras = Hero::map_influence(&*self.get_game(), -1);
+        let heroes = HeroMap::new(&*self.get_game(), None);
         let mut scripts = Vec::new();
         for p in self.with_map(|map| map.all_points()) {
             if let Some(unit) = self.with_map(|map| map.get_unit(p).cloned()) {
-                let heroes = hero_auras.get(&(p, unit.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
-                let script = get_script(&*self.get_game(), &unit, p, None, heroes);
+                let script = get_script(&*self.get_game(), &unit, p, None, &heroes);
                 if script.len() > 0 {
                     let id = self.observe_unit(p, None).0;
                     scripts.push((script, unit.clone(), p, id));
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
-                    let script = get_script(&*self.get_game(), u, p, Some((&unit, i)), heroes);
+                    let script = get_script(&*self.get_game(), u, p, Some((&unit, i)), &heroes);
                     if script.len() > 0 {
                         let id = self.observe_unit(p, Some(i)).0;
                         scripts.push((script, u.clone(), p, id));
@@ -810,7 +853,7 @@ impl<D: Direction> EventHandler<D> {
         &mut self,
         get_script: impl Fn(&GlobalEventConfig) -> Option<usize>,
     ) {
-        let hero_auras = Hero::map_influence(&*self.get_game(), -1);
+        let hero_auras = HeroMap::new(&*self.get_game(), None);
         let all_points = self.with_map(|map| map.all_points());
         let environment = self.environment();
         for (i, conf) in environment.config.global_events.iter().enumerate() {

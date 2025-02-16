@@ -84,7 +84,7 @@ impl AttackType {
     }
 }
 
-fn attack_area_cannon<D: Direction, F: FnMut(Point, D, usize)>(map: &impl GameView<D>, point: Point, dir: D, min_range: usize, max_range: usize, mut callback: F) {
+pub fn attack_area_cannon<D: Direction, F: FnMut(Point, D, usize)>(map: &impl GameView<D>, point: Point, dir: D, min_range: usize, max_range: usize, mut callback: F) {
     if D::is_hex() {
         let mut old_front = HashMap::default();
         let mut front = HashMap::default();
@@ -516,7 +516,7 @@ impl<D: Direction> AttackVector<D> {
         let environment = handler.get_game().environment();
         if let Some(weapon_effects_rhai) = environment.weapon_effects_rhai() {
             // only for effects, so this executor doesn't get access to the event handler
-            let mut engine = environment.get_engine(&*handler.get_game());
+            let mut engine = environment.get_engine_board(&*handler.get_game());
             let handler_ = Arc::new(Mutex::new(handler.clone()));
             {
                 let handler = handler_.clone();
@@ -690,7 +690,7 @@ fn attack_targets<D: Direction>(
             }
         }
         for (defender_id, defender_pos, defender, damage) in defend_script_users {
-            let heroes = hero_map.get(&(defender_pos, defender.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
+            let heroes = hero_map.get(defender_pos, defender.get_owner_id());
             // TODO: set transporter and ballast if defender is originally the attacker
             let scripts = defender.on_defend(&*handler.get_game(), defender_pos, &attacker, attacker_pos, None, heroes, &[], counter.is_counter());
             if scripts.len() == 0 {
@@ -833,7 +833,7 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
             raw_damage.insert(defender_pos, previous_damage + damage as u16);
         }
         // OnDamage shouldn't remove units, so this executor doesn't get access to the event handler
-        let mut engine = environment.get_engine(&*handler.get_game());
+        let mut engine = environment.get_engine_board(&*handler.get_game());
         let handler_ = Arc::new(Mutex::new(handler.clone()));
         {
             let handler = handler_.clone();
@@ -891,7 +891,7 @@ fn deal_damage<D: Direction>(handler: &mut EventHandler<D>, attacker: &Unit<D>, 
     // destroy defeated units
     let environment = handler.get_game().environment();
     let is_unit_dead_rhai = environment.is_unit_dead_rhai();
-    let engine = environment.get_engine(&*handler.get_game());
+    let engine = environment.get_engine_board(&*handler.get_game());
     let executor = Executor::new(engine, Scope::new(), environment);
     let dead_units: Vec<(Point, Unit<D>)> = handler.with_map(|map| map.all_points()).into_iter()
     .filter_map(|p| handler.get_game().get_unit(p).and_then(|u| {
@@ -948,7 +948,7 @@ fn calculate_attack_damage<D: Direction>(game: &impl GameView<D>, attacker: &Uni
     let defender_heroes = Hero::hero_influence_at(game, defender_pos, defender.get_owner_id());
     let environment = game.environment();
     let calculate_attack_damage_rhai = environment.calculate_attack_damage_rhai();
-    let mut engine = environment.get_engine(game);
+    let mut engine = environment.get_engine_board(game);
     let attacker_ = attacker.clone();
     let defender_ = defender.clone();
     let attacker_heroes = attacker_heroes.to_vec();

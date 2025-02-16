@@ -3,10 +3,12 @@ use std::sync::Arc;
 use interfaces::*;
 use semver::Version;
 use zipper::*;
+use crate::combat::AttackInput;
 use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::map::point_map::MapSize;
+use crate::map::wrapping_map::OrientedPoint;
 use crate::script::custom_action::CustomActionInput;
 use crate::tokens::token::*;
 use crate::game::commands::*;
@@ -21,7 +23,6 @@ use crate::map::wrapping_map::WMBuilder;
 use crate::tags::*;
 use crate::terrain::TerrainType;
 use crate::tokens::token_types::TokenType;
-use crate::units::combat::AttackVector;
 use crate::units::commands::*;
 use crate::units::movement::MovementType;
 use crate::units::movement::Path;
@@ -106,7 +107,7 @@ fn zombie() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let mut skull = Token::new(environment.clone(), TokenType::SKULL);
     skull.set_owner_id(0);
@@ -121,7 +122,7 @@ fn zombie() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction6::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(2, 1)), Vec::new());
     assert_eq!(server.get_unit(Point::new(2, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).build()));
@@ -180,7 +181,7 @@ fn simo() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
-        action: UnitAction::Attack(AttackVector::Point(target_close)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert!(server.get_unit(target_close).unwrap().get_hp() < 100);
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 100);
@@ -196,7 +197,7 @@ fn simo() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
-        action: UnitAction::Attack(AttackVector::Point(target_close)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let hp_close = server.get_unit(target_close).unwrap().get_hp();
     let hp_far = server.get_unit(target_far).unwrap().get_hp();
@@ -211,12 +212,12 @@ fn simo() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
-        action: UnitAction::Attack(AttackVector::Point(target_far)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_far, Direction4::D0))),
     }), Arc::new(|| 0.)).err().expect("range shouldn't be increased");
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
-        action: UnitAction::Attack(AttackVector::Point(target_close)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert!(server.get_unit(target_close).unwrap().get_hp() < hp_close);
     assert!(server.get_unit(target_far).unwrap().get_hp() < hp_far);
@@ -233,7 +234,7 @@ fn simo() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
-        action: UnitAction::Attack(AttackVector::Point(target_far)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_far, Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(target_close).unwrap().get_hp(), 100);
     assert!(server.get_unit(target_far).unwrap().get_hp() < 100);
@@ -249,7 +250,7 @@ fn simo() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
-        action: UnitAction::Attack(AttackVector::Point(target_farthest)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_farthest, Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 100);
     assert!(server.get_unit(target_farthest).unwrap().get_hp() < 100);
@@ -284,7 +285,7 @@ fn vlad() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
-        action: UnitAction::Attack(AttackVector::Point(target_close)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(arty_pos).unwrap().get_hp(), 50);
 
@@ -300,7 +301,7 @@ fn vlad() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
-        action: UnitAction::Attack(AttackVector::Point(target_close)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert!(server.get_unit(arty_pos).unwrap().get_hp() > 50);
 
@@ -363,7 +364,7 @@ fn tapio() {
         server.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
             path: Path::new(Point::new(0, i)),
-            action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+            action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, i), Direction4::D0))),
         }), Arc::new(|| 0.)).unwrap();
     }
     assert!(server.get_unit(Point::new(1, 0)).unwrap().get_hp() > server.get_unit(Point::new(1, 1)).unwrap().get_hp(), "stronger attack from grass than street");
@@ -462,21 +463,21 @@ fn sludge_monster() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let default_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
     let mut server = unchanged.clone();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D180)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D180))),
     }), Arc::new(|| 0.)).unwrap();
     let sludge_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
     let mut server = unchanged.clone();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 2)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D90)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D90))),
     }), Arc::new(|| 0.)).unwrap();
     let oil_platform_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
     assert!(default_attack < oil_platform_attack, "{default_attack} < {oil_platform_attack}");
@@ -488,7 +489,7 @@ fn sludge_monster() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 0)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D270)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D270))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(1, 0)), &[sludge_token(0, 0)]);
 
@@ -568,7 +569,7 @@ fn celerity() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 2)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 2), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let default_attack = 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp();
     server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
@@ -600,7 +601,7 @@ fn celerity() {
             server.handle_command(Command::UnitCommand(UnitCommand {
                 unload_index: None,
                 path: Path::new(Point::new(2, 2)),
-                action: UnitAction::Attack(AttackVector::Direction(d)),
+                action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(map.get_neighbor(Point::new(2, 2), d).unwrap().0, d))),
             }), Arc::new(|| 0.)).unwrap();
             server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
             server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
@@ -622,7 +623,7 @@ fn celerity() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 2)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 2), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(default_attack, 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
 
@@ -633,7 +634,7 @@ fn celerity() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 2)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 2), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(attack_damage[3], 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
 
@@ -681,12 +682,12 @@ fn lageos() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 0), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let damage_to_neutral_heli = 100 - server.get_unit(Point::new(1, 0)).unwrap().get_hp();
     let damage_to_neutral_tank = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
@@ -706,12 +707,12 @@ fn lageos() {
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 0), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
-        action: UnitAction::Attack(AttackVector::Direction(Direction4::D0)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
     }), Arc::new(|| 0.)).unwrap();
     let damage_to_lageos_heli = 100 - server.get_unit(Point::new(1, 0)).unwrap().get_hp();
     assert!(damage_to_neutral_heli > damage_to_lageos_heli, "{damage_to_neutral_heli} > {damage_to_lageos_heli}");

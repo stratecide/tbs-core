@@ -69,7 +69,7 @@ pub trait GameView<D: Direction>: Send + Sync {
     fn additional_hero_influence_at(&self, _point: Point, _only_owner_id: i8) -> Option<Vec<HeroInfluence<D>>> {
         None
     }
-    fn additional_hero_influence_map(&self, _only_owner_id: i8) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
+    fn additional_hero_influence_map(&self, _only_owner_id: Option<i8>) -> Option<HashMap<(Point, i8), Vec<HeroInfluence<D>>>> {
         None
     }
 

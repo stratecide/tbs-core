@@ -1,8 +1,6 @@
 pub mod commands;
 pub mod movement;
 pub mod rhai_movement;
-pub mod combat;
-pub mod rhai_combat;
 pub mod hero;
 pub mod unit_types;
 pub mod unit;
@@ -13,9 +11,13 @@ pub(crate) mod test;
 use zipper::*;
 use zipper_derive::Zippable;
 
-use crate::{config::parse::FromConfig, game::fog::FogIntensity};
+use crate::config::parse::FromConfig;
+use crate::game::fog::FogIntensity;
+use crate::map::direction::Direction;
+use crate::map::wrapping_map::Distortion;
 
-pub type Hp = U<100>;
+#[derive(Debug, Clone, Copy)]
+pub struct UnitId<D: Direction>(pub usize, pub Distortion<D>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zippable)]
 #[zippable(bits = 2)]

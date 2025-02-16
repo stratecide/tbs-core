@@ -8,7 +8,7 @@ use zipper::zipper_derive::*;
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
 use crate::map::point::Point;
-use crate::units::hero::Hero;
+use crate::units::hero::HeroMap;
 use crate::units::unit::Unit;
 use crate::units::UnitVisibility;
 
@@ -242,11 +242,11 @@ pub fn recalculate_fog<D: Direction>(game: &impl GameView<D>, perspective: Clien
     if !game.is_foggy() {
         return fog;
     }
-    let heroes = Hero::map_influence(game, -1);
+    let heroes = HeroMap::new(game, None);
     for p in game.all_points() {
         let terrain = game.get_terrain(p).unwrap();
         let terrain_heroes = if terrain.get_team() != ClientPerspective::Neutral {
-            heroes.get(&(p, terrain.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[])
+            heroes.get(p, terrain.get_owner_id())
         } else {
             &[]
         };
@@ -255,7 +255,7 @@ pub fn recalculate_fog<D: Direction>(game: &impl GameView<D>, perspective: Clien
         }
         if let Some(unit) = game.get_unit(p) {
             if perspective != ClientPerspective::Neutral && perspective == unit.get_team() {
-                let heroes = heroes.get(&(p, unit.get_owner_id())).map(|h| h.as_slice()).unwrap_or(&[]);
+                let heroes = heroes.get(p, unit.get_owner_id());
                 for (p, v) in unit.get_vision(game, p, heroes) {
                     fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
                 }
@@ -268,6 +268,13 @@ pub fn recalculate_fog<D: Direction>(game: &impl GameView<D>, perspective: Clien
         }
     }
     fog
+}
+
+pub fn add_vision(vision: &mut FxHashMap<Point, FogIntensity>, to_add: &FxHashMap<Point, FogIntensity>) {
+    for (p, intensity) in to_add {
+        let old = vision.remove(p).unwrap_or(FogIntensity::Dark);
+        vision.insert(*p, old.min(*intensity));
+    }
 }
 
 pub fn can_see_unit_at<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {

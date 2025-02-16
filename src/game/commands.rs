@@ -186,32 +186,34 @@ impl<D: Direction> Command<D> {
                 Ok(())
             }
         }?;
-        Self::cleanup_dead_material(handler);
+        cleanup_dead_material(handler, true);
         Ok(())
     }
+}
 
-    fn cleanup_dead_material(handler: &mut EventHandler<D>) {
-        // destroy units that are now dead
-        let all_points = handler.with_map(|map| map.all_points());
-        let environment = handler.get_game().environment();
-        let is_unit_dead_rhai = environment.is_unit_dead_rhai();
-        let engine = environment.get_engine(&*handler.get_game());
-        let executor = Executor::new(engine, Scope::new(), environment);
-        for _ in 0..100 {
-            let deaths: FxHashSet<Point> = all_points.iter().cloned()
-            .filter(|p| {
-                handler.get_game().get_unit(*p).map(|u| {
-                    match executor.run(is_unit_dead_rhai, (u, *p)) {
-                        Ok(result) => result,
-                        Err(e) => {
-                            // TODO: log error
-                            println!("unit is_unit_dead_rhai {is_unit_dead_rhai}: {e:?}");
-                            false
-                        }
+pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execute_scripts: bool) {
+    // destroy units that are now dead
+    let all_points = handler.with_map(|map| map.all_points());
+    let environment = handler.get_game().environment();
+    let is_unit_dead_rhai = environment.is_unit_dead_rhai();
+    let engine = environment.get_engine::<D>();
+    let executor = Executor::new(engine, Scope::new(), environment);
+    for _ in 0..100 {
+        let deaths: FxHashSet<Point> = all_points.iter().cloned()
+        .filter(|p| {
+            handler.get_game().get_unit(*p).map(|u| {
+                match executor.run(is_unit_dead_rhai, (u,)) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        // TODO: log error
+                        println!("unit is_unit_dead_rhai {is_unit_dead_rhai}: {e:?}");
+                        false
                     }
-                }).unwrap_or(false)
-            })
-            .collect();
+                }
+            }).unwrap_or(false)
+        })
+        .collect();
+        if execute_scripts {
             handler.trigger_all_unit_scripts(
                 |game, unit, unit_pos, transporter, heroes| {
                     if deaths.contains(&unit_pos) {
@@ -243,27 +245,26 @@ impl<D: Direction> Command<D> {
                     }
                 }
             );
-            // check if a player lost
-            let viable_player_ids = handler.with_map(|map| map.get_viable_player_ids(&*handler.get_game()));
-            let players: Vec<u8> = handler.get_game().players().iter()
-            .filter(|p| !p.dead)
-            .map(|p| p.color_id)
-            .collect();
-            let mut no_player_died = true;
-            for owner_id in players {
-                if !viable_player_ids.contains(&owner_id) {
-                    no_player_died = false;
-                    handler.player_dies(owner_id as i8);
-                }
+        }
+        // check if a player lost
+        let viable_player_ids = handler.with_map(|map| map.get_viable_player_ids(&*handler.get_game()));
+        let players: Vec<u8> = handler.get_game().players().iter()
+        .filter(|p| !p.dead)
+        .map(|p| p.color_id)
+        .collect();
+        let mut no_player_died = true;
+        for owner_id in players {
+            if !viable_player_ids.contains(&owner_id) {
+                no_player_died = false;
+                handler.player_dies(owner_id as i8);
             }
-            handler.recalculate_fog();
-            if deaths.len() == 0 && no_player_died {
-                break;
-            }
+        }
+        handler.recalculate_fog();
+        if deaths.len() == 0 && no_player_died {
+            break;
         }
     }
 }
-
 #[derive(Debug, Clone)]
 pub struct CommanderPowerIndex(pub usize);
 

@@ -3,8 +3,11 @@ use std::error::Error;
 use num_rational::Rational32;
 use rustc_hash::FxHashMap as HashMap;
 
+use crate::combat::AllowedAttackInputDirectionSource;
+use crate::combat::AttackPattern;
+use crate::combat::AttackType;
+use crate::combat::ValidAttackTargets;
 use crate::config::parse::*;
-use crate::units::combat::*;
 use crate::units::UnitVisibility;
 
 use super::file_loader::FileLoader;
@@ -23,15 +26,12 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) vision: NumberMod<u8>,
     pub(super) true_vision: NumberMod<u8>,
     pub(super) pass_enemy_units: Option<bool>,
-    pub(super) attack_pattern: Option<AttackType>,
-    //pub(super) attack_targets: Option<AttackTargeting>,
-    pub(super) splash_damage: Vec<Rational32>, // doesn't override if empty. contains factor per additional distance
+    pub(super) attack_pattern: Option<AttackPattern>,
+    pub(super) attack_type: Option<AttackType>,
+    pub(super) attack_targets: Option<ValidAttackTargets>,
+    pub(super) attack_direction: Option<AllowedAttackInputDirectionSource>,
     pub(super) value: NumberMod<i32>,
-    //pub(super) displacement: Option<Displacement>, // implies that attack_pattern is Adjacent or Straight
-    pub(super) displacement_distance: NumberMod<i8>, // can only be 0 if Displacement::None
     pub(super) can_be_displaced: Option<bool>,
-    pub(super) on_attack: Option<usize>,
-    pub(super) on_defend: Option<usize>,
     pub(super) on_kill: Option<usize>,
     pub(super) on_death: Option<usize>,
     pub(super) on_normal_action: Option<usize>,
@@ -72,30 +72,24 @@ impl TableLine for CommanderPowerUnitConfig {
                 _ => None,
             },
             attack_pattern: match data.get(&H::AttackPattern) {
+                Some(s) if s.len() > 0 => Some(AttackPattern::from_conf(s, loader)?.0),
+                _ => None,
+            },
+            attack_type: match data.get(&H::AttackType) {
                 Some(s) if s.len() > 0 => Some(AttackType::from_conf(s, loader)?.0),
                 _ => None,
             },
-            /*attack_targets: match data.get(&H::AttackTargets) {
-                Some(s) if s.len() > 0 => Some(AttackTargeting::from_conf(s, loader)?.0),
+            attack_targets: match data.get(&H::Targeting) {
+                Some(s) if s.len() > 0 => Some(ValidAttackTargets::from_conf(s, loader)?.0),
                 _ => None,
-            },*/
-            splash_damage: parse_vec_def(data, H::SplashDamage, Vec::new(), loader)?,
+            },
+            attack_direction: match data.get(&H::AttackDirection) {
+                Some(s) if s.len() > 0 => Some(AllowedAttackInputDirectionSource::from_conf(s, loader)?.0),
+                _ => None,
+            },
             value: parse_def(data, H::Value, NumberMod::Keep, loader)?,
-            /*displacement: match data.get(&H::Displacement) {
-                Some(s) if s.len() > 0 => Some(Displacement::from_conf(s, loader)?.0),
-                _ => None,
-            },*/
-            displacement_distance: parse_def(data, H::DisplacementDistance, NumberMod::Keep, loader)?,
             can_be_displaced: match data.get(&H::CanBeDisplaced) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
-                _ => None,
-            },
-            on_attack: match data.get(&H::OnAttack) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
-                _ => None,
-            },
-            on_defend: match data.get(&H::OnDefend) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
             },
             on_kill: match data.get(&H::OnKill) {
@@ -147,16 +141,13 @@ crate::enum_with_custom! {
         Weapon,
         CanAttackAfterMoving,
         AttackPattern,
-        //AttackTargets,
-        SplashDamage,
+        AttackType,
+        Targeting,
+        AttackDirection,
         CanBuildUnits,
         Value,
-        //Displacement,
-        DisplacementDistance,
         CanBeDisplaced,
         TransportCapacity,
-        OnAttack,
-        OnDefend,
         OnKill,
         OnDeath,
         OnNormalAction,

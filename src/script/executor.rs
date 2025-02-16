@@ -26,9 +26,13 @@ impl Executor {
     }
 
     pub fn execute<T: Any>(environment: &Environment, engine: &Engine, scope: &mut Scope, function_index: usize, args: impl FuncArgs) -> Result<T, Box<EvalAltResult>> {
-        let (ast, name) = environment.rhai_function_name(engine, function_index);
+        let (ast, name) = environment.get_rhai_function(engine, function_index);
+        Self::execute_ast(engine, scope, ast, name, args)
+    }
+
+    pub fn execute_ast<T: Any>(engine: &Engine, scope: &mut Scope, ast: Shared<AST>, function: impl AsRef<str>, args: impl FuncArgs) -> Result<T, Box<EvalAltResult>> {
         let options = CallFnOptions::new().eval_ast(false).rewind_scope(true);
-        let result: Dynamic = engine.call_fn_with_options(options, scope, &ast, name, args)?;
+        let result: Dynamic = engine.call_fn_with_options(options, scope, &ast, function, args)?;
         result.try_cast_result().map_err(|r| {
             let result_type = engine.map_type_name(r.type_name());
             let cast_type = match type_name::<T>() {
