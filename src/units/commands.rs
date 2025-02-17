@@ -25,6 +25,7 @@ use crate::VERSION;
 use super::hero::*;
 use super::movement::*;
 use super::unit::Unit;
+use super::UnitId;
 
 pub const UNIT_REPAIR: u32 = 30;
 pub const MAX_CUSTOM_ACTION_STEPS: u32 = 8;
@@ -153,10 +154,10 @@ impl<D: Direction> UnitAction<D> {
             }
             Self::Attack(input) => {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
-                let attacker_position = AttackerPosition::Real {
-                    id: unit_id,
-                    distortion: handler.get_observed_unit(unit_id).unwrap().2,
-                };
+                let attacker_position = AttackerPosition::Real(UnitId(
+                    unit_id,
+                    handler.get_observed_unit(unit_id).unwrap().2,
+                ));
                 execute_attack(handler, attacker_position, *input, transporter, ballast, AttackCounterState::AllowCounter, true);
                 true
             }

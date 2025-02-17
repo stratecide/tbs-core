@@ -152,7 +152,7 @@ mod fraction_module {
             "i32" => {
                 *a = Dynamic::from(add_if(a.clone().cast(), b));
             }
-            "Fraction" => {
+            "Fraction" | "Ratio<i32>" => {
                 *a = Dynamic::from(add_ff(a.clone().cast(), b));
             }
             typename => return Err(format!("Attempted to add Fraction to a value of type '{typename}'").into())
@@ -245,6 +245,19 @@ mod fraction_module {
     #[rhai_fn(name = "/=")]
     pub fn div_assign_fi(a: &mut Fraction, b: i32) {
         *a /= Rational32::from_integer(b)
+    }
+
+    // powers
+    //=======
+
+    #[rhai_fn(name = "**")]
+    pub fn pow_fi(a: Fraction, b: i32) -> Fraction {
+        a.pow(b)
+    }
+
+    #[rhai_fn(name = "**=")]
+    pub fn pow_assign_fi(a: &mut Fraction, b: i32) {
+        *a = a.pow(b);
     }
 }
 

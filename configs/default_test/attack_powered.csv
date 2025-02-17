@@ -1,3 +1,4 @@
-Filter;Strength;Targeting;SplashRange;AllowsCounterAttack;SplashPriority;DirectionModifier;OnDefend
-Co(Simo,3),AT(Ranged);+8/20;;>1;;;;
-Co(Simo,1), CC(3000), AT(Ranged);+1/20;;>1;;;;
+Filter;Strength;Targeting;SplashRange;AllowsCounterAttack;SplashPriority;DirectionModifier;OnDefend;Lifesteal
+Co(Simo,3),AT(Ranged);+8/20;;>1;;;;;
+Co(Simo,1), CC(3000), AT(Ranged);+1/20;;>1;;;;;
+Co(Vlad), Fog(Dark);;;;;;;;+20/100

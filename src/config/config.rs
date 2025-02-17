@@ -55,8 +55,6 @@ use super::token_typ_config::TokenTypeConfig;
 use super::unit_type_config::UnitTypeConfig;
 use super::OwnershipPredicate;
 
-const DEFAULT_SPLASH: [Rational32; 1] = [Rational32::new_raw(1, 1)];
-
 pub struct Config {
     pub(super) name: String,
     pub(super) owner_colors: Vec<[u8; 4]>,
@@ -1198,6 +1196,52 @@ impl Config {
         r
     }
 
+    pub fn attack_bonus<D: Direction>(
+        &self,
+        column_name: &String,
+        base_value: Rational32,
+        game: &impl GameView<D>,
+        attack: &ConfiguredAttack,
+        splash: &AttackInstance,
+        attacker: &Unit<D>,
+        attacker_pos: Point,
+        defender: Option<(&Unit<D>, Point, Option<usize>)>,
+        heroes: &HeroMap<D>,
+        temporary_ballast: &[TBallast<D>],
+        counter: &AttackCounterState<D>,
+    ) -> Rational32 {
+        let scope = attack_power_scope(
+            attack,
+            Some(splash),
+            attacker,
+            attacker_pos,
+            defender,
+            None,
+            heroes,
+            temporary_ballast,
+            counter.is_counter(),
+        );
+        self.attack_power_configs(
+            game,
+            &scope,
+            attack.clone(),
+            Some(splash.clone()),
+            attacker,
+            (attacker_pos, None),
+            None,
+            heroes,
+            temporary_ballast,
+            counter,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly(
+                    base_value,
+                    iter.map(|c| c.get_fraction(column_name)),
+                    executor,
+                )
+            }
+        )
+    }
+
     pub fn unit_configured_attacks<D: Direction>(
         &self,
         game: &impl GameView<D>,
@@ -1231,15 +1275,6 @@ impl Config {
         ) else {
             return Vec::new();
         };
-        let mut scope = Scope::new();
-        /*scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u)).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
-        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));*/
-        scope.push_constant(CONST_NAME_UNIT, unit.clone());
-        scope.push_constant(CONST_NAME_POSITION, unit_pos);
-        scope.push_constant(CONST_NAME_IS_COUNTER, is_counter);
-        let engine = game.environment().get_engine_board(game);
-        let executor = Executor::new(engine, scope.clone(), game.environment());
         let mut result = Vec::new();
         for attack in &self.attack_types[attack_type].1 {
             let mut atk = ConfiguredAttack {
@@ -1250,6 +1285,19 @@ impl Config {
                 splash: Vec::new(),
                 focus: attack.focus,
             };
+            let scope = attack_power_scope(
+                &atk,
+                None,
+                unit,
+                unit_pos,
+                None,
+                transporter,
+                heroes,
+                temporary_ballast,
+                is_counter,
+            );
+            let engine = game.environment().get_engine_board(game);
+            let executor = Executor::new(engine, scope.clone(), game.environment());
             if attack.condition.iter().all(|cond| cond.check(
                 game,
                 &atk,
@@ -1292,6 +1340,7 @@ impl Config {
                             direction_modifier: splash.direction_modifier,
                             script: splash.script,
                         };
+                        // TODO: add spl to scope and executor
                         if splash.condition.iter().all(|cond| cond.check(
                             game,
                             &atk,
@@ -1404,7 +1453,6 @@ impl Config {
         let is_counter = counter.is_counter();
         let other_unit = counter.attacker()
             .map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id())));
-        let mut result = self.default_attack_direction(unit.typ());
         self.unit_power_configs(
             game,
             unit,
@@ -1557,4 +1605,28 @@ impl Config {
         )
     }
 
+}
+
+fn attack_power_scope<D: Direction>(
+    attack: &ConfiguredAttack,
+    splash: Option<&AttackInstance>,
+    attacker: &Unit<D>,
+    attacker_pos: Point,
+    defender: Option<(&Unit<D>, Point, Option<usize>)>,
+    // when moving out of a transporter, or start_turn for transported units
+    transporter: Option<(&Unit<D>, Point)>,
+    // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
+    heroes: &HeroMap<D>,
+    // empty if the unit hasn't moved
+    temporary_ballast: &[TBallast<D>],
+    is_counter: bool,
+) -> Scope<'static> {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_SPLASH_DISTANCE, splash.map(|s| Dynamic::from(s.splash_distance as i32)).unwrap_or(().into()));
+    scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(u, _)| Dynamic::from(u.clone())).unwrap_or(().into()));
+    scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.map(|(_, p)| Dynamic::from(p)).unwrap_or(().into()));
+    scope.push_constant(CONST_NAME_UNIT, attacker.clone());
+    scope.push_constant(CONST_NAME_POSITION, attacker_pos);
+    scope.push_constant(CONST_NAME_IS_COUNTER, is_counter);
+    scope
 }

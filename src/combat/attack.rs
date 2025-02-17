@@ -20,7 +20,7 @@ use crate::units::hero::HeroMap;
 use crate::units::movement::{Path, PathStep, TBallast};
 use crate::units::{unit::*, UnitId};
 
-use super::{AttackTargetingFocus, AttackerInfo, AttackerPosition, SplashPattern};
+use super::{AttackCounterState, AttackTargetingFocus, AttackerInfo, AttackerPosition, SplashPattern};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AttackType(pub Option<usize>);
@@ -149,14 +149,16 @@ impl AttackInstance {
     pub fn into_executable<D: Direction>(
         &self,
         handler: &mut EventHandler<D>,
+        attack: &ConfiguredAttack,
+        splash: &AttackInstance,
         attacker_pos: &AttackerPosition<D>,
         targets: &[OrientedPoint<D>],
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
-        is_counter: bool,
+        counter_state: &AttackCounterState<D>,
     ) -> Vec<AttackExecutable<D>> {
         let attacker_id = match attacker_pos {
-            AttackerPosition::Real { id, .. } => Some(*id),
+            AttackerPosition::Real(id) => Some(*id),
             _ => None,
         };
         let Some(attacker) = attacker_pos.get_unit(handler) else {
@@ -165,6 +167,7 @@ impl AttackInstance {
         let Some((attacker_pos, _)) = attacker_pos.get_position(handler) else {
             return Vec::new();
         };
+        let is_counter = counter_state.is_counter();
         let environment = handler.environment();
         let result: Vec<(Array, AttackExecutableScript)>;
         match &self.script {
@@ -252,7 +255,7 @@ impl AttackInstance {
                         };
                         let game = handler.get_game();
                         let defender = get_unit(&*game, defender_pos.0, defender_pos.1).unwrap();
-                        let def = game.environment().config.unit_defense_bonus(
+                        let result = game.environment().config.unit_defense_bonus(
                             &column_id.to_string(),
                             base_value,
                             &*game,
@@ -263,8 +266,35 @@ impl AttackInstance {
                             &heroes_,
                             is_counter,
                         );
-                        println!("unit_defense_bonus {column_id} = {def}");
-                        def
+                        println!("unit_defense_bonus {column_id} = {result}");
+                        result
+                    });
+                    let handler = handler_.clone();
+                    let attack_ = attack.clone();
+                    let splash_ = splash.clone();
+                    let attacker_ = attacker.clone();
+                    let heroes_ = heroes.clone();
+                    let ballast = temporary_ballast.to_vec();
+                    let counter_ = counter_state.clone();
+                    engine.register_fn("attack_bonus", move |column_id: &str, base_value: Rational32| {
+                        let handler = handler.clone();
+                        let handler = handler.lock().unwrap();
+                        let game = handler.get_game();
+                        let result = game.environment().config.attack_bonus(
+                            &column_id.to_string(),
+                            base_value,
+                            &*game,
+                            &attack_,
+                            &splash_,
+                            &attacker_,
+                            attacker_pos,
+                            None,
+                            &heroes_,
+                            &ballast,
+                            &counter_,
+                        );
+                        println!("attack_bonus {column_id} = {result}");
+                        result
                     });
                     let result = result_.clone();
                     let (ast, _) = environment.get_rhai_function(&engine, *build_script);
@@ -284,6 +314,7 @@ impl AttackInstance {
                     });
                 }
                 let mut scope = Scope::new();
+                scope.push_constant(CONST_NAME_SPLASH_DISTANCE, splash.splash_distance as i32);
                 scope.push_constant(CONST_NAME_ATTACKER_ID, attacker_id.map(|id| Dynamic::from(id)).unwrap_or(().into()));
                 scope.push_constant(CONST_NAME_ATTACKER, attacker.clone());
                 scope.push_constant(CONST_NAME_TARGETS, targets.into_iter()
@@ -305,7 +336,7 @@ impl AttackInstance {
                 AttackExecutable {
                     priority: self.priority,
                     attacker: attacker.clone(),
-                    attacker_id,
+                    attacker_id: attacker_id.map(|id| id.0),
                     attacker_pos,
                     is_counter,
                     arguments,
@@ -484,8 +515,8 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
         let splash_range = attack.splash.iter().map(|a| a.splash_distance).max()?;
         let ranges: Vec<Vec<OrientedPoint<D>>> = attack.splash_pattern.get_splash(&*handler.get_game(), &unit, attacker.temporary_ballast, &attack_pattern, input, splash_range);
         let mut result = Vec::new();
-        for attack in attack.splash {
-            for exe in attack.into_executable(handler, &attacker.attacker_position, &ranges[attack.splash_distance], &heroes, attacker.temporary_ballast, attacker.counter_state.is_counter()) {
+        for splash_instance in &attack.splash {
+            for exe in splash_instance.into_executable(handler, &attack, splash_instance, &attacker.attacker_position, &ranges[splash_instance.splash_distance], &heroes, attacker.temporary_ballast, &attacker.counter_state) {
                 /*let priority = exe.priority;
                 let list = Arc::new(Mutex::new(vec![exe.clone()]));
                 // add OnDefend scripts

@@ -18,7 +18,7 @@ use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::*;
-use crate::map::wrapping_map::{Distortion, OrientedPoint};
+use crate::map::wrapping_map::OrientedPoint;
 use crate::units::hero::HeroMap;
 use crate::units::movement::TBallast;
 use crate::units::unit::Unit;
@@ -70,21 +70,21 @@ impl<D: Direction> AttackCounterState<D> {
 #[derive(Clone)]
 pub enum AttackerPosition<D: Direction> {
     Ghost(Point, Unit<D>),
-    Real{ id: usize, distortion: Distortion<D> },
+    Real(UnitId<D>),
 }
 
 impl<D: Direction> AttackerPosition<D> {
     fn get_position(&self, handler: &EventHandler<D>) -> Option<(Point, Option<usize>)> {
         match self {
             Self::Ghost(p, _) => Some((*p, None)),
-            Self::Real { id, .. } => handler.get_observed_unit_pos(*id),
+            Self::Real(id) => handler.get_observed_unit_pos(id.0),
         }
     }
 
     fn get_unit(&self, handler: &EventHandler<D>) -> Option<Unit<D>> {
         match self {
             Self::Ghost(_, unit) => Some(unit.clone()),
-            Self::Real { id, .. } => handler.get_observed_unit_pos(*id).map(|(p, unload_index)| {
+            Self::Real(id) => handler.get_observed_unit_pos(id.0).map(|(p, unload_index)| {
                 let unit = handler.get_game().get_unit(p).unwrap();
                 match unload_index {
                     Some(i) => unit.get_transported()[i].clone(),
@@ -93,15 +93,6 @@ impl<D: Direction> AttackerPosition<D> {
             }),
         }
     }
-
-    /*fn get_distortion(&self, handler: &EventHandler<D>) -> Distortion<D> {
-        match self {
-            Self::Ghost(p) => Distortion::neutral(),
-            Self::Real { id, distortion } => handler.get_observed_unit(*id)
-                .map(|_, _, disto| -*distortion + disto)
-                .unwrap_or(Distortion::neutral()),
-        }
-    }*/
 }
 
 #[derive(Clone)]
@@ -145,7 +136,7 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
         let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, self.counter_state.clone(), heroes, self.temporary_ballast);
         let mut allowed_directions = allowed_directions.get_dirs(&attacker, self.temporary_ballast);
         let mut direction_hint = self.targeting.direction_hint;
-        if let AttackerPosition::Real { id, distortion } = self.attacker_position {
+        if let AttackerPosition::Real(UnitId(id, distortion)) = self.attacker_position {
             let current_distortion = handler.get_observed_unit(id)?.2;
             direction_hint = (-distortion + current_distortion).update_direction(direction_hint);
         }
@@ -273,18 +264,18 @@ pub fn execute_attack<D: Direction>(
             counter_state: counter_state.clone(),
         }];
         match attacker_position {
-            AttackerPosition::Real { id, .. } if counter_state.allows_counter() => {
+            AttackerPosition::Real(id) if counter_state.allows_counter() => {
                 // add all counter-attackers to attackers list
                 let attacker_id = id;
                 let counter_attackers = find_counter_attackers(&*handler.get_game(), &attacker, attacker_pos, &attack_pattern, input, transporter, temporary_ballast, &heroes);
                 for (p, counter_direction_hint) in counter_attackers {
-                    let UnitId(id, distortion) = handler.observe_unit(p, None);
+                    let unit_id = handler.observe_unit(p, None);
                     attackers.push(AttackerInfo {
-                        attacker_position: AttackerPosition::Real { id, distortion },
+                        attacker_position: AttackerPosition::Real(unit_id),
                         targeting: AttackTargeting {
                             target: OrientedPoint::new(attacker_pos, target.mirrored, direction_hint.opposite_direction()),
                             direction_hint: counter_direction_hint,
-                            unit_id: Some(attacker_id),
+                            unit_id: Some(attacker_id.0),
                         },
                         transporter: None,
                         temporary_ballast: &[],
