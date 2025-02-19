@@ -3,25 +3,39 @@ use rhai::plugin::*;
 
 use crate::map::direction::*;
 use crate::units::UnitId;
-use crate::combat::*;
 
 #[export_module]
 mod combat_module {
 
     pub type AttackScript = crate::combat::AttackScript;
 
+    #[rhai_fn(name="Script")]
+    pub fn new_script(function_name: ImmutableString, arguments: Array) -> AttackScript {
+        AttackScript {
+            function_name,
+            arguments,
+        }
+    }
 }
 
 macro_rules! combat_module {
     ($pack: ident, $name: ident, $d: ty) => {
         #[export_module]
         mod $name {
-            #[rhai_fn(name="Script")]
-            pub fn new_script(function_name: ImmutableString, arguments: Array) -> AttackScript {
-                AttackScript {
-                    function_name,
-                    arguments,
+            pub type OnDefendScript = crate::combat::OnDefendScript<$d>;
+
+            #[rhai_fn(name="OnDefendScript")]
+            pub fn new_defend_script(column_name: ImmutableString, defender_id: UnitId<$d>) -> OnDefendScript {
+                OnDefendScript {
+                    column_name,
+                    defender_id,
+                    arguments: Vec::new(),
                 }
+            }
+
+            pub fn with_arguments(mut script: OnDefendScript, arguments: Array) -> OnDefendScript {
+                script.arguments = arguments;
+                script
             }
         }
 

@@ -169,7 +169,7 @@ impl AttackInstance {
         };
         let is_counter = counter_state.is_counter();
         let environment = handler.environment();
-        let result: Vec<(Array, AttackExecutableScript)>;
+        let result: Vec<(Array, Option<Rational32>, AttackExecutableScript)>;
         match &self.script {
             AttackInstanceScript::Displace { distance, push_limit, throw, neighbor_mode } => {
                 result = targets.into_iter()
@@ -188,11 +188,13 @@ impl AttackInstance {
                             distance: distance as usize,
                             push_limit: push_limit as usize,
                         })],
+                        None,
                         AttackExecutableScript::Displace { throw: *throw, neighbor_mode: *neighbor_mode },
                     ))
                 }).collect();
             }
             AttackInstanceScript::Rhai { build_script } => {
+                let engine_inner = environment.get_engine_board(&*handler.get_game());
                 let handler_ = Arc::new(Mutex::new(handler.clone()));
                 let result_ = Arc::new(Mutex::new(Vec::new()));
                 let mut engine = environment.get_engine_board(&*handler.get_game());
@@ -301,6 +303,7 @@ impl AttackInstance {
                     engine.register_fn("add_script", move |attack_script: AttackScript| {
                         result.lock().unwrap().push((
                             attack_script.arguments,
+                            None,
                             AttackExecutableScript::Rhai {
                                 ast: ast.clone(),
                                 script: attack_script.function_name
@@ -308,9 +311,52 @@ impl AttackInstance {
                         ));
                     });
                     let result = result_.clone();
-                    let (ast, _) = environment.get_rhai_function(&engine, *build_script);
+                    let handler = handler_.clone();
+                    let attack_ = attack.clone();
+                    let splash_ = splash.clone();
+                    let attacker_ = attacker.clone();
+                    let heroes_ = heroes.clone();
+                    let ballast = temporary_ballast.to_vec();
+                    let counter_ = counter_state.clone();
                     engine.register_fn("on_defend", move |defend_script: OnDefendScript<D>| {
-                        todo!("add all OnDefend scripts from attack_powered.csv to result if their condition is satisfied")
+                        let handler = handler.clone();
+                        let handler = handler.lock().unwrap();
+                        let Some(defender_pos) = handler.get_observed_unit_pos(defend_script.defender_id.0) else {
+                            return;
+                        };
+                        let game = handler.get_game();
+                        let defender = get_unit(&*game, defender_pos.0, defender_pos.1).unwrap();
+                        let scripts = game.environment().config.on_defend_scripts(
+                            &defend_script.column_name.to_string(),
+                            defend_script.arguments.len(),
+                            &*game,
+                            &attack_,
+                            &splash_,
+                            &attacker_,
+                            attacker_pos,
+                            defender,
+                            defender_pos,
+                            &heroes_,
+                            &ballast,
+                            &counter_,
+                        );
+                        println!("on_defend {} scripts", scripts.len());
+                        if scripts.len() == 0 {
+                            return;
+                        }
+                        let mut result = result.lock().unwrap();
+                        let environment = game.environment();
+                        for (function_index, priority) in scripts {
+                            let (ast, function_name) = environment.get_rhai_function(&engine_inner, function_index);
+                            result.push((
+                                defend_script.arguments.clone(),
+                                priority,
+                                AttackExecutableScript::Rhai {
+                                    ast,
+                                    script: function_name.into(),
+                                },
+                            ));
+                        }
                     });
                 }
                 let mut scope = Scope::new();
@@ -332,9 +378,9 @@ impl AttackInstance {
             }
         }
         result.into_iter()
-            .map(|(arguments, script)| {
+            .map(|(arguments, priority, script)| {
                 AttackExecutable {
-                    priority: self.priority,
+                    priority: priority.unwrap_or(self.priority),
                     attacker: attacker.clone(),
                     attacker_id: attacker_id.map(|id| id.0),
                     attacker_pos,
@@ -355,9 +401,9 @@ pub(crate) struct AttackScript {
 
 #[derive(Debug, Clone)]
 pub(crate) struct OnDefendScript<D: Direction> {
+    pub column_name: ImmutableString,
     pub defender_id: UnitId<D>,
     pub arguments: Array,
-    pub priority: Rational32,
 }
 
 #[derive(Debug, Clone)]
@@ -517,84 +563,6 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
         let mut result = Vec::new();
         for splash_instance in &attack.splash {
             for exe in splash_instance.into_executable(handler, &attack, splash_instance, &attacker.attacker_position, &ranges[splash_instance.splash_distance], &heroes, attacker.temporary_ballast, &attacker.counter_state) {
-                /*let priority = exe.priority;
-                let list = Arc::new(Mutex::new(vec![exe.clone()]));
-                // add OnDefend scripts
-                let attacker_id = exe.attacker_id;
-                let attacker_pos = exe.attacker_pos;
-                let is_counter = exe.is_counter;
-                for defender_id in defender_ids {
-                    let (defender_pos, unload_index) = handler.get_observed_unit_pos(defender_id).unwrap();
-                    let defender = get_unit(&*handler.get_game(), defender_pos, unload_index).unwrap();
-                    let defend_scripts = environment.config.unit_defend_effects(&*handler.get_game(), &defender, defender_pos, &unit, attacker_pos, attacker.def_transporter, &heroes, attacker.def_temporary_ballast, attacker.counter_state.is_counter());
-                    for script in defend_scripts {
-                        let handler_ = Arc::new(Mutex::new(handler.clone()));
-                        // TODO: lazy initialize engine once per exe
-                        let mut engine = environment.get_engine_board(&*handler.get_game());
-                        {
-                            let handler = handler_.clone();
-                            engine.register_fn("remember_unit", move |p: Point| -> Dynamic {
-                                let mut handler = handler.lock().unwrap();
-                                if handler.get_game().get_unit(p).is_some() {
-                                    Dynamic::from(handler.observe_unit(p, None))
-                                } else {
-                                    ().into()
-                                }
-                            });
-                            let handler = handler_.clone();
-                            engine.register_fn("remember_unit", move |p: Point, unload_index: i32| {
-                                let mut handler = handler.lock().unwrap();
-                                if unload_index < 0 {
-                                    return ().into();
-                                }
-                                let unload_index = unload_index as usize;
-                                if handler.get_game().get_unit(p).filter(|u| u.get_transported().len() > unload_index).is_some() {
-                                    Dynamic::from(handler.observe_unit(p, Some(unload_index)))
-                                } else {
-                                    ().into()
-                                }
-                            });
-                            let attacker = exe.attacker.clone();
-                            let list_ = list.clone();
-                            let (ast, _) = environment.get_rhai_function(&engine, script);
-                            engine.register_fn("add_script", move |attack_script: OnDefendScript| {
-                                list_.lock().unwrap().push(AttackExecutable {
-                                    attacker: attacker.clone(),
-                                    attacker_id,
-                                    attacker_pos,
-                                    is_counter,
-                                    priority: attack_script.priority,
-                                    sticky: attack_script.sticky,
-                                    arguments: attack_script.arguments,
-                                    script: AttackExecutableScript::Rhai {
-                                        ast: ast.clone(),
-                                        script: attack_script.function_name
-                                    },
-                                });
-                            });
-                        }
-                        let mut scope = Scope::new();
-                        scope.push_constant(CONST_NAME_DEFENDER_ID, defender_id);
-                        scope.push_constant(CONST_NAME_ATTACKER, exe.attacker.clone());
-                        scope.push_constant(CONST_NAME_TARGETS, ranges[attack.splash_distance].iter()
-                            .map(|dp| Dynamic::from(attack.direction_modifier.modify(dp)))
-                            .collect::<Array>());
-                        match Executor::execute(&environment, &engine, &mut scope, script, ()) {
-                            Ok(()) => (),
-                            Err(e) => {
-                                // TODO: log error
-                                println!("OnDefend preparation script {script}: {e:?}");
-                                handler.effect_glitch();
-                            }
-                        }
-                    }
-                }
-                let mut list = Mutex::into_inner(Arc::into_inner(list).unwrap()).unwrap();
-                list.sort_by(AttackExecutable::cmp);
-                for exe in list.iter_mut().filter(|exe| exe.sticky) {
-                    exe.priority = priority;
-                }
-                result.extend(list);*/
                 result.push(exe);
             }
         }

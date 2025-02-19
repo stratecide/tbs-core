@@ -453,48 +453,6 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    /*pub fn on_attack(&self, game: &impl GameView<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<usize> {
-        self.environment.config.unit_attack_effects(
-            game,
-            self,
-            position,
-            defender,
-            defender_pos,
-            transporter,
-            heroes,
-            temporary_ballast,
-            is_counter,
-        )
-    }
-
-    pub fn on_defend(&self, game: &impl GameView<D>, position: Point, attacker: &Self, attacker_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<usize> {
-        self.environment.config.unit_defend_effects(
-            game,
-            self,
-            position,
-            attacker,
-            attacker_pos,
-            transporter,
-            heroes,
-            temporary_ballast,
-            is_counter,
-        )
-    }*/
-
-    pub fn on_kill(&self, game: &impl GameView<D>, position: Point, defender: &Self, defender_pos: Point, transporter: Option<(&Unit<D>, Point)>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>], is_counter: bool) -> Vec<usize> {
-        self.environment.config.unit_kill_effects(
-            game,
-            self,
-            position,
-            defender,
-            defender_pos,
-            transporter,
-            heroes,
-            temporary_ballast,
-            is_counter,
-        )
-    }
-
     pub fn on_death(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<(&Self, Point)>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> Vec<usize> {
         self.environment.config.unit_death_effects(
             game,

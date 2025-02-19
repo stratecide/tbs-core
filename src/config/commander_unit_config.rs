@@ -30,7 +30,6 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) attack_direction: Option<AllowedAttackInputDirectionSource>,
     pub(super) value: NumberMod<i32>,
     pub(super) can_be_displaced: Option<bool>,
-    pub(super) on_kill: Option<usize>,
     pub(super) on_death: Option<usize>,
     pub(super) on_normal_action: Option<usize>,
     pub(super) aura_range: NumberMod<i8>,
@@ -88,10 +87,6 @@ impl TableLine for CommanderPowerUnitConfig {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
             },
-            on_kill: match data.get(&H::OnKill) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
-                _ => None,
-            },
             on_death: match data.get(&H::OnDeath) {
                 Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
                 _ => None,
@@ -142,7 +137,6 @@ crate::enum_with_custom! {
         Value,
         CanBeDisplaced,
         TransportCapacity,
-        OnKill,
         OnDeath,
         OnNormalAction,
         AuraRange,

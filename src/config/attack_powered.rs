@@ -32,10 +32,9 @@ pub(super) struct AttackPoweredConfig {
     pub allows_counter_attack: Option<bool>,
     pub splash_priority: NumberMod<Rational32>,
     pub direction_modifier: Option<DisplaceDirectionModifier>,
-    // events
-    pub on_defend: Option<usize>,
     // user-defined columns
     custom_columns: HashMap<String, NumberMod<Rational32>>,
+    scripts: HashMap<String, (usize, usize, Option<Rational32>)>,
 }
 
 impl TableLine for AttackPoweredConfig {
@@ -43,12 +42,27 @@ impl TableLine for AttackPoweredConfig {
     fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
         use AttackPoweredConfigHeader as H;
         let mut custom_columns = HashMap::default();
+        let mut scripts = HashMap::default();
         for (header, s) in data {
             if let H::Custom(name) = header {
                 let s = s.trim();
                 if s.len() > 0 {
-                    let nm =NumberMod::from_conf(s, loader)?.0;
-                    custom_columns.insert(name.clone(), nm);
+                    if name.starts_with("On") {
+                        let (base, s) = string_base(s);
+                        let (priority, f) = match base {
+                            "S" | "Simple" => (None, parse_tuple1::<String>(s, loader)?.0),
+                            "P" | "WithPriority" => {
+                                let (priority, name, _) = parse_tuple2(s, loader)?;
+                                (Some(priority), name)
+                            }
+                            _ => return Err(ConfigParseError::UnknownEnumMember(format!("OnDefend::{base}")).into())
+                        };
+                        let f = loader.rhai_function(&f, 0..=10)?;
+                        scripts.insert(name.clone(), (f.index, f.parameters.len(), priority));
+                    } else {
+                        let nm =NumberMod::from_conf(s, loader)?.0;
+                        custom_columns.insert(name.clone(), nm);
+                    }
                 }
             }
         }
@@ -69,11 +83,8 @@ impl TableLine for AttackPoweredConfig {
                 Some(s) if s.len() > 0 => Some(DisplaceDirectionModifier::from_conf(s, loader)?.0),
                 _ => None,
             },
-            on_defend: match data.get(&H::OnDefend) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
-                _ => None,
-            },
             custom_columns,
+            scripts,
         })
     }
 
@@ -87,6 +98,12 @@ impl AttackPoweredConfig {
         self.custom_columns.get(column_name)
         .cloned()
         .unwrap_or(NumberMod::Keep)
+    }
+
+    pub(super) fn get_script(&self, column_name: &String, parameter_count: usize) -> Option<(usize, Option<Rational32>)> {
+        self.scripts.get(column_name)
+        .filter(|(_, p, _)| *p == parameter_count)
+        .map(|(f, _, priority)| (*f, *priority))
     }
 }
 
@@ -105,7 +122,6 @@ crate::enum_with_custom! {
         DirectionModifier,
         // events
         OnAttack,
-        OnDefend,
     }
 }
 

@@ -27,6 +27,8 @@ fn resurrect() {
     EVENT_HANDLER.place_unit(OTHER_POSITION, unit);
 }
 
-fn level_up() {
-    EVENT_HANDLER.set_unit_tag(POSITION, TAG_Level, (UNIT.get(TAG_Level) ?? 0) + 1);
+fn level_up(attacker_id, defender_id) {
+    if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
+        EVENT_HANDLER.set(attacker_id, TAG_Level, (EVENT_HANDLER.get(attacker_id, TAG_Level) ?? 0) + 1);
+    }
 }

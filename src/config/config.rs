@@ -955,99 +955,6 @@ impl Config {
         ) as usize
     }
 
-    /*pub fn unit_attack_effects<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: Point,
-        defender: &Unit<D>,
-        defender_pos: Point,
-        transporter: Option<(&Unit<D>, Point)>, // if the attacker moved out of a transporter to attack
-        heroes: &HeroMap<D>,
-        temporary_ballast: &[TBallast<D>],
-        is_counter: bool,
-    ) -> Vec<usize> {
-        let mut result = Vec::new();
-        self.unit_power_configs(
-            game,
-            unit,
-            (unit_pos, None),
-            transporter,
-            Some((defender, defender_pos, None, heroes.get(defender_pos, defender.get_owner_id()))),
-            heroes.get(unit_pos, unit.get_owner_id()),
-            temporary_ballast,
-            is_counter,
-            |iter, _executor| {
-                for config in iter {
-                    result.extend(config.on_attack.iter().cloned())
-                }
-            }
-        );
-        result
-    }
-
-    pub fn unit_defend_effects<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: Point,
-        attacker: &Unit<D>,
-        attacker_pos: Point,
-        transporter: Option<(&Unit<D>, Point)>, // if the defender moved out of a transporter to attack + defend
-        heroes: &HeroMap<D>,
-        temporary_ballast: &[TBallast<D>],
-        is_counter: bool
-    ) -> Vec<usize> {
-        let mut result = Vec::new();
-        self.unit_power_configs(
-            game,
-            unit,
-            (unit_pos, None),
-            transporter,
-            Some((attacker, attacker_pos, None, heroes.get(attacker_pos, attacker.get_owner_id()))),
-            heroes.get(unit_pos, unit.get_owner_id()),
-            temporary_ballast,
-            is_counter,
-            |iter, _executor| {
-                for config in iter {
-                    result.extend(config.on_defend.iter().cloned())
-                }
-            }
-        );
-        result
-    }*/
-
-    pub fn unit_kill_effects<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: Point,
-        defender: &Unit<D>,
-        defender_pos: Point,
-        transporter: Option<(&Unit<D>, Point)>, // if the attacker moved out of a transporter to attack
-        heroes: &HeroMap<D>,
-        temporary_ballast: &[TBallast<D>],
-        is_counter: bool,
-    ) -> Vec<usize> {
-        let mut result = Vec::new();
-        self.unit_power_configs(
-            game,
-            unit,
-            (unit_pos, None),
-            transporter,
-            Some((defender, defender_pos, None, heroes.get(defender_pos, defender.get_owner_id()))),
-            heroes.get(unit_pos, unit.get_owner_id()),
-            temporary_ballast,
-            is_counter,
-            |iter, _executor| {
-                for config in iter {
-                    result.extend(config.on_kill.iter().cloned())
-                }
-            }
-        );
-        result
-    }
-
     pub fn unit_death_effects<D: Direction>(
         &self,
         game: &impl GameView<D>,
@@ -1240,6 +1147,53 @@ impl Config {
                 )
             }
         )
+    }
+
+    pub fn on_defend_scripts<D: Direction>(
+        &self,
+        column_name: &String,
+        argument_count: usize,
+        game: &impl GameView<D>,
+        attack: &ConfiguredAttack,
+        splash: &AttackInstance,
+        attacker: &Unit<D>,
+        attacker_pos: Point,
+        defender: Unit<D>,
+        defender_pos: (Point, Option<usize>),
+        heroes: &HeroMap<D>,
+        temporary_ballast: &[TBallast<D>],
+        counter: &AttackCounterState<D>,
+    ) -> Vec<(usize, Option<Rational32>)> {
+        let scope = attack_power_scope(
+            attack,
+            Some(splash),
+            attacker,
+            attacker_pos,
+            Some((&defender, defender_pos.0, defender_pos.1)),
+            None,
+            heroes,
+            temporary_ballast,
+            counter.is_counter(),
+        );
+        let mut result = Vec::new();
+        self.attack_power_configs(
+            game,
+            &scope,
+            attack.clone(),
+            Some(splash.clone()),
+            attacker,
+            (attacker_pos, None),
+            None,
+            heroes,
+            temporary_ballast,
+            counter,
+            |iter, _| {
+                for conf in iter {
+                    result.extend(conf.get_script(column_name, argument_count));
+                }
+            }
+        );
+        result
     }
 
     pub fn unit_configured_attacks<D: Direction>(

@@ -1,4 +1,8 @@
-Filter;Strength;Targeting;SplashRange;AllowsCounterAttack;SplashPriority;DirectionModifier;OnDefend;Lifesteal
+Filter;Strength;Targeting;SplashRange;AllowsCounterAttack;AttackPriority;DirectionModifier;OnDefend;Lifesteal
+Counter;;;;;+1;;;
 Co(Simo,3),AT(Ranged);+8/20;;>1;;;;;
 Co(Simo,1), CC(3000), AT(Ranged);+1/20;;>1;;;;;
 Co(Vlad), Fog(Dark);;;;;;;;+20/100
+Co(Celerity), MovementPattern(Standard);;;;;;;P(999,on_unit/kill > level_up);
+Co(Zombie), Not(Co(Zombie,2)), MovementPattern(Standard);;;;;;;P(999,on_unit/kill > leave_skull);
+Co(Zombie,2), MovementPattern(Standard);;;;;;;P(999,on_unit/kill > resurrect);

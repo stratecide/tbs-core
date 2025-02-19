@@ -39,6 +39,7 @@ fn deal_damage_to_unit() {
         } else {
             arguments[index][1] += damage;
         }
+        on_defend(OnDefendScript("OnDefend", defender_id).with_arguments([ATTACKER_ID, defender_id]));
     }
     if arguments.len > 0 {
         add_script(
