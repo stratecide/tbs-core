@@ -21,6 +21,19 @@ macro_rules! event_handler_module {
             pub type Handler = EventHandler<$d>;
             pub type UnitId = crate::units::UnitId<$d>;
 
+            // comparison
+            //============
+
+            #[rhai_fn(name = "==")]
+            pub fn eq_ui(a: UnitId, b: UnitId) -> bool {
+                a.0 == b.0
+            }
+
+            #[rhai_fn(name = "!=")]
+            pub fn neq_ui(a: UnitId, b: UnitId) -> bool {
+                a.0 != b.0
+            }
+
             #[rhai_fn(pure)]
             pub fn get_unit_position(handler: &mut Handler, id: UnitId) -> Dynamic {
                 handler.get_observed_unit_pos(id.0)

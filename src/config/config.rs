@@ -1536,45 +1536,6 @@ impl Config {
         )
     }
 
-    pub fn unit_range<D: Direction>(
-        &self,
-        game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: Point,
-        transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
-        temporary_ballast: &[TBallast<D>],
-        min_range: bool,
-        base_range: u8,
-        is_counter: bool,
-    ) -> u8 {
-        self.unit_power_configs(
-            game,
-            unit,
-            (unit_pos, None),
-            transporter,
-            None,
-            heroes,
-            temporary_ballast,
-            is_counter,
-            |iter, executor| {
-                if min_range {
-                    NumberMod::update_value_repeatedly(
-                        base_range,
-                        iter.map(|c| c.min_range),
-                        executor,
-                    )
-                } else {
-                    NumberMod::update_value_repeatedly(
-                        base_range,
-                        iter.map(|c| c.max_range),
-                        executor,
-                    )
-                }
-            }
-        )
-    }
-
     pub fn unit_can_be_displaced<D: Direction>(
         &self,
         game: &impl GameView<D>,

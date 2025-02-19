@@ -37,7 +37,7 @@ fn deal_damage_to_unit() {
             arguments.push([defender_id, damage]);
             defender_ids.push(defender_id);
         } else {
-            argument[index][1] += damage;
+            arguments[index][1] += damage;
         }
     }
     if arguments.len > 0 {

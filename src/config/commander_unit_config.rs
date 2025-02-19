@@ -19,8 +19,6 @@ use super::unit_filter::UnitFilter;
 #[derive(Debug)]
 pub(super) struct CommanderPowerUnitConfig {
     pub(super) affects: Vec<UnitFilter>,
-    pub(super) min_range: NumberMod<u8>,
-    pub(super) max_range: NumberMod<u8>,
     pub(super) visibility: Option<UnitVisibility>,
     pub(super) movement_points: NumberMod<Rational32>,
     pub(super) vision: NumberMod<u8>,
@@ -58,8 +56,6 @@ impl TableLine for CommanderPowerUnitConfig {
         }
         Ok(Self {
             affects: power.into_iter().chain(affects.into_iter()).collect(),
-            min_range: parse_def(data, H::MinRange, NumberMod::Keep, loader)?,
-            max_range: parse_def(data, H::MaxRange, NumberMod::Keep, loader)?,
             visibility: match data.get(&H::Visibility) {
                 Some(s) if s.len() > 0 => Some(UnitVisibility::from_conf(s, loader)?.0),
                 _ => None,
@@ -128,8 +124,6 @@ crate::enum_with_custom! {
     pub enum CommanderPowerUnitConfigHeader {
         Power,
         Affects,
-        MinRange,
-        MaxRange,
         Visibility,
         MovementPoints,
         Vision,

@@ -177,7 +177,7 @@ fn simo() {
     // before chaos/order
     let arty = server.get_unit(arty_pos).unwrap();
     assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_close).is_some());
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far).is_none());
+    assert_eq!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far), None);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),

@@ -96,7 +96,7 @@ impl AttackPattern {
             Self::Straight { min, max } |
             Self::TriangleDiagonal { min, max } |
             Self::TriangleStraight { min, max } => {
-                vec![("min_range".to_string(), min), ("max_range".to_string(), max)]
+                vec![("MinRange".to_string(), min), ("MaxRange".to_string(), max)]
             }
             Self::Rhai { parameter_names, parameter_values, .. } => {
                 parameter_names.iter().cloned().zip(parameter_values.iter_mut()).collect()

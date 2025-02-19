@@ -628,12 +628,6 @@ impl<D: Direction> Unit<D> {
         if let Some((destination, this)) = game.unit_path_without_placing(transporter.map(|(_, i)| i), path) {
             if (this.can_attack_after_moving() || path.steps.len() == 0) && game.get_unit(destination).is_none() {
                 game.put_unit(destination, this.clone());
-                /*let heroes = Hero::hero_influence_at(&game, destination, self.get_owner_id());
-                for attack_vector in AttackVector::search(&this, &game, destination, None, transporter.map(|(u, _)| (u, path.start)), ballast, Counter::NoCounter) {
-                    for (point, _, _) in attack_vector.get_splash(&this, &game, destination, &heroes, ballast, Counter::NoCounter) {
-                        result.insert(point);
-                    }
-                }*/
                 let heroes = HeroMap::new(&game, Some(self.get_owner_id()));
                 for input in AttackInput::attackable_positions(&game, self, destination, transporter.map(|(u, _)| (u, path.start)), ballast, &heroes) {
                     result.insert(input.target());
@@ -668,7 +662,7 @@ impl<D: Direction> Unit<D> {
                 return PathSearchFeedback::ContinueWithoutStopping
             } else if goal == p && can_stop_here && takes != PathStepTakes::Deny {
                 return PathSearchFeedback::Found
-            } else if path.steps.len() == 0 || self.can_attack_after_moving() && self.attackable_positions(game, path, transporter, ballast.get_entries()).contains(&goal) {
+            } else if (path.steps.len() == 0 || self.can_attack_after_moving()) && self.attackable_positions(game, path, transporter, ballast.get_entries()).contains(&goal) {
                 return PathSearchFeedback::Found
             }
             PathSearchFeedback::Continue
