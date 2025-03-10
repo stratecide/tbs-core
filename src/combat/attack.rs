@@ -176,8 +176,8 @@ impl AttackInstance {
                 .filter_map(|dp| {
                     let defender = handler.get_game().get_unit(dp.point)?;
                     let UnitId(id, distortion) = handler.observe_unit(dp.point, None);
-                    let distance: i32 = environment.config.unit_attack_bonus(&"PushDistance".to_string(), *distance, &*handler.get_game(), &attacker, attacker_pos, &defender, (dp.point, None), heroes, temporary_ballast, is_counter).to_integer();
-                    let push_limit: i32 = environment.config.unit_attack_bonus(&"PushLimit".to_string(), *push_limit, &*handler.get_game(), &attacker, attacker_pos, &defender, (dp.point, None), heroes, temporary_ballast, is_counter).to_integer();
+                    let distance: i32 = environment.config.unit_attack_bonus(&"PushDistance".to_string(), *distance, &*handler.get_game(), attack, splash, &attacker, attacker_pos, &defender, (dp.point, None), heroes, temporary_ballast, counter_state).to_integer();
+                    let push_limit: i32 = environment.config.unit_attack_bonus(&"PushLimit".to_string(), *push_limit, &*handler.get_game(), attack, splash, &attacker, attacker_pos, &defender, (dp.point, None), heroes, temporary_ballast, counter_state).to_integer();
                     if distance <= 0 || push_limit < 0 {
                         return None;
                     }
@@ -222,9 +222,12 @@ impl AttackInstance {
                         }
                     });
                     let handler = handler_.clone();
+                    let attack_ = attack.clone();
+                    let splash_ = splash.clone();
                     let attacker_ = attacker.clone();
                     let heroes_ = heroes.clone();
                     let ballast = temporary_ballast.to_vec();
+                    let counter_ = counter_state.clone();
                     engine.register_fn("attacker_bonus", move |defender_id: UnitId<D>, column_id: ImmutableString, base_value: Rational32| -> Rational32 {
                         let handler = handler.clone();
                         let handler = handler.lock().unwrap();
@@ -237,18 +240,24 @@ impl AttackInstance {
                             &column_id.to_string(),
                             base_value,
                             &*game,
+                            &attack_,
+                            &splash_,
                             &attacker_,
                             attacker_pos,
                             &defender,
                             defender_pos,
                             &heroes_,
                             &ballast,
-                            is_counter,
+                            &counter_,
                         )
                     });
                     let handler = handler_.clone();
+                    let attack_ = attack.clone();
+                    let splash_ = splash.clone();
                     let attacker_ = attacker.clone();
                     let heroes_ = heroes.clone();
+                    let ballast = []; // TODO
+                    let counter_ = counter_state.clone();
                     engine.register_fn("defender_bonus", move |defender_id: UnitId<D>, column_id: &str, base_value: Rational32| {
                         let handler = handler.clone();
                         let handler = handler.lock().unwrap();
@@ -261,12 +270,15 @@ impl AttackInstance {
                             &column_id.to_string(),
                             base_value,
                             &*game,
+                            &attack_,
+                            &splash_,
                             &defender,
                             defender_pos,
                             &attacker_,
                             attacker_pos,
                             &heroes_,
-                            is_counter,
+                            &ballast,
+                            &counter_,
                         );
                         println!("unit_defense_bonus {column_id} = {result}");
                         result

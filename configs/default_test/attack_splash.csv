@@ -1,6 +1,6 @@
 SplashType;Condition;AllowsCounterAttack;Priority;Strength;DirectionModifier;Script;PushDistance;PushLimit;Throw
 Default;;true;0;;;attack/deal_damage > deal_damage_to_unit;;;
-Default;U(Destroyer);;0;;;Displace;1;0;false
+Default;;;0;;;Displace;0;0;false
 DragonHead;;true;0;;;attack/deal_damage > deal_damage_to_unit;;;
 NoCounter;;false;0;;;attack/deal_damage > deal_damage_to_unit;;;
 Erupt;;false;0;;;attack/deal_damage > deal_damage_to_unit;;;

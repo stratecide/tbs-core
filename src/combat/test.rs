@@ -75,12 +75,13 @@ fn terrain_defense() {
             path: Path::new(Point::new(x, 1)),
             action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(x, 0), Direction4::D90))),
         }), Arc::new(|| 0.)).unwrap();
+        println!("attacker hp: {}, defender hp: {}", game.get_unit(Point::new(x, 1)).unwrap().get_hp(), game.get_unit(Point::new(x, 0)).unwrap().get_hp());
     }
     let base_damage = 100. - game.get_unit(Point::new(0, 0)).unwrap().get_hp() as f32;
     assert!(base_damage > 0.);
-    assert_eq!(100 - (base_damage / 1.1).ceil() as u8, game.get_unit(Point::new(1, 0)).unwrap().get_hp());
-    assert_eq!(100 - (base_damage / 1.2).ceil() as u8, game.get_unit(Point::new(2, 0)).unwrap().get_hp());
-    assert_eq!(100 - (base_damage / 1.3).ceil() as u8, game.get_unit(Point::new(3, 0)).unwrap().get_hp());
+    assert_eq!((base_damage / 1.1).ceil() as u8, 100 - game.get_unit(Point::new(1, 0)).unwrap().get_hp());
+    assert_eq!((base_damage / 1.2).ceil() as u8, 100 - game.get_unit(Point::new(2, 0)).unwrap().get_hp());
+    assert_eq!((base_damage / 1.3).ceil() as u8, 100 - game.get_unit(Point::new(3, 0)).unwrap().get_hp());
 }
 
 #[test]

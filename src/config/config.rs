@@ -1432,23 +1432,38 @@ impl Config {
         column_name: &String,
         base_value: Rational32,
         game: &impl GameView<D>,
+        attack: &ConfiguredAttack,
+        splash: &AttackInstance,
         unit: &Unit<D>,
         unit_pos: Point,
         defender: &Unit<D>,
         (defender_pos, defender_unload_index): (Point, Option<usize>),
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
-        is_counter: bool,
+        counter: &AttackCounterState<D>,
     ) -> Rational32 {
-        self.unit_power_configs(
+        let scope = attack_power_scope(
+            attack,
+            Some(splash),
+            unit,
+            unit_pos,
+            Some((defender, defender_pos, defender_unload_index)),
+            None,
+            heroes,
+            temporary_ballast,
+            counter.is_counter(),
+        );
+        self.attack_power_configs(
             game,
+            &scope,
+            attack.clone(),
+            Some(splash.clone()),
             unit,
             (unit_pos, None),
             None,
-            Some((defender, defender_pos, defender_unload_index, heroes.get(defender_pos, defender.get_owner_id()))),
-            heroes.get(unit_pos, unit.get_owner_id()),
+            heroes,
             temporary_ballast,
-            is_counter,
+            counter,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     base_value,
@@ -1464,22 +1479,38 @@ impl Config {
         column_name: &String,
         base_value: Rational32,
         game: &impl GameView<D>,
+        attack: &ConfiguredAttack,
+        splash: &AttackInstance,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         attacker: &Unit<D>,
         attacker_pos: Point,
         heroes: &HeroMap<D>,
-        is_counter: bool,
+        temporary_ballast: &[TBallast<D>],
+        counter: &AttackCounterState<D>,
     ) -> Rational32 {
-        self.unit_power_configs(
+        let scope = attack_power_scope(
+            attack,
+            Some(splash),
+            unit,
+            unit_pos.0,
+            Some((attacker, attacker_pos, None)),
+            None,
+            heroes,
+            temporary_ballast,
+            counter.is_counter(),
+        );
+        self.attack_power_configs(
             game,
+            &scope,
+            attack.clone(),
+            Some(splash.clone()),
             unit,
             unit_pos,
             None,
-            Some((attacker, attacker_pos, None, heroes.get(attacker_pos, attacker.get_owner_id()))),
-            heroes.get(unit_pos.0, unit.get_owner_id()),
-            &[],
-            is_counter,
+            heroes,
+            temporary_ballast,
+            counter,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     base_value,
@@ -1525,9 +1556,9 @@ impl Config {
 fn attack_power_scope<D: Direction>(
     attack: &ConfiguredAttack,
     splash: Option<&AttackInstance>,
-    attacker: &Unit<D>,
-    attacker_pos: Point,
-    defender: Option<(&Unit<D>, Point, Option<usize>)>,
+    unit: &Unit<D>,
+    unit_pos: Point,
+    other_unit: Option<(&Unit<D>, Point, Option<usize>)>,
     // when moving out of a transporter, or start_turn for transported units
     transporter: Option<(&Unit<D>, Point)>,
     // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
@@ -1540,8 +1571,8 @@ fn attack_power_scope<D: Direction>(
     scope.push_constant(CONST_NAME_SPLASH_DISTANCE, splash.map(|s| Dynamic::from(s.splash_distance as i32)).unwrap_or(().into()));
     scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(u, _)| Dynamic::from(u.clone())).unwrap_or(().into()));
     scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.map(|(_, p)| Dynamic::from(p)).unwrap_or(().into()));
-    scope.push_constant(CONST_NAME_UNIT, attacker.clone());
-    scope.push_constant(CONST_NAME_POSITION, attacker_pos);
+    scope.push_constant(CONST_NAME_UNIT, unit.clone());
+    scope.push_constant(CONST_NAME_POSITION, unit_pos);
     scope.push_constant(CONST_NAME_IS_COUNTER, is_counter);
     scope
 }

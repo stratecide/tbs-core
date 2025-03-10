@@ -1,8 +1,52 @@
-Filter;Strength;Targeting;SplashRange;AllowsCounterAttack;AttackPriority;DirectionModifier;OnDefend;Lifesteal
-Counter;;;;;+1;;;
-Co(Simo,3),AT(Ranged);+8/20;;>1;;;;;
-Co(Simo,1), CC(3000), AT(Ranged);+1/20;;>1;;;;;
-Co(Vlad), Fog(Dark);;;;;;;;+20/100
-Co(Celerity), MovementPattern(Standard);;;;;;;P(999,on_unit/kill > level_up);
-Co(Zombie), Not(Co(Zombie,2)), MovementPattern(Standard);;;;;;;P(999,on_unit/kill > leave_skull);
-Co(Zombie,2), MovementPattern(Standard);;;;;;;P(999,on_unit/kill > resurrect);
+Filter;Attack;Defense;Strength;Targeting;SplashRange;AllowsCounterAttack;AttackPriority;DirectionModifier;OnDefend;Lifesteal;PushDistance
+Counter;;;;;;;+1;;;;
+U(PufferFish), Counter;*0;;;;;;;;;;
+U(Destroyer);;;;;;;;;;;+1
+IH(), Not(IH(CrystalObelisk));+2/10;+2/10;;;;;;;;;
+H(Crystal, CrystalObelisk);+2/10;+2/10;;;;;;;;;
+H(Crystal, CrystalObelisk), HG((Crystal, 1));+1/10;+1/10;;;;;;;;;
+H(EarlGrey);+3/10;+1/10;;;;;;;;;
+H(EarlGrey, 1);+2/10;;;;;;;;;;
+H(BlueBerry);+1/10;+1/10;;;;;;;;;
+H(Tess);+1/10;+3/10;;;;;;;;;
+H(Tess, 1);+1/10;+1/10;;;;;;;;;
+H(Edwin);+1/10;+1/10;;;;;;;;;
+H(Edwin, 1);+1/10;+1/10;;;;;;;;;+1
+Co(Zombie), Not(Co(Zombie,2)), MovementPattern(Standard);-1/10;;;;;;;;P(999,on_unit/kill > leave_skull);;
+Co(Zombie), Counter;+2/10;;;;;;;;;;
+Co(Zombie,1), MovementPattern(Standard);+1/10;+1/10;;;;;;;;;
+Co(Zombie,2), MovementPattern(Standard);+1/10;+1/10;;;;;;;P(999,on_unit/kill > resurrect);;
+Co(Simo,3),AT(Ranged);+2/10;;;;;;;;;;
+Co(Simo), Movement(Heli, Plane);-1/10;;;;;;;;;;
+Co(Simo,1), CC(3000), AT(Ranged);;;+1/20;;>1;;;;;;
+Co(Simo,3), AT(Ranged);+1/10;;+8/20;;>1;;;;;;
+Co(Simo,3);+1/10;+1/10;;;;;;;;;
+Co(Simo,4);+1/10;+1/10;;;;;;;;;
+Co(Simo,4), AT(Ranged);+2/10;;;;;;;;;;
+Co(Simo,5);+1/10;+1/10;;;;;;;;;
+Co(Simo,5), AT(Ranged);+2/10;;;;;;;;;;
+Co(Vlad), Fog(Dark);;;;;;;;;;+20/100;
+Co(Vlad), Fog(TrueSight, NormalVision);;-1/10;;;;;;;;;
+Co(Vlad, 1);+1/10;+1/10;;;;;;;;;
+Co(Vlad, 2);+1/10;+1/10;;;;;;;;;
+Co(Tapio), Not(Movement(Heli, Plane)), T(Grass, Hill, Lillypads);+1/10;;;;;;;;;;
+Co(Tapio), Not(Movement(Heli, Plane)), T(Forest, FairyForest);+2/10;;;;;;;;;;
+Co(Tapio, 2);+1/10;+1/10;;;;;;;;;
+Co(Tapio, 3);+1/10;+1/10;;;;;;;;;
+Co(Lageos), Movement(Plane);;+2/10;;;;;;;;;
+Co(Lageos), Movement(Heli);;+1/10;;;;;;;;;
+Co(Lageos, 1);+1/10;+1/10;;;;;;;;;
+Co(Lageos, 2);+1/10;+1/10;;;;;;;;;
+Co(SludgeMonster), MovementPattern(Standard), T(OilPlatform);+2/10;;;;;;;;;;
+Co(SludgeMonster), MovementPattern(Standard), Token(Sludge);Rhai(unit_powered > add_half_missing_hp);;;;;;;;;;
+Co(SludgeMonster, 1);+1/10;+1/10;;;;;;;;;
+Co(SludgeMonster, 2);+1/10;+1/10;;;;;;;;;
+Co(Celerity), MovementPattern(Standard);-1/10;-1/10;;;;;;;;;
+Co(Celerity), MovementPattern(Standard);Rhai(commanders/celerity > level_increases_attack);;;;;;;;P(999,on_unit/kill > level_up);;
+Co(Celerity, 1);+1/10;+1/10;;;;;;;;;
+Co(Celerity, 1), MovementPattern(Standard), AttackPattern(Adjacent), Not(U(Marine, Sniper, Bazooka, LaserShark));;;;;;;;;;;
+Co(Celerity, 2);+1/10;+1/10;;;;;;;;;
+Co(Celerity, 2), MovementPattern(Standard), AttackPattern(Adjacent), Not(U(Marine, Sniper, Bazooka, LaserShark));+2/10;;;;;;;;;;
+;Rhai(unit_powered > multiply_hp);Rhai(unit_powered > terrain_defense);;;;;;;;;
+U(BattleShip, Sniper, Blimp), Moved, Not(Counter);*7/10;;;;;;;;;;
+Flag(Capturing, Repairing);;*6/10;;;;;;;;;
