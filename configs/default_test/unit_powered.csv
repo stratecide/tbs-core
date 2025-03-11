@@ -11,8 +11,6 @@ Power;Affects;Attack;Defense;MinRange;MaxRange;Visibility;MovementPoints;Vision;
 ;U(PufferFish), Counter;*0;;;;;;;;;;;;;;;;;;;;;;
 ;U(King, LifeCrystal);;;;;;;;;;;;;;;;;;;;;;on_unit/death > lose_game;
 ;U(Pyramid, Factory);;;;;;;;;;;;;;;;;;;;;;;
-;U(Pyramid, Factory), Unowned;;;;;;;;;;;;;;;;;;;;;;on_unit/death > revive_converted;
-;U(Pyramid, Factory), Not(Unowned);;;;;;;;;;;;;;;;;;;;;;on_unit/death > revive_neutral;
 ;U(Pyramid, Factory), Counter, Not(Unowned);;;;;;;;;;;;;;;Adjacent;;;;;;;;
 ;T(FairyForest);;;;;;;;;;;;;;;;;;;;;;;
 ;Token(Sludge);;;;;;;;;;;;;;;;;;;;;;;

@@ -2,6 +2,7 @@ Filter;Attack;Defense;Strength;Targeting;SplashRange;AllowsCounterAttack;AttackP
 Counter;;;;;;;+1;;;;
 U(PufferFish), Counter;*0;;;;;;;;;;
 U(Destroyer);;;;;;;;;;;+1
+U(Pyramid, Factory);;;;;;;;;P(999,on_unit/kill > capture_neutral);;
 IH(), Not(IH(CrystalObelisk));+2/10;+2/10;;;;;;;;;
 H(Crystal, CrystalObelisk);+2/10;+2/10;;;;;;;;;
 H(Crystal, CrystalObelisk), HG((Crystal, 1));+1/10;+1/10;;;;;;;;;

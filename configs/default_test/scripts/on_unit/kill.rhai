@@ -41,3 +41,21 @@ fn level_up(attacker_id, defender_id) {
         EVENT_HANDLER.set(attacker_id, TAG_Level, (EVENT_HANDLER.get(attacker_id, TAG_Level) ?? 0) + 1);
     }
 }
+
+fn capture_neutral(attacker_id, defender_id) {
+    if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
+        let position = EVENT_HANDLER.get_unit_position(defender_id);
+        let defender = EVENT_HANDLER.get_unit(defender_id);
+        let new_unit = Unit(defender.type);
+        new_unit.copy_from(defender);
+        if defender.owner_id == -1 {
+            new_unit.owner_id = EVENT_HANDLER.get_unit(attacker_id).owner_id;
+        } else {
+            new_unit.owner_id = -1;
+        }
+        new_unit.set(TAG_Hp, 50);
+        // TODO: show effect?
+        EVENT_HANDLER.take_unit(position);
+        EVENT_HANDLER.place_unit(position, new_unit);
+    }
+}
