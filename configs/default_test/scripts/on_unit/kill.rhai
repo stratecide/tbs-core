@@ -1,33 +1,38 @@
 
 fn leave_skull(attacker_id, defender_id) {
     if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
+        let position = EVENT_HANDLER.get_unit_position(defender_id);
+        let defender = EVENT_HANDLER.get_unit(defender_id);
         let skull = Token("Skull");
-        skull.copy_from(OTHER_UNIT);
-        skull.owner_id = UNIT.owner_id;
-        skull.set(TAG_UnitType, OTHER_UNIT.type);
-        if OTHER_UNIT.movement_type != OTHER_UNIT.movement_types[0] {
-            skull.set(TAG_MovementType, OTHER_UNIT.movement_type);
+        skull.copy_from(defender);
+        skull.owner_id = EVENT_HANDLER.get_unit(attacker_id).owner_id;
+        skull.set(TAG_UnitType, defender.type);
+        if defender.movement_type != defender.movement_types[0] {
+            skull.set(TAG_MovementType, defender.movement_type);
         }
         skull.remove(FLAG_Exhausted);
         skull.remove(FLAG_Capturing);
         skull.remove(FLAG_Repairing);
         skull.remove(TAG_Hp);
-        EVENT_HANDLER.place_token(OTHER_POSITION, skull);
+        EVENT_HANDLER.place_token(position, skull);
     }
 }
 
 fn resurrect(attacker_id, defender_id) {
-    if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
-        let unit = Unit(OTHER_UNIT.type);
-        unit.copy_from(OTHER_UNIT);
-        unit.owner_id = UNIT.owner_id;
-        unit.movement_type = OTHER_UNIT.movement_type;
+    if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 && EVENT_HANDLER.get_unit_transport_index(defender_id) == () {
+        let position = EVENT_HANDLER.get_unit_position(defender_id);
+        let defender = EVENT_HANDLER.get_unit(defender_id);
+        let unit = Unit(defender.type);
+        unit.copy_from(defender);
+        unit.owner_id = EVENT_HANDLER.get_unit(attacker_id).owner_id;
+        unit.movement_type = defender.movement_type;
         unit.set(TAG_Hp, 50);
         unit.set(FLAG_Zombified);
         unit.remove(FLAG_Exhausted);
         unit.remove(FLAG_Capturing);
         unit.remove(FLAG_Repairing);
-        EVENT_HANDLER.place_unit(OTHER_POSITION, unit);
+        EVENT_HANDLER.take_unit(position);
+        EVENT_HANDLER.place_unit(position, unit);
     }
 }
 

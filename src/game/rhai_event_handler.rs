@@ -3,6 +3,7 @@ use rhai::plugin::*;
 use rustc_hash::FxHashMap;
 use num_rational::Rational32;
 
+use crate::dyn_opt;
 use super::event_handler::EventHandler;
 use crate::map::direction::*;
 use crate::map::point::*;
@@ -32,6 +33,17 @@ macro_rules! event_handler_module {
             #[rhai_fn(name = "!=")]
             pub fn neq_ui(a: UnitId, b: UnitId) -> bool {
                 a.0 != b.0
+            }
+
+            #[rhai_fn(pure)]
+            pub fn get_unit(handler: &mut Handler, id: UnitId) -> Dynamic {
+                dyn_opt(handler.get_observed_unit_pos(id.0).and_then(|(p, unload_index)| handler.with_map(|map| {
+                    let mut u = map.get_unit(p)?;
+                    if let Some(i) = unload_index {
+                        u = u.get_transported().get(i)?;
+                    }
+                    Some(u.clone())
+                })))
             }
 
             #[rhai_fn(pure)]
