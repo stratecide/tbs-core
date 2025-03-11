@@ -148,7 +148,7 @@ impl FromConfig for EffectVisibility {
                 remainder = r;
                 Self::Fog(key)
             }
-            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("EffectVisibility::{invalid}"))),
         }, remainder))
     }
 }

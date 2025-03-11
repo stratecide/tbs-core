@@ -85,7 +85,6 @@ fn zombie() {
     map.set_terrain(Point::new(3, 1), TerrainType::Factory.instance(&map_env).set_owner_id(0).build());
 
     let settings = map.settings().unwrap();
-
     let mut settings = settings.clone();
     for player in &settings.players {
         assert!(player.get_commander_options().contains(&CommanderType::Zombie));
@@ -99,7 +98,20 @@ fn zombie() {
     });
     let unchanged = server.clone();
     let environment = server.environment().clone();
+    let mut skull = Token::new(environment.clone(), TokenType::SKULL);
+    skull.set_owner_id(0);
+    skull.set_tag(TAG_UNIT_TYPE, TagValue::UnitType(UnitType::small_tank()));
+    // no power
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(1, 1)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
+    }), Arc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_unit(Point::new(2, 1)), None);
+    assert_eq!(server.get_tokens(Point::new(1, 1)), vec![]);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), vec![skull.clone()]);
     // small power
+    let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
     assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
@@ -109,11 +121,8 @@ fn zombie() {
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
     }), Arc::new(|| 0.)).unwrap();
-    let mut skull = Token::new(environment.clone(), TokenType::SKULL);
-    skull.set_owner_id(0);
-    skull.set_tag(TAG_UNIT_TYPE, TagValue::UnitType(UnitType::small_tank()));
-    assert_eq!(server.get_tokens(Point::new(2, 1)), vec![skull]);
     assert_eq!(server.get_unit(Point::new(2, 1)), None);
+    assert_eq!(server.get_tokens(Point::new(2, 1)), vec![skull]);
     // big power
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
@@ -598,15 +607,17 @@ fn celerity() {
     for i in 0..=3 {
         let mut server = unchanged.clone();
         for d in Direction4::list().into_iter().take(i + 1).rev() {
+            let target = map.get_neighbor(Point::new(2, 2), d).unwrap().0;
             server.handle_command(Command::UnitCommand(UnitCommand {
                 unload_index: None,
                 path: Path::new(Point::new(2, 2)),
-                action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(map.get_neighbor(Point::new(2, 2), d).unwrap().0, d))),
+                action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target, d))),
             }), Arc::new(|| 0.)).unwrap();
             server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
             server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
         }
         if i > 0 {
+            assert_eq!(server.get_unit(Point::new(2, 1)), None);
             assert_eq!(server.get_unit(Point::new(2, 2)).unwrap().get_tag(TAG_LEVEL), Some(TagValue::Int(Int32(i as i32))));
         }
         attack_damage.push(100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());

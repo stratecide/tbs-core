@@ -96,3 +96,6 @@ macro_rules! enum_with_custom {(
 
 pub(crate) use enum_with_custom;
 
+pub(crate) fn dyn_opt<T: 'static + Clone + Send + Sync>(value: Option<T>) -> rhai::Dynamic {
+    value.map(rhai::Dynamic::from).unwrap_or(rhai::Dynamic::UNIT)
+}

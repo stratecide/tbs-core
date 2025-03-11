@@ -3,20 +3,22 @@ use std::error::Error;
 use num_rational::Rational32;
 use rustc_hash::FxHashMap as HashMap;
 use rustc_hash::FxHashSet;
+use rhai::*;
 
 use crate::combat::*;
 use crate::config::parse::*;
+use crate::dyn_opt;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
-use crate::map::point::Point;
 use crate::script::executor::Executor;
+use crate::script::*;
 use crate::units::hero::HeroMap;
-use crate::units::movement::TBallast;
-use crate::units::unit::Unit;
+use crate::units::UnitData;
 
 use super::file_loader::FileLoader;
 use super::file_loader::TableLine;
 use super::number_modification::NumberMod;
+use super::unit_filter::unit_filter_scope;
 use super::ConfigParseError;
 use super::unit_filter::UnitFilter;
 
@@ -196,16 +198,12 @@ impl AttackFilter {
         game: &impl GameView<D>,
         attack: &ConfiguredAttack,
         splash: Option<&AttackInstance>,
-        unit: &Unit<D>,
-        unit_pos: (Point, Option<usize>),
-        // when moving out of a transporter, or start_turn for transported units
-        transporter: Option<(&Unit<D>, Point)>,
+        unit_data: UnitData<D>,
+        other_unit_data: Option<UnitData<D>>,
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
         heroes: &HeroMap<D>,
         // empty if the unit hasn't moved
-        temporary_ballast: &[TBallast<D>],
-        counter_state: &AttackCounterState<D>,
-        executor: &Executor,
+        is_counter: bool,
     ) -> bool {
         match self {
             Self::Attack(t) => t.contains(&attack.typ),
@@ -217,18 +215,12 @@ impl AttackFilter {
                 count_from_both_ends(*min, attack.splash_range as usize + 1) <= splash.splash_distance as i32
                 && splash.splash_distance as i32 <= count_from_both_ends(*max, attack.splash_range as usize + 1)
             }
-            Self::UnitFilter(uf) => uf.check(
-                game,
-                unit,
-                unit_pos,
-                transporter,
-                counter_state.attacker().map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id()))),
-                heroes.get(unit_pos.0, unit.get_owner_id()),
-                temporary_ballast,
-                counter_state.is_counter(),
-                executor
-            ),
+            Self::UnitFilter(uf) => uf.check(game, unit_data, other_unit_data, heroes, is_counter),
             Self::Rhai(function_index) => {
+                let environment = game.environment();
+                let engine = environment.get_engine_board(game);
+                let scope = attack_filter_scope(game, attack, splash, unit_data, other_unit_data, heroes, is_counter);
+                let executor = Executor::new(engine, scope, environment);
                 match executor.run(*function_index, ()) {
                     Ok(result) => result,
                     Err(_e) => {
@@ -241,7 +233,7 @@ impl AttackFilter {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
                 negated.iter()
-                .any(|negated| !negated.check(game, attack, splash, unit, unit_pos, transporter, heroes, temporary_ballast, counter_state, executor))
+                .any(|negated| !negated.check(game, attack, splash, unit_data, other_unit_data, heroes, is_counter))
             }
         }
     }
@@ -253,4 +245,20 @@ fn count_from_both_ends(value: i32, count: usize) -> i32 {
     } else {
         (count as i32 + value).max(0)
     }
+}
+
+pub(crate) fn attack_filter_scope<D: Direction>(
+    game: &impl GameView<D>,
+    _attack: &ConfiguredAttack,
+    splash: Option<&AttackInstance>,
+    unit_data: UnitData<D>,
+    other_unit_data: Option<UnitData<D>>,
+    heroes: &HeroMap<D>,
+    // true only during counter-attacks
+    is_counter: bool,
+) -> Scope<'static> {
+    let mut scope = unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter);
+    scope.push_constant(CONST_NAME_SPLASH_DISTANCE, dyn_opt(splash.map(|s| s.splash_distance as i32)));
+    scope
+
 }

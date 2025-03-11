@@ -8,12 +8,15 @@ pub mod rhai_unit;
 #[cfg(test)]
 pub(crate) mod test;
 
+use movement::TBallast;
+use unit::Unit;
 use zipper::*;
 use zipper_derive::Zippable;
 
 use crate::config::parse::FromConfig;
 use crate::game::fog::FogIntensity;
 use crate::map::direction::Direction;
+use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 
 #[derive(Debug, Clone, Copy)]
@@ -57,4 +60,14 @@ impl ToString for UnitVisibility {
             Self::AlwaysVisible => "AlwaysVisible".to_string(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnitData<'a, D: Direction> {
+    pub unit: &'a Unit<D>,
+    pub pos: Point,
+    pub unload_index: Option<usize>,
+    // empty if the unit hasn't moved
+    pub ballast: &'a [TBallast<D>],
+    pub original_transporter: Option<(&'a Unit<D>, Point)>,
 }

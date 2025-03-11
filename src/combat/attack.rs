@@ -18,7 +18,7 @@ use crate::map::wrapping_map::OrientedPoint;
 use crate::script::*;
 use crate::units::hero::HeroMap;
 use crate::units::movement::{Path, PathStep, TBallast};
-use crate::units::{unit::*, UnitId};
+use crate::units::{unit::*, UnitData, UnitId};
 
 use super::{AttackCounterState, AttackTargetingFocus, AttackerInfo, AttackerPosition, SplashPattern};
 
@@ -164,7 +164,7 @@ impl AttackInstance {
         let Some(attacker) = attacker_pos.get_unit(handler) else {
             return Vec::new();
         };
-        let Some((attacker_pos, _)) = attacker_pos.get_position(handler) else {
+        let Some((attacker_pos, attacker_unload_index)) = attacker_pos.get_position(handler) else {
             return Vec::new();
         };
         let is_counter = counter_state.is_counter();
@@ -176,8 +176,15 @@ impl AttackInstance {
                 .filter_map(|dp| {
                     let defender = handler.get_game().get_unit(dp.point)?;
                     let UnitId(id, distortion) = handler.observe_unit(dp.point, None);
-                    let distance: i32 = environment.config.unit_attack_bonus(&"PushDistance".to_string(), *distance, &*handler.get_game(), attack, splash, &attacker, attacker_pos, &defender, (dp.point, None), heroes, temporary_ballast, counter_state).to_integer();
-                    let push_limit: i32 = environment.config.unit_attack_bonus(&"PushLimit".to_string(), *push_limit, &*handler.get_game(), attack, splash, &attacker, attacker_pos, &defender, (dp.point, None), heroes, temporary_ballast, counter_state).to_integer();
+                    let defender_data = UnitData {
+                        unit: &defender,
+                        pos: dp.point,
+                        unload_index: None,
+                        ballast: &[], // TODO: should have a value if counter-attack
+                        original_transporter: None, // TODO: should have a value if counter-attack
+                    };
+                    let distance: i32 = environment.config.unit_attack_bonus(&"PushDistance".to_string(), *distance, &*handler.get_game(), attack, splash, &attacker, attacker_pos, defender_data, heroes, temporary_ballast, counter_state.is_counter()).to_integer();
+                    let push_limit: i32 = environment.config.unit_attack_bonus(&"PushLimit".to_string(), *push_limit, &*handler.get_game(), attack, splash, &attacker, attacker_pos, defender_data, heroes, temporary_ballast, counter_state.is_counter()).to_integer();
                     if distance <= 0 || push_limit < 0 {
                         return None;
                     }
@@ -227,7 +234,6 @@ impl AttackInstance {
                     let attacker_ = attacker.clone();
                     let heroes_ = heroes.clone();
                     let ballast = temporary_ballast.to_vec();
-                    let counter_ = counter_state.clone();
                     engine.register_fn("attacker_bonus", move |defender_id: UnitId<D>, column_id: ImmutableString, base_value: Rational32| -> Rational32 {
                         let handler = handler.clone();
                         let handler = handler.lock().unwrap();
@@ -244,11 +250,16 @@ impl AttackInstance {
                             &splash_,
                             &attacker_,
                             attacker_pos,
-                            &defender,
-                            defender_pos,
+                            UnitData {
+                                unit: &defender,
+                                pos: defender_pos.0,
+                                unload_index: defender_pos.1,
+                                ballast: &[],  // TODO: could have a value if counter-attack
+                                original_transporter: None, // TODO: could have a value if counter-attack
+                            },
                             &heroes_,
                             &ballast,
-                            &counter_,
+                            is_counter,
                         )
                     });
                     let handler = handler_.clone();
@@ -257,7 +268,7 @@ impl AttackInstance {
                     let attacker_ = attacker.clone();
                     let heroes_ = heroes.clone();
                     let ballast = []; // TODO
-                    let counter_ = counter_state.clone();
+                    let attacker_ballast = temporary_ballast.to_vec();
                     engine.register_fn("defender_bonus", move |defender_id: UnitId<D>, column_id: &str, base_value: Rational32| {
                         let handler = handler.clone();
                         let handler = handler.lock().unwrap();
@@ -274,11 +285,16 @@ impl AttackInstance {
                             &splash_,
                             &defender,
                             defender_pos,
-                            &attacker_,
-                            attacker_pos,
+                            UnitData {
+                                unit: &attacker_,
+                                pos: attacker_pos,
+                                unload_index: attacker_unload_index,
+                                ballast: &attacker_ballast,
+                                original_transporter: None, // TODO
+                            },
                             &heroes_,
                             &ballast,
-                            &counter_,
+                            is_counter,
                         );
                         println!("unit_defense_bonus {column_id} = {result}");
                         result
@@ -346,8 +362,13 @@ impl AttackInstance {
                             &splash_,
                             &attacker_,
                             attacker_pos,
-                            defender,
-                            defender_pos,
+                            UnitData {
+                                unit: &defender,
+                                pos: defender_pos.0,
+                                unload_index: defender_pos.1,
+                                ballast: &[], // TODO,
+                                original_transporter: None, // TODO
+                            },
                             &heroes_,
                             &ballast,
                             &counter_,

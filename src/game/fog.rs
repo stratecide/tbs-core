@@ -255,8 +255,7 @@ pub fn recalculate_fog<D: Direction>(game: &impl GameView<D>, perspective: Clien
         }
         if let Some(unit) = game.get_unit(p) {
             if perspective != ClientPerspective::Neutral && perspective == unit.get_team() {
-                let heroes = heroes.get(p, unit.get_owner_id());
-                for (p, v) in unit.get_vision(game, p, heroes) {
+                for (p, v) in unit.get_vision(game, p, &heroes) {
                     fog.insert(p, v.min(fog.get(&p).clone().unwrap().clone()));
                 }
             }

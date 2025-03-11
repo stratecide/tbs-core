@@ -9,6 +9,7 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::*;
 use crate::units::hero::HeroMap;
+use crate::units::UnitData;
 
 use super::file_loader::{FileLoader, TableLine};
 use super::terrain_powered::TerrainFilter;
@@ -115,29 +116,35 @@ impl GlobalEventType {
                 let Some(unit) = game.get_unit(pos) else {
                     return result
                 };
-                let heroes = heroes.get(pos, unit.get_owner_id());
-                let environment = game.environment();
-                let engine = environment.get_engine_board(game);
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                scope.push_constant(CONST_NAME_POSITION, pos);
-                scope.push_constant(CONST_NAME_TRANSPORT_INDEX, ());
-                scope.push_constant(CONST_NAME_TRANSPORTER, ());
-                scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
-                let executor = Executor::new(engine, scope.clone(), environment.clone());
-                if filter.iter().all(|filter| filter.check(game, &unit, (pos, None), None, None, heroes, &[], false, &executor)) {
+                if filter.iter().all(|filter| filter.check(game, UnitData {
+                    unit: &unit,
+                    pos,
+                    unload_index: None,
+                    ballast: &[],
+                    original_transporter: None,
+                }, None, heroes, false)) {
+                    let mut scope = Scope::new();
+                    scope.push_constant(CONST_NAME_UNIT, unit.clone());
+                    scope.push_constant(CONST_NAME_POSITION, pos);
+                    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, ());
+                    scope.push_constant(CONST_NAME_TRANSPORTER, ());
+                    scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
                     result.push(scope)
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
-                    let engine = environment.get_engine_board(game);
-                    let mut scope = Scope::new();
-                    scope.push_constant(CONST_NAME_UNIT, u.clone());
-                    scope.push_constant(CONST_NAME_POSITION, pos);
-                    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, i as i32);
-                    scope.push_constant(CONST_NAME_TRANSPORTER, unit.clone());
-                    scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
-                    let executor = Executor::new(engine, scope.clone(), environment.clone());
-                    if filter.iter().all(|filter| filter.check(game, &u, (pos, Some(i)), Some((&unit, pos)), None, heroes, &[], false, &executor)) {
+                    if filter.iter().all(|filter| filter.check(game, UnitData {
+                        unit: u,
+                        pos,
+                        unload_index: Some(i),
+                        ballast: &[],
+                        original_transporter: Some((&unit, pos)),
+                    }, None, heroes, false)) {
+                        let mut scope = Scope::new();
+                        scope.push_constant(CONST_NAME_UNIT, u.clone());
+                        scope.push_constant(CONST_NAME_POSITION, pos);
+                        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, i as i32);
+                        scope.push_constant(CONST_NAME_TRANSPORTER, unit.clone());
+                        scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
                         result.push(scope)
                     }
                 }

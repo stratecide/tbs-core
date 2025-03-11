@@ -27,6 +27,7 @@ use crate::units::hero::HeroMap;
 use crate::units::hero::{Hero, HeroInfluence};
 use crate::units::movement::{Path, TBallast};
 use crate::units::unit::Unit;
+use crate::units::UnitData;
 use crate::units::UnitId;
 use super::event_fx::*;
 use super::events::Event;
@@ -529,16 +530,16 @@ impl<D: Direction> EventHandler<D> {
     }
 
     pub fn unit_creation(&mut self, position: Point, unit: Unit<D>) {
+        self.add_event(Event::UnitAdd(position, unit.clone()));
         if let ClientPerspective::Team(team) = unit.get_team() {
             if self.get_game().is_foggy() && self.with_game(|game| game.is_team_alive(team)) {
-                let heroes = Hero::hero_influence_at(&*self.get_game(), position, unit.get_owner_id());
+                let heroes = HeroMap::new(&*self.get_game(), Some(unit.get_owner_id()));
                 let changes = unit.get_vision(&*self.get_game(), position, &heroes).into_iter()
                 .filter(|(p, intensity)| *intensity < self.get_game().get_fog_at(ClientPerspective::Team(team), *p))
                 .collect();
                 self.change_fog(ClientPerspective::Team(team), changes);
             }
         }
-        self.add_event(Event::UnitAdd(position, unit));
     }
 
     pub fn unit_add_transported(&mut self, position: Point, unit: Unit<D>) {
@@ -624,12 +625,9 @@ impl<D: Direction> EventHandler<D> {
         let mut steps = Vec::new();
         let mut vision_changes = HashMap::default();
         for (i, step) in path.steps.iter().enumerate() {
-            if self.get_game().is_foggy() && !involuntarily && (i == 0 || unit.vision_mode().see_while_moving()) {
-                let mut heroes = heroes.get(current, owner_id).to_vec();
-                if let Some(strength) = Hero::aura_range(&*self.get_game(), &transformed_unit, current, None) {
-                    heroes.push((transformed_unit.clone(), transformed_unit.get_hero().unwrap().clone(), current, None, strength as u8));
-                }
-                for (p, vision) in unit.get_vision(&*self.get_game(), current, &heroes) {
+            if self.get_game().is_foggy() && !involuntarily && (i == 0 || transformed_unit.vision_mode().see_while_moving()) {
+                let heroes = heroes.with(&*self.get_game(), current, &transformed_unit);
+                for (p, vision) in transformed_unit.get_vision(&*self.get_game(), current, &heroes) {
                     let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
                     if vision < self.get_game().get_fog_at(unit_team, p) {
                         vision_changes.insert(p, vision);
@@ -645,10 +643,7 @@ impl<D: Direction> EventHandler<D> {
             current = next;
         }
         if self.get_game().is_foggy() {
-            let mut heroes = heroes.get(current, owner_id).to_vec();
-            if let Some(strength) = Hero::aura_range(&*self.get_game(), &transformed_unit, current, None) {
-                heroes.push((transformed_unit.clone(), transformed_unit.get_hero().unwrap().clone(), current, None, strength as u8));
-            }
+            let heroes = heroes.with(&*self.get_game(), current, &transformed_unit);
             for (p, vision) in unit.get_vision(&*self.get_game(), current, &heroes) {
                 let vision = vision.min(vision_changes.remove(&p).unwrap_or(FogIntensity::Dark));
                 if vision < self.get_game().get_fog_at(unit_team, p) {
@@ -672,14 +667,20 @@ impl<D: Direction> EventHandler<D> {
             u.clone()
         });
         let transporter = self.get_game().get_unit(path.start);
-        let other_unit = unload_index.and_then(|_| self.get_game().get_unit(p));
+        let destination_unit = unload_index.and_then(|_| self.get_game().get_unit(p));
         let environment = self.get_game().environment();
         let scripts = environment.config.unit_normal_action_effects(
             &*self.get_game(),
             &unit,
             (p, unload_index),
             transporter.as_ref().map(|t| (t, path.start)),
-            other_unit.as_ref().map(|u| (u, p)),
+            destination_unit.as_ref().map(|u| UnitData {
+                unit: u,
+                pos: p,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None, // no recursive transportation
+            }),
             heroes,
             ballast,
         );

@@ -63,7 +63,7 @@ impl FromConfig for TokenFilter {
                 remainder = r;
                 Self::Not(list)
             }
-            _ => return Err(ConfigParseError::UnknownEnumMember(s.to_string()))
+            _ => return Err(ConfigParseError::UnknownEnumMember(format!("TokenFilter::{s}")))
         }, remainder))
     }
 }

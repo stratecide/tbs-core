@@ -1,17 +1,19 @@
 use std::collections::HashSet;
 
+use rhai::*;
+
 use crate::combat::AttackPatternType;
 use crate::commander::commander_type::CommanderType;
 use crate::game::fog::FogIntensity;
 use crate::game::game_view::GameView;
-use crate::map::point::Point;
 use crate::script::executor::Executor;
+use crate::units::UnitData;
+use crate::{dyn_opt, script::*};
 use crate::tags::FlagKey;
 use crate::terrain::TerrainType;
 use crate::tokens::token_types::TokenType;
-use crate::units::hero::{HeroInfluence, HeroType};
-use crate::units::movement::{MovementType, TBallast};
-use crate::units::unit::Unit;
+use crate::units::hero::{HeroMap, HeroType};
+use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 use crate::map::direction::Direction;
 
@@ -42,7 +44,6 @@ pub(crate) enum UnitFilter {
     AttackPattern(HashSet<AttackPatternType>),
     Unowned,
     // situation/environment
-    OtherUnit(HashSet<UnitType>),
     OwnerTurn,
     Carried,
     Counter,
@@ -51,6 +52,7 @@ pub(crate) enum UnitFilter {
     Fog(HashSet<FogIntensity>),
     Moved, // as in: it moved along a path with at least 1 step
     // recursive
+    OtherUnit(Vec<Self>),
     Not(Vec<Self>),
 }
 
@@ -140,20 +142,20 @@ impl FromConfig for UnitFilter {
                     Self::Commander(commander, None)
                 }
             }
-            "OtherUnit" => {
-                let (list, r) = parse_inner_vec::<UnitType>(remainder, true, loader)?;
-                remainder = r;
-                Self::OtherUnit(list.into_iter().collect())
-            }
             "OwnerTurn" => Self::OwnerTurn,
             "Carried" => Self::Carried,
             "Counter" => Self::Counter,
+            "OU" | "OtherUnit" => {
+                let (list, r) = parse_inner_vec::<Self>(remainder, false, loader)?;
+                remainder = r;
+                Self::OtherUnit(list.into_iter().collect())
+            }
             "Not" => {
                 let (list, r) = parse_inner_vec_dyn::<Self>(remainder, true, |s| Self::from_conf(s, loader))?;
                 remainder = r;
                 Self::Not(list)
             }
-            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("UnitFilter::{invalid}"))),
         }, remainder))
     }
 }
@@ -162,22 +164,17 @@ impl UnitFilter {
     pub fn check<D: Direction>(
         &self,
         game: &impl GameView<D>,
-        unit: &Unit<D>,
-        unit_pos: (Point, Option<usize>),
-        // when moving out of a transporter, or start_turn for transported units
-        transporter: Option<(&Unit<D>, Point)>,
-        // the attacked unit, the unit this one was destroyed by, ...
-        other_unit: Option<(&Unit<D>, Point, Option<usize>, &[HeroInfluence<D>])>,
-        // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
-        heroes: &[HeroInfluence<D>],
-        // empty if the unit hasn't moved
-        temporary_ballast: &[TBallast<D>],
+        unit_data: UnitData<D>,
+        other_unit_data: Option<UnitData<D>>,
+        heroes: &HeroMap<D>,
         // true only during counter-attacks
         is_counter: bool,
-        executor: &Executor,
     ) -> bool {
         match self {
             Self::Rhai(function_index) => {
+                let environment = game.environment();
+                let engine = environment.get_engine_board(game);
+                let executor = Executor::new(engine, unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter), environment);
                 match executor.run(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {
@@ -187,22 +184,22 @@ impl UnitFilter {
                     }
                 }
             }
-            Self::Unit(u) => u.contains(&unit.typ()),
-            Self::Flag(flags) => flags.iter().any(|flag| unit.has_flag(flag.0)),
-            Self::Movement(m) => m.contains(&unit.base_movement_type()),
-            Self::SubMovement(m) => m.contains(&unit.sub_movement_type()),
-            Self::Terrain(t) => t.contains(&game.get_terrain(unit_pos.0).unwrap().typ()),
+            Self::Unit(u) => u.contains(&unit_data.unit.typ()),
+            Self::Flag(flags) => flags.iter().any(|flag| unit_data.unit.has_flag(flag.0)),
+            Self::Movement(m) => m.contains(&unit_data.unit.base_movement_type()),
+            Self::SubMovement(m) => m.contains(&unit_data.unit.sub_movement_type()),
+            Self::Terrain(t) => t.contains(&game.get_terrain(unit_data.pos).unwrap().typ()),
             Self::Token(t) => {
-                for token in game.get_tokens(unit_pos.0) {
+                for token in game.get_tokens(unit_data.pos) {
                     if t.contains(&token.typ()) {
                         return true;
                     }
                 }
                 false
             }
-            Self::MovementPattern(m) => m.contains(&unit.movement_pattern()),
+            Self::MovementPattern(m) => m.contains(&unit_data.unit.movement_pattern()),
             Self::Hero(h) => {
-                for (_, hero, _, _, _) in heroes {
+                for (_, hero, _, _, _) in heroes.get(unit_data.pos, unit_data.unit.get_owner_id()) {
                     let power = hero.get_active_power() as u8;
                     if h.iter().any(|h| h.0 == hero.typ() && h.1.unwrap_or(power) == power) {
                         return true;
@@ -211,21 +208,16 @@ impl UnitFilter {
                 false
             }
             Self::HeroGlobal(h) => {
-                for p in game.all_points() {
-                    if let Some(hero) = game.get_unit(p)
-                    .filter(|u| u.get_owner_id() == unit.get_owner_id())
-                    .and_then(|u| u.get_hero().cloned()) {
-                        let power = hero.get_active_power() as u8;
-                        let hero = hero.typ();
-                        if h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power) {
-                            return true;
-                        }
+                for (_, hero, _, _, _) in heroes.iter_owned(unit_data.unit.get_owner_id()) {
+                    let power = hero.get_active_power() as u8;
+                    if h.iter().any(|h| h.0 == hero.typ() && h.1.unwrap_or(power) == power) {
+                        return true;
                     }
                 }
                 false
             }
             Self::IsHero(h) => {
-                if let Some(hero) = unit.get_hero() {
+                if let Some(hero) = unit_data.unit.get_hero() {
                     let power = hero.get_active_power() as u8;
                     let hero = hero.typ();
                     h.len() == 0 || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
@@ -234,35 +226,68 @@ impl UnitFilter {
                 }
             }
             Self::AttackPattern(a) => {
-                let attack_type = game.environment().config.default_attack_pattern(unit.typ()).typ(&game.environment());
+                let attack_type = game.environment().config.default_attack_pattern(unit_data.unit.typ()).typ(&game.environment());
                 a.iter().any(|a| *a == attack_type)
             }
             Self::CommanderCharge(charge) => {
-                unit.get_commander(game).get_charge() >= *charge
+                unit_data.unit.get_commander(game).get_charge() >= *charge
             }
             Self::Fog(f) => {
                 let fog = game.get_fog_setting().intensity();
                 f.iter().any(|f| *f == fog)
             }
             Self::Moved => {
-                temporary_ballast.len() > 0
+                unit_data.ballast.len() > 0
             }
-            Self::Unowned => unit.get_owner_id() < 0,
+            Self::Unowned => unit_data.unit.get_owner_id() < 0,
             Self::Commander(commander_type, power) => {
-                let commander = unit.get_commander(game);
+                let commander = unit_data.unit.get_commander(game);
                 commander.typ() == *commander_type
                 && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
             }
-            Self::OtherUnit(u) => other_unit.map(|(unit, _, _, _)| u.contains(&unit.typ())).unwrap_or(false),
-            Self::OwnerTurn => unit.get_owner_id() == game.current_owner(),
-            Self::Carried => transporter.is_some(),
+            Self::OwnerTurn => unit_data.unit.get_owner_id() == game.current_owner(),
+            Self::Carried => unit_data.unload_index.is_some(),
             Self::Counter => is_counter,
+            Self::OtherUnit(filter) => {
+                match other_unit_data {
+                    Some(other_unit_data) => filter.iter()
+                        .all(|f| f.check(game, other_unit_data, Some(unit_data), heroes, is_counter)),
+                    None => false,
+                }
+                
+            }
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
                 negated.iter()
-                .any(|negated| !negated.check(game, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast, is_counter, executor))
+                .any(|negated| !negated.check(game, unit_data, other_unit_data, heroes, is_counter))
             }
         }
     }
+}
+
+pub(crate) fn unit_filter_scope<D: Direction>(
+    game: &impl GameView<D>,
+    unit_data: UnitData<D>,
+    other_unit_data: Option<UnitData<D>>,
+    _heroes: &HeroMap<D>,
+    // true only during counter-attacks
+    is_counter: bool,
+) -> Scope<'static> {
+    let mut scope = Scope::new();
+    scope.push_constant(CONST_NAME_UNIT, unit_data.unit.clone());
+    scope.push_constant(CONST_NAME_POSITION, unit_data.pos);
+    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, dyn_opt(unit_data.unload_index.map(|i| i as i32)));
+    scope.push_constant(CONST_NAME_TRANSPORTER, dyn_opt(unit_data.original_transporter.map(|(u, _)| u.clone())));
+    scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, dyn_opt(unit_data.original_transporter.map(|(_, p)| p)));
+    scope.push_constant(CONST_NAME_OTHER_UNIT, dyn_opt(other_unit_data.map(|ud| ud.unit.clone())));
+    scope.push_constant(CONST_NAME_OTHER_POSITION, dyn_opt(other_unit_data.map(|ud| ud.pos)));
+    //scope.push_constant(CONST_NAME_OTHER_TRANSPORT_INDEX, dyn_opt(other_unit_data.map(|ud| ud.unload_index.map(|i| i as i32))));
+    //scope.push_constant(CONST_NAME_OTHER_TRANSPORTER, dyn_opt(other_unit_data.map(|ud| ud.original_transporter.map(|(u, _)| u.clone()))));
+    //scope.push_constant(CONST_NAME_OTHER_TRANSPORTER_POSITION, dyn_opt(other_unit_data.map(|ud| ud.original_transporter.map(|(_, p)| p))));
+    // TODO: heroes and ballast (put them into Arc<>s ?)
+    scope.push_constant(CONST_NAME_IS_COUNTER, is_counter);
+    scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner() as i32);
+    scope
+
 }

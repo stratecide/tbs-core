@@ -22,7 +22,7 @@ use crate::map::wrapping_map::OrientedPoint;
 use crate::units::hero::HeroMap;
 use crate::units::movement::TBallast;
 use crate::units::unit::Unit;
-use crate::units::UnitId;
+use crate::units::{UnitData, UnitId};
 
 /*
  * TO CONSIDER
@@ -41,7 +41,13 @@ use crate::units::UnitId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttackCounterState<D: Direction> {
-    RealCounter(Unit<D>, Point),
+    RealCounter {
+        id: usize,
+        unit: Unit<D>,
+        pos: Point,
+        ballast: Vec<TBallast<D>>,
+        original_transporter: Option<(Unit<D>, Point)>,
+    },
     FakeCounter,
     AllowCounter,
     NoCounter,
@@ -53,15 +59,21 @@ impl<D: Direction> AttackCounterState<D> {
 
     pub fn is_counter(&self) -> bool {
         match self {
-            Self::RealCounter(_, _) |
+            Self::RealCounter{..} |
             Self::FakeCounter => true,
             _ => false
         }
     }
 
-    pub fn attacker(&self) -> Option<(&Unit<D>, Point)> {
+    pub fn attacker(&self) -> Option<UnitData<D>> {
         match self {
-            Self::RealCounter(unit, pos) => Some((unit, *pos)),
+            Self::RealCounter { unit, pos, ballast, original_transporter, .. } => Some(UnitData {
+                unit,
+                pos: *pos,
+                unload_index: None,
+                ballast: &ballast,
+                original_transporter: original_transporter.as_ref().map(|(u, p)| (u, *p)),
+            }),
             _ => None
         }
     }
@@ -117,8 +129,6 @@ struct AttackerInfo<'a, D: Direction> {
     pub targeting: AttackTargeting<D>,
     pub transporter: Option<(&'a Unit<D>, Point)>,
     pub temporary_ballast: &'a [TBallast<D>],
-    pub def_transporter: Option<(&'a Unit<D>, Point)>,
-    pub def_temporary_ballast: &'a [TBallast<D>],
     pub counter_state: AttackCounterState<D>,
 }
 
@@ -132,8 +142,8 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
         let attacker = self.attacker_position.get_unit(handler)?;
         let attacker_pos = self.attacker_position.get_position(handler)?.0;
         let game = handler.get_game();
-        let pattern = attacker.attack_pattern(&*game, attacker_pos, self.counter_state.clone(), heroes, self.temporary_ballast);
-        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, self.counter_state.clone(), heroes, self.temporary_ballast);
+        let pattern = attacker.attack_pattern(&*game, attacker_pos, &self.counter_state, heroes, self.temporary_ballast);
+        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, &self.counter_state, heroes, self.temporary_ballast);
         let mut allowed_directions = allowed_directions.get_dirs(&attacker, self.temporary_ballast);
         let mut direction_hint = self.targeting.direction_hint;
         if let AttackerPosition::Real(UnitId(id, distortion)) = self.attacker_position {
@@ -209,8 +219,8 @@ pub fn execute_attack<D: Direction>(
         let unit_id = handler.get_game().get_visible_unit(handler.get_game().current_team(), input.target());
         let unit_id = unit_id.map(|_| handler.observe_unit(input.target(), None).0);
         let game = handler.get_game();
-        let attack_pattern = attacker.attack_pattern(&*game, attacker_pos, AttackCounterState::NoCounter, &heroes, temporary_ballast);
-        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, counter_state.clone(), &heroes, temporary_ballast);
+        let attack_pattern = attacker.attack_pattern(&*game, attacker_pos, &AttackCounterState::NoCounter, &heroes, temporary_ballast);
+        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, &counter_state, &heroes, temporary_ballast);
         let allowed_directions = allowed_directions.get_dirs(&attacker, temporary_ballast);
         if allowed_directions.len() == 0 {
             return;
@@ -259,8 +269,6 @@ pub fn execute_attack<D: Direction>(
             },
             transporter,
             temporary_ballast,
-            def_transporter: None,
-            def_temporary_ballast: &[],
             counter_state: counter_state.clone(),
         }];
         match attacker_position {
@@ -279,9 +287,13 @@ pub fn execute_attack<D: Direction>(
                         },
                         transporter: None,
                         temporary_ballast: &[],
-                        def_transporter: transporter,
-                        def_temporary_ballast: temporary_ballast,
-                        counter_state: AttackCounterState::RealCounter(attacker.clone(), attacker_pos),
+                        counter_state: AttackCounterState::RealCounter {
+                            id: attacker_id.0,
+                            unit: attacker.clone(),
+                            pos: attacker_pos,
+                            ballast: temporary_ballast.to_vec(),
+                            original_transporter: transporter.map(|(u, p)| (u.clone(), p)),
+                        },
                     });
                 }
             }
@@ -294,7 +306,7 @@ pub fn execute_attack<D: Direction>(
     for attacker in attackers {
         let unit = attacker.attacker_position.get_unit(handler).unwrap();
         let pos = attacker.attacker_position.get_position(handler).unwrap().0;
-        for attack in unit.environment().config.unit_configured_attacks(&*game, &unit, pos, attacker.transporter, attacker.counter_state.clone(), &heroes, attacker.temporary_ballast) {
+        for attack in unit.environment().config.unit_configured_attacks(&*game, &unit, pos, attacker.transporter, &attacker.counter_state, &heroes, attacker.temporary_ballast) {
             let priority = attack.priority;
             let value = (attacker.clone(), attack);
             if let Some(list) = attacks.get_mut(&priority) {
@@ -323,7 +335,7 @@ fn find_counter_attackers<D: Direction>(
     temporary_ballast: &[TBallast<D>],
     heroes: &HeroMap<D>,
 ) -> Vec<(Point, D)> {
-    let configured_attacks = attacker.environment().config.unit_configured_attacks(game, attacker, attacker_pos, transporter, AttackCounterState::NoCounter, heroes, temporary_ballast);
+    let configured_attacks = attacker.environment().config.unit_configured_attacks(game, attacker, attacker_pos, transporter, &AttackCounterState::NoCounter, heroes, temporary_ballast);
     let mut checked = FxHashSet::default();
     let mut result = Vec::new();
     for attack in &configured_attacks {

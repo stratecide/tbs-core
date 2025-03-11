@@ -12,10 +12,10 @@ H(Tess);+1/10;+3/10;;;;;;;;;
 H(Tess, 1);+1/10;+1/10;;;;;;;;;
 H(Edwin);+1/10;+1/10;;;;;;;;;
 H(Edwin, 1);+1/10;+1/10;;;;;;;;;+1
-Co(Zombie), Not(Co(Zombie,2)), MovementPattern(Standard);-1/10;;;;;;;;P(999,on_unit/kill > leave_skull);;
+MovementPattern(Standard), OU(Co(Zombie), Not(Co(Zombie,2)), MovementPattern(Standard));-1/10;;;;;;;;P(999,on_unit/kill > leave_skull);;
 Co(Zombie), Counter;+2/10;;;;;;;;;;
 Co(Zombie,1), MovementPattern(Standard);+1/10;+1/10;;;;;;;;;
-Co(Zombie,2), MovementPattern(Standard);+1/10;+1/10;;;;;;;P(999,on_unit/kill > resurrect);;
+MovementPattern(Standard), OU(Co(Zombie,2), MovementPattern(Standard));+1/10;+1/10;;;;;;;P(999,on_unit/kill > resurrect);;
 Co(Simo,3),AT(Ranged);+2/10;;;;;;;;;;
 Co(Simo), Movement(Heli, Plane);-1/10;;;;;;;;;;
 Co(Simo,1), CC(3000), AT(Ranged);;;+1/20;;>1;;;;;;
@@ -42,7 +42,8 @@ Co(SludgeMonster), MovementPattern(Standard), Token(Sludge);Rhai(unit_powered > 
 Co(SludgeMonster, 1);+1/10;+1/10;;;;;;;;;
 Co(SludgeMonster, 2);+1/10;+1/10;;;;;;;;;
 Co(Celerity), MovementPattern(Standard);-1/10;-1/10;;;;;;;;;
-Co(Celerity), MovementPattern(Standard);Rhai(commanders/celerity > level_increases_attack);;;;;;;;P(999,on_unit/kill > level_up);;
+Co(Celerity), MovementPattern(Standard);Rhai(commanders/celerity > level_increases_attack);;;;;;;;;;
+OU(Co(Celerity), MovementPattern(Standard)), MovementPattern(Standard);;;;;;;;;P(999,on_unit/kill > level_up);;
 Co(Celerity, 1);+1/10;+1/10;;;;;;;;;
 Co(Celerity, 1), MovementPattern(Standard), AttackPattern(Adjacent), Not(U(Marine, Sniper, Bazooka, LaserShark));;;;;;;;;;;
 Co(Celerity, 2);+1/10;+1/10;;;;;;;;;

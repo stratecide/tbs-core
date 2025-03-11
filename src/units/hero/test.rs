@@ -172,11 +172,10 @@ fn earl_grey() {
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
     let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
-    let influence1 = Hero::hero_influence_at(&*server, Point::new(2, 1), 0);
-    let influence2 = Hero::hero_influence_at(&*server, Point::new(4, 4), 0);
+    let heroes = HeroMap::new(&*server, None);
     assert_eq!(
-        server.get_unit(Point::new(2, 1)).unwrap().movement_points(&*server, Point::new(2, 1), None, &influence1),
-        server.get_unit(Point::new(4, 4)).unwrap().movement_points(&*server, Point::new(4, 4), None, &influence2),
+        server.get_unit(Point::new(2, 1)).unwrap().movement_points(&*server, Point::new(2, 1), None, &heroes),
+        server.get_unit(Point::new(4, 4)).unwrap().movement_points(&*server, Point::new(4, 4), None, &heroes),
     );
     // hero power shouldn't be available if the hero moves
     let mut path = Path::new(Point::new(1, 1));
@@ -198,12 +197,11 @@ fn earl_grey() {
         action: UnitAction::hero_power(1, Vec::new()),
     }), Arc::new(|| 0.)).unwrap();
     assert!(!server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
-    let influence1 = Hero::hero_influence_at(&*server, Point::new(2, 1), 0);
-    let influence2 = Hero::hero_influence_at(&*server, Point::new(4, 4), 0);
+    let heroes = HeroMap::new(&*server, None);
     assert!(
-        server.get_unit(Point::new(2, 1)).unwrap().movement_points(&*server, Point::new(2, 1), None, &influence1)
+        server.get_unit(Point::new(2, 1)).unwrap().movement_points(&*server, Point::new(2, 1), None, &heroes)
         >
-        server.get_unit(Point::new(4, 4)).unwrap().movement_points(&*server, Point::new(4, 4), None, &influence2)
+        server.get_unit(Point::new(4, 4)).unwrap().movement_points(&*server, Point::new(4, 4), None, &heroes)
     );
 }
 

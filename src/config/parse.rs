@@ -844,7 +844,7 @@ impl FromConfig for (interfaces::PreviewShape, Option<[u8; 4]>) {
         let (shape, s) = string_base(s);
         let shape = match shape.parse() {
             Ok(shape) => shape,
-            _ => return Err(ConfigParseError::UnknownEnumMember(shape.to_string()))
+            _ => return Err(ConfigParseError::UnknownEnumMember(format!("PreviewShape::{shape}")))
         };
         let (color, s) = parse_tuple1::<String>(s, loader)?;
         let color = if color.trim().to_lowercase().as_str() != "owner" {

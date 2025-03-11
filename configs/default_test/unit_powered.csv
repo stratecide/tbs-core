@@ -2,7 +2,6 @@ Power;Affects;Attack;Defense;MinRange;MaxRange;Visibility;MovementPoints;Vision;
 ;;;;;;;;;;;;;;;;;;;;;;;on_unit/death > show_explosion;on_unit/after_normal_action > exhaust
 ;U(Pawn),T(ChessPawnTile);;;;;;+1;;;;;;;;;;;;;;;;;
 ;U(Pawn);;;;;;;;;;;;;;;;;;;;;;;on_unit/after_normal_action > setup_en_passant
-;U(King), OtherUnit(Rook);;;;;;;;;;;;;;;;;;;;;;;
 ;Movement(Foot, Bike, Wheel, Treads),T(Hill);;;;;;;+1;;;;;;;;;;;;;;;;
 ;Movement(Foot),T(Mountain);;;;;;;+2;;;;;;;;;;;;;;;;
 ;Movement(Foot, Bike, Wheel, Treads),T(Forest, FairyForest);;;;;Stealth;;;;;;;;;;;;;;;;;;

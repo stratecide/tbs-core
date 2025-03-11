@@ -25,6 +25,7 @@ use crate::VERSION;
 use super::hero::*;
 use super::movement::*;
 use super::unit::Unit;
+use super::UnitData;
 use super::UnitId;
 
 pub const UNIT_REPAIR: u32 = 30;
@@ -118,10 +119,17 @@ impl<D: Direction> UnitAction<D> {
                             }
                         }
                     }
+                    let attacker_data = UnitData {
+                        unit: &attacker,
+                        pos: end,
+                        unload_index: None,
+                        original_transporter: transporter.map(|(u, _)| (u, path.start)),
+                        ballast,
+                    };
                     handler.trigger_all_unit_scripts(
                         |game, unit, unit_pos, transporter, heroes| {
                             if deaths.contains(&unit_pos) {
-                                unit.on_death(game, unit_pos, transporter, Some((&attacker, end)), heroes, &[])
+                                unit.on_death(game, unit_pos, transporter, Some(attacker_data), heroes, &[])
                             } else {
                                 Vec::new()
                             }

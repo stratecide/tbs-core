@@ -10,6 +10,7 @@ use crate::units::movement::MovementType;
 use crate::units::UnitVisibility;
 use crate::tags::*;
 use crate::tokens::token::Token;
+use super::hero::*;
 
 #[export_module]
 mod unit_type_module {
@@ -144,11 +145,17 @@ macro_rules! board_module {
 
             #[rhai_fn(pure, name = "value")]
             pub fn value1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {
-                with_board(context, |game| unit.value(game, position, None, &[]))
+                with_board(context, |game| {
+                    let heroes = HeroMap::new(game, Some(unit.get_owner_id()));
+                    unit.value(game, position, None, &heroes)
+                })
             }
             #[rhai_fn(pure, name = "value")]
             pub fn value2(context: NativeCallContext, unit: &mut Unit, position: Point, factory: Unit) -> i32 {
-                with_board(context, |game| unit.value(game, position, Some(&factory), &[]))
+                with_board(context, |game| {
+                    let heroes = HeroMap::new(game, Some(unit.get_owner_id()));
+                    unit.value(game, position, Some(&factory), &heroes)
+                })
             }
 
             #[rhai_fn(pure, get = "transported")]

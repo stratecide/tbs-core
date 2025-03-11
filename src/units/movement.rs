@@ -19,7 +19,7 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::terrain::terrain::Terrain;
 
-use super::hero::Hero;
+use super::hero::HeroMap;
 use super::unit::Unit;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -38,7 +38,7 @@ impl FromConfig for MovementType {
         let (base, s) = crate::config::parse::string_base(s);
         match loader.movement_types.iter().position(|name| name.as_str() == base) {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::UnknownEnumMember(base.to_string()))
+            None => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("MovementType::{base}")))
         }
     }
 }
@@ -804,7 +804,7 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool, &TemporaryBallast<D>) -> PathS
             game.update_hero(pos, permanent, round);
             let unit = game.get_hero();
             let transporter = game.get_transporter();
-            let heroes = Hero::hero_influence_at(&*game, pos, owner_id);
+            let heroes = HeroMap::new(&*game, Some(owner_id));
             unit.movement_points(&*game, pos, transporter.map(|(u, _)| u), &heroes)
         },
         |previous_turns: &[Path<D>], path: &Path<D>, destination, temporary_ballast, permanent_ballast| {
@@ -831,7 +831,7 @@ F: FnMut(&[Path<D>], &Path<D>, Point, bool, bool, &TemporaryBallast<D>) -> PathS
                     reject = false;
                 }
                 // stealth
-                let heroes = Hero::hero_influence_at(&*game, destination, owner_id);
+                let heroes = HeroMap::new(&*game, Some(owner_id));
                 if blocking_unit.can_be_moved_through() && unit.can_pass_enemy_units(&*game, (destination, None), transporter.map(|(t, _)| (t, path.start)), &heroes) {
                     reject = false;
                 }
@@ -890,7 +890,7 @@ where F: FnMut(&[Path<D>], &Path<D>, Point, &TemporaryBallast<D>, &PermanentBall
             game.update_hero(pos, permanent, round);
             let unit = game.get_hero();
             let transporter = game.get_transporter();
-            let heroes = Hero::hero_influence_at(&*game, pos, owner_id);
+            let heroes = HeroMap::new(&*game, Some(owner_id));
             unit.movement_points(&*game, pos, transporter.map(|(u, _)| u), &heroes)
         },
         callback,

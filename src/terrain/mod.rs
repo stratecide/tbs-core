@@ -59,7 +59,7 @@ impl FromConfig for ExtraMovementOptions {
         Ok((match base {
             "None" => Self::None,
             "Jump" => Self::Jump,
-            invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("ExtraMovementOptions::{invalid}"))),
         }, remainder))
     }
 }

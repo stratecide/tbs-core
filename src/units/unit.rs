@@ -26,6 +26,7 @@ use crate::map::wrapping_map::Distortion;
 use crate::player::{Player, Owner};
 use crate::script::*;
 use crate::tags::{TagBag, TagValue};
+use crate::units::UnitData;
 
 use super::UnitVisibility;
 use super::commands::UnitAction;
@@ -142,7 +143,7 @@ impl<D: Direction> Unit<D> {
         self.environment.config.base_movement_points(self.typ)
     }
 
-    pub fn can_pass_enemy_units(&self, game: &impl GameView<D>, unit_pos: (Point, Option<usize>), transporter: Option<(&Unit<D>, Point)>, heroes: &[HeroInfluence<D>]) -> bool {
+    pub fn can_pass_enemy_units(&self, game: &impl GameView<D>, unit_pos: (Point, Option<usize>), transporter: Option<(&Unit<D>, Point)>, heroes: &HeroMap<D>) -> bool {
         self.environment.config.unit_can_pass_enemy_units(game, self, unit_pos, transporter, heroes)
     }
 
@@ -158,11 +159,11 @@ impl<D: Direction> Unit<D> {
         self.environment.config.can_attack_after_moving(self.typ)
     }
 
-    pub fn attack_pattern(&self, game: &impl GameView<D>, unit_pos: Point, counter: AttackCounterState<D>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> AttackPattern {
+    pub fn attack_pattern(&self, game: &impl GameView<D>, unit_pos: Point, counter: &AttackCounterState<D>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> AttackPattern {
         self.environment.config.unit_attack_pattern(game, self, unit_pos, counter, heroes, temporary_ballast)
     }
 
-    pub fn attack_pattern_directions(&self, game: &impl GameView<D>, unit_pos: Point, counter: AttackCounterState<D>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> AllowedAttackInputDirectionSource {
+    pub fn attack_pattern_directions(&self, game: &impl GameView<D>, unit_pos: Point, counter: &AttackCounterState<D>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> AllowedAttackInputDirectionSource {
         self.environment.config.unit_attack_directions(game, self, unit_pos, counter, heroes, temporary_ballast)
     }
 
@@ -178,7 +179,7 @@ impl<D: Direction> Unit<D> {
         self.environment.config.vision_mode(self.typ)
     }
 
-    pub fn vision_range(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> usize {
+    pub fn vision_range(&self, game: &impl GameView<D>, pos: Point, heroes: &HeroMap<D>) -> usize {
         let mut range = self.environment.config.unit_vision(game, self, pos, heroes);
         match game.get_fog_setting() {
             FogSetting::None => (),
@@ -191,11 +192,11 @@ impl<D: Direction> Unit<D> {
         range
     }
 
-    fn true_vision_range(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> usize {
+    fn true_vision_range(&self, game: &impl GameView<D>, pos: Point, heroes: &HeroMap<D>) -> usize {
         self.environment.config.unit_true_vision(game, self, pos, heroes)
     }
 
-    pub fn get_vision(&self, game: &impl GameView<D>, pos: Point, heroes: &[HeroInfluence<D>]) -> HashMap<Point, FogIntensity> {
+    pub fn get_vision(&self, game: &impl GameView<D>, pos: Point, heroes: &HeroMap<D>) -> HashMap<Point, FogIntensity> {
         let mut result = HashMap::new();
         result.insert(pos, FogIntensity::TrueSight);
         let vision_range = self.vision_range(game, pos, heroes);
@@ -433,7 +434,7 @@ impl<D: Direction> Unit<D> {
 
     // influenced by unit_power_config
 
-    pub fn value(&self, game: &impl GameView<D>, position: Point, factory: Option<&Unit<D>>, heroes: &[HeroInfluence<D>]) -> i32 {
+    pub fn value(&self, game: &impl GameView<D>, position: Point, factory: Option<&Unit<D>>, heroes: &HeroMap<D>) -> i32 {
         self.environment.config.unit_value(
             game,
             self,
@@ -443,7 +444,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn movement_points(&self, game: &impl GameView<D>, position: Point, transporter: Option<&Unit<D>>, heroes: &[HeroInfluence<D>]) -> Rational32 {
+    pub fn movement_points(&self, game: &impl GameView<D>, position: Point, transporter: Option<&Unit<D>>, heroes: &HeroMap<D>) -> Rational32 {
         self.environment.config.unit_movement_points(
             game,
             self,
@@ -453,7 +454,7 @@ impl<D: Direction> Unit<D> {
         )
     }
 
-    pub fn on_death(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<(&Self, Point)>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> Vec<usize> {
+    pub fn on_death(&self, game: &impl GameView<D>, position: Point, transporter: Option<(&Self, usize)>, attacker: Option<UnitData<D>>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> Vec<usize> {
         self.environment.config.unit_death_effects(
             game,
             self,
@@ -519,7 +520,7 @@ impl<D: Direction> Unit<D> {
         // for now, heroes don't affect unit visibility.
         // when they do in the future, the heroes should be given to this method instead of calculating here
         // it could also be necessary to add this unit's hero to the heroes list here manually (if it isn't already in there)
-        self.environment.config.unit_visibility(game, self, pos, &[])
+        self.environment.config.unit_visibility(game, self, pos)
     }
 
     pub fn fog_replacement(&self, game: &impl GameView<D>, pos: Point, intensity: FogIntensity) -> Option<Self> {
@@ -647,44 +648,6 @@ impl<D: Direction> Unit<D> {
         }
     }
 
-    /*pub fn could_attack(&self, p: Point, heroes: &HeroMap<D>, game: &impl GameView<D>, defender: &Self, defender_pos: Point, is_counter: bool, allow_friendly_fire: bool) -> bool {
-        let base_damage = self.base_damage(defender.typ());
-        if base_damage.is_none() {
-            return false;
-        }
-        if self.displacement() == Displacement::InsteadOfAttack && !defender.can_be_displaced(game, defender_pos, self, p, heroes, is_counter) {
-            return false;
-        }
-        if self.displacement() == Displacement::None && base_damage == Some(0) {
-            return false;
-        }
-        if !allow_friendly_fire && !match self.attack_targeting() {
-            AttackTargeting::All => true,
-            AttackTargeting::Enemy => self.get_team() != defender.get_team(),
-            AttackTargeting::Friendly => self.get_team() == defender.get_team(),
-            AttackTargeting::Rhai(function_index) => {
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_UNIT, self.clone());
-                scope.push_constant(CONST_NAME_POSITION, p);
-                scope.push_constant(CONST_NAME_OTHER_UNIT, defender.clone());
-                scope.push_constant(CONST_NAME_OTHER_POSITION, defender_pos);
-                let engine = game.environment().get_engine_board(game);
-                let executor = Executor::new(engine, scope, game.environment());
-                match executor.run(function_index, ()) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        // TODO: log error
-                        println!("AttackTargeting::Rhai {e}");
-                        false
-                    }
-                }
-            },
-        } {
-            return false;
-        }
-        true
-    }*/
-
     pub fn could_take(&self, defender: &Self, takes: PathStepTakes) -> bool {
         takes != PathStepTakes::Deny && defender.can_be_taken() && self.get_team() != defender.get_team()
     }
@@ -722,8 +685,7 @@ impl<D: Direction> Unit<D> {
             let mut game = UnitMovementView::new(game);
             game.put_unit(destination, self.clone());
             let game = &game;
-            let funds_after_path = *game.get_owning_player(self.get_owner_id()).unwrap().funds;
-            let heroes = Hero::hero_influence_at(game, destination, self.get_owner_id());
+            let heroes = HeroMap::new(game, Some(self.get_owner_id()));
             // hero power
             if let Some(hero) = &self.hero {
                 hero.add_options_after_path(&mut result, game);
@@ -731,19 +693,15 @@ impl<D: Direction> Unit<D> {
             // custom actions
             let custom_actions = self.environment.config.custom_actions();
             if custom_actions.len() > 0 {
-                let engine = game.environment().get_engine_board(game);
-                // build scope
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_UNIT, self.clone());
-                scope.push_constant(CONST_NAME_PATH, path.clone());
-                scope.push_constant(CONST_NAME_POSITION, destination);
-                scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transporter.map(|(_, i)| i));
-                scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
-                scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
-                // TODO: heroes and ballast (put them into Arc<>s)
-                let executor = Arc::new(Executor::new(engine, scope, game.environment()));
+                let unit_data = UnitData {
+                    unit: self,
+                    pos: destination,
+                    unload_index: None,
+                    original_transporter: transporter.map(|(u, _)| (u, path.start)),
+                    ballast,
+                };
                 for (i, custom_action) in custom_actions.iter().enumerate() {
-                    if custom_action.add_as_option(game, self, path, destination, funds_after_path, transporter, None, &heroes, ballast, &executor) {
+                    if custom_action.unit_filter.iter().all(|f| f.check(game, unit_data, None, &heroes, false)) {
                         result.push(UnitAction::custom(i, Vec::new()));
                     }
                 }
@@ -751,7 +709,6 @@ impl<D: Direction> Unit<D> {
             // attack
             if self.can_attack_after_moving() || path.steps.len() == 0 {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
-                let heroes = HeroMap::new(game, Some(self.get_owner_id()));
                 for input in AttackInput::attackable_positions(game, self, destination, transporter, ballast, &heroes) {
                     result.push(UnitAction::Attack(input));
                 }

@@ -27,7 +27,7 @@ use crate::script::executor::Executor;
 use crate::script::*;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::*;
-use crate::units::UnitVisibility;
+use crate::units::{UnitData, UnitVisibility};
 use crate::units::movement::*;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
@@ -35,7 +35,7 @@ use crate::units::hero::*;
 use crate::VERSION;
 
 use super::attack_config::{AttackConfig, AttackSplashConfig};
-use super::attack_powered::AttackPoweredConfig;
+use super::attack_powered::{attack_filter_scope, AttackPoweredConfig};
 use super::custom_action_config::CustomActionConfig;
 use super::editor_tag_config::TagEditorVisibility;
 use super::effect_config::{EffectConfig, EffectDataType, EffectVisibility};
@@ -52,6 +52,7 @@ use super::tag_config::{TagConfig, TagType};
 use super::terrain_powered::TerrainPoweredConfig;
 use super::terrain_type_config::TerrainTypeConfig;
 use super::token_typ_config::TokenTypeConfig;
+use super::unit_filter::unit_filter_scope;
 use super::unit_type_config::UnitTypeConfig;
 use super::OwnershipPredicate;
 
@@ -410,20 +411,25 @@ impl Config {
         &self,
         map: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
+        pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
     ) -> Option<usize> {
         let Some(hero) = unit.get_hero() else {
             return None
         };
+        // avoid infinite loop
+        let heroes = HeroMap::new_without_aura(map, Some(unit.get_owner_id()));
         let result = self.unit_power_configs(
             map,
-            unit,
-            (unit_pos, transporter.map(|u| u.1)),
-            transporter.map(|u| (u.0, unit_pos)),
+            UnitData {
+                unit,
+                pos,
+                unload_index: transporter.map(|(_, i)| i),
+                ballast: &[],
+                original_transporter: transporter.map(|(u, _)| (u, pos)),
+            },
             None,
-            &[],
-            &[],
+            &heroes,
             false,
             |iter, executor| -> Option<i8> {
                 Some(if transporter.is_none() {
@@ -803,34 +809,16 @@ impl Config {
     fn unit_power_configs<'a, D: Direction, R>(
         &'a self,
         game: &'a impl GameView<D>,
-        unit: &'a Unit<D>,
-        unit_pos: (Point, Option<usize>),
-        // when moving out of a transporter, or start_turn for transported units
-        transporter: Option<(&'a Unit<D>, Point)>,
-        // the attacked unit, the unit this one was destroyed by, ...
-        other_unit: Option<(&'a Unit<D>, Point, Option<usize>, &'a [HeroInfluence<D>])>,
-        // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
-        heroes: &'a [HeroInfluence<D>],
-        // empty if the unit hasn't moved
-        temporary_ballast: &'a [TBallast<D>],
+        unit_data: UnitData<'a, D>,
+        other_unit_data: Option<UnitData<'a, D>>,
+        heroes: &'a HeroMap<D>,
         is_counter: bool,
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> + 'a>, &Executor) -> R,
     ) -> R {
         // get engine...
         let engine = game.environment().get_engine_board(game);
-        let mut scope = Scope::new();
-        // build scope
-        scope.push_constant(CONST_NAME_UNIT, unit.clone());
-        scope.push_constant(CONST_NAME_POSITION, unit_pos.0);
-        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, unit_pos.1.map(|i| i as i32));
-        scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
-        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.map(|(_, p)| p));
-        scope.push_constant(CONST_NAME_OTHER_UNIT, other_unit.map(|(t, _, _, _)| t.clone()));
-        scope.push_constant(CONST_NAME_OTHER_POSITION, other_unit.map(|(_, p, _, _)| p));
-        // TODO: heroes and ballast (put them into Arc<>s)
-        scope.push_constant(CONST_NAME_IS_COUNTER,is_counter);
-        let executor = Arc::new(Executor::new(engine, scope, game.environment()));
-        let executor_ = executor.clone();
+        let scope = unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter);
+        let executor = Executor::new(engine, scope, game.environment());
         let max_len = self.unit_overrides.len();
         let limit = game.get_unit_config_limit();
         let it = self.unit_overrides.iter()
@@ -838,10 +826,10 @@ impl Config {
         .enumerate()
         .filter(move |(i, config)| {
             game.set_unit_config_limit(Some(*i));
-            config.affects.iter().all(|filter| filter.check(game, unit, unit_pos, transporter, other_unit, heroes, temporary_ballast, is_counter, &executor))
+            config.affects.iter().all(|filter| filter.check(game, unit_data, other_unit_data, heroes, is_counter))
         })
         .map(|(_, config)| config);
-        let r = f(Box::new(it), &executor_);
+        let r = f(Box::new(it), &executor);
         game.set_unit_config_limit(limit);
         r
     }
@@ -850,18 +838,27 @@ impl Config {
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
+        pos: Point,
         factory_unit: Option<&Unit<D>>, // if built by a unit
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
     ) -> i32 {
         self.unit_power_configs(
             game,
-            unit,
-            (unit_pos, None),
-            factory_unit.map(|u| (u, unit_pos)),
-            None,
+            UnitData {
+                unit,
+                pos,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None,
+            },
+            factory_unit.map(|unit| UnitData {
+                unit,
+                pos,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None,
+            }),
             heroes,
-            &[],
             false,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
@@ -877,19 +874,21 @@ impl Config {
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
-        //transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
+        pos: Point,
+        //heroes: &HeroMap<D>,
     ) -> UnitVisibility {
         let mut result = self.unit_config(unit.typ()).visibility;
         self.unit_power_configs(
             game,
-            unit,
-            (unit_pos, None),
+            UnitData {
+                unit,
+                pos,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None,
+            },
             None,
-            None,
-            heroes,
-            &[],
+            &HeroMap::new_empty(), // TODO
             false,
             |iter, _executor| {
                 for config in iter.rev() {
@@ -907,17 +906,20 @@ impl Config {
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
-        heroes: &[HeroInfluence<D>],
+        pos: Point,
+        heroes: &HeroMap<D>,
     ) -> usize {
         self.unit_power_configs(
             game,
-            unit,
-            (unit_pos, None),
-            None,
+            UnitData {
+                unit,
+                pos,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None,
+            },
             None,
             heroes,
-            &[],
             false,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
@@ -933,17 +935,20 @@ impl Config {
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
-        heroes: &[HeroInfluence<D>],
+        pos: Point,
+        heroes: &HeroMap<D>,
     ) -> usize {
         self.unit_power_configs(
             game,
-            unit,
-            (unit_pos, None),
-            None,
+            UnitData {
+                unit,
+                pos,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None,
+            },
             None,
             heroes,
-            &[],
             false,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
@@ -961,19 +966,22 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
-        attacker: Option<(&Unit<D>, Point)>,
+        attacker: Option<UnitData<D>>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<usize> {
         let mut result = Vec::new();
         self.unit_power_configs(
             game,
-            unit,
-            unit_pos,
-            transporter,
-            attacker.map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id()))),
-            heroes.get(unit_pos.0, unit.get_owner_id()),
-            temporary_ballast,
+            UnitData {
+                unit,
+                pos: unit_pos.0,
+                unload_index: unit_pos.1,
+                ballast: temporary_ballast,
+                original_transporter: transporter,
+            },
+            attacker,
+            heroes,
             false,
             |iter, _executor| {
                 for config in iter {
@@ -992,19 +1000,22 @@ impl Config {
         // the transporter the unit moved out of
         transporter: Option<(&Unit<D>, Point)>,
         // the unit this unit moved on top of
-        other_unit: Option<(&Unit<D>, Point)>,
+        other_unit: Option<UnitData<D>>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<usize> {
         let mut result = Vec::new();
         self.unit_power_configs(
             game,
-            unit,
-            unit_pos,
-            transporter,
-            other_unit.map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id()))),
-            heroes.get(unit_pos.0, unit.get_owner_id()),
-            temporary_ballast,
+            UnitData {
+                unit,
+                pos: unit_pos.0,
+                unload_index: unit_pos.1,
+                ballast: temporary_ballast,
+                original_transporter: transporter,
+            },
+            other_unit,
+            heroes,
             false,
             |iter, _executor| {
                 for config in iter {
@@ -1021,16 +1032,19 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
     ) -> Rational32 {
         self.unit_power_configs(
             game,
-            unit,
-            unit_pos,
-            transporter,
+            UnitData {
+                unit,
+                pos: unit_pos.0,
+                unload_index: unit_pos.1,
+                ballast: &[],
+                original_transporter: transporter,
+            },
             None,
             heroes,
-            &[],
             false,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
@@ -1048,16 +1062,19 @@ impl Config {
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
-        heroes: &[HeroInfluence<D>],
+        heroes: &HeroMap<D>,
     ) -> bool {
         self.unit_power_configs(
             game,
-            unit,
-            unit_pos,
-            transporter,
+            UnitData {
+                unit,
+                pos: unit_pos.0,
+                unload_index: unit_pos.1,
+                ballast: &[],
+                original_transporter: transporter,
+            },
             None,
             heroes,
-            &[],
             false,
             |iter, _| {
                 for conf in iter.rev() {
@@ -1073,33 +1090,24 @@ impl Config {
     fn attack_power_configs<'a, D: Direction, R>(
         &'a self,
         game: &'a impl GameView<D>,
-        outer_scope: &'a Scope,
         attack: ConfiguredAttack,
         splash: Option<AttackInstance>,
-        unit: &'a Unit<D>,
-        unit_pos: (Point, Option<usize>),
-        // when moving out of a transporter, or start_turn for transported units
-        transporter: Option<(&'a Unit<D>, Point)>,
+        unit_data: UnitData<'a, D>,
+        other_unit_data: Option<UnitData<'a, D>>,
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
         heroes: &'a HeroMap<D>,
-        // empty if the unit hasn't moved
-        temporary_ballast: &'a [TBallast<D>],
-        counter: &'a AttackCounterState<D>,
+        is_counter: bool,
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a AttackPoweredConfig> + 'a>, &Executor) -> R,
     ) -> R {
         // get engine...
         let engine = game.environment().get_engine_board(game);
-        let mut scope = Scope::new();
-        for (name, _, value) in outer_scope.iter() {
-            scope.push_constant_dynamic(name, value);
-        }
-        let executor = Arc::new(Executor::new(engine, scope, game.environment()));
-        let executor_ = executor.clone();
+        let scope = attack_filter_scope(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter);
+        let executor = Executor::new(engine, scope, game.environment());
         let it = self.attack_overrides.iter()
         .filter(move |config| {
-            config.affects.iter().all(|filter| filter.check(game, &attack, splash.as_ref(), unit, unit_pos, transporter, heroes, temporary_ballast, counter, &executor))
+            config.affects.iter().all(|filter| filter.check(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter))
         });
-        let r = f(Box::new(it), &executor_);
+        let r = f(Box::new(it), &executor);
         r
     }
 
@@ -1112,33 +1120,25 @@ impl Config {
         splash: &AttackInstance,
         attacker: &Unit<D>,
         attacker_pos: Point,
-        defender: Option<(&Unit<D>, Point, Option<usize>)>,
+        defender: Option<UnitData<D>>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
         counter: &AttackCounterState<D>,
     ) -> Rational32 {
-        let scope = attack_power_scope(
-            attack,
-            Some(splash),
-            attacker,
-            attacker_pos,
-            defender,
-            None,
-            heroes,
-            temporary_ballast,
-            counter.is_counter(),
-        );
         self.attack_power_configs(
             game,
-            &scope,
             attack.clone(),
             Some(splash.clone()),
-            attacker,
-            (attacker_pos, None),
-            None,
+            UnitData {
+                unit: attacker,
+                pos: attacker_pos,
+                unload_index: None,
+                ballast: temporary_ballast,
+                original_transporter: None,
+            },
+            defender,
             heroes,
-            temporary_ballast,
-            counter,
+            counter.is_counter(),
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     base_value,
@@ -1158,35 +1158,26 @@ impl Config {
         splash: &AttackInstance,
         attacker: &Unit<D>,
         attacker_pos: Point,
-        defender: Unit<D>,
-        defender_pos: (Point, Option<usize>),
+        defender: UnitData<D>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
         counter: &AttackCounterState<D>,
     ) -> Vec<(usize, Option<Rational32>)> {
-        let scope = attack_power_scope(
-            attack,
-            Some(splash),
-            attacker,
-            attacker_pos,
-            Some((&defender, defender_pos.0, defender_pos.1)),
-            None,
-            heroes,
-            temporary_ballast,
-            counter.is_counter(),
-        );
         let mut result = Vec::new();
         self.attack_power_configs(
             game,
-            &scope,
             attack.clone(),
             Some(splash.clone()),
-            attacker,
-            (attacker_pos, None),
-            None,
+            defender,
+            Some(UnitData {
+                unit: attacker,
+                pos: attacker_pos,
+                unload_index: None,
+                ballast: temporary_ballast,
+                original_transporter: None,
+            }),
             heroes,
-            temporary_ballast,
-            counter,
+            counter.is_counter(),
             |iter, _| {
                 for conf in iter {
                     result.extend(conf.get_script(column_name, argument_count));
@@ -1200,23 +1191,26 @@ impl Config {
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
+        pos: Point,
         transporter: Option<(&Unit<D>, Point)>,
-        counter: AttackCounterState<D>,
+        counter: &AttackCounterState<D>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
     ) -> Vec<ConfiguredAttack> {
         let is_counter = counter.is_counter();
-        let other_unit = counter.attacker()
-            .map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id())));
+        let other_unit_data = counter.attacker();
+        let unit_data = UnitData {
+            unit,
+            pos,
+            unload_index: None,
+            ballast: temporary_ballast,
+            original_transporter: transporter,
+        };
         let AttackType(Some(attack_type)) = self.unit_power_configs(
             game,
-            unit,
-            (unit_pos, None),
-            None,
-            other_unit,
-            heroes.get(unit_pos, unit.get_owner_id()),
-            temporary_ballast,
+            unit_data,
+            other_unit_data,
+            heroes,
             is_counter,
             |iter, _| {
                 for conf in iter.rev() {
@@ -1239,43 +1233,24 @@ impl Config {
                 splash: Vec::new(),
                 focus: attack.focus,
             };
-            let scope = attack_power_scope(
-                &atk,
-                None,
-                unit,
-                unit_pos,
-                None,
-                transporter,
-                heroes,
-                temporary_ballast,
-                is_counter,
-            );
-            let engine = game.environment().get_engine_board(game);
-            let executor = Executor::new(engine, scope.clone(), game.environment());
             if attack.condition.iter().all(|cond| cond.check(
                 game,
                 &atk,
                 None,
-                unit,
-                (unit_pos, None),
-                transporter,
+                unit_data,
+                other_unit_data,
                 heroes,
-                temporary_ballast,
-                &counter,
-                &executor,
+                counter.is_counter(),
             )) {
                 self.attack_power_configs(
                     game,
-                    &scope,
                     atk.clone(),
                     None,
-                    unit,
-                    (unit_pos, None),
-                    None,
+                    unit_data,
+                    other_unit_data,
                     heroes,
-                    temporary_ballast,
-                    &counter,
-                    |iter, executor| {
+                    counter.is_counter(),
+                        |iter, executor| {
                         for conf in iter {
                             atk.priority = conf.attack_priority.update_value(atk.priority, executor);
                             atk.splash_range = conf.splash_range.update_value(atk.splash_range, executor);
@@ -1299,26 +1274,20 @@ impl Config {
                             game,
                             &atk,
                             Some(&spl),
-                            unit,
-                            (unit_pos, None),
-                            transporter,
+                            unit_data,
+                            other_unit_data,
                             heroes,
-                            temporary_ballast,
-                            &counter,
-                            &executor,
+                            counter.is_counter(),
                         )) {
                             self.attack_power_configs(
                                 game,
-                                &scope,
                                 atk.clone(),
                                 Some(spl.clone()),
-                                unit,
-                                (unit_pos, None),
-                                None,
+                                unit_data,
+                                other_unit_data,
                                 heroes,
-                                temporary_ballast,
-                                &counter,
-                                |iter, executor| {
+                                counter.is_counter(),
+                                                |iter, executor| {
                                     for conf in iter {
                                         spl.priority = conf.splash_priority.update_value(spl.priority, executor);
                                         if let Some(allows_counter_attack) = conf.allows_counter_attack {
@@ -1347,23 +1316,26 @@ impl Config {
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
-        counter: AttackCounterState<D>,
+        pos: Point,
+        counter: &AttackCounterState<D>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
     ) -> AttackPattern {
         let is_counter = counter.is_counter();
-        let other_unit = counter.attacker()
-            .map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id())));
+        let unit_data = UnitData {
+            unit,
+            pos,
+            unload_index: None,
+            ballast: temporary_ballast,
+            original_transporter: None,
+        };
+        let other_unit_data = counter.attacker();
         let mut result = self.default_attack_pattern(unit.typ());
         self.unit_power_configs(
             game,
-            unit,
-            (unit_pos, None),
-            None,
-            other_unit,
-            heroes.get(unit_pos, unit.get_owner_id()),
-            temporary_ballast,
+            unit_data,
+            other_unit_data,
+            heroes,
             is_counter,
             |iter, _executor| {
                 for conf in iter {
@@ -1376,13 +1348,10 @@ impl Config {
         for (name, value) in result.parameters() {
             *value = self.unit_power_configs(
                 game,
-                unit,
-                (unit_pos, None),
-                None,
-                other_unit,
-                heroes.get(unit_pos, unit.get_owner_id()),
-                temporary_ballast,
-                is_counter,
+                unit_data,
+                other_unit_data,
+                heroes,
+                    is_counter,
                 |iter, executor| {
                     NumberMod::update_value_repeatedly(
                         *value,
@@ -1399,22 +1368,24 @@ impl Config {
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
-        counter: AttackCounterState<D>,
+        pos: Point,
+        counter: &AttackCounterState<D>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
     ) -> AllowedAttackInputDirectionSource {
         let is_counter = counter.is_counter();
-        let other_unit = counter.attacker()
-            .map(|(u, p)| (u, p, None, heroes.get(p, u.get_owner_id())));
+        let other_unit = counter.attacker();
         self.unit_power_configs(
             game,
-            unit,
-            (unit_pos, None),
-            None,
+            UnitData {
+                unit,
+                pos,
+                unload_index: None,
+                ballast: temporary_ballast,
+                original_transporter: None,
+            },
             other_unit,
-            heroes.get(unit_pos, unit.get_owner_id()),
-            temporary_ballast,
+            heroes,
             is_counter,
             |iter, _executor| {
                 for conf in iter {
@@ -1436,34 +1407,25 @@ impl Config {
         splash: &AttackInstance,
         unit: &Unit<D>,
         unit_pos: Point,
-        defender: &Unit<D>,
-        (defender_pos, defender_unload_index): (Point, Option<usize>),
+        defender: UnitData<D>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
-        counter: &AttackCounterState<D>,
+        is_counter: bool,
     ) -> Rational32 {
-        let scope = attack_power_scope(
-            attack,
-            Some(splash),
-            unit,
-            unit_pos,
-            Some((defender, defender_pos, defender_unload_index)),
-            None,
-            heroes,
-            temporary_ballast,
-            counter.is_counter(),
-        );
         self.attack_power_configs(
             game,
-            &scope,
             attack.clone(),
             Some(splash.clone()),
-            unit,
-            (unit_pos, None),
-            None,
+            UnitData {
+                unit,
+                pos: unit_pos,
+                ballast: temporary_ballast,
+                unload_index: None,
+                original_transporter: None,
+            },
+            Some(defender),
             heroes,
-            temporary_ballast,
-            counter,
+            is_counter,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     base_value,
@@ -1483,34 +1445,25 @@ impl Config {
         splash: &AttackInstance,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
-        attacker: &Unit<D>,
-        attacker_pos: Point,
+        attacker: UnitData<D>,
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
-        counter: &AttackCounterState<D>,
+        is_counter: bool,
     ) -> Rational32 {
-        let scope = attack_power_scope(
-            attack,
-            Some(splash),
-            unit,
-            unit_pos.0,
-            Some((attacker, attacker_pos, None)),
-            None,
-            heroes,
-            temporary_ballast,
-            counter.is_counter(),
-        );
         self.attack_power_configs(
             game,
-            &scope,
             attack.clone(),
             Some(splash.clone()),
-            unit,
-            unit_pos,
-            None,
+            UnitData {
+                unit,
+                pos: unit_pos.0,
+                ballast: temporary_ballast,
+                unload_index: unit_pos.1,
+                original_transporter: None,
+            },
+            Some(attacker),
             heroes,
-            temporary_ballast,
-            counter,
+            is_counter,
             |iter, executor| {
                 NumberMod::update_value_repeatedly(
                     base_value,
@@ -1525,7 +1478,7 @@ impl Config {
         &self,
         game: &impl GameView<D>,
         unit: &Unit<D>,
-        unit_pos: Point,
+        pos: Point,
         attacker: &Unit<D>,
         attacker_pos: Point,
         heroes: &HeroMap<D>,
@@ -1533,12 +1486,21 @@ impl Config {
     ) -> bool {
         self.unit_power_configs(
             game,
-            unit,
-            (unit_pos, None),
-            None,
-            Some((attacker, attacker_pos, None, heroes.get(attacker_pos, attacker.get_owner_id()))),
-            heroes.get(unit_pos, unit.get_owner_id()),
-            &[],
+            UnitData {
+                unit,
+                pos,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None,
+            },
+            Some(UnitData {
+                unit: attacker,
+                pos: attacker_pos,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None,
+            }),
+            heroes,
             is_counter,
             |iter, _executor| {
                 for conf in iter.rev() {
@@ -1551,28 +1513,4 @@ impl Config {
         )
     }
 
-}
-
-fn attack_power_scope<D: Direction>(
-    attack: &ConfiguredAttack,
-    splash: Option<&AttackInstance>,
-    unit: &Unit<D>,
-    unit_pos: Point,
-    other_unit: Option<(&Unit<D>, Point, Option<usize>)>,
-    // when moving out of a transporter, or start_turn for transported units
-    transporter: Option<(&Unit<D>, Point)>,
-    // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
-    heroes: &HeroMap<D>,
-    // empty if the unit hasn't moved
-    temporary_ballast: &[TBallast<D>],
-    is_counter: bool,
-) -> Scope<'static> {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_SPLASH_DISTANCE, splash.map(|s| Dynamic::from(s.splash_distance as i32)).unwrap_or(().into()));
-    scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(u, _)| Dynamic::from(u.clone())).unwrap_or(().into()));
-    scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.map(|(_, p)| Dynamic::from(p)).unwrap_or(().into()));
-    scope.push_constant(CONST_NAME_UNIT, unit.clone());
-    scope.push_constant(CONST_NAME_POSITION, unit_pos);
-    scope.push_constant(CONST_NAME_IS_COUNTER, is_counter);
-    scope
 }

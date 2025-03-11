@@ -213,11 +213,11 @@ impl<D: Direction> AttackInput<D> {
         heroes: &HeroMap<D>,
     ) -> Vec<Self> {
         let counter_state = AttackCounterState::NoCounter;
-        let Some(attack) = attacker.environment().config.unit_configured_attacks(&*game, &attacker, attacker_pos, transporter, counter_state.clone(), heroes, temporary_ballast).into_iter().next() else {
+        let Some(attack) = attacker.environment().config.unit_configured_attacks(&*game, &attacker, attacker_pos, transporter, &counter_state, heroes, temporary_ballast).into_iter().next() else {
             return Vec::new();
         };
-        let attack_pattern = attacker.attack_pattern(&*game, attacker_pos, counter_state.clone(), &heroes, temporary_ballast);
-        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, counter_state, &heroes, temporary_ballast);
+        let attack_pattern = attacker.attack_pattern(&*game, attacker_pos, &counter_state, &heroes, temporary_ballast);
+        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, &counter_state, &heroes, temporary_ballast);
         let allowed_directions = allowed_directions.get_dirs(&attacker, temporary_ballast);
         let mut layers = Vec::new();
         for d in allowed_directions.into_iter() {
