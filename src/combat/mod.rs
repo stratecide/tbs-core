@@ -11,6 +11,7 @@ pub use attack_pattern::*;
 pub use attack::*;
 pub use splash_damage::*;
 
+use crate::config::unit_filter::unit_filter_scope;
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
 use crate::config::ConfigParseError;
@@ -19,6 +20,7 @@ use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
+use crate::script::executor::Executor;
 use crate::units::hero::HeroMap;
 use crate::units::movement::TBallast;
 use crate::units::unit::Unit;
@@ -381,6 +383,13 @@ fn find_counter_attackers<D: Direction>(
     let configured_attacks = attacker.environment().config.unit_configured_attacks(game, attacker, attacker_pos, transporter, &AttackCounterState::NoCounter, heroes, temporary_ballast);
     let mut checked = FxHashSet::default();
     let mut result = Vec::new();
+    let attacker_data = UnitData {
+        unit: attacker,
+        pos: attacker_pos,
+        unload_index: None,
+        ballast: temporary_ballast,
+        original_transporter: transporter,
+    };
     for attack in &configured_attacks {
         // don't need to consider splashes that don't allow counter attacks
         let Some(splash_range) = attack.splash.iter().filter(|a| a.allows_counter_attack).map(|a| a.splash_distance).max() else {
@@ -393,9 +402,11 @@ fn find_counter_attackers<D: Direction>(
         .map(|(_, range)| range)
         .flatten() {
             if checked.insert(dp.point) {
-                if let Some(_unit) = game.get_unit(dp.point).filter(|u| u.get_team() != attacker.get_team()) {
-                    // could reverse SplashDirectionModifier for direction_hint here
-                    result.push((dp.point, dp.direction.opposite_direction()));
+                if let Some(unit) = game.get_unit(dp.point).filter(|u| u.get_team() != attacker.get_team()) {
+                    if unit.can_target(game, dp.point, None, attacker_data, true, &heroes) {
+                        // could reverse SplashDirectionModifier for direction_hint here
+                        result.push((dp.point, dp.direction.opposite_direction()));
+                    }
                 }
             }
         }
@@ -422,5 +433,36 @@ impl FromConfig for ValidAttackTargets {
                 Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
             }
         }, ""))
+    }
+}
+
+impl ValidAttackTargets {
+    pub fn check<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit_data: UnitData<D>,
+        other_unit_data: UnitData<D>,
+        heroes: &HeroMap<D>,
+        // true only during counter-attacks
+        is_counter: bool,
+    ) -> bool {
+        match self {
+            Self::Enemy => unit_data.unit.get_team() != other_unit_data.unit.get_team(),
+            Self::Friendly => unit_data.unit.get_team() == other_unit_data.unit.get_team(),
+            Self::All => true,
+            Self::Rhai(function_index) => {
+                let environment = game.environment();
+                let engine = environment.get_engine_board(game);
+                let executor = Executor::new(engine, unit_filter_scope(game, unit_data, Some(other_unit_data), heroes, is_counter), environment);
+                match executor.run(*function_index, ()) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        // TODO: log error
+                        println!("ValidAttackTargets error: {e:?}");
+                        false
+                    }
+                }
+            }
+        }
     }
 }

@@ -5,7 +5,7 @@ mod hero_type_config;
 mod commander_type_config;
 mod commander_power_config;
 mod commander_unit_config;
-mod unit_filter;
+pub(crate) mod unit_filter;
 pub mod number_modification;
 pub mod config;
 pub mod parse;

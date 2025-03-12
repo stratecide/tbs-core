@@ -287,10 +287,6 @@ impl Config {
         self.unit_config(typ).attack_direction
     }
 
-    pub fn valid_attack_targets(&self, typ: UnitType) -> ValidAttackTargets {
-        self.unit_config(typ).attack_targets
-    }
-
     pub fn base_value(&self, typ: UnitType) -> i32 {
         self.unit_config(typ).value as i32
     }
@@ -1192,6 +1188,42 @@ impl Config {
             }
         );
         result
+    }
+
+    pub fn unit_is_target_valid<D: Direction>(
+        &self,
+        game: &impl GameView<D>,
+        unit: &Unit<D>,
+        pos: Point,
+        defender: UnitData<D>,
+        transporter: Option<(&Unit<D>, Point)>,
+        is_counter: bool,
+        heroes: &HeroMap<D>,
+    ) -> bool {
+        let mut targeting = self.unit_config(unit.typ()).attack_targets;
+        let unit_data = UnitData {
+            unit,
+            pos,
+            unload_index: None,
+            ballast: &[],
+            original_transporter: transporter,
+        };
+        self.unit_power_configs(
+            game,
+            unit_data,
+            Some(defender),
+            heroes,
+            is_counter,
+            |iter, _| {
+                for conf in iter.rev() {
+                    if let Some(t) = conf.attack_targets {
+                        targeting = t;
+                        break;
+                    }
+                }
+            }
+        );
+        targeting.check(game, unit_data, defender, heroes, is_counter)
     }
 
     pub fn unit_configured_attacks<D: Direction>(

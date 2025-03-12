@@ -164,6 +164,14 @@ impl TableValue {
             Self::Fraction(v) => Dynamic::from(v),
         }
     }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            Self::Bool(v) => v.to_string(),
+            Self::Int(v) => v.to_string(),
+            Self::Fraction(v) => v.to_string(),
+        }
+    }
 }
 
 

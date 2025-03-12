@@ -10,7 +10,7 @@ use num_rational::Rational32;
 use rhai::Scope;
 use zipper::*;
 
-use crate::combat::{AllowedAttackInputDirectionSource, AttackCounterState, AttackInput, AttackPattern, ValidAttackTargets};
+use crate::combat::{AllowedAttackInputDirectionSource, AttackCounterState, AttackInput, AttackPattern};
 use crate::commander::commander_type::CommanderType;
 use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
@@ -159,16 +159,16 @@ impl<D: Direction> Unit<D> {
         self.environment.config.can_attack_after_moving(self.typ)
     }
 
+    pub fn can_target(&self, game: &impl GameView<D>, unit_pos: Point, transporter: Option<(&Unit<D>, Point)>, target: UnitData<D>, is_counter: bool, heroes: &HeroMap<D>) -> bool {
+        self.environment.config.unit_is_target_valid(game, self, unit_pos, target, transporter, is_counter, heroes)
+    }
+
     pub fn attack_pattern(&self, game: &impl GameView<D>, unit_pos: Point, counter: &AttackCounterState<D>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> AttackPattern {
         self.environment.config.unit_attack_pattern(game, self, unit_pos, counter, heroes, temporary_ballast)
     }
 
     pub fn attack_pattern_directions(&self, game: &impl GameView<D>, unit_pos: Point, counter: &AttackCounterState<D>, heroes: &HeroMap<D>, temporary_ballast: &[TBallast<D>]) -> AllowedAttackInputDirectionSource {
         self.environment.config.unit_attack_directions(game, self, unit_pos, counter, heroes, temporary_ballast)
-    }
-
-    pub fn attack_targeting(&self) -> ValidAttackTargets {
-        self.environment.config.valid_attack_targets(self.typ)
     }
 
     pub fn can_be_displaced(&self, game: &impl GameView<D>, pos: Point, attacker: &Self, attacker_pos: Point, heroes: &HeroMap<D>, is_counter: bool) -> bool {
@@ -622,6 +622,7 @@ impl<D: Direction> Unit<D> {
             } else if goal == p && can_stop_here && takes != PathStepTakes::Deny {
                 return PathSearchFeedback::Found
             } else if (path.steps.len() == 0 || self.can_attack_after_moving()) && self.attackable_positions(game, path, transporter, ballast.get_entries()).contains(&goal) {
+                // TODO: check if unit at goal can be targeted
                 return PathSearchFeedback::Found
             }
             PathSearchFeedback::Continue

@@ -312,6 +312,10 @@ impl <D: Direction> HeroMap<D> {
         self.0.get(&(position, owner_id)).map(|h| h.as_slice()).unwrap_or(&[])
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = (&(Point, i8), &Vec<HeroInfluence<D>>)> {
+        self.0.iter()
+    }
+
     pub fn iter_owned(&self, owner_id: i8) -> impl Iterator<Item = &HeroInfluence<D>> {
         self.0.iter()
             .filter(move |((_, o), _)| *o == owner_id)

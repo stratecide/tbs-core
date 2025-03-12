@@ -166,7 +166,25 @@ impl<D: Direction> UnitAction<D> {
                     unit_id,
                     handler.get_observed_unit(unit_id).unwrap().2,
                 ));
-                execute_attack(handler, attacker_position, *input, transporter, ballast, AttackCounterState::AllowCounter, true);
+                let attacker = handler.get_game().get_unit(end).unwrap();
+                let heroes = HeroMap::new(&*handler.get_game(), None);
+                let defender = handler.get_game().get_unit(input.target());
+                if let Some(defender) = defender {
+                    let target = UnitData {
+                        unit: &defender,
+                        pos: input.target(),
+                        unload_index: None,
+                        ballast: &[],
+                        original_transporter: None,
+                    };
+                    if attacker.can_target(&*handler.get_game(), end, transporter, target, false, &heroes) {
+                        execute_attack(handler, attacker_position, *input, transporter, ballast, AttackCounterState::AllowCounter, true);
+                    } else {
+                        handler.effect_fog_surprise(end);
+                    }
+                } else {
+                    handler.effect_fog_surprise(end);
+                }
                 true
             }
             Self::HeroPower(index, _) => {

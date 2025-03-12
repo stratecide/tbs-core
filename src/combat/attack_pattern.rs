@@ -162,26 +162,6 @@ impl AllowedAttackInputDirectionSource {
     }
 }
 
-/*#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Zippable)]
-#[zippable(support_ref = Environment)]
-pub struct AttackInput<D: Direction> {
-    // the chosen attack target
-    pub target: Point,
-    // direction used for splash pattern
-    pub splash_direction: D,
-    pub splash_mirrored: bool,
-    // direction used for attack_pattern
-    //pub attack_direction: D,
-    // distortion applied to splash pattern
-    //pub distortion: Distortion<D>,
-}
-
-impl<D: Direction> AttackInput<D> {
-    pub fn is_data_valid(&self, map: &Map<D>) -> bool {
-        map.is_point_valid(self.target)
-    }
-}*/
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Zippable)]
 #[zippable(bits=1, support_ref = Environment)]
 pub enum AttackInput<D: Direction> {
