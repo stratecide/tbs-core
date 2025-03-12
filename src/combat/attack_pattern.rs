@@ -78,6 +78,9 @@ impl FromConfig for AttackPattern {
 }
 
 impl AttackPattern {
+    pub(crate) const MIN_RANGE: &'static str = "MinRange";
+    pub(crate) const MAX_RANGE: &'static str = "MaxRange";
+
     pub(crate) fn typ(&self, environment: &Environment) -> AttackPatternType {
         match self {
             Self::None => AttackPatternType::None,
@@ -96,7 +99,7 @@ impl AttackPattern {
             Self::Straight { min, max } |
             Self::TriangleDiagonal { min, max } |
             Self::TriangleStraight { min, max } => {
-                vec![("MinRange".to_string(), min), ("MaxRange".to_string(), max)]
+                vec![(Self::MIN_RANGE.to_string(), min), (Self::MAX_RANGE.to_string(), max)]
             }
             Self::Rhai { parameter_names, parameter_values, .. } => {
                 parameter_names.iter().cloned().zip(parameter_values.iter_mut()).collect()

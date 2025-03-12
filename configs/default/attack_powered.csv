@@ -1,6 +1,6 @@
 Filter;Attack;Defense;Strength;Targeting;SplashRange;AllowsCounterAttack;AttackPriority;DirectionModifier;OnDefend;Lifesteal;PushDistance
 Counter;;;;;;;+1;;;;
-AT(Erupt);;;=1;;;;;;;;
+AT(Erupt, DragonHead, Cannon);;;=1;;;;;;;;
 U(PufferFish), AT(Adjacent, DragonHead);;;;;;;;;P(500,on_unit/defend > flee);;
 U(PufferFish);;;;;=1;;;;P(501,on_unit/defend > attack_self);;
 U(Destroyer);;;;;;;;;;;+1

@@ -1299,6 +1299,14 @@ impl Config {
                         }
                     }
                 );
+                if atk.splash_pattern.points == SplashDamagePointSource::AttackPattern {
+                    let mut pattern = self.unit_attack_pattern(game, unit, pos, counter, heroes, temporary_ballast);
+                    if let Some((_, range)) = pattern.parameters().iter()
+                    .filter(|(name, _)| name.as_str() == AttackPattern::MAX_RANGE)
+                    .next() {
+                        atk.splash_range = range.to_integer().max(0).min(50) as u8;
+                    }
+                };
                 for splash_distance in 0..=atk.splash_range {
                     for splash in &self.splash_types[attack.splash_type.0].1 {
                         let mut spl = AttackInstance {

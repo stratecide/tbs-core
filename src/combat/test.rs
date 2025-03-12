@@ -128,3 +128,41 @@ fn displacement() {
     }), Arc::new(|| 0.)).unwrap();
     assert!(game.get_unit(Point::new(1, 2)).unwrap().get_hp() < 100);
 }
+
+#[test]
+fn dragon_head() {
+    // create map
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(4, 4, false);
+    let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+    let mut map = Map::new(wmap, &config);
+    let map_env = map.environment().clone();
+    map.set_unit(Point::new(0, 0), Some(UnitType::dragon_head().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(1, 0), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(2, 0), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(3, 0), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    // create game
+    let settings = map.settings().unwrap();
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let unchanged = game.clone();
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 0)),
+        action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(1, 0), Direction4::D0)),
+    }), Arc::new(|| 0.)).unwrap();
+    let hp1 = game.get_unit(Point::new(1, 0)).unwrap().get_hp();
+    let hp2 = game.get_unit(Point::new(2, 0)).unwrap().get_hp();
+    assert!(hp1 < 100);
+    assert_eq!(hp1, hp2);
+    assert_eq!(100, game.get_unit(Point::new(3, 0)).unwrap().get_hp());
+    // target the other enemy
+    game = unchanged;
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 0)),
+        action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(2, 0), Direction4::D0)),
+    }), Arc::new(|| 0.)).unwrap();
+    assert_eq!(hp1, game.get_unit(Point::new(1, 0)).unwrap().get_hp());
+    assert_eq!(hp2, game.get_unit(Point::new(2, 0)).unwrap().get_hp());
+    assert_eq!(100, game.get_unit(Point::new(3, 0)).unwrap().get_hp());
+}

@@ -60,6 +60,7 @@ mod helper {
         ut!(sniper, 1);
         ut!(bazooka, 2);
         ut!(magnet, 3);
+        ut!(dragon_head, 4);
         ut!(convoy, 5);
         ut!(artillery, 6);
         ut!(small_tank, 7);
@@ -96,6 +97,7 @@ mod tests {
         assert_eq!(config.unit_name(UnitType::sniper()), "Sniper");
         assert_eq!(config.unit_name(UnitType::bazooka()), "Bazooka");
         assert_eq!(config.unit_name(UnitType::magnet()), "Magnet");
+        assert_eq!(config.unit_name(UnitType::dragon_head()), "DragonHead");
         assert_eq!(config.unit_name(UnitType::convoy()), "Convoy");
         assert_eq!(config.unit_name(UnitType::small_tank()), "SmallTank");
         assert_eq!(config.unit_name(UnitType::drone_boat()), "DroneBoat");
