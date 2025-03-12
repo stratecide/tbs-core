@@ -44,6 +44,7 @@ pub const CONST_NAME_DAMAGE: &'static str = "DAMAGE";
 pub const CONST_NAME_INTERRUPTED: &'static str = "INTERRUPTED";
 pub const CONST_NAME_TARGETS: &'static str = "TARGETS";
 pub const CONST_NAME_SPLASH_DISTANCE: &'static str = "SPLASH_DISTANCE";
+pub const CONST_NAME_ATTACK_PRIORITY: &'static str = "ATTACK_PRIORITY";
 
 pub const FUNCTION_NAME_INPUT_CHOICE: &'static str = "user_selection";
 pub const FUNCTION_NAME_BLAST_DIRECTION: &'static str = "get_blast_direction";

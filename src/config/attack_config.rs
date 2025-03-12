@@ -1,4 +1,3 @@
-use rhai::ImmutableString;
 use rustc_hash::FxHashMap as HashMap;
 use std::error::Error;
 use num_rational::Rational32;
@@ -7,7 +6,6 @@ use crate::combat::*;
 
 use super::attack_powered::AttackFilter;
 use super::file_loader::{FileLoader, TableLine};
-use super::number_modification::NumberMod;
 use super::ConfigParseError;
 use super::parse::*;
 
@@ -21,7 +19,7 @@ pub struct AttackConfig {
     pub splash_pattern: SplashPattern,
     pub splash_range: u8,
     pub focus: AttackTargetingFocus,
-    pub(super) custom_columns: HashMap<ImmutableString, ImmutableString>,
+    //pub(super) custom_columns: HashMap<ImmutableString, ImmutableString>,
 }
 
 impl TableLine for AttackConfig {
@@ -32,13 +30,13 @@ impl TableLine for AttackConfig {
         let get = |key| {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
-        let mut custom_columns = HashMap::default();
+        /*let mut custom_columns = HashMap::default();
         for (header, s) in data {
             if let H::Custom(name) = header {
                 let s = s.trim();
                 custom_columns.insert(name.into(), s.into());
             }
-        }
+        }*/
         let result = Self {
             attack_type: AttackType::parse_new(get(H::AttackType)?, loader)?,
             unparsed_condition: parse_def(data, H::Condition, String::new(), loader)?,
@@ -51,7 +49,7 @@ impl TableLine for AttackConfig {
             splash_range: parse_def(data, H::SplashRange, 0, loader)?,
             focus: parse_def(data, H::Targeting, AttackTargetingFocus::Unit, loader)?,
             splash_type: parse(data, H::SplashType, loader)?,
-            custom_columns,
+            //custom_columns,
         };
         Ok(result)
     }
@@ -68,7 +66,7 @@ impl AttackConfig {
     }
 }
 
-crate::enum_with_custom! {
+crate::listable_enum! {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum AttackConfigHeader {
         AttackType,
@@ -91,7 +89,7 @@ pub struct AttackSplashConfig {
     pub priority: Rational32,
     pub direction_modifier: DisplaceDirectionModifier,
     pub script: AttackInstanceScript,
-    custom_columns: HashMap<String, NumberMod<Rational32>>,
+    //custom_columns: HashMap<String, NumberMod<Rational32>>,
 }
 
 impl TableLine for AttackSplashConfig {
@@ -117,7 +115,7 @@ impl TableLine for AttackSplashConfig {
                 }
             }
         };
-        let mut custom_columns = HashMap::default();
+        /*let mut custom_columns = HashMap::default();
         for (header, s) in data {
             if let H::Custom(name) = header {
                 let s = s.trim();
@@ -126,7 +124,7 @@ impl TableLine for AttackSplashConfig {
                     custom_columns.insert(name.clone(), nm);
                 }
             }
-        }
+        }*/
         let splash_type = get(H::SplashType)?;
         if splash_type.len() == 0 {
             return Err(E::NameTooShort.into());
@@ -146,7 +144,7 @@ impl TableLine for AttackSplashConfig {
             priority: parse_def(data, H::Priority, Rational32::from_integer(0), loader)?,
             direction_modifier: parse_def(data, H::DirectionModifier, DisplaceDirectionModifier::Keep, loader)?,
             script,
-            custom_columns,
+            //custom_columns,
         };
         Ok(result)
     }
@@ -163,7 +161,7 @@ impl AttackSplashConfig {
     }
 }
 
-crate::enum_with_custom! {
+crate::listable_enum! {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum AttackSplashConfigHeader {
         SplashType,

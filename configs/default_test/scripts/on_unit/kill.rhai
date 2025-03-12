@@ -1,5 +1,5 @@
 
-fn leave_skull(attacker_id, defender_id) {
+fn leave_skull(attacker_id, defender_id, damage, direction) {
     if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
         let position = EVENT_HANDLER.get_unit_position(defender_id);
         let defender = EVENT_HANDLER.get_unit(defender_id);
@@ -18,7 +18,7 @@ fn leave_skull(attacker_id, defender_id) {
     }
 }
 
-fn resurrect(attacker_id, defender_id) {
+fn resurrect(attacker_id, defender_id, damage, direction) {
     if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 && EVENT_HANDLER.get_unit_transport_index(defender_id) == () {
         let position = EVENT_HANDLER.get_unit_position(defender_id);
         let defender = EVENT_HANDLER.get_unit(defender_id);
@@ -36,13 +36,13 @@ fn resurrect(attacker_id, defender_id) {
     }
 }
 
-fn level_up(attacker_id, defender_id) {
+fn level_up(attacker_id, defender_id, damage, direction) {
     if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
         EVENT_HANDLER.set(attacker_id, TAG_Level, (EVENT_HANDLER.get(attacker_id, TAG_Level) ?? 0) + 1);
     }
 }
 
-fn capture_neutral(attacker_id, defender_id) {
+fn capture_neutral(attacker_id, defender_id, damage, direction) {
     if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
         let position = EVENT_HANDLER.get_unit_position(defender_id);
         let defender = EVENT_HANDLER.get_unit(defender_id);

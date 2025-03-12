@@ -284,7 +284,7 @@ fn puffer_fish() {
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 2)),
-        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction4::D0))),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction4::D90))),
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(2, 1)).unwrap().get_hp(), 100);
     assert!(game.get_unit(Point::new(2, 0)).unwrap().get_hp() < hp);

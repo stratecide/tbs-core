@@ -1103,11 +1103,18 @@ impl Config {
         let engine = game.environment().get_engine_board(game);
         let scope = attack_filter_scope(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter);
         let executor = Executor::new(engine, scope, game.environment());
+        let max_len = self.attack_overrides.len();
+        let limit = game.get_attack_config_limit();
         let it = self.attack_overrides.iter()
-        .filter(move |config| {
+        .take(limit.unwrap_or(max_len))
+        .enumerate()
+        .filter(move |(i, config)| {
+            game.set_attack_config_limit(Some(*i));
             config.affects.iter().all(|filter| filter.check(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter))
-        });
+        })
+        .map(|(_, config)| config);
         let r = f(Box::new(it), &executor);
+        game.set_attack_config_limit(limit);
         r
     }
 

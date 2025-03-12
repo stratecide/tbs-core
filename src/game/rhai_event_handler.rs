@@ -1,7 +1,6 @@
 use rhai::*;
 use rhai::plugin::*;
 use rustc_hash::FxHashMap;
-use num_rational::Rational32;
 
 use crate::dyn_opt;
 use super::event_handler::EventHandler;
@@ -44,6 +43,13 @@ macro_rules! event_handler_module {
                     }
                     Some(u.clone())
                 })))
+            }
+
+            #[rhai_fn(pure)]
+            pub fn get_unit_distortion(handler: &mut Handler, id: UnitId) -> Dynamic {
+                handler.get_observed_unit(id.0)
+                .map(|(_, _, distortion)| Dynamic::from(distortion))
+                .unwrap_or(().into())
             }
 
             #[rhai_fn(pure)]

@@ -37,24 +37,6 @@ fn lose_game() {
     EVENT_HANDLER.make_player_lose(UNIT.owner_id)
 }
 
-fn revive_neutral() {
-    let new_unit = Unit(UNIT.type);
-    new_unit.copy_from(UNIT);
-    new_unit.owner_id = -1;
-    new_unit.set(TAG_Hp, 50);
-    // TODO: show effect?
-    EVENT_HANDLER.place_unit(POSITION, new_unit);
-}
-
-fn revive_converted() {
-    let new_unit = Unit(UNIT.type);
-    new_unit.copy_from(UNIT);
-    new_unit.owner_id = OTHER_UNIT?.owner_id ?? -1;
-    new_unit.set(TAG_Hp, 50);
-    // TODO: show effect?
-    EVENT_HANDLER.place_unit(POSITION, new_unit);
-}
-
 fn sludge_1() {
     let counter = 0;
     let token = Token("Sludge");

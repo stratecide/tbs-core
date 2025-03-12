@@ -302,26 +302,69 @@ pub fn execute_attack<D: Direction>(
         attackers
     };
     let game = handler.get_game();
-    let mut attacks: FxHashMap<i8, Vec<(AttackerInfo<D>, ConfiguredAttack)>> = FxHashMap::default();
+    let mut attack_map: FxHashMap<i8, Vec<(AttackerInfo<D>, ConfiguredAttack)>> = FxHashMap::default();
     for attacker in attackers {
         let unit = attacker.attacker_position.get_unit(handler).unwrap();
         let pos = attacker.attacker_position.get_position(handler).unwrap().0;
         for attack in unit.environment().config.unit_configured_attacks(&*game, &unit, pos, attacker.transporter, &attacker.counter_state, &heroes, attacker.temporary_ballast) {
             let priority = attack.priority;
             let value = (attacker.clone(), attack);
-            if let Some(list) = attacks.get_mut(&priority) {
+            if let Some(list) = attack_map.get_mut(&priority) {
                 list.push(value);
             } else {
-                attacks.insert(priority, vec![value]);
+                attack_map.insert(priority, vec![value]);
             }
         }
     }
     drop(game);
-    let mut priorities: Vec<i8> = attacks.keys().cloned().collect();
-    priorities.sort(); // lol
-    for priority in priorities {
-        let attacks = attacks.remove(&priority).unwrap();
-        execute_attacks_with_equal_priority(handler, attacks, execute_scripts);
+    let mut priorities: Vec<i8> = attack_map.keys().cloned().collect();
+    priorities.sort_by(|a, b| b.cmp(a));
+    while let Some(priority) = priorities.pop() {
+        let attacks = attack_map.remove(&priority).unwrap();
+        let scripted_attacks = execute_attacks_with_equal_priority(handler, attacks, execute_scripts);
+        // on_defend scripts can add attackers. add them to the map here
+        if scripted_attacks.len() > 0 {
+            let game = handler.get_game();
+            for atk in scripted_attacks {
+                let Some((pos, None)) = atk.attacker.get_position(handler) else {
+                    continue;
+                };
+                let Some((defender_pos, _)) = handler.get_observed_unit_pos(atk.defender_id.0) else {
+                    continue;
+                };
+                let unit = atk.attacker.get_unit(handler).unwrap();
+                let targeting = AttackTargeting {
+                    target: OrientedPoint::simple(defender_pos, D::angle_0()),
+                    direction_hint: D::angle_0(),
+                    unit_id: Some(atk.defender_id.0),
+                };
+                let transporter = None;
+                let temporary_ballast = &[];
+                let counter_state = AttackCounterState::FakeCounter;
+                for attack in unit.environment().config.unit_configured_attacks(&*game, &unit, pos, transporter, &counter_state, &heroes, temporary_ballast) {
+                    let prio = attack.priority as i32 + atk.priority;
+                    if prio <= priority as i32 || prio > i8::MAX as i32 {
+                        // don't add attack instances that should have happened in the past
+                        continue;
+                    }
+                    let priority = prio as i8;
+                    let value = (AttackerInfo {
+                        attacker_position: atk.attacker.clone(),
+                        targeting: targeting.clone(),
+                        transporter,
+                        temporary_ballast,
+                        counter_state: counter_state.clone(),
+                    }, attack);
+                    if let Some(list) = attack_map.get_mut(&priority) {
+                        list.push(value);
+                    } else {
+                        attack_map.insert(priority, vec![value]);
+                    }
+                }
+            }
+            priorities = attack_map.keys().cloned().collect();
+            priorities.sort_by(|a, b| b.cmp(a));
+        }
     }
 }
 

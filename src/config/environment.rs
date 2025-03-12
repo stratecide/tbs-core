@@ -199,12 +199,15 @@ impl Environment {
     }
 
     pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
+        //println!("table_entry at {x:?}, {y:?}");
         self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name)
         .map(|(_, table)| {
-            table.values.get(&(x, y))
+            let value = table.values.get(&(x, y))
             .unwrap_or(&table.default_value)
-            .clone()
+            .clone();
+            //println!("value = {value:?}");
+            value
         })
     }
 

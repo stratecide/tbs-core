@@ -589,6 +589,12 @@ impl<D: Direction> GameView<D> for Handle<Map<D>> {
         self.with(|map| map.get_unit(p).cloned())
     }
 
+    fn get_attack_config_limit(&self) -> Option<usize> {
+        Handle::get_attack_config_limit(self)
+    }
+    fn set_attack_config_limit(&self, limit: Option<usize>) {
+        Handle::set_attack_config_limit(self, limit);
+    }
     fn get_unit_config_limit(&self) -> Option<usize> {
         Handle::get_unit_config_limit(self)
     }

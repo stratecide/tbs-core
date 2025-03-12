@@ -74,6 +74,8 @@ pub trait GameView<D: Direction>: Send + Sync {
     }
 
     // prevent infinite loop in Config
+    fn get_attack_config_limit(&self) -> Option<usize>;
+    fn set_attack_config_limit(&self, limit: Option<usize>);
     fn get_unit_config_limit(&self) -> Option<usize>;
     fn set_unit_config_limit(&self, limit: Option<usize>);
     fn get_terrain_config_limit(&self) -> Option<usize>;

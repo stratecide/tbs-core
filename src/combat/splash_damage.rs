@@ -60,8 +60,9 @@ impl SplashPattern {
                 }
                 result[0].push(input);
                 for d in self.directions.get_dirs(attacker, input) {
-                    self.points.add_splash_in_direction(game, input, range, |i, p, distortion| {
-                        let dp = OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d));
+                    let main_target = OrientedPoint::new(input.point, input.mirrored, d);
+                    self.points.add_splash_in_direction(game, main_target, range, |i, p, distortion| {
+                        let dp = OrientedPoint::new(p, distortion.is_mirrored() != main_target.mirrored, distortion.update_direction(d));
                         if avoid_duplicates[i].insert(dp) {
                             result[i].push(dp);
                         }

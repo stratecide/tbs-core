@@ -164,6 +164,12 @@ macro_rules! impl_game_view {
             }
 
             // prevent infinite loop in Config
+            fn get_attack_config_limit(&self) -> Option<usize> {
+                self.get_inner_view().get_attack_config_limit()
+            }
+            fn set_attack_config_limit(&self, limit: Option<usize>) {
+                self.get_inner_view().set_attack_config_limit(limit)
+            }
             fn get_unit_config_limit(&self) -> Option<usize> {
                 self.get_inner_view().get_unit_config_limit()
             }

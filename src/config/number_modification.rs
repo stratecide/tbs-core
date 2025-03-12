@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Sub};
 
 use num_rational::Rational32;
+use rhai::Dynamic;
 
 use crate::script::executor::Executor;
 
@@ -10,6 +11,7 @@ use super::parse::{parse_tuple1, string_base, FromConfig};
 use super::ConfigParseError;
 
 pub trait MulRational32: Debug + Clone + Add<Self, Output = Self> + Sub<Self, Output = Self> + Mul<Self, Output = Self> + Div<Self, Output = Self> {
+    fn from_fraction(fraction: Rational32) -> Self;
     fn mul_r32(self, other: Rational32) -> Self;
 }
 
@@ -95,8 +97,18 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
             Self::MulAdd(a, b) => value.mul_r32(a) + b,
             Self::MulSub(a, b) => value.mul_r32(a) - b,
             Self::Rhai(function_index) => {
-                match executor.run(function_index, (value.clone(), )) {
-                    Ok(t) => t,
+                match executor.run::<Dynamic>(function_index, (value.clone(), )) {
+                    Ok(t) => {
+                        let fraction = match t.type_name().split("::").last().unwrap() {
+                            "i32" => Rational32::from_integer(t.cast()),
+                            "Ratio<i32>" => t.cast(),
+                            invalid => {
+                                println!("NumberMod::Rhai returned invalid value of type {invalid}");
+                                return value;
+                            }
+                        };
+                        T::from_fraction(fraction)
+                    },
                     Err(e) => {
                         // TODO: log error
                         println!("NumberMod::Rhai {e}");
@@ -105,8 +117,18 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
                 }
             }
             Self::RhaiReplace(function_index) => {
-                match executor.run(function_index, ()) {
-                    Ok(t) => t,
+                match executor.run::<Dynamic>(function_index, ()) {
+                    Ok(t) => {
+                        let fraction = match t.type_name().split("::").last().unwrap() {
+                            "i32" => Rational32::from_integer(t.cast()),
+                            "Ratio<i32>" => t.cast(),
+                            invalid => {
+                                println!("NumberMod::RhaiReplace returned invalid value of type {invalid}");
+                                Rational32::from_integer(0)
+                            }
+                        };
+                        T::from_fraction(fraction)
+                    },
                     Err(e) => {
                         // TODO: log error
                         println!("NumberMod::RhaiReplace {e}");
@@ -134,30 +156,45 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
 }
 
 impl MulRational32 for Rational32 {
+    fn from_fraction(fraction: Rational32) -> Self {
+        fraction
+    }
     fn mul_r32(self, other: Rational32) -> Self {
         self * other
     }
 }
 
 impl MulRational32 for u8 {
+    fn from_fraction(fraction: Rational32) -> Self {
+        fraction.round().to_integer().max(0).min(u8::MAX as i32) as u8
+    }
     fn mul_r32(self, other: Rational32) -> Self {
         (Rational32::from_integer(self as i32) * other).round().to_integer().min(u8::MAX as i32).max(0) as Self
     }
 }
 
 impl MulRational32 for i8 {
+    fn from_fraction(fraction: Rational32) -> Self {
+        fraction.round().to_integer().max(i8::MIN as i32).min(i8::MAX as i32) as i8
+    }
     fn mul_r32(self, other: Rational32) -> Self {
         (Rational32::from_integer(self as i32) * other).round().to_integer().min(i8::MAX as i32).max(i8::MIN as i32) as Self
     }
 }
 
 impl MulRational32 for u32 {
+    fn from_fraction(fraction: Rational32) -> Self {
+        fraction.round().to_integer().max(0) as u32
+    }
     fn mul_r32(self, other: Rational32) -> Self {
         (Rational32::from_integer(self as i32) * other).round().to_integer().max(0) as Self
     }
 }
 
 impl MulRational32 for i32 {
+    fn from_fraction(fraction: Rational32) -> Self {
+        fraction.round().to_integer()
+    }
     fn mul_r32(self, other: Rational32) -> Self {
         (Rational32::from_integer(self as i32) * other).round().to_integer() as Self
     }

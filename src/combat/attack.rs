@@ -439,6 +439,13 @@ pub(crate) struct OnDefendScript<D: Direction> {
     pub arguments: Array,
 }
 
+#[derive(Clone)]
+pub(crate) struct ScriptedAttack<D: Direction> {
+    pub attacker: AttackerPosition<D>,
+    pub defender_id: UnitId<D>,
+    pub priority: i32,
+}
+
 #[derive(Debug, Clone)]
 pub struct AttackExecutable<D: Direction> {
     priority: Rational32,
@@ -455,7 +462,7 @@ impl<D: Direction> AttackExecutable<D> {
         self.priority.cmp(&other.priority)
     }
 
-    fn execute(mut self, handler: &mut EventHandler<D>, current_team: ClientPerspective, heroes: &HeroMap<D>) {
+    fn execute(mut self, handler: &mut EventHandler<D>, current_team: ClientPerspective, heroes: &HeroMap<D>, attack_priority: i32) -> Vec<ScriptedAttack<D>> {
         match self.script {
             AttackExecutableScript::Displace { throw, neighbor_mode } => {
                 let PushArguments {
@@ -465,7 +472,7 @@ impl<D: Direction> AttackExecutable<D> {
                     push_limit,
                 } = self.arguments.pop().unwrap().cast();
                 let Some((point, None, distortion)) = handler.get_observed_unit(id) else {
-                    return;
+                    return Vec::new();
                 };
                 let direction = distortion.update_direction(direction);
                 let push_limit = if throw {
@@ -475,7 +482,7 @@ impl<D: Direction> AttackExecutable<D> {
                 };
                 let line = get_line(&*handler.get_game(), point, direction, distance + push_limit, neighbor_mode);
                 if line.len() < 2 {
-                    return;
+                    return Vec::new();
                 }
                 let attacker_team = self.attacker.get_team();
                 if throw {
@@ -544,15 +551,23 @@ impl<D: Direction> AttackExecutable<D> {
                         }
                     }
                 }
+                Vec::new()
             }
             AttackExecutableScript::Rhai { ast, script } => {
                 let environment = handler.environment();
-                let engine = environment.get_engine_handler(handler);
+                let mut engine = environment.get_engine_handler(handler);
+                let scripted_attacks = Arc::new(Mutex::new(Vec::new()));
+                let scripted_attacks_ = scripted_attacks.clone();
+                engine.register_fn("add_attack", move |atk: ScriptedAttack<D>| {
+                    //println!("add attack with prio {}", atk.priority);
+                    scripted_attacks_.lock().unwrap().push(atk);
+                });
                 let mut scope = Scope::new();
                 scope.push_constant(CONST_NAME_ATTACKER, self.attacker);
                 scope.push_constant(CONST_NAME_ATTACKER_POSITION, self.attacker_pos);
                 scope.push_constant(CONST_NAME_ATTACKER_ID, self.attacker_id.map(Dynamic::from).unwrap_or(().into()));
                 scope.push_constant(CONST_NAME_IS_COUNTER, self.is_counter);
+                scope.push_constant(CONST_NAME_ATTACK_PRIORITY, attack_priority);
                 match Executor::execute_ast(&engine, &mut scope, ast, &script, self.arguments) {
                     Ok(()) => (), // script had no errors
                     Err(e) => {
@@ -561,6 +576,8 @@ impl<D: Direction> AttackExecutable<D> {
                         handler.effect_glitch();
                     }
                 }
+                let mut scripted_attacks = scripted_attacks.lock().unwrap();
+                scripted_attacks.drain(..).collect()
             }
         }
     }
@@ -583,18 +600,27 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
     handler: &mut EventHandler<D>,
     attacks: Vec<(AttackerInfo<D>, ConfiguredAttack)>,
     execute_scripts: bool,
-) {
+) -> Vec<ScriptedAttack<D>> {
+    let attack_priority = match attacks.first() {
+        Some((_, atk)) => atk.priority as i32,
+        _ => return Vec::new()
+    };
     let current_team = handler.get_game().current_team();
     // all these attacks have the same priority, so they shouldn't influence one another
     let heroes = HeroMap::new(&*handler.get_game(), None);
     let mut attacks: Vec<AttackExecutable<D>> = attacks.into_iter()
     .filter_map(|(attacker, attack)| {
         let unit = attacker.attacker_position.get_unit(handler)?;
+        //println!("unit of type {} attacks!", unit.name());
         let (input, attack_pattern) = attacker.retarget(handler, &attack, &heroes)?;
         let splash_range = attack.splash.iter().map(|a| a.splash_distance).max()?;
         let ranges: Vec<Vec<OrientedPoint<D>>> = attack.splash_pattern.get_splash(&*handler.get_game(), &unit, attacker.temporary_ballast, &attack_pattern, input, splash_range);
         let mut result = Vec::new();
         for splash_instance in &attack.splash {
+            if splash_instance.splash_distance >= ranges.len() {
+                // can happen if splash_pattern uses SplashDamagePointSource::AttackPattern
+                continue;
+            }
             for exe in splash_instance.into_executable(handler, &attack, splash_instance, &attacker.attacker_position, &ranges[splash_instance.splash_distance], &heroes, attacker.temporary_ballast, &attacker.counter_state) {
                 result.push(exe);
             }
@@ -604,12 +630,14 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
     .collect();
     attacks.sort_by(AttackExecutable::cmp);
     //let mut fog_changes = FxHashMap::default();
+    let mut scripted_attacks = Vec::new();
     for attack in attacks {
-        attack.execute(handler, current_team, &heroes);
+        scripted_attacks.extend(attack.execute(handler, current_team, &heroes, attack_priority));
     }
     if handler.get_game().is_foggy() {
         //handler.change_fog(current_team, fog_changes);
         handler.recalculate_fog();
     }
     cleanup_dead_material(handler, execute_scripts);
+    scripted_attacks
 }

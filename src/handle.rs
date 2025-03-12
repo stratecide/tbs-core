@@ -7,6 +7,7 @@ use std::sync::MappedRwLockReadGuard;
 
 pub struct Handle<T: ?Sized> {
     inner: Arc<RwLock<T>>,
+    attack_config_limit: Arc<Mutex<Option<usize>>>,
     unit_config_limit: Arc<Mutex<Option<usize>>>,
     terrain_config_limit: Arc<Mutex<Option<usize>>>,
 }
@@ -15,6 +16,7 @@ impl<T> Handle<T> {
     pub fn new(t: T) -> Self {
         Self {
             inner: Arc::new(RwLock::new(t)),
+            attack_config_limit: Arc::new(Mutex::new(None)),
             unit_config_limit: Arc::new(Mutex::new(None)),
             terrain_config_limit: Arc::new(Mutex::new(None)),
         }
@@ -42,11 +44,18 @@ impl<T> Handle<T> {
     pub(crate) fn cloned(&self) -> Self {
         Self {
             inner: self.inner.clone(),
+            attack_config_limit: self.terrain_config_limit.clone(),
             unit_config_limit: self.unit_config_limit.clone(),
             terrain_config_limit: self.terrain_config_limit.clone(),
         }
     }
 
+    pub(crate) fn get_attack_config_limit(&self) -> Option<usize> {
+        self.attack_config_limit.lock().unwrap().clone()
+    }
+    pub(crate) fn set_attack_config_limit(&self, limit: Option<usize>) {
+        *self.attack_config_limit.lock().unwrap() = limit;
+    }
     pub(crate) fn get_unit_config_limit(&self) -> Option<usize> {
         self.unit_config_limit.lock().unwrap().clone()
     }
@@ -73,6 +82,7 @@ impl<T: Clone> Clone for Handle<T> {
         // TODO: should this panic if self.unit_config_limit or self.terrain_config_limit aren't None?
         Self {
             inner,
+            attack_config_limit: Arc::new(Mutex::new(None)),
             unit_config_limit: Arc::new(Mutex::new(None)),
             terrain_config_limit: Arc::new(Mutex::new(None)),
         }
