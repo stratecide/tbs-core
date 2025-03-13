@@ -140,7 +140,7 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
         handler: &EventHandler<D>,
         attack: &ConfiguredAttack,
         heroes: &HeroMap<D>,
-    ) -> Option<(AttackInput<D>, Vec<Vec<OrientedPoint<D>>>)> {
+    ) -> Option<(AttackInput<D>, D, Vec<Vec<OrientedPoint<D>>>)> {
         let attacker = self.attacker_position.get_unit(handler)?;
         let attacker_pos = self.attacker_position.get_position(handler)?.0;
         let game = handler.get_game();
@@ -179,7 +179,7 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
             .collect();
         // prefer attacks at minimum range
         let max_range = possible_attack_targets.iter().map(|(_, layers)| layers.len()).max()?;
-        for range in 0..max_range {
+        'outer: for range in 0..max_range {
             for (d, layers) in &possible_attack_targets {
                 let Some(layer) = layers.get(range) else {
                     continue;
@@ -192,16 +192,17 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
                     if *d == direction_hint
                     && (attack.splash_pattern.points == SplashDamagePointSource::AttackPattern || self.targeting.target == *dp) {
                         // found a perfect match, return immediately
-                        return Some((attack_input, layers.clone()));
+                        return Some((attack_input, *d, layers.clone()));
                     }
-                    // TODO: check if dp is a better fit than the result so far
+                    // TODO: check if dp is a better fit than the result so far instead of returning right away
                     if result.is_none() {
-                        result = Some((attack_input, layers));
+                        result = Some((attack_input, *d, layers));
+                        break 'outer;
                     }
                 }
             }
         }
-        result.map(|(dp, layers)| (dp, layers.clone()))
+        result.map(|(dp, d, layers)| (dp, d, layers.clone()))
     }
 }
 

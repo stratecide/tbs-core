@@ -152,6 +152,7 @@ impl AttackInstance {
         attack: &ConfiguredAttack,
         splash: &AttackInstance,
         attacker_pos: &AttackerPosition<D>,
+        attack_direction: D,
         targets: &[OrientedPoint<D>],
         heroes: &HeroMap<D>,
         temporary_ballast: &[TBallast<D>],
@@ -396,6 +397,8 @@ impl AttackInstance {
                 scope.push_constant(CONST_NAME_SPLASH_DISTANCE, splash.splash_distance as i32);
                 scope.push_constant(CONST_NAME_ATTACKER_ID, attacker_id.map(|id| Dynamic::from(id)).unwrap_or(().into()));
                 scope.push_constant(CONST_NAME_ATTACKER, attacker.clone());
+                scope.push_constant(CONST_NAME_ATTACKER_POSITION, attacker_pos);
+                scope.push_constant(CONST_NAME_ATTACK_DIRECTION, attack_direction);
                 scope.push_constant(CONST_NAME_TARGETS, targets.into_iter()
                     .map(|dp| Dynamic::from(self.direction_modifier.modify(dp)))
                     .collect::<Array>());
@@ -612,7 +615,7 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
     .filter_map(|(attacker, attack)| {
         let unit = attacker.attacker_position.get_unit(handler)?;
         //println!("unit of type {} attacks!", unit.name());
-        let (input, attack_pattern) = attacker.retarget(handler, &attack, &heroes)?;
+        let (input, attack_direction, attack_pattern) = attacker.retarget(handler, &attack, &heroes)?;
         let splash_range = attack.splash.iter().map(|a| a.splash_distance).max()?;
         let ranges: Vec<Vec<OrientedPoint<D>>> = attack.splash_pattern.get_splash(&*handler.get_game(), &unit, attacker.temporary_ballast, &attack_pattern, input, splash_range);
         let mut result = Vec::new();
@@ -621,7 +624,7 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
                 // can happen if splash_pattern uses SplashDamagePointSource::AttackPattern
                 continue;
             }
-            for exe in splash_instance.into_executable(handler, &attack, splash_instance, &attacker.attacker_position, &ranges[splash_instance.splash_distance], &heroes, attacker.temporary_ballast, &attacker.counter_state) {
+            for exe in splash_instance.into_executable(handler, &attack, splash_instance, &attacker.attacker_position, attack_direction, &ranges[splash_instance.splash_distance], &heroes, attacker.temporary_ballast, &attacker.counter_state) {
                 result.push(exe);
             }
         }

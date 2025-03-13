@@ -5,6 +5,18 @@ fn deal_damage_to_unit() {
     let lifesteal_hp = Fraction(0);
     let lifesteal = attack_bonus("Lifesteal", Fraction(0));
     let strength = attack_bonus("Strength", Fraction(0)) ** SPLASH_DISTANCE;
+    if SPLASH_DISTANCE == 0 {
+        let points = [];
+        for target in TARGETS {
+            let p = target.point;
+            if points.index_of(p) < 0 {
+                points.push(p);
+            }
+        }
+        add_script(
+            Script("do_weapon_effects", [ATTACK_DIRECTION, points])
+        );
+    }
     for target in TARGETS {
         // check if there's a unit at target position
         let p = target.point;
@@ -79,4 +91,68 @@ fn do_lifesteal(attacker_id, hp_gain) {
         EVENT_HANDLER.set(attacker_id, TAG_Hp, hp + hp_gain);
     }
     EVENT_HANDLER.effect(FX_HpChange(hp_gain).at(position));
+}
+
+// send animation events for weapon use
+fn do_weapon_effects(ATTACK_DIRECTION, DEFENDER_POSITIONS) {
+    let weapon = ATTACKER.get_custom("Weapon");
+    switch weapon {
+        "Flame" => {
+            // fire follows a path
+            let path = Path(ATTACKER_POSITION);
+            path.add(ATTACK_DIRECTION);
+            path.add(path.distortion.update_straight_direction(ATTACK_DIRECTION));
+            EVENT_HANDLER.effect(path, FX_Flame());
+        }
+        "SurfaceMissiles" => {
+            // show effect at attacker position
+            let effects = [FX_Attacker().at(ATTACKER_POSITION)];
+            let teams = [];
+            for p in DEFENDER_POSITIONS {
+                let unit = BOARD.get_unit(p);
+                if unit == () {
+                    continue;
+                }
+                let team = unit.team;
+                if team >= 0 && !teams.contains(team) && !BOARD.is_unit_visible(ATTACKER_POSITION, team) {
+                    teams.push(team);
+                    effects.push(FX_AttackerTeam(team).at(ATTACKER_POSITION))
+                }
+            }
+            EVENT_HANDLER.effects(effects);
+            // and afterwards effects at defender positions
+            for p in DEFENDER_POSITIONS {
+                effects.push(FX_Shells().at(p))
+            }
+            EVENT_HANDLER.effects(effects);
+        }
+        "MachineGun" | "Rifle" | "AntiAir" => {
+            close_range_weapon_effects(EVENT_HANDLER, BOARD, ATTACKER_POSITION, DEFENDER_POSITIONS, Fn("FX_Rifle"))
+        }
+        "Shells" => {
+            close_range_weapon_effects(EVENT_HANDLER, BOARD, ATTACKER_POSITION, DEFENDER_POSITIONS, Fn("FX_Shells"))
+        }
+        "Rocket" => {
+            close_range_weapon_effects(EVENT_HANDLER, BOARD, ATTACKER_POSITION, DEFENDER_POSITIONS, Fn("FX_Shells"))
+        }
+    }
+}
+
+fn close_range_weapon_effects(EVENT_HANDLER, BOARD, ATTACKER_POSITION, DEFENDER_POSITIONS, fx_weapon) {
+    // show effect at attacker position at the same time as effects at defender positions
+    let effects = [FX_Attacker().at(ATTACKER_POSITION)];
+    let teams = [];
+    for p in DEFENDER_POSITIONS {
+        let unit = BOARD.get_unit(p);
+        if unit == () {
+            continue;
+        }
+        let team = unit.team;
+        if team >= 0 && !teams.contains(team) && !BOARD.is_unit_visible(ATTACKER_POSITION, team) {
+            teams.push(team);
+            effects.push(FX_AttackerTeam(team).at(ATTACKER_POSITION))
+        }
+        effects.push(fx_weapon.call().at(p))
+    }
+    EVENT_HANDLER.effects(effects);
 }
