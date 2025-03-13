@@ -41,7 +41,7 @@ impl SplashPattern {
         &self,
         game: &impl GameView<D>,
         attacker: &Unit<D>,
-        temporary_ballast: &[TBallast<D>],
+        _temporary_ballast: &[TBallast<D>],
         possible_attack_targets: &Vec<Vec<OrientedPoint<D>>>,
         input: AttackInput<D>,
         range: usize,
