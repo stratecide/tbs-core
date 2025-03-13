@@ -1316,7 +1316,6 @@ impl Config {
                             direction_modifier: splash.direction_modifier,
                             script: splash.script,
                         };
-                        // TODO: add spl to scope and executor
                         if splash.condition.iter().all(|cond| cond.check(
                             game,
                             &atk,
