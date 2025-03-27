@@ -1,5 +1,5 @@
 Power;Affects;MinRange;MaxRange;Visibility;MovementPoints;Vision;TrueVision;PassEnemyUnits;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;Targeting;CanBuildUnits;Value;CanBeDisplaced;TransportCapacity;AuraRange;OnDeath;OnNormalAction
-;;;;;;;;;;;;;;;;;;;;;on_unit/death > show_explosion;on_unit/after_normal_action > exhaust
+;;;;;;;;;;;;;;;;;Rhai(unit_powered > multiply_hp);;;;on_unit/death > show_explosion;on_unit/after_normal_action > exhaust
 ;U(Pawn),T(ChessPawnTile);;;;+1;;;;;;;;;;;;;;;;;
 ;U(Pawn);;;;;;;;;;;;;;;;;;;;;on_unit/after_normal_action > setup_en_passant
 ;Movement(Foot, Bike, Wheel, Treads),T(Hill);;;;;+1;;;;;;;;;;;;;;;;
@@ -19,4 +19,4 @@ Co(Celerity, 2);MovementPattern(Standard), AttackPattern(Adjacent), Not(U(Marine
 ;IH(CrystalObelisk), HG((Crystal, 1));;;;;;;;;;;;;;;;;;;+1;;
 ;H(EarlGrey, 1);;;;+1;;;;;;;;;;;;;;;;;
 ;H(Edwin, 1);;;;;+1;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;Rhai(unit_powered > multiply_hp);;;;;
+;IH(Jax), HC(1);;;;;;;;;;;;;;;;;;;+1;;

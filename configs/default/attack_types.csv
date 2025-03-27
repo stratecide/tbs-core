@@ -1,7 +1,10 @@
 AttackType;Condition;Priority;SplashType;SplashRange;SplashPattern;SplashDirection;Targeting
 Adjacent;;0;Default;;Straight;AttackInput;Unit
+Adjacent;H(Jax);2;Default;;Straight;AttackInput;Unit
 Ranged;;0;Default;;Straight;AllDirections;Unit
+Ranged;H(Jax);2;Default;;Straight;AllDirections;Unit
 DragonHead;;0;Default;;AttackPattern;AttackInput;Unit
+DragonHead;H(Jax);2;Default;;AttackPattern;AttackInput;Unit
 Magnet;;0;Magnet;;Straight;AttackInput;Unit
 Cannon;;0;NoCounter;;AttackPattern;AttackInput;Unit
 Erupt;;0;Erupt;;TriangleDiagonal;AllDirections;Unit

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use num_rational::Rational32;
 use rhai::*;
 
 use crate::combat::AttackPatternType;
@@ -35,6 +36,7 @@ pub(crate) enum UnitFilter {
     Hero(HashSet<(HeroType, Option<u8>)>),
     HeroGlobal(HashSet<(HeroType, Option<u8>)>),
     IsHero(HashSet<(HeroType, Option<u8>)>),
+    HeroCharge(Rational32),
     // this unit
     Unit(HashSet<UnitType>),
     Flag(HashSet<FlagKey>),
@@ -114,6 +116,11 @@ impl FromConfig for UnitFilter {
                 let (list, r) = parse_inner_vec::<(HeroType, Option<u8>)>(remainder, false, loader)?;
                 remainder = r;
                 Self::IsHero(list.into_iter().collect())
+            }
+            "HC" | "HeroCharge" => {
+                let (charge, r) = parse_tuple1(remainder, loader)?;
+                remainder = r;
+                Self::HeroCharge(charge)
             }
             "AP" | "AttackPattern" => {
                 let (list, r) = parse_inner_vec::<AttackPatternType>(remainder, true, loader)?;
@@ -221,6 +228,14 @@ impl UnitFilter {
                     let power = hero.get_active_power() as u8;
                     let hero = hero.typ();
                     h.len() == 0 || h.iter().any(|h| h.0 == hero && h.1.unwrap_or(power) == power)
+                } else {
+                    false
+                }
+            }
+            Self::HeroCharge(charge_ratio) => {
+                if let Some(hero) = unit_data.unit.get_hero() {
+                    let environment = game.environment();
+                    Rational32::new(hero.get_charge() as i32, hero.max_charge(&environment) as i32) >= *charge_ratio
                 } else {
                     false
                 }

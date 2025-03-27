@@ -13,8 +13,10 @@ use crate::map::point::Position;
 use crate::map::point_map::PointMap;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::map::wrapping_map::WMBuilder;
+use crate::script::custom_action::run_unit_input_script;
 use crate::script::custom_action::test::CA_UNIT_BUY_HERO;
 use crate::script::custom_action::CustomActionInput;
+use crate::script::custom_action::CustomActionTestResult;
 use crate::tags::TagValue;
 use crate::terrain::TerrainType;
 use crate::units::commands::*;
@@ -31,6 +33,7 @@ impl HeroType {
     pub const BlueBerry: Self = Self(3);
     pub const Tess: Self = Self(4);
     pub const Edwin: Self = Self(5);
+    pub const Jax: Self = Self(6);
 }
 
 #[test]
@@ -41,7 +44,7 @@ fn buy_hero() {
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
     map.set_terrain(Point::new(1, 1), TerrainType::StatueLand.instance(&map_env).set_owner_id(0).build());
-    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build()));
     map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hero(Hero::new(HeroType::CrystalObelisk)).build()));
 
     let settings = map.settings().unwrap();
@@ -50,11 +53,15 @@ fn buy_hero() {
     settings.players[0].set_funds(999999);
 
     let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), None);
-    let path = Path::new(Point::new(1, 1));
-    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
+    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(0, 1)).unwrap(), Point::new(0, 1), None), None);
+    let path = Path::with_steps(Point::new(0, 1), vec![PathStep::Dir(Direction4::D0)]);
+    let options = server.get_unit(Point::new(0, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
     println!("options: {:?}", options);
     assert!(options.contains(&UnitAction::custom(CA_UNIT_BUY_HERO, Vec::new())));
+    let script = config.custom_actions()[CA_UNIT_BUY_HERO].script.0.unwrap();
+    let test_result = run_unit_input_script(script, &*server, &path, None, &[]);
+    println!("test_result: {:?}", test_result);
+    assert!(matches!(test_result, CustomActionTestResult::Next(_)));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,
@@ -327,4 +334,54 @@ fn edwin() {
     }), Arc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(3, 1)), None);
     assert!(server.get_unit(Point::new(2, 1)).is_some());
+}
+
+#[test]
+fn jax() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(5, 5, false);
+    let map = WMBuilder::<Direction4>::new(map);
+    let mut map = Map::new(map.build(), &config);
+    let map_env = map.environment().clone();
+    let mut jax = Hero::new(HeroType::Jax);
+    jax.set_charge(&map_env, jax.max_charge(&map_env));
+    map.set_unit(Point::new(1, 1), Some(UnitType::dragon_head().instance(&map_env).set_owner_id(0).set_hero(jax).set_hp(100).build()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::dragon_head().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::dragon_head().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(2, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(3, 1), Some(UnitType::dragon_head().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(3, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+
+    let settings = map.settings().unwrap();
+    let mut settings = settings.clone();
+    settings.fog_mode = FogMode::Constant(FogSetting::None);
+
+    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    // Jax has no active
+    let path = Path::new(Point::new(1, 1));
+    let options = server.get_unit(path.start).unwrap().options_after_path(&*server, &path, None, &[]);
+    println!("options: {:?}", options);
+    assert!(!options.iter().any(|o| matches!(o, UnitAction::HeroPower(_, _))));
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 1)),
+        action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(0, 3), Direction4::D270)),
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(2, 1)),
+        action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(2, 2), Direction4::D270)),
+    }), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(3, 1)),
+        action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(3, 3), Direction4::D270)),
+    }), Arc::new(|| 0.)).unwrap();
+    let double_damage = 100 - server.get_unit(Point::new(0, 3)).unwrap().get_hp();
+    let reduced_double_damage = 100 - server.get_unit(Point::new(2, 2)).unwrap().get_hp();
+    let normal_damage = 100 - server.get_unit(Point::new(3, 3)).unwrap().get_hp();
+    assert_eq!(normal_damage * 2, double_damage);
+    assert!(double_damage > reduced_double_damage, "{double_damage} > {reduced_double_damage}");
+    assert!(normal_damage < reduced_double_damage, "{normal_damage} < {reduced_double_damage}");
 }

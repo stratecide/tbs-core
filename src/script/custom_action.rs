@@ -255,7 +255,7 @@ fn run_input_script<D: Direction>(
             } else {
                 // script had an error
                 // TODO: log error
-                println!("is_script_input_valid: {e:?}");
+                println!("run_input_script: {e:?}");
                 CustomActionTestResult::Failure
             }
         }
