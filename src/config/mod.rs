@@ -42,7 +42,7 @@ pub enum ConfigParseError {
     EmptyList,
     FileMissing(String),
     FolderMissing(PathBuf),
-    HeroMaxChargeExceeded(u8),
+    HeroMaxChargeExceeded(u32),
     InvalidCellData(&'static str, usize, usize, String),
     InvalidColumnValue(String, String),
     InvalidBool(String),

@@ -188,7 +188,7 @@ impl<D: Direction> Event<D> {
             Self::HeroCharge(p, change) => {
                 let environment = game.environment().clone();
                 if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_charge(&environment, (hero.get_charge() as i8 + change.0) as u8);
+                    hero.set_charge(&environment, (hero.get_charge() as i32 + change.0) as u32);
                 }
             }
             Self::HeroChargeTransported(p, unload_index, change) => {
@@ -197,7 +197,7 @@ impl<D: Direction> Event<D> {
                 .map(|u| u.get_transported_mut()) {
                     if let Some(hero) = transported.get_mut(unload_index.0)
                     .and_then(|u| u.get_hero_mut()) {
-                        hero.set_charge(&environment, (hero.get_charge() as i8 + change.0) as u8);
+                        hero.set_charge(&environment, (hero.get_charge() as i32 + change.0) as u32);
                     }
                 }
             }
@@ -346,7 +346,7 @@ impl<D: Direction> Event<D> {
             Self::HeroCharge(p, change) => {
                 let environment = game.environment().clone();
                 if let Some(hero) = game.get_map_mut().get_unit_mut(*p).and_then(|u| u.get_hero_mut()) {
-                    hero.set_charge(&environment, (hero.get_charge() as i8 - change.0) as u8);
+                    hero.set_charge(&environment, (hero.get_charge() as i32 - change.0) as u32);
                 }
             }
             Self::HeroChargeTransported(p, unload_index, change) => {
@@ -355,7 +355,7 @@ impl<D: Direction> Event<D> {
                 .map(|u| u.get_transported_mut()) {
                     if let Some(hero) = transported.get_mut(unload_index.0)
                     .and_then(|u| u.get_hero_mut()) {
-                        hero.set_charge(&environment, (hero.get_charge() as i8 - change.0) as u8);
+                        hero.set_charge(&environment, (hero.get_charge() as i32 - change.0) as u32);
                     }
                 }
             }

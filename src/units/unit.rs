@@ -359,17 +359,17 @@ impl<D: Direction> Unit<D> {
         self.fix_transported()
     }
 
-    pub fn get_max_charge(&self) -> u8 {
+    pub fn get_max_charge(&self) -> u32 {
         self.hero.as_ref()
         .map(|hero| hero.max_charge(&self.environment))
         .unwrap_or(0)
     }
-    pub fn get_charge(&self) -> u8 {
+    pub fn get_charge(&self) -> u32 {
         self.hero.as_ref()
         .map(|hero| hero.get_charge())
         .unwrap_or(0)
     }
-    pub fn set_charge(&mut self, charge: u8) {
+    pub fn set_charge(&mut self, charge: u32) {
         if let Some(hero) = &mut self.hero {
             hero.set_charge(&self.environment, charge);
         }

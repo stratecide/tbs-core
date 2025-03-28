@@ -45,7 +45,7 @@ impl SupportedZippable<&Environment> for HeroType {
 }
 
 impl HeroType {
-    pub fn max_charge(&self, environment: &Environment) -> u8 {
+    pub fn max_charge(&self, environment: &Environment) -> u32 {
         environment.config.hero_charge(*self)
     }
 
@@ -62,7 +62,7 @@ impl HeroType {
 pub struct Hero {
     typ: HeroType,
     power: usize,
-    charge: u8,
+    charge: u32,
 }
 
 impl Debug for Hero {
@@ -87,13 +87,13 @@ impl Hero {
         self.typ
     }
 
-    pub fn max_charge(&self, environment: &Environment) -> u8 {
+    pub fn max_charge(&self, environment: &Environment) -> u32 {
         self.typ.max_charge(environment)
     }
-    pub fn get_charge(&self) -> u8 {
+    pub fn get_charge(&self) -> u32 {
         self.charge
     }
-    pub fn set_charge(&mut self, environment: &Environment, charge: u8) {
+    pub fn set_charge(&mut self, environment: &Environment, charge: u32) {
         self.charge = charge.min(self.typ.max_charge(environment));
     }
     pub fn can_gain_charge(&self, environment: &Environment) -> bool {
@@ -131,7 +131,7 @@ impl Hero {
         }
     }
 
-    pub fn power_cost(&self, environment: &Environment, index: usize) -> u8 {
+    pub fn power_cost(&self, environment: &Environment, index: usize) -> u32 {
         let power = match environment.config.hero_powers(self.typ).get(index) {
             Some(power) => power,
             None => return 0,
@@ -226,7 +226,7 @@ impl SupportedZippable<&Environment> for Hero {
         zipper.write_u8(self.power as u8, bits_needed_for_max_value(environment.config.hero_powers(self.typ).len() as u32 - 1));
         if self.typ.max_charge(&environment) > 0 {
             let bits = bits_needed_for_max_value(self.typ.max_charge(&environment) as u32);
-            zipper.write_u8(self.charge, bits);
+            zipper.write_u32(self.charge, bits);
         }
     }
 
@@ -236,7 +236,7 @@ impl SupportedZippable<&Environment> for Hero {
         result.power = unzipper.read_u8(bits_needed_for_max_value(environment.config.hero_powers(typ).len() as u32 - 1))? as usize;
         if typ.max_charge(environment) > 0 {
             let bits = bits_needed_for_max_value(typ.max_charge(environment) as u32);
-            result.charge = typ.max_charge(environment).min(unzipper.read_u8(bits)?);
+            result.charge = typ.max_charge(environment).min(unzipper.read_u32(bits)?);
         }
         Ok(result)
     }
@@ -341,21 +341,21 @@ impl <D: Direction> HeroMap<D> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct HeroChargeChange(pub i8);
+pub struct HeroChargeChange(pub i32);
 
 impl SupportedZippable<&Environment> for HeroChargeChange {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        let max = support.config.max_hero_charge() as i8;
-        zipper.write_u8((self.0 + max) as u8, bits_needed_for_max_value(max as u32 * 2));
+        let max = support.config.max_hero_charge() as i32;
+        zipper.write_u32((self.0 + max) as u32, bits_needed_for_max_value(max as u32 * 2));
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        let max = support.config.max_hero_charge() as i8;
-        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(max as u32 * 2))? as i8 - max))
+        let max = support.config.max_hero_charge() as i32;
+        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(max as u32 * 2))? as i32 - max))
     }
 }
 
-impl From<i8> for HeroChargeChange {
-    fn from(value: i8) -> Self {
+impl From<i32> for HeroChargeChange {
+    fn from(value: i32) -> Self {
         Self(value)
     }
 }

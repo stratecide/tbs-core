@@ -78,7 +78,7 @@ pub struct Config {
     pub(super) attack_overrides: Vec<AttackPoweredConfig>,
     // heroes
     pub(super) heroes: Vec<HeroTypeConfig>,
-    pub(super) max_hero_charge: u8,
+    pub(super) max_hero_charge: u32,
     pub(super) max_aura_range: i8,
     pub(super) max_hero_transport_bonus: usize,
     // terrain
@@ -383,12 +383,12 @@ impl Config {
         }
     }
 
-    pub fn max_hero_charge(&self) -> u8 {
+    pub fn max_hero_charge(&self) -> u32 {
         self.max_hero_charge
     }
 
-    pub fn hero_charge(&self, typ: HeroType) -> u8 {
-        self.hero_config(typ).charge
+    pub fn hero_charge(&self, typ: HeroType) -> u32 {
+        self.hero_config(typ).max_charge
     }
 
     pub fn hero_transport_capacity(&self, typ: HeroType) -> u8 {

@@ -349,10 +349,10 @@ impl Config {
             if result.heroes.iter().any(|conf| conf.name == line.name) {
                 // TODO: error
             }
-            if line.charge > i8::MAX as u8 {
-                return Err(Box::new(ConfigParseError::HeroMaxChargeExceeded(i8::MAX as u8)));
+            if line.max_charge > i32::MAX as u32 {
+                return Err(Box::new(ConfigParseError::HeroMaxChargeExceeded(i32::MAX as u32)));
             }
-            result.max_hero_charge = result.max_hero_charge.max(line.charge);
+            result.max_hero_charge = result.max_hero_charge.max(line.max_charge);
             result.max_hero_transport_bonus = result.max_hero_transport_bonus.max(line.transport_capacity as usize);
             result.heroes.push(line);
             Ok(())

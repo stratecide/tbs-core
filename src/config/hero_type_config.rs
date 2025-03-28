@@ -13,7 +13,7 @@ use super::ConfigParseError;
 pub struct HeroTypeConfig {
     pub(super) name: String,
     pub(super) price: NumberMod<i32>,
-    pub(super) charge: u8,
+    pub(super) max_charge: u32,
     // gets added to the unit's transport_capacity
     // if reducing the transport_capacity of a unit should be allowed,
     // the unit's current transported.len() has to be below the result in order to pick the hero
@@ -32,7 +32,7 @@ impl TableLine for HeroTypeConfig {
         let result = Self {
             name: get(H::Id)?.to_string(),
             price: parse_def(data, H::Price, NumberMod::Keep, loader)?,
-            charge: parse_def(data, H::Charge, 0, loader)?,
+            max_charge: parse_def(data, H::Charge, 0, loader)?,
             transport_capacity: parse_def(data, H::TransportCapacity, 0, loader)?,
             powers: Vec::new(),
         };

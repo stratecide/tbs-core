@@ -15,7 +15,7 @@ pub struct HeroPowerConfig {
     pub(crate) name: String, // of the ability
     pub(crate) usable_from_power: Vec<u8>,
     pub(crate) next_power: u8, // at the start of the player's turn, this index is automatically switched to if possible (e.g. hero has enough charge)
-    pub(crate) required_charge: u8,
+    pub(crate) required_charge: u32,
     pub(super) aura_range: i8,
     pub(super) aura_range_transported: i8,
     pub(crate) script: Option<CustomAction>,

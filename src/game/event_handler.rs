@@ -427,20 +427,20 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    pub fn hero_charge_add(&mut self, position: Point, unload_index: Option<usize>, change: u8) {
-        self.hero_charge(position, unload_index, change as i8)
+    pub fn hero_charge_add(&mut self, position: Point, unload_index: Option<usize>, change: u32) {
+        self.hero_charge(position, unload_index, change as i32)
     }
 
-    pub fn hero_charge_sub(&mut self, position: Point, unload_index: Option<usize>, change: u8) {
-        self.hero_charge(position, unload_index, -(change as i8))
+    pub fn hero_charge_sub(&mut self, position: Point, unload_index: Option<usize>, change: u32) {
+        self.hero_charge(position, unload_index, -(change as i32))
     }
 
-    fn hero_charge(&mut self, position: Point, unload_index: Option<usize>, change: i8) {
+    fn hero_charge(&mut self, position: Point, unload_index: Option<usize>, change: i32) {
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         let Some(hero) = unit.get_hero() else {
             return;
         };
-        let change = change.max(-(hero.get_charge() as i8)).min((hero.typ().max_charge(&self.environment()) - hero.get_charge()) as i8);
+        let change = change.max(-(hero.get_charge() as i32)).min((hero.typ().max_charge(&self.environment()) - hero.get_charge()) as i32);
         if change != 0 {
             if let Some(unload_index) = unload_index {
                 self.add_event(Event::HeroChargeTransported(position, unload_index.into(), change.into()));
