@@ -256,7 +256,7 @@ impl<D: Direction> EventHandler<D> {
                 let next_power = hero.get_next_power(&self.environment());
                 if hero.can_activate_power(&self.environment(), next_power, true) {
                     // TODO: this skips the custom-action. maybe execute the custom action if no user input is needed
-                    self.hero_charge_sub(p, None, hero.power_cost(&self.environment(), next_power));
+                    self.add_hero_charge(p, None, -(hero.power_cost(&self.environment(), next_power) as i32));
                     self.hero_power(p, next_power);
                 }
             }
@@ -427,25 +427,33 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    pub fn hero_charge_add(&mut self, position: Point, unload_index: Option<usize>, change: u32) {
-        self.hero_charge(position, unload_index, change as i32)
-    }
-
-    pub fn hero_charge_sub(&mut self, position: Point, unload_index: Option<usize>, change: u32) {
-        self.hero_charge(position, unload_index, -(change as i32))
-    }
-
-    fn hero_charge(&mut self, position: Point, unload_index: Option<usize>, change: i32) {
+    pub fn add_hero_charge(&mut self, position: Point, unload_index: Option<usize>, delta: i32) {
         let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
         let Some(hero) = unit.get_hero() else {
             return;
         };
-        let change = change.max(-(hero.get_charge() as i32)).min((hero.typ().max_charge(&self.environment()) - hero.get_charge()) as i32);
-        if change != 0 {
+        let delta = delta.max(-(hero.get_charge() as i32)).min((hero.typ().max_charge(&self.environment()) - hero.get_charge()) as i32);
+        if delta != 0 {
             if let Some(unload_index) = unload_index {
-                self.add_event(Event::HeroChargeTransported(position, unload_index.into(), change.into()));
+                self.add_event(Event::HeroChargeTransported(position, unload_index.into(), delta.into()));
             } else {
-                self.add_event(Event::HeroCharge(position, change.into()));
+                self.add_event(Event::HeroCharge(position, delta.into()));
+            }
+        }
+    }
+
+    pub fn set_hero_charge(&mut self, position: Point, unload_index: Option<usize>, charge: i32) {
+        let unit = self.with_map(|map| map.get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone());
+        let Some(hero) = unit.get_hero() else {
+            return;
+        };
+        let delta = charge - hero.get_charge() as i32;
+        let delta = delta.max(-(hero.get_charge() as i32)).min((hero.typ().max_charge(&self.environment()) - hero.get_charge()) as i32);
+        if delta != 0 {
+            if let Some(unload_index) = unload_index {
+                self.add_event(Event::HeroChargeTransported(position, unload_index.into(), delta.into()));
+            } else {
+                self.add_event(Event::HeroCharge(position, delta.into()));
             }
         }
     }

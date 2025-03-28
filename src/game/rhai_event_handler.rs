@@ -180,6 +180,17 @@ macro_rules! event_handler_module {
                 handler.unit_set_hero(position, hero);
             }
 
+            pub fn add_hero_charge(mut handler: Handler, id: UnitId, delta: i32) {
+                if let Some((p, unload_index)) = handler.get_observed_unit_pos(id.0) {
+                    handler.add_hero_charge(p, unload_index, delta);
+                }
+            }
+            pub fn set_hero_charge(mut handler: Handler, id: UnitId, new_charge: i32) {
+                if let Some((p, unload_index)) = handler.get_observed_unit_pos(id.0) {
+                    handler.set_hero_charge(p, unload_index, new_charge);
+                }
+            }
+
             /*#[rhai_fn(name = "sneak_attack")]
             pub fn sneak_attack(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32, attacker_id: usize) {
                 vector.execute(

@@ -53,12 +53,25 @@ fn deal_damage_to_unit() {
         add_script(
             Script("do_deal_damage_to_units", [arguments])
         );
+        for hero in HEROES.get(ATTACKER_POSITION, ATTACKER.owner_id) {
+            add_script(
+                Script("do_charge_hero", [ATTACKER_ID, hero.unit_id])
+            );
+        }
     }
     if lifesteal_hp > Fraction(0) {
         add_script(
             Script("do_lifesteal", [ATTACKER_ID, lifesteal_hp.ceil()])
         );
     }
+}
+
+fn do_charge_hero(attacker_id, hero_id) {
+    let delta = 1;
+    if attacker_id == hero_id {
+        delta = 3;
+    }
+    EVENT_HANDLER.add_hero_charge(hero_id, delta);
 }
 
 fn do_deal_damage_to_units(arguments) {

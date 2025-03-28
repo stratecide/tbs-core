@@ -8,11 +8,13 @@ mod test;
 
 use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
+use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use super::commands::UnitAction;
 use super::unit::Unit;
+use super::UnitId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HeroType(pub usize);
@@ -243,6 +245,7 @@ impl SupportedZippable<&Environment> for Hero {
 }
 
 pub type HeroInfluence<D> = (Unit<D>, Hero, Point, Option<usize>, u8);
+pub type HeroInfluenceWithId<D> = (UnitId<D>, Unit<D>, Hero, Point, Option<usize>, u8);
 
 #[derive(Clone)]
 pub struct HeroMap<D: Direction>(rhai::Shared<FxHashMap<(Point, i8), Vec<HeroInfluence<D>>>>);
@@ -308,6 +311,20 @@ impl <D: Direction> HeroMap<D> {
         hero_auras
     }
 
+    pub(crate) fn with_ids(&self, handler: &mut EventHandler<D>) -> HeroMapWithId<D> {
+        let mut hero_auras: FxHashMap<(Point, i8), Vec<HeroInfluenceWithId<D>>> = FxHashMap::default();
+        for (key, list) in self.0.iter() {
+            let list = list.iter()
+                .cloned()
+                .map(|(unit, hero, position, unload_index, strength)| {
+                    let id = handler.observe_unit(position, unload_index);
+                    (id, unit, hero, position, unload_index, strength)
+                }).collect();
+            hero_auras.insert(*key, list);
+        }
+        HeroMapWithId(rhai::Shared::new(hero_auras))
+    }
+
     pub fn get(&self, position: Point, owner_id: i8) -> &[HeroInfluence<D>] {
         self.0.get(&(position, owner_id)).map(|h| h.as_slice()).unwrap_or(&[])
     }
@@ -337,6 +354,15 @@ impl <D: Direction> HeroMap<D> {
         } else {
             self.clone()
         }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct HeroMapWithId<D: Direction>(rhai::Shared<FxHashMap<(Point, i8), Vec<HeroInfluenceWithId<D>>>>);
+
+impl <D: Direction> HeroMapWithId<D> {
+    pub(crate) fn get(&self, position: Point, owner_id: i8) -> &[HeroInfluenceWithId<D>] {
+        self.0.get(&(position, owner_id)).map(|h| h.as_slice()).unwrap_or(&[])
     }
 }
 

@@ -75,6 +75,32 @@ fn buy_hero() {
 
 
 #[test]
+fn gain_charge() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(5, 5, false);
+    let map = WMBuilder::<Direction4>::new(map);
+    let mut map = Map::new(map.build(), &config);
+    let map_env = map.environment().clone();
+    let jax = Hero::new(HeroType::Crystal);
+    map.set_unit(Point::new(0, 1), Some(UnitType::dragon_head().instance(&map_env).set_owner_id(0).set_hero(jax).set_hp(100).build()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+
+    let settings = map.settings().unwrap();
+    let mut settings = settings.clone();
+    settings.fog_mode = FogMode::Constant(FogSetting::None);
+
+    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    assert_eq!(server.get_unit(Point::new(0, 1)).unwrap().get_charge(), 0);
+    let path = Path::new(Point::new(0, 1));
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path,
+        action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(2, 1), Direction4::D0)),
+    }), Arc::new(|| 0.)).unwrap();
+    assert!(server.get_unit(Point::new(0, 1)).unwrap().get_charge() > 0);
+}
+
+#[test]
 fn crystal() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);

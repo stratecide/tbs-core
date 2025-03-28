@@ -16,7 +16,7 @@ use crate::map::map::{get_line, get_unit, NeighborMode};
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::script::*;
-use crate::units::hero::HeroMap;
+use crate::units::hero::{HeroMap, HeroMapWithId};
 use crate::units::movement::{Path, PathStep, TBallast};
 use crate::units::{unit::*, UnitData, UnitId};
 
@@ -146,7 +146,7 @@ struct PushArguments<D: Direction> {
 }
 
 impl AttackInstance {
-    pub fn into_executable<D: Direction>(
+    pub(crate) fn into_executable<D: Direction>(
         &self,
         handler: &mut EventHandler<D>,
         attack: &ConfiguredAttack,
@@ -155,6 +155,7 @@ impl AttackInstance {
         attack_direction: D,
         targets: &[OrientedPoint<D>],
         heroes: &HeroMap<D>,
+        heroes_with_ids: &HeroMapWithId<D>,
         temporary_ballast: &[TBallast<D>],
         counter_state: &AttackCounterState<D>,
     ) -> Vec<AttackExecutable<D>> {
@@ -399,6 +400,7 @@ impl AttackInstance {
                 scope.push_constant(CONST_NAME_ATTACKER, attacker.clone());
                 scope.push_constant(CONST_NAME_ATTACKER_POSITION, attacker_pos);
                 scope.push_constant(CONST_NAME_ATTACK_DIRECTION, attack_direction);
+                scope.push_constant(CONST_NAME_HEROES, heroes_with_ids.clone());
                 scope.push_constant(CONST_NAME_TARGETS, targets.into_iter()
                     .map(|dp| Dynamic::from(self.direction_modifier.modify(dp)))
                     .collect::<Array>());
@@ -611,6 +613,7 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
     let current_team = handler.get_game().current_team();
     // all these attacks have the same priority, so they shouldn't influence one another
     let heroes = HeroMap::new(&*handler.get_game(), None);
+    let heroes_with_ids = heroes.with_ids(handler);
     let mut attacks: Vec<AttackExecutable<D>> = attacks.into_iter()
     .filter_map(|(attacker, attack)| {
         let unit = attacker.attacker_position.get_unit(handler)?;
@@ -624,7 +627,7 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
                 // can happen if splash_pattern uses SplashDamagePointSource::AttackPattern
                 continue;
             }
-            for exe in splash_instance.into_executable(handler, &attack, splash_instance, &attacker.attacker_position, attack_direction, &ranges[splash_instance.splash_distance], &heroes, attacker.temporary_ballast, &attacker.counter_state) {
+            for exe in splash_instance.into_executable(handler, &attack, splash_instance, &attacker.attacker_position, attack_direction, &ranges[splash_instance.splash_distance], &heroes, &heroes_with_ids, attacker.temporary_ballast, &attacker.counter_state) {
                 result.push(exe);
             }
         }

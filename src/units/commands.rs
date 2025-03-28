@@ -192,7 +192,7 @@ impl<D: Direction> UnitAction<D> {
                 let hero = unit.get_hero().unwrap();
                 let config = handler.environment().config.clone();
                 let power = &config.hero_powers(hero.typ())[index.0];
-                handler.hero_charge_sub(end, None, power.required_charge.into());
+                handler.add_hero_charge(end, None, -(power.required_charge as i32));
                 handler.hero_power(end, index.0);
                 let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
                 if let Some((input_script, function_index)) = power.script {

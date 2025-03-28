@@ -20,6 +20,7 @@ pub const CONST_NAME_TEAM: &'static str = "TEAM";
 pub const CONST_NAME_STARTING_POSITION: &'static str = "STARTING_POSITION";
 pub const CONST_NAME_POSITION: &'static str = "POSITION";
 pub const CONST_NAME_OTHER_POSITION: &'static str = "OTHER_POSITION";
+pub const CONST_NAME_HEROES: &'static str = "HEROES";
 pub const CONST_NAME_TERRAIN: &'static str = "TERRAIN";
 pub const CONST_NAME_TOKEN: &'static str = "TOKEN";
 pub const CONST_NAME_UNIT: &'static str = "UNIT";
@@ -84,7 +85,7 @@ def_package! {
         crate::game::rhai_board::BoardPackage4,
         crate::units::rhai_unit::UnitPackage4,
         crate::units::rhai_movement::MovementPackage4,
-        crate::units::hero::rhai_hero::HeroPackage,
+        crate::units::hero::rhai_hero::HeroPackage4,
         crate::tokens::rhai_token::TokenPackage4,
         crate::combat::rhai_combat::CombatPackage4,
         crate::game::rhai_event_handler::EventHandlerPackage4 {}
@@ -105,7 +106,7 @@ def_package! {
         crate::game::rhai_board::BoardPackage6,
         crate::units::rhai_unit::UnitPackage6,
         crate::units::rhai_movement::MovementPackage6,
-        crate::units::hero::rhai_hero::HeroPackage,
+        crate::units::hero::rhai_hero::HeroPackage6,
         crate::tokens::rhai_token::TokenPackage6,
         crate::combat::rhai_combat::CombatPackage6,
         crate::game::rhai_event_handler::EventHandlerPackage6 {}
