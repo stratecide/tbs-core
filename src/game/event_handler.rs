@@ -243,7 +243,7 @@ impl<D: Direction> EventHandler<D> {
                 )
             })
         }) {
-            self.commander_charge_sub(owner_id, charge_cost);
+            self.add_commander_charge(owner_id, -(charge_cost as i32));
             self.commander_power(owner_id, power_index);
             if let Some(function_index) = function_index {
                 execute_commander_script(function_index, self, None);
@@ -345,23 +345,14 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    pub fn commander_charge_add(&mut self, owner: i8, change: u32) {
+    pub fn add_commander_charge(&mut self, owner: i8, delta: i32) {
         if let Some(player) = self.with_game(|game| game.get_owning_player(owner).cloned()) {
             if !player.commander.can_gain_charge() {
                 return;
             }
-            let change = change.min(player.commander.get_max_charge() - player.commander.get_charge()) as i32;
-            if change > 0 {
-                self.add_event(Event::CommanderCharge(owner.into(), change.into()));
-            }
-        }
-    }
-
-    pub fn commander_charge_sub(&mut self, owner: i8, change: u32) {
-        if let Some(player) = self.with_game(|game| game.get_owning_player(owner).cloned()) {
-            let change = -(change as i32).min(player.commander.get_charge() as i32);
-            if change < 0 {
-                self.add_event(Event::CommanderCharge(owner.into(), change.into()));
+            let delta = delta.max(-(player.commander.get_charge() as i32)).min((player.commander.get_max_charge() - player.commander.get_charge()) as i32);
+            if delta != 0 {
+                self.add_event(Event::CommanderCharge(owner.into(), delta.into()));
             }
         }
     }

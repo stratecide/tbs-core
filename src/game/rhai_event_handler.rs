@@ -191,44 +191,11 @@ macro_rules! event_handler_module {
                 }
             }
 
-            /*#[rhai_fn(name = "sneak_attack")]
-            pub fn sneak_attack(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32, attacker_id: usize) {
-                vector.execute(
-                    &mut handler,
-                    p,
-                    attacker,
-                    Some(attacker_id),
-                    None,
-                    false,
-                    false,
-                    true,
-                    factor,
-                    Counter::NoCounter,
-                );
+            pub fn add_commander_charge(mut handler: Handler, owner_id: i32, delta: i32) {
+                if owner_id >= 0 && owner_id < i8::MAX as i32 {
+                    handler.add_commander_charge(owner_id as i8, delta);
+                }
             }
-            #[rhai_fn(name = "sneak_attack")]
-            pub fn sneak_attack2(handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: i32, attacker_id: usize) {
-                sneak_attack(handler, vector, p, attacker, Rational32::from_integer(factor), attacker_id)
-            }
-            #[rhai_fn(name = "sneak_attack")]
-            pub fn sneak_attack3(mut handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: Rational32) {
-                vector.execute(
-                    &mut handler,
-                    p,
-                    attacker,
-                    None,
-                    None,
-                    false,
-                    false,
-                    true,
-                    factor,
-                    Counter::NoCounter,
-                );
-            }
-            #[rhai_fn(name = "sneak_attack")]
-            pub fn sneak_attack4(handler: Handler, vector: AttackVector<$d>, p: Point, attacker: Unit<$d>, factor: i32) {
-                sneak_attack3(handler, vector, p, attacker, Rational32::from_integer(factor))
-            }*/
 
             pub fn place_unit(mut handler: Handler, position: Point, unit: Unit<$d>) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {

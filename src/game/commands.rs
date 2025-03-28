@@ -177,7 +177,7 @@ impl<D: Direction> Command<D> {
                 } else {
                     return Err(CommandError::PowerNotUsable);
                 };
-                handler.commander_charge_sub(owner_id, commander.power_cost(index.0));
+                handler.add_commander_charge(owner_id, -(commander.power_cost(index.0) as i32));
                 handler.commander_power(owner_id, index.0);
                 if let Some((input_script, function_index)) = script {
                     let data = input_script.map(|_| data);

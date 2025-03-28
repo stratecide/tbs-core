@@ -60,6 +60,40 @@ fn verify_commander_type_constants() {
 // actual tests
 
 #[test]
+fn gain_charge() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(5, 5, false);
+    let map = WMBuilder::<Direction6>::new(map);
+    let mut map = Map::new(map.build(), &config);
+    let map_env = map.environment().clone();
+    map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::magnet().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+
+    let mut settings = map.settings().unwrap();
+    settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = settings.build_default();
+    settings.players[0].set_commander(CommanderType::Zombie);
+    settings.players[1].set_commander(CommanderType::Zombie);
+    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    server.with(|server| {
+        assert_eq!(server.players.get(0).unwrap().commander.get_charge(), 0);
+        assert_eq!(server.players.get(1).unwrap().commander.get_charge(), 0);
+    });
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(1, 1)),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
+    }), Arc::new(|| 0.)).unwrap();
+    server.with(|server| {
+        let charge_0 = server.players.get(0).unwrap().commander.get_charge();
+        let charge_1 = server.players.get(1).unwrap().commander.get_charge();
+        println!("charges: {charge_0}, {charge_1}");
+        assert!(charge_0 > 0);
+        assert_eq!(charge_0 * 2, charge_1);
+    });
+}
+
+#[test]
 fn zombie() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
