@@ -79,14 +79,21 @@ fn do_deal_damage_to_units(arguments) {
     for argument in arguments {
         let defender_id = argument[0];
         let damage = argument[1].ceil();
-        let position = EVENT_HANDLER.get_unit_position(defender_id);
-        if position == () {
+        let defender = EVENT_HANDLER.get_unit(defender_id);
+        if defender == () {
             // unit has been removed in the mean time
             continue;
         }
-        let hp = EVENT_HANDLER.get(defender_id, TAG_Hp);
+        let hp = defender.get(TAG_Hp);
+        let position = EVENT_HANDLER.get_unit_position(defender_id);
         if hp != () {
+            let charge = min(hp, damage);
             EVENT_HANDLER.set(defender_id, TAG_Hp, hp - damage);
+            if charge > 0 && ATTACKER.owner_id != defender.owner_id {
+                charge = defender.value(position) * charge / hp;
+                EVENT_HANDLER.add_commander_charge(ATTACKER.owner_id, charge / 2);
+                EVENT_HANDLER.add_commander_charge(defender.owner_id, charge);
+            }
         }
         effects.push(FX_HpChange(-damage).at(position));
     }
