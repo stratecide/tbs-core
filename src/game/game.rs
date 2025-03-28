@@ -463,6 +463,13 @@ impl<D: Direction> GameView<D> for Handle<Game<D>> {
 }
 
 impl<D: Direction> GameInterface for Handle<Game<D>> {
+    fn width(&self) -> usize {
+        self.with(|game| game.map.width()) as usize
+    }
+    fn height(&self) -> usize {
+        self.with(|game| game.map.height()) as usize
+    }
+
     fn execute_command(&mut self, command: Vec<u8>, random: RandomFn) -> Result<Events, Box<dyn Error>> {
         let environment = self.with(|game| game.environment.clone());
         let mut unzipper = Unzipper::new(command, Version::parse(VERSION).unwrap());
@@ -596,6 +603,13 @@ impl<D: Direction> GameInterface for Handle<Game<D>> {
                 },
                 dead: player.dead,
             }
+        })
+    }
+
+    #[cfg(feature = "rendering")]
+    fn preview(&self) -> MapPreview {
+        self.with(|game| {
+            game.map.preview()
         })
     }
 }

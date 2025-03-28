@@ -505,6 +505,34 @@ impl<D: Direction> Map<D> {
             players: players.try_into().unwrap(),
         })
     }
+
+    #[cfg(feature = "rendering")]
+    pub(crate) fn preview(&self) -> MapPreview {
+        let mut base = Vec::new();
+        let base_x = if self.odd_if_hex() {
+            2
+        } else {
+            0
+        };
+        for (p, terrain) in &self.terrain {
+            let (x, y) = D::T::between(&GlobalPoint::ZERO, &GlobalPoint::new(p.x as i16, p.y as i16), self.odd_if_hex()).screen_coordinates();
+            let pos = PreviewPos {
+                x: base_x + (x * 4.).round() as u16,
+                y: (y * 4.).round() as u16,
+            };
+            for (shape, color) in self.environment.config.terrain_preview(terrain.typ(), terrain.get_owner_id()) {
+                base.push(PreviewTile {
+                    pos,
+                    shape,
+                    color,
+                });
+            }
+        }
+        MapPreview {
+            base,
+            frames: Vec::new(),
+        }
+    }
 }
 
 impl<D: Direction> GameView<D> for Handle<Map<D>> {
@@ -733,32 +761,9 @@ impl<D: Direction> MapInterface for Handle<Map<D>> {
 
     #[cfg(feature = "rendering")]
     fn preview(&self) -> MapPreview {
-        let mut base = Vec::new();
         self.with(|map| {
-            let base_x = if map.odd_if_hex() {
-                2
-            } else {
-                0
-            };
-            for (p, terrain) in &map.terrain {
-                let (x, y) = D::T::between(&GlobalPoint::ZERO, &GlobalPoint::new(p.x as i16, p.y as i16), map.odd_if_hex()).screen_coordinates();
-                let pos = PreviewPos {
-                    x: base_x + (x * 4.).round() as u16,
-                    y: (y * 4.).round() as u16,
-                };
-                for (shape, color) in map.environment().config.terrain_preview(terrain.typ(), terrain.get_owner_id()) {
-                    base.push(PreviewTile {
-                        pos,
-                        shape,
-                        color,
-                    });
-                }
-            }
-        });
-        MapPreview {
-            base,
-            frames: Vec::new(),
-        }
+            map.preview()
+        })
     }
 }
 
