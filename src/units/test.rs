@@ -5,6 +5,8 @@ use interfaces::{Perspective, GameEventsMap};
 use crate::combat::AttackInput;
 use crate::config::config::Config;
 use crate::game::commands::Command;
+use crate::game::event_fx::Effect;
+use crate::game::events::Event;
 use crate::game::fog::*;
 use crate::game::game::Game;
 use crate::game::game_view::GameView;
@@ -608,4 +610,33 @@ fn magnet_pulls_through_pipe() {
     assert!(game.get_unit(Point::new(1, 1)).is_some());
     assert!(game.get_unit(Point::new(1, 2)).is_some());
     assert_eq!(None, game.get_unit(Point::new(3, 0)));
+}
+
+#[test]
+fn fog_surprise() {
+    let config = Arc::new(Config::test_config());
+    let map = PointMap::new(8, 4, false);
+    let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+    let mut map = Map::new(wmap, &config);
+    let map_env = map.environment().clone();
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(6, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    let mut settings = map.settings().unwrap();
+    settings.fog_mode = FogMode::Constant(FogSetting::ExtraDark(0));
+    let settings = settings.build_default();
+    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+
+    // no fog during the first turn
+    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+
+    let path = Path::with_steps(Point::new(0, 0), [PathStep::Dir(Direction4::D0); 6].to_vec());
+    let events = game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path,
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    assert!(game.get_unit(Point::new(0, 0)).is_none());
+    assert!(game.get_unit(Point::new(5, 0)).is_some());
+    assert!(events.get(&Perspective::Team(0)).unwrap().contains(&Event::Effect(Effect::new_fog_surprise(Point::new(6, 0)))));
 }

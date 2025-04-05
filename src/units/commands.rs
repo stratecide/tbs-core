@@ -231,7 +231,7 @@ impl<D: Direction> UnitCommand<D> {
         let borrowed_game = handler.get_game();
         let client_game;
         let client = if handler.get_game().is_foggy() {
-            let player = handler.get_game().current_owner() as u8;
+            let player = handler.get_game().current_player().team;
             let data = handler.get_game().export();
             let secret = data.hidden
             .and_then(|mut h| h.teams.remove(&player))
@@ -326,6 +326,7 @@ impl<D: Direction> UnitCommand<D> {
             }
         }
         let ballast = ballast.expect(&format!("couldn't handle unit command {:?}", self)).1;
+        // no event for the path is necessary if the unit is unable to move at all
         let ballast = if path_taken.steps.len() > 0 {
             handler.unit_path(self.unload_index.map(|i| i.0), &path_taken, board_at_the_end, false);
             ballast.get_entries()
@@ -334,10 +335,6 @@ impl<D: Direction> UnitCommand<D> {
         };
         let end = path_taken.end(&*handler.get_game()).unwrap().0;
         if let Some(fog_trap) = fog_trap {
-            // no event for the path is necessary if the unit is unable to move at all
-            if path_taken.steps.len() > 0 {
-                handler.unit_path(self.unload_index.map(|i| i.0), &path_taken, false, false);
-            }
             // fog trap
             handler.effect_fog_surprise(fog_trap);
             let heroes = HeroMap::new(&*handler.get_game(), None);
