@@ -157,6 +157,10 @@ impl Config {
         self.max_aura_range
     }
 
+    pub fn owner_colors(&self) -> &[[u8; 4]] {
+        &self.owner_colors
+    }
+
     // flags / tags
 
     pub fn flag_count(&self) -> usize {
