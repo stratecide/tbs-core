@@ -136,6 +136,12 @@ fn build_drone() {
         server.get_unit(Point::new(3, 4)).unwrap().get_transported()[0].get_tag(TAG_DRONE_ID),
         server.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID)
     );
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    // drone boat is unexhausted next turn
+    assert!(!server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
+    // built drone is unexhausted next turn
+    assert!(!server.get_unit(Point::new(3, 4)).unwrap().get_transported()[0].has_flag(FLAG_EXHAUSTED));
 }
 
 #[test]

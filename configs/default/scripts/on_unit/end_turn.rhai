@@ -1,4 +1,4 @@
 
 fn unexhaust() {
-    EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Exhausted);
+    EVENT_HANDLER.remove(UNIT_ID, FLAG_Exhausted);
 }

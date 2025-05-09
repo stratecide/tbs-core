@@ -693,7 +693,7 @@ impl<D: Direction> EventHandler<D> {
         scope.push_constant(CONST_NAME_PATH, path);
         scope.push_constant(CONST_NAME_POSITION, p);
         scope.push_constant(CONST_NAME_UNIT, unit);
-        scope.push_constant(CONST_NAME_UNIT_ID, id);
+        scope.push_constant(CONST_NAME_UNIT_ID, UnitId(id, self.get_observed_unit(id).unwrap().2));
         scope.push_constant(CONST_NAME_INTERRUPTED, interrupted);
         let engine = environment.get_engine_handler(self);
         let executor = Executor::new(engine, scope, environment);
@@ -862,15 +862,16 @@ impl<D: Direction> EventHandler<D> {
             };
             let mut scripts = Vec::new();
             {
-                let game = &*self.get_game();
                 // commander scripts
-                if let Some(scope) = conf.typ.test_global(game) {
+                let game = self.get_game();
+                if let Some(scope) = conf.typ.test_global(&*game) {
                     scripts.push((script, scope))
                 } else {
+                    drop(game);
                     // terrain, token, unit scripts
                     for p in all_points.iter().cloned() {
-                        for scope in conf.typ.test_local(game, p, &hero_auras) {
-                            scripts.push((script, scope))
+                        for scope in conf.typ.test_local(self, p, &hero_auras) {
+                            scripts.push((script, scope));
                         }
                     }
                 }

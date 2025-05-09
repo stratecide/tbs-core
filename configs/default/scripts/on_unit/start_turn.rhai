@@ -17,11 +17,11 @@ fn damage_20() {
 }
 
 fn clear_status_flags() {
-    EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Repairing);
-    EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Capturing);
+    EVENT_HANDLER.remove(UNIT_ID, FLAG_Repairing);
+    EVENT_HANDLER.remove(UNIT_ID, FLAG_Capturing);
     if UNIT.has(FLAG_Stunned) {
-        EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
-        EVENT_HANDLER.remove_unit_flag(POSITION, FLAG_Stunned);
+        EVENT_HANDLER.set(UNIT_ID, FLAG_Exhausted);
+        EVENT_HANDLER.remove(UNIT_ID, FLAG_Stunned);
     }
-    EVENT_HANDLER.remove_unit_tag(POSITION, TAG_EnPassant);
+    EVENT_HANDLER.remove(UNIT_ID, TAG_EnPassant);
 }

@@ -172,6 +172,14 @@ macro_rules! event_handler_module {
                     };
                 }
             }
+            #[rhai_fn(name = "remove")]
+            pub fn remove_unit_id_tag(mut handler: Handler, id: UnitId, key: TagKey) {
+                match handler.get_observed_unit_pos(id.0) {
+                    Some((p, None)) => handler.remove_unit_tag(p, key.0),
+                    Some((p, Some(unload_index))) => handler.remove_unit_tag_boarded(p, unload_index, key.0),
+                    None => (),
+                };
+            }
 
             pub fn set_hero(mut handler: Handler, position: Point, hero: Hero) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {

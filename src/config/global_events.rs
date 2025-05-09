@@ -4,6 +4,7 @@ use rhai::Scope;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
+use crate::game::event_handler::EventHandler;
 use crate::game::game_view::GameView;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -80,11 +81,12 @@ impl GlobalEventType {
         }
     }
 
-    pub fn test_local<D: Direction>(&self, game: &impl GameView<D>, pos: Point, heroes: &HeroMap<D>) -> Vec<Scope<'static>> {
-        let current_owner_id = game.current_owner() as i32;
+    pub fn test_local<D: Direction>(&self, handler: &mut EventHandler<D>, pos: Point, heroes: &HeroMap<D>) -> Vec<Scope<'static>> {
+        let current_owner_id = handler.get_game().current_owner() as i32;
         let mut result = Vec::new();
         match self {
             Self::Terrain(filter) => {
+                let game = &*handler.get_game();
                 let terrain = game.get_terrain(pos).unwrap();
                 let heroes = heroes.get(pos, terrain.get_owner_id());
                 let environment = game.environment();
@@ -99,6 +101,7 @@ impl GlobalEventType {
                 }
             }
             Self::Token(filter) => {
+                let game = &*handler.get_game();
                 for token in game.get_tokens(pos) {
                     let environment = game.environment();
                     let engine = environment.get_engine_board(game);
@@ -113,10 +116,10 @@ impl GlobalEventType {
                 }
             }
             Self::Unit(filter) => {
-                let Some(unit) = game.get_unit(pos) else {
+                let Some(unit) = handler.get_game().get_unit(pos) else {
                     return result
                 };
-                if filter.iter().all(|filter| filter.check(game, UnitData {
+                if filter.iter().all(|filter| filter.check(&*handler.get_game(), UnitData {
                     unit: &unit,
                     pos,
                     unload_index: None,
@@ -125,6 +128,7 @@ impl GlobalEventType {
                 }, None, heroes, false)) {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_UNIT, unit.clone());
+                    scope.push_constant(CONST_NAME_UNIT_ID, handler.observe_unit(pos, None));
                     scope.push_constant(CONST_NAME_POSITION, pos);
                     scope.push_constant(CONST_NAME_TRANSPORT_INDEX, ());
                     scope.push_constant(CONST_NAME_TRANSPORTER, ());
@@ -132,7 +136,7 @@ impl GlobalEventType {
                     result.push(scope)
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
-                    if filter.iter().all(|filter| filter.check(game, UnitData {
+                    if filter.iter().all(|filter| filter.check(&*handler.get_game(), UnitData {
                         unit: u,
                         pos,
                         unload_index: Some(i),
@@ -141,6 +145,7 @@ impl GlobalEventType {
                     }, None, heroes, false)) {
                         let mut scope = Scope::new();
                         scope.push_constant(CONST_NAME_UNIT, u.clone());
+                        scope.push_constant(CONST_NAME_UNIT_ID, handler.observe_unit(pos, Some(i)));
                         scope.push_constant(CONST_NAME_POSITION, pos);
                         scope.push_constant(CONST_NAME_TRANSPORT_INDEX, i as i32);
                         scope.push_constant(CONST_NAME_TRANSPORTER, unit.clone());
