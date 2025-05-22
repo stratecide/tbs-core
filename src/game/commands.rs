@@ -23,7 +23,7 @@ use super::fog::FogIntensity;
 use super::game::Game;
 use super::game_view::GameView;
 
-#[derive(Debug, Clone, Zippable)]
+#[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
 pub enum Command<D: Direction> {
     EndTurn,
@@ -265,7 +265,7 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CommanderPowerIndex(pub usize);
 
 impl SupportedZippable<&Environment> for CommanderPowerIndex {
