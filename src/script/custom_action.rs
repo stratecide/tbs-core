@@ -470,7 +470,7 @@ fn execute_script<D: Direction>(
         Ok(_) => (),
         Err(e) => {
             // TODO: log error
-            println!("execute_unit_script: {e}");
+            println!("execute_script: {e}");
             handler.effect_glitch();
         }
     }

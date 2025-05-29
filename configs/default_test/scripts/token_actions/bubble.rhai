@@ -4,8 +4,8 @@ fn buy_airport_input() {
 }
 
 fn buy_airport(data) {
-    terrain_buy_unit(POSITION, TOKEN.owner_id, data, false);
     EVENT_HANDLER.remove_token(POSITION, TOKEN);
+    terrain_buy_unit(POSITION, TOKEN.owner_id, data, false);
 }
 
 fn buy_factory_input() {
@@ -13,8 +13,8 @@ fn buy_factory_input() {
 }
 
 fn buy_factory(data) {
-    terrain_buy_unit(POSITION, TOKEN.owner_id, data, false);
     EVENT_HANDLER.remove_token(POSITION, TOKEN);
+    terrain_buy_unit(POSITION, TOKEN.owner_id, data, false);
 }
 
 fn buy_port_input() {
@@ -22,6 +22,6 @@ fn buy_port_input() {
 }
 
 fn buy_port(data) {
-    terrain_buy_unit(POSITION, TOKEN.owner_id, data, false);
     EVENT_HANDLER.remove_token(POSITION, TOKEN);
+    terrain_buy_unit(POSITION, TOKEN.owner_id, data, false);
 }
