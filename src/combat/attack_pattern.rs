@@ -323,8 +323,8 @@ impl AttackPattern {
                         }
                     }
                     Err(e) => {
-                        // TODO: log error
-                        println!("AttackPattern::Rhai {function_index}: {e:?}");
+                        let environment = game.environment();
+                        environment.log_rhai_error("AttackPattern::Rhai", environment.get_rhai_function_name(*function_index), &e);
                     }
                 }
             }

@@ -298,7 +298,7 @@ impl AttackInstance {
                             &ballast,
                             is_counter,
                         );
-                        println!("unit_defense_bonus {column_id} = {result}");
+                        tracing::debug!("unit_defense_bonus {column_id} = {result}");
                         result
                     });
                     let handler = handler_.clone();
@@ -325,7 +325,7 @@ impl AttackInstance {
                             &ballast,
                             &counter_,
                         );
-                        println!("attack_bonus {column_id} = {result}");
+                        tracing::debug!("attack_bonus {column_id} = {result}");
                         result
                     });
                     let result = result_.clone();
@@ -375,7 +375,7 @@ impl AttackInstance {
                             &ballast,
                             &counter_,
                         );
-                        println!("on_defend {} scripts", scripts.len());
+                        tracing::debug!("on_defend {} scripts", scripts.len());
                         if scripts.len() == 0 {
                             return;
                         }
@@ -407,8 +407,7 @@ impl AttackInstance {
                 match Executor::execute(&environment, &engine, &mut scope, *build_script, ()) {
                     Ok(()) => result = result_.lock().unwrap().drain(..).collect(),
                     Err(e) => {
-                        // TODO: log error
-                        println!("AttackSplash preparation script {build_script}: {e:?}");
+                        environment.log_rhai_error("AttackSplash preparation", environment.get_rhai_function_name(*build_script), &e);
                         handler.effect_glitch();
                         return Vec::new();
                     }
@@ -564,7 +563,7 @@ impl<D: Direction> AttackExecutable<D> {
                 let scripted_attacks = Arc::new(Mutex::new(Vec::new()));
                 let scripted_attacks_ = scripted_attacks.clone();
                 engine.register_fn("add_attack", move |atk: ScriptedAttack<D>| {
-                    //println!("add attack with prio {}", atk.priority);
+                    //tracing::debug!("add attack with prio {}", atk.priority);
                     scripted_attacks_.lock().unwrap().push(atk);
                 });
                 let mut scope = Scope::new();
@@ -576,8 +575,7 @@ impl<D: Direction> AttackExecutable<D> {
                 match Executor::execute_ast(&engine, &mut scope, ast, &script, self.arguments) {
                     Ok(()) => (), // script had no errors
                     Err(e) => {
-                        // TODO: log error
-                        println!("AttackExecutableScript::Rhai script {script}: {e:?}");
+                        environment.log_rhai_error("AttackExecutableScript::Rhai", &script, &e);
                         handler.effect_glitch();
                     }
                 }
@@ -617,7 +615,7 @@ pub(super) fn execute_attacks_with_equal_priority<D: Direction>(
     let mut attacks: Vec<AttackExecutable<D>> = attacks.into_iter()
     .filter_map(|(attacker, attack)| {
         let unit = attacker.attacker_position.get_unit(handler)?;
-        //println!("unit of type {} attacks!", unit.name());
+        //tracing::debug!("unit of type {} attacks!", unit.name());
         let (input, attack_direction, attack_pattern) = attacker.retarget(handler, &attack, &heroes)?;
         let splash_range = attack.splash.iter().map(|a| a.splash_distance).max()?;
         let ranges: Vec<Vec<OrientedPoint<D>>> = attack.splash_pattern.get_splash(&*handler.get_game(), &unit, attacker.temporary_ballast, &attack_pattern, input, splash_range);

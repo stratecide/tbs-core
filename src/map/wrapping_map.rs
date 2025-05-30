@@ -705,7 +705,7 @@ mod tests {
     use super::*;
     use crate::{config::config::Config, game::{game::Game, game_view::GameView}, map::{map::{Map, NeighborMode}, point_map::PointMap}, terrain::TerrainType, units::{movement::Path, unit_types::UnitType}};
 
-    #[test]
+    #[test_log::test]
     fn distortions() {
         for mirrored in vec![true, false] {
             for rotation in Direction4::list() {
@@ -721,7 +721,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test_log::test]
     fn transformations1() {
         let transformations = vec![
             Transformation::new(Distortion::new(false, Direction4::D0), Direction4::D0.translation(0)),
@@ -745,7 +745,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test_log::test]
     fn transformations2() {
         assert_eq!(-Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(8) + Direction4::D90.translation(7)),
                 Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(8) + Direction4::D90.translation(-7)));
@@ -753,7 +753,7 @@ mod tests {
                 Transformation::new(Distortion::new(true, Direction4::D90), Direction4::D0.translation(-6) + Direction4::D90.translation(5)));
     }
 
-    #[test]
+    #[test_log::test]
     fn no_wrapping() {
         let builder = WMBuilder::<Direction4>::new(PointMap::new(4, 8, false));
         builder.build();
@@ -779,7 +779,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test_log::test]
     fn simple_wrapping() {
         let builder = WMBuilder::<Direction4>::with_transformations(PointMap::new(5, 4, false), vec![
             Transformation::new(Distortion::new(false, Direction4::D0), Direction4::D0.translation(-5))
@@ -812,7 +812,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[test_log::test]
     fn mirrored_wrapping() -> Result<(), TransformationError<Direction4>> {
         let builder = WMBuilder::<Direction4>::with_transformations(PointMap::new(5, 4, false), vec![
             Transformation::new(Distortion::new(true, Direction4::D0), Direction4::D0.translation(-5))
@@ -825,7 +825,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[test_log::test]
     fn rotated_wrapping() -> Result<(), TransformationError<Direction4>> {
         let builder = WMBuilder::<Direction4>::with_transformations(PointMap::new(5, 4, false), vec![
             Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(5))
@@ -839,7 +839,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[test_log::test]
     fn double_wrapping() -> Result<(), TransformationError<Direction4>> {
         let builder = WMBuilder::<Direction4>::with_transformations(PointMap::new(5, 4, false), vec![
             Transformation::new(Distortion::neutral(), Direction4::D0.translation(-5) + Direction4::D90.translation(2)),
@@ -853,7 +853,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[test_log::test]
     fn rotation_and_mirror() -> Result<(), TransformationError<Direction4>> {
         let builder = WMBuilder::<Direction4>::with_transformations(PointMap::new(5, 4, false), vec![
             Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(5)),
@@ -875,7 +875,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[test_log::test]
     fn transformation_errors() -> Result<(), TransformationError<Direction4>> {
         let mut builder = WMBuilder::<Direction4>::new(PointMap::new(5, 4, false));
         let unchanged: WMBuilder<Direction4> = builder.clone();
@@ -893,7 +893,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[test_log::test]
     fn straight_line() {
         let config = Arc::new(Config::test_config());
         let map = PointMap::new(8, 5, false);

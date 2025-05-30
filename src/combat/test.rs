@@ -16,7 +16,7 @@ use crate::units::unit_types::UnitType;
 
 use super::*;
 
-#[test]
+#[test_log::test]
 fn hp_factor() {
     let map = PointMap::new(4, 4, false);
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
@@ -49,7 +49,7 @@ fn hp_factor() {
     assert_eq!(100 - (base_damage * 0.25).ceil() as u8, game.get_unit(Point::new(3, 0)).unwrap().get_hp());
 }
 
-#[test]
+#[test_log::test]
 fn terrain_defense() {
     let map = PointMap::new(4, 4, false);
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
@@ -75,7 +75,7 @@ fn terrain_defense() {
             path: Path::new(Point::new(x, 1)),
             action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(x, 0), Direction4::D90))),
         }), Arc::new(|| 0.)).unwrap();
-        println!("attacker hp: {}, defender hp: {}", game.get_unit(Point::new(x, 1)).unwrap().get_hp(), game.get_unit(Point::new(x, 0)).unwrap().get_hp());
+        tracing::debug!("attacker hp: {}, defender hp: {}", game.get_unit(Point::new(x, 1)).unwrap().get_hp(), game.get_unit(Point::new(x, 0)).unwrap().get_hp());
     }
     let base_damage = 100. - game.get_unit(Point::new(0, 0)).unwrap().get_hp() as f32;
     assert!(base_damage > 0.);
@@ -84,7 +84,7 @@ fn terrain_defense() {
     assert_eq!((base_damage / 1.3).ceil() as u8, 100 - game.get_unit(Point::new(3, 0)).unwrap().get_hp());
 }
 
-#[test]
+#[test_log::test]
 fn displacement() {
     let map = PointMap::new(5, 4, false);
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
@@ -129,7 +129,7 @@ fn displacement() {
     assert!(game.get_unit(Point::new(1, 2)).unwrap().get_hp() < 100);
 }
 
-#[test]
+#[test_log::test]
 fn dragon_head() {
     // create map
     let config = Arc::new(Config::test_config());

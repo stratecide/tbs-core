@@ -387,8 +387,8 @@ impl<D: Direction> Unit<D> {
         match executor.run(is_unit_movable_rhai, ()) {
             Ok(movable) => movable,
             Err(e) => {
-                // TODO: log error
-                println!("unit is_unit_movable_rhai {is_unit_movable_rhai}: {e:?}");
+                let environment = self.environment();
+                environment.log_rhai_error("is_unit_movable_rhai", environment.get_rhai_function_name(is_unit_movable_rhai), &e);
                 false
             }
         }
@@ -716,7 +716,7 @@ impl<D: Direction> Unit<D> {
             }
             result.push(UnitAction::Wait);
         }
-        println!("unit actions: {result:?}");
+        //tracing::debug!("unit actions: {result:?}");
         result
     }
 }

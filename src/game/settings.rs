@@ -354,7 +354,7 @@ mod tests {
 
     use super::{GameConfig, GameSettings, PlayerOptions, PlayerSettings, PlayerConfig};
 
-    #[test]
+    #[test_log::test]
     fn export_commander_options() {
         let config = Config::test_config();
         let options = PlayerOptions{
@@ -366,14 +366,14 @@ mod tests {
         co.export(&mut zipper, &config);
         zipper.write_u8(1, 1);
         let data = zipper.finish();
-        println!("export_commander_options: {data:?}");
+        tracing::debug!("export_commander_options: {data:?}");
         let mut unzipper = Unzipper::new(data, Version::parse(VERSION).unwrap());
         assert_eq!(Ok(options), PlayerOptions::import(&mut unzipper, &config));
         assert_eq!(Ok(co), CommanderType::import(&mut unzipper, &config));
         assert_eq!(1, unzipper.read_u8(1).unwrap());
     }
 
-    #[test]
+    #[test_log::test]
     fn export_game_config() {
         let config = Arc::new(Config::test_config());
         let setting = GameConfig {
@@ -396,7 +396,7 @@ mod tests {
         assert_eq!(Ok(setting), GameConfig::import(config, bytes));
     }
 
-    #[test]
+    #[test_log::test]
     fn export_game_settings() {
         let config = Arc::new(Config::test_config());
         let setting = GameSettings {

@@ -20,6 +20,10 @@ impl Executor {
         }
     }
 
+    pub fn environment(&self) -> &Environment {
+        &self.environment
+    }
+
     pub fn run<T: Any>(&self, function_index: usize, args: impl FuncArgs) -> Result<T, Box<EvalAltResult>> {
         let mut scope = self.scope.borrow_mut();
         Self::execute(&self.environment, &self.engine, &mut scope, function_index, args)

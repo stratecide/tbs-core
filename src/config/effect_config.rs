@@ -169,8 +169,8 @@ impl EffectVisibility {
                 match executor.run(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {
-                        // TODO: log error
-                        println!("EffectVisibility error: {e:?}");
+                        let environment = game.environment();
+                        environment.log_rhai_error("EffectVisibility::Rhai", environment.get_rhai_function_name(*function_index), &e);
                         // TODO: return "glitch" effect instead
                         None
                     }

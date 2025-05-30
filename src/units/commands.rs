@@ -142,15 +142,15 @@ impl<D: Direction> UnitAction<D> {
                                 scope.push_constant(CONST_NAME_UNIT, unit.clone());
                                 scope.push_constant(CONST_NAME_OTHER_POSITION, end);
                                 scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
-                                let environment = handler.get_game().environment();
+                                let environment = handler.environment();
                                 let engine = environment.get_engine_handler(handler);
                                 let executor = Executor::new(engine, scope, environment);
                                 for function_index in scripts {
                                     match executor.run(function_index, ()) {
                                         Ok(()) => (),
                                         Err(e) => {
-                                            // TODO: log error
-                                            println!("unit OnDeath {function_index}: {e:?}");
+                                            let environment = handler.environment();
+                                            environment.log_rhai_error("OnDeath", environment.get_rhai_function_name(function_index), &e);
                                         }
                                     }
                                 }

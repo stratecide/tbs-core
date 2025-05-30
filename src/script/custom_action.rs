@@ -254,8 +254,8 @@ fn run_input_script<D: Direction>(
                 result
             } else {
                 // script had an error
-                // TODO: log error
-                println!("run_input_script: {e:?}");
+                let environment = game.environment();
+                environment.log_rhai_error("run_input_script", environment.get_rhai_function_name(script), &e);
                 CustomActionTestResult::Failure
             }
         }
@@ -378,13 +378,13 @@ fn is_script_input_valid<D: Direction>(
                 Some(result_.lock().unwrap().clone())
             } else if *invalid_data_.lock().unwrap() {
                 // wrong data supplied
-                // TODO: log error
-                println!("is_script_input_valid: {e:?}");
+                let environment = game.environment();
+                environment.log_rhai_error("is_script_input_valid data", environment.get_rhai_function_name(script), &e);
                 None
             } else {
                 // script had an error
-                // TODO: log error
-                println!("is_script_input_valid: {e:?}");
+                let environment = game.environment();
+                environment.log_rhai_error("is_script_input_valid error", environment.get_rhai_function_name(script), &e);
                 None
             }
         }
@@ -455,7 +455,7 @@ fn execute_script<D: Direction>(
     scope: Scope<'static>,
     data: Option<Vec<CustomActionData<D>>>,
 ) {
-    let environment = handler.get_game().environment();
+    let environment = handler.environment();
     let engine = environment.get_engine_handler(handler);
     let executor = Executor::new(engine, scope, environment);
     let result: Result<(), Box<EvalAltResult>> = if let Some(data) = data {
@@ -469,8 +469,8 @@ fn execute_script<D: Direction>(
     match result {
         Ok(_) => (),
         Err(e) => {
-            // TODO: log error
-            println!("execute_script: {e}");
+            let environment = handler.environment();
+            environment.log_rhai_error("execute_script", environment.get_rhai_function_name(script), &e);
             handler.effect_glitch();
         }
     }

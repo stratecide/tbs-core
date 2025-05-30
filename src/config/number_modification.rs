@@ -103,15 +103,18 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
                             "i32" => Rational32::from_integer(t.cast()),
                             "Ratio<i32>" => t.cast(),
                             invalid => {
-                                println!("NumberMod::Rhai returned invalid value of type {invalid}");
+                                let environment = executor.environment();
+                                let function_name = environment.get_rhai_function_name(function_index);
+                                let config_name = &environment.config.name;
+                                tracing::warn!("NumberMod::Rhai({function_name}), config {config_name} returned invalid value of type {invalid}");
                                 return value;
                             }
                         };
                         T::from_fraction(fraction)
                     },
                     Err(e) => {
-                        // TODO: log error
-                        println!("NumberMod::Rhai {e}");
+                        let environment = executor.environment();
+                        environment.log_rhai_error("NumberMod::Rhai", environment.get_rhai_function_name(function_index), &e);
                         value
                     }
                 }
@@ -123,15 +126,18 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
                             "i32" => Rational32::from_integer(t.cast()),
                             "Ratio<i32>" => t.cast(),
                             invalid => {
-                                println!("NumberMod::RhaiReplace returned invalid value of type {invalid}");
+                                let environment = executor.environment();
+                                let function_name = environment.get_rhai_function_name(function_index);
+                                let config_name = &environment.config.name;
+                                tracing::warn!("NumberMod::RhaiReplace({function_name}), config {config_name} returned invalid value of type {invalid}");
                                 Rational32::from_integer(0)
                             }
                         };
                         T::from_fraction(fraction)
                     },
                     Err(e) => {
-                        // TODO: log error
-                        println!("NumberMod::RhaiReplace {e}");
+                        let environment = executor.environment();
+                        environment.log_rhai_error("NumberMod::RhaiReplace", environment.get_rhai_function_name(function_index), &e);
                         value
                     }
                 }

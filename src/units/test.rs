@@ -59,7 +59,7 @@ impl MovementType {
 
 // actual tests
 
-#[test]
+#[test_log::test]
 fn unit_builder_transported() {
     let config = Arc::new(Config::test_config());
     let map = WMBuilder::<Direction4>::new(PointMap::new(5, 5, false));
@@ -71,7 +71,7 @@ fn unit_builder_transported() {
     assert_eq!(unit.get_transported().len(), 1);
 }
 
-#[test]
+#[test_log::test]
 fn fog_replacement() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -87,7 +87,7 @@ fn fog_replacement() {
     );
 }
 
-#[test]
+#[test_log::test]
 fn build_drone() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 7, false);
@@ -144,7 +144,7 @@ fn build_drone() {
     assert!(!server.get_unit(Point::new(3, 4)).unwrap().get_transported()[0].has_flag(FLAG_EXHAUSTED));
 }
 
-#[test]
+#[test_log::test]
 fn repair_unit() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 7, false);
@@ -180,7 +180,7 @@ fn repair_unit() {
 }
 
 
-#[test]
+#[test_log::test]
 fn end_game() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(4, 4, false);
@@ -205,7 +205,7 @@ fn end_game() {
     });
 }
 
-#[test]
+#[test_log::test]
 fn defeat_player_of_3() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(4, 4, false);
@@ -235,7 +235,7 @@ fn defeat_player_of_3() {
     assert_eq!(game.current_owner(), 1);
 }
 
-#[test]
+#[test_log::test]
 fn on_death_lose_game() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(4, 4, false);
@@ -262,7 +262,7 @@ fn on_death_lose_game() {
     });
 }
 
-#[test]
+#[test_log::test]
 fn puffer_fish() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(4, 4, false);
@@ -299,7 +299,7 @@ fn puffer_fish() {
 }
 
 
-#[test]
+#[test_log::test]
 fn capture_pyramid() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(4, 4, false);
@@ -326,7 +326,7 @@ fn capture_pyramid() {
     assert_eq!(game.get_unit(Point::new(0, 1)).unwrap().get_owner_id(), 0);
 }
 
-#[test]
+#[test_log::test]
 fn s_factory() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(4, 4, false);
@@ -354,7 +354,7 @@ fn s_factory() {
     assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
-#[test]
+#[test_log::test]
 fn marine_movement_types() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(4, 4, false);
@@ -382,7 +382,7 @@ fn marine_movement_types() {
     assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(100).set_movement_type(MovementType::AMPHIBIOUS).build()));
 }
 
-#[test]
+#[test_log::test]
 fn enter_transporter() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(4, 4, false);
@@ -413,7 +413,7 @@ fn enter_transporter() {
     assert_eq!(game.get_unit(Point::new(0, 0)), None);
 }
 
-#[test]
+#[test_log::test]
 fn chess_movement_exhausts_all() {
     let map = chess_board();
     let settings = map.settings().unwrap();
@@ -425,7 +425,7 @@ fn chess_movement_exhausts_all() {
     }), Arc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(0, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
     for x in 0..8 {
-        println!("x = {x}");
+        tracing::debug!("x = {x}");
         assert!(!server.get_unit(Point::new(x, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
         assert!(!server.get_unit(Point::new(x, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
         if x > 0 {
@@ -436,7 +436,7 @@ fn chess_movement_exhausts_all() {
     assert_eq!(server.get_unit(Point::new(0, 6)), None);
 }
 
-#[test]
+#[test_log::test]
 fn chess_castling() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -479,7 +479,7 @@ fn chess_castling() {
     assert!(!server.get_unit(Point::new(0, 4)).unwrap().has_flag(FLAG_UNMOVED));
 }
 
-#[test]
+#[test_log::test]
 fn chess_en_passant() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -594,7 +594,7 @@ fn chess_en_passant() {
     }), Arc::new(|| 0.)).unwrap_err();
 }
 
-#[test]
+#[test_log::test]
 fn magnet_pulls_through_pipe() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 4, false);
@@ -618,7 +618,7 @@ fn magnet_pulls_through_pipe() {
     assert_eq!(None, game.get_unit(Point::new(3, 0)));
 }
 
-#[test]
+#[test_log::test]
 fn fog_surprise() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(8, 4, false);

@@ -194,7 +194,7 @@ impl<D: Direction> Command<D> {
 pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execute_scripts: bool) {
     // destroy units that are now dead
     let all_points = handler.with_map(|map| map.all_points());
-    let environment = handler.get_game().environment();
+    let environment = handler.environment();
     let is_unit_dead_rhai = environment.is_unit_dead_rhai();
     let engine = environment.get_engine::<D>();
     let executor = Executor::new(engine, Scope::new(), environment);
@@ -205,8 +205,8 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
                 match executor.run(is_unit_dead_rhai, (u,)) {
                     Ok(result) => result,
                     Err(e) => {
-                        // TODO: log error
-                        println!("unit is_unit_dead_rhai {is_unit_dead_rhai}: {e:?}");
+                        let environment = handler.environment();
+                        environment.log_rhai_error("cleanup_dead_material::is_unit_dead_rhai", environment.get_rhai_function_name(is_unit_dead_rhai), &e);
                         false
                     }
                 }
@@ -230,15 +230,15 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
                         scope.push_constant(CONST_NAME_UNIT, unit.clone());
                         scope.push_constant(CONST_NAME_OTHER_POSITION, ());
                         scope.push_constant(CONST_NAME_OTHER_UNIT, ());
-                        let environment = handler.get_game().environment();
+                        let environment = handler.environment();
                         let engine = environment.get_engine_handler(handler);
                         let executor = Executor::new(engine, scope, environment);
                         for function_index in scripts {
                             match executor.run(function_index, ()) {
                                 Ok(()) => (),
                                 Err(e) => {
-                                    // TODO: log error
-                                    println!("unit OnDeath {function_index}: {e:?}");
+                                    let environment = handler.environment();
+                                    environment.log_rhai_error("cleanup_dead_material::OnDeath", environment.get_rhai_function_name(function_index), &e);
                                 }
                             }
                         }

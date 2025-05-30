@@ -195,7 +195,7 @@ mod tests {
     use super::*;
 
 
-    #[test]
+    #[test_log::test]
     fn filled_point_map() {
         let map = PointMap::new(5, 6, false);
         assert_eq!(map.width(), 5);
@@ -213,7 +213,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test_log::test]
     fn export_import_point_map() {
         let mut map = PointMap::new(5, 6, false);
         map.set_valid(Point::new(2, 5), false);
@@ -222,13 +222,13 @@ mod tests {
         map.zip(&mut zipper);
         zipper.write_u8(0b10101010, 8);
         let data = zipper.finish();
-        println!("export_import_point_map, {data:?}");
+        tracing::debug!("export_import_point_map, {data:?}");
         let mut unzipper = Unzipper::new(data, Version::parse(VERSION).unwrap());
         assert_eq!(Ok(map), PointMap::unzip(&mut unzipper));
         assert_eq!(Ok(0b10101010), unzipper.read_u8(8));
     }
 
-    #[test]
+    #[test_log::test]
     fn crop() {
         let mut map = PointMap::filled(5, 6, false, false);
         let translations = map.crop::<Direction4>();

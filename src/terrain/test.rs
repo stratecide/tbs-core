@@ -42,7 +42,7 @@ impl TerrainType {
     pub const TentacleDepths: Self = Self(25);
     pub const FairyForest: Self = Self(28);
 }
-#[test]
+#[test_log::test]
 fn verify_terrain_type_constants() {
     let config = Arc::new(Config::test_config());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
@@ -66,7 +66,7 @@ fn verify_terrain_type_constants() {
 
 // actual tests
 
-#[test]
+#[test_log::test]
 fn capture_city() {
     let map = PointMap::new(4, 4, false);
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
@@ -103,7 +103,7 @@ fn capture_city() {
     assert_eq!(0, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
 }
 
-#[test]
+#[test_log::test]
 fn build_unit() {
     let map = PointMap::new(4, 4, false);
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
@@ -126,7 +126,7 @@ fn build_unit() {
     assert!(game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
-#[test]
+#[test_log::test]
 fn kraken() {
     let map = PointMap::new(5, 5, false);
     let map_env = Environment::new_map(Arc::new(Config::test_config()), map.size());
@@ -165,7 +165,7 @@ fn kraken() {
     assert!(game.get_unit(Point::new(3, 2)).unwrap().get_hp() < 100);
 }
 
-#[test]
+#[test_log::test]
 fn terrain_vision() {
     let map = PointMap::new(4, 4, false);
     let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());

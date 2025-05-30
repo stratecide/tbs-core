@@ -111,7 +111,7 @@ impl Config {
         for (i, conf) in tags.iter().enumerate() {
             global_constants.push_constant(conf.name.as_str(), TagKey(i));
         }*/
-        //println!("global constants: {global_constants:?}");
+        //tracing::debug!("global constants: {global_constants:?}");
         // TODO: FileLoader also creates a base engine. no need to create two
         let engine = create_base_engine();
         let global_module = engine.optimize_ast(&global_constants, global_ast.clone(), OptimizationLevel::Simple);
@@ -898,7 +898,7 @@ impl FromConfig for [u8; 4] {
 mod tests {
     use super::*;
 
-    #[test]
+    #[test_log::test]
     fn import_default_config() {
         Config::default();
     }

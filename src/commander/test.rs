@@ -43,7 +43,7 @@ impl CommanderType {
     pub const SludgeMonster: Self = Self(6);
     pub const Celerity: Self = Self(7);
 }
-#[test]
+#[test_log::test]
 fn verify_commander_type_constants() {
     let config = Arc::new(Config::test_config());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
@@ -59,7 +59,7 @@ fn verify_commander_type_constants() {
 
 // actual tests
 
-#[test]
+#[test_log::test]
 fn gain_charge() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -87,13 +87,13 @@ fn gain_charge() {
     server.with(|server| {
         let charge_0 = server.players.get(0).unwrap().commander.get_charge();
         let charge_1 = server.players.get(1).unwrap().commander.get_charge();
-        println!("charges: {charge_0}, {charge_1}");
+        tracing::debug!("charges: {charge_0}, {charge_1}");
         assert!(charge_0 > 0);
         assert_eq!(charge_0 * 2, charge_1);
     });
 }
 
-#[test]
+#[test_log::test]
 fn zombie() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -185,7 +185,7 @@ fn zombie() {
     }
 }
 
-#[test]
+#[test_log::test]
 fn simo() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(6, 5, false);
@@ -299,7 +299,7 @@ fn simo() {
     assert!(server.get_unit(target_farthest).unwrap().get_hp() < 100);
 }
 
-#[test]
+#[test_log::test]
 fn vlad() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(6, 5, false);
@@ -363,7 +363,7 @@ fn vlad() {
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 50);
 }
 
-#[test]
+#[test_log::test]
 fn tapio() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(6, 5, false);
@@ -460,7 +460,7 @@ fn tapio() {
     assert_eq!(server.get_terrain(Point::new(5, 3)).unwrap().typ(), TerrainType::Grass);
 }
 
-#[test]
+#[test_log::test]
 fn sludge_monster() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -575,7 +575,7 @@ fn sludge_monster() {
     }), Arc::new(|| 0.)), Err(CommandError::InvalidAction));
 }
 
-#[test]
+#[test_log::test]
 fn celerity() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -703,7 +703,7 @@ fn celerity() {
     ]).set_hp(89).build()));
 }
 
-#[test]
+#[test_log::test]
 fn lageos() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(8, 5, false);

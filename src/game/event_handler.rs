@@ -606,8 +606,8 @@ impl<D: Direction> EventHandler<D> {
                 match executor.run(function_index, (p, token)) {
                     Ok(()) => (),
                     Err(e) => {
-                        // TODO: log error
-                        println!("token OnUnitPath {function_index}: {e:?}");
+                        let environment = self.environment();
+                        environment.log_rhai_error("token OnUnitPath", environment.get_rhai_function_name(function_index), &e);
                     }
                 }
             }
@@ -701,8 +701,8 @@ impl<D: Direction> EventHandler<D> {
             match executor.run(function_index, ()) {
                 Ok(()) => (),
                 Err(e) => {
-                    // TODO: log error
-                    println!("unit OnNormalAction {function_index}: {e:?}");
+                    let environment = self.environment();
+                    environment.log_rhai_error("unit OnNormalAction", environment.get_rhai_function_name(function_index), &e);
                 }
             }
         }
@@ -882,8 +882,8 @@ impl<D: Direction> EventHandler<D> {
                 match executor.run(function_index, ()) {
                     Ok(()) => (),
                     Err(e) => {
-                        // TODO: log error
-                        println!("global_event #{i} {function_index}: {e:?}");
+                        let environment = self.environment();
+                        environment.log_rhai_error(&format!("global_event #{i}"), environment.get_rhai_function_name(function_index), &e);
                     }
                 }
             }

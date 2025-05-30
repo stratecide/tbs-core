@@ -33,7 +33,7 @@ impl TokenType {
 
 // actual tests
 
-#[test]
+#[test_log::test]
 fn verify_token_test_constants() {
     let config = Arc::new(Config::test_config());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
@@ -45,7 +45,7 @@ fn verify_token_test_constants() {
     assert_eq!(environment.config.token_name(TokenType::BUBBLE_PORT), "PortBubble");
 }
 
-#[test]
+#[test_log::test]
 fn collect_coin_tokens() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 5, false);
@@ -85,7 +85,7 @@ fn collect_coin_tokens() {
     });
 }
 
-#[test]
+#[test_log::test]
 fn bubble_token() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(7, 5, false);

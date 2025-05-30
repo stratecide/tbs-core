@@ -108,6 +108,12 @@ impl Environment {
         Some(id)
     }
 
+    pub(crate) fn log_rhai_error(&self, location: &str, function_name: impl AsRef<str>, error: &EvalAltResult) {
+        let config_name = &self.config.name;
+        let function_name = function_name.as_ref();
+        tracing::warn!("RHAI error in {location}, config '{config_name}', function '{function_name}':\n{error:?}");
+    }
+
     fn get_engine_base(&self, is_hex: bool) -> Engine {
         let mut engine = Engine::new_raw();
         if is_hex {
@@ -199,14 +205,14 @@ impl Environment {
     }
 
     pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
-        //println!("table_entry at {x:?}, {y:?}");
+        //tracing::debug!("table_entry at {x:?}, {y:?}");
         self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name)
         .map(|(_, table)| {
             let value = table.values.get(&(x, y))
             .unwrap_or(&table.default_value)
             .clone();
-            //println!("value = {value:?}");
+            //tracing::debug!("value = {value:?}");
             value
         })
     }

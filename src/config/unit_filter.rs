@@ -185,8 +185,8 @@ impl UnitFilter {
                 match executor.run(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {
-                        // TODO: log error
-                        println!("UnitFilter error: {e:?}");
+                        let environment = game.environment();
+                        environment.log_rhai_error("UnitFilter::Rhai", environment.get_rhai_function_name(*function_index), &e);
                         false
                     }
                 }

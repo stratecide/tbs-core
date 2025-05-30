@@ -52,7 +52,7 @@ pub fn chess_board() -> Map<Direction4> {
     map
 }
 
-#[test]
+#[test_log::test]
 fn simple_distortions() {
     let distortion = Distortion::neutral();
     for d in Direction4::list() {

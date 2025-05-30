@@ -136,8 +136,8 @@ impl SplashDamagePointSource {
                         }
                     }
                     Err(e) => {
-                        // TODO: log error
-                        println!("unit OnDeath {function_index}: {e:?}");
+                        let environment = game.environment();
+                        environment.log_rhai_error("SplashDamagePointSource::Rhai", environment.get_rhai_function_name(*function_index), &e);
                     }
                 }
             }
