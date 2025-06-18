@@ -124,6 +124,9 @@ fn build_unit() {
     assert!(game.get_unit(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
     //assert_eq!(Some(TagValue::Int(Int32(1))), game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_BUILT_THIS_TURN));
     assert!(game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
+    // property should get unexhausted when the owner ends their turn
+    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    assert!(!game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
 #[test_log::test]

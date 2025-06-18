@@ -8,4 +8,5 @@ Unit;OwnerTurn, Not(Carried), Token(Sludge);on_unit/start_turn > damage_10;
 Unit;OwnerTurn, Not(Carried), IH(CrystalObelisk), Not(HG(Crystal));on_unit/start_turn > damage_20;
 Unit;OwnerTurn, Not(Carried), H(BlueBerry);on_unit/start_turn > heal_10;
 Unit;OwnerTurn;on_unit/start_turn > clear_status_flags;on_unit/end_turn > unexhaust
+Terrain;OwnerTurn;;on_terrain/end_turn > unexhaust
 Token;OwnerTurn, T(Sludge);on_token/start_turn > tick_sludge;
