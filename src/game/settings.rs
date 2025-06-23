@@ -9,7 +9,7 @@ use crate::{player::*, VERSION};
 
 use super::fog::FogMode;
 use interfaces::map_interface::GameSettingsInterface;
-use interfaces::RandomFn;
+use interfaces::{PlayerMeta, RandomFn};
 use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
@@ -139,6 +139,13 @@ impl Display for PlayerSettingError {
 impl std::error::Error for PlayerSettingError {}
 
 impl GameSettingsInterface for GameConfig {
+    fn players(&self) -> Vec<PlayerMeta> {
+        self.players.iter().map(|player| PlayerMeta {
+            color_id: player.get_owner_id() as u8,
+            team: player.get_team(),
+        }).collect()
+    }
+
     fn check_player_setting(&self, player_index: usize, bytes: Vec<u8>) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         if player_index >= self.players.len() {
             return Err(Box::new(PlayerSettingError::PlayerIndex(player_index, self.players.len())));
