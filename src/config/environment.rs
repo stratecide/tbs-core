@@ -115,7 +115,7 @@ impl Environment {
     }
 
     fn get_engine_base(&self, is_hex: bool) -> Engine {
-        let mut engine = Engine::new_raw();
+        let mut engine = create_base_engine();
         if is_hex {
             self.config.my_package_6.register_into_engine(&mut engine);
             engine.register_global_module(self.config.effect_modules[1].clone());

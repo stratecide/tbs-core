@@ -181,6 +181,22 @@ macro_rules! event_handler_module {
                 };
             }
 
+            #[rhai_fn(pure, name = "remaining_transport_capacity")]
+            pub fn get_unit_id_transport_capacity(handler: &mut Handler, id: UnitId) -> i32 {
+                if let Some((p, unload_index)) = handler.get_observed_unit_pos(id.0) {
+                    handler.with_map(|map| {
+                        let unit = map.get_unit(p).unwrap();
+                        if let Some(_) = unload_index {
+                            0
+                        } else {
+                            unit.remaining_transport_capacity() as i32
+                        }
+                    })
+                } else {
+                    0
+                }
+            }
+
             pub fn set_hero(mut handler: Handler, position: Point, hero: Hero) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {
                     return;

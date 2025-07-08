@@ -16,6 +16,10 @@ fn damage_20() {
     EVENT_HANDLER.effect(change_unit_hp(POSITION, -20));
 }
 
+fn damage_50() {
+    EVENT_HANDLER.effect(change_unit_hp(POSITION, -50));
+}
+
 fn clear_status_flags() {
     EVENT_HANDLER.remove(UNIT_ID, FLAG_Repairing);
     EVENT_HANDLER.remove(UNIT_ID, FLAG_Capturing);
@@ -24,4 +28,26 @@ fn clear_status_flags() {
         EVENT_HANDLER.remove(UNIT_ID, FLAG_Stunned);
     }
     EVENT_HANDLER.remove(UNIT_ID, TAG_EnPassant);
+}
+
+fn return_drones() {
+    let capacity = EVENT_HANDLER.remaining_transport_capacity(UNIT_ID);
+    let id = UNIT.get(TAG_DroneStationId);
+    for p in BOARD.all_positions() {
+        let drone = BOARD.get_unit(p);
+        if drone != () && drone.get(TAG_DroneId) == id {
+            if capacity == 0 {
+                EVENT_HANDLER.effect(p, FX_Explosion(drone.visibility(p)));
+            }
+            EVENT_HANDLER.take_unit(p);
+            if capacity > 0 {
+                capacity -= 1;
+                EVENT_HANDLER.transport_unit(POSITION, drone);
+            }
+        }
+    }
+}
+
+fn self_destruct() {
+    EVENT_HANDLER.effect(change_unit_hp(POSITION, -100));
 }

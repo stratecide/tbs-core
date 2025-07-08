@@ -5,7 +5,7 @@ use interfaces::{Perspective, GameEventsMap};
 use crate::combat::AttackInput;
 use crate::config::config::Config;
 use crate::game::commands::Command;
-use crate::game::event_fx::Effect;
+use crate::game::event_fx::{Effect, EffectWithoutPosition};
 use crate::game::events::Event;
 use crate::game::fog::*;
 use crate::game::game::Game;
@@ -88,7 +88,7 @@ fn fog_replacement() {
 }
 
 #[test_log::test]
-fn build_drone() {
+fn drone() {
     let config = Arc::new(Config::test_config());
     let map = PointMap::new(5, 7, false);
     let map = WMBuilder::<Direction6>::new(map);
@@ -142,6 +142,30 @@ fn build_drone() {
     assert!(!server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
     // built drone is unexhausted next turn
     assert!(!server.get_unit(Point::new(3, 4)).unwrap().get_transported()[0].has_flag(FLAG_EXHAUSTED));
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: Some(0.into()),
+        path: Path::with_steps(Point::new(3, 4), vec![PathStep::Dir(Direction6::D0)]),
+        action: UnitAction::Wait,
+    }), Arc::new(|| 0.)).unwrap();
+    // can't build another drone
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(3, 4)),
+        action: UnitAction::custom(CA_UNIT_BUILD_UNIT, vec![CustomActionInput::ShopItem(0.into())]),
+    }), Arc::new(|| 0.)).unwrap_err();
+    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    let drone = server.get_unit(Point::new(4, 4)).unwrap();
+    server.with_mut(|g| g.get_map_mut().set_unit(Point::new(0, 0), Some(drone)));
+    assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_transported().len(), 0);
+    let events = server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    // one drone has returned to the boat, the other died
+    assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_transported().len(), 1);
+    assert!(server.get_unit(Point::new(0, 0)).is_none());
+    assert!(server.get_unit(Point::new(4, 4)).is_none());
+    let death_effect = config.find_effect_by_name("Explosion").unwrap();
+    assert!(events.get(&Perspective::Server).unwrap().iter()
+        .any(|e| matches!(e, Event::Effect(Effect::Point(EffectWithoutPosition { typ, .. }, _)) if *typ == death_effect)), 
+        "{:?}", events.get(&Perspective::Server));
 }
 
 #[test_log::test]

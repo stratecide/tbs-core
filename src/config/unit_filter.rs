@@ -10,7 +10,7 @@ use crate::game::game_view::GameView;
 use crate::script::executor::Executor;
 use crate::units::UnitData;
 use crate::{dyn_opt, script::*};
-use crate::tags::FlagKey;
+use crate::tags::{FlagKey, TagKey};
 use crate::terrain::TerrainType;
 use crate::tokens::token_types::TokenType;
 use crate::units::hero::{HeroMap, HeroType};
@@ -40,6 +40,7 @@ pub(crate) enum UnitFilter {
     // this unit
     Unit(HashSet<UnitType>),
     Flag(HashSet<FlagKey>),
+    Tag(HashSet<TagKey>),
     Movement(HashSet<MovementType>),
     SubMovement(HashSet<MovementType>),
     MovementPattern(HashSet<MovementPattern>),
@@ -76,6 +77,11 @@ impl FromConfig for UnitFilter {
                 let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
                 remainder = r;
                 Self::Flag(list.into_iter().collect())
+            }
+            "Tag" => {
+                let (list, r) = parse_inner_vec::<TagKey>(remainder, true, loader)?;
+                remainder = r;
+                Self::Tag(list.into_iter().collect())
             }
             "Movement" | "M" => {
                 let (list, r) = parse_inner_vec::<MovementType>(remainder, true, loader)?;
@@ -193,6 +199,7 @@ impl UnitFilter {
             }
             Self::Unit(u) => u.contains(&unit_data.unit.typ()),
             Self::Flag(flags) => flags.iter().any(|flag| unit_data.unit.has_flag(flag.0)),
+            Self::Tag(tags) => tags.iter().any(|tag| unit_data.unit.get_tag(tag.0).is_some()),
             Self::Movement(m) => m.contains(&unit_data.unit.base_movement_type()),
             Self::SubMovement(m) => m.contains(&unit_data.unit.sub_movement_type()),
             Self::Terrain(t) => t.contains(&game.get_terrain(unit_data.pos).unwrap().typ()),

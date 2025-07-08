@@ -445,11 +445,20 @@ mod tag_module {
 
     #[rhai_fn(pure, name = "==")]
     pub fn eq(u1: &mut UniqueId, u2: UniqueId) -> bool {
-        *u1 == u2
+        u1.id == u2.id
     }
     #[rhai_fn(pure, name = "!=")]
     pub fn neq(u1: &mut UniqueId, u2: UniqueId) -> bool {
-        *u1 != u2
+        u1.id != u2.id
+    }
+
+    #[rhai_fn(pure, name = "to_string")]
+    pub fn to_string(id: &mut UniqueId) -> String {
+        format!("[{}]", id.id)
+    }
+    #[rhai_fn(pure, name = "to_debug")]
+    pub fn to_debug(id: &mut UniqueId) -> String {
+        format!("[{}]", id.id)
     }
 }
 
