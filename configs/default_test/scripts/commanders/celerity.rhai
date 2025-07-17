@@ -1,10 +1,9 @@
 
 fn co_recovery() {
     let effects = [];
-    for point in BOARD.all_positions() {
-        let unit = BOARD.get_unit(point);
-        if unit?.owner_id == OWNER_ID && unit.has(TAG_Hp) {
-            effects.push(change_unit_hp(point, 30));
+    for uwp in BOARD.all_units() {
+        if uwp.unit.owner_id == OWNER_ID && uwp.unit.has(TAG_Hp) {
+            effects.push(change_unit_hp(uwp.position, 30));
         }
     }
     EVENT_HANDLER.effects(effects);

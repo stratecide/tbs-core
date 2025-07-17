@@ -12,6 +12,7 @@ use crate::map::map::NeighborMode;
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::terrain::terrain::Terrain;
+use crate::units::unit::Unit;
 
 #[derive(Clone)]
 pub struct SharedGameView<D: Direction>(pub Shared<dyn GameView<D>>);
@@ -23,11 +24,19 @@ impl<D: Direction> Deref for SharedGameView<D> {
     }
 }
 
+#[derive(Debug, Clone)]
+struct UnitWithPosition<D: Direction> {
+    unit: Unit<D>,
+    position: Point,
+    transport_index: Option<usize>,
+}
+
 macro_rules! board_module {
     ($pack: ident, $name: ident, $d: ty) => {
         #[export_module]
         mod $name {
             pub type Board = SharedGameView<$d>;
+            pub type UnitWithPosition = super::UnitWithPosition<$d>;
 
             #[rhai_fn(pure)]
             pub fn all_points(board: &mut Board) -> Array {
@@ -61,6 +70,43 @@ macro_rules! board_module {
                 board.all_points().into_iter()
                 .map(Dynamic::from)
                 .collect()
+            }
+
+            #[rhai_fn(pure)]
+            pub fn all_units(board: &mut Board) -> Array {
+                let mut result = Vec::new();
+                for p in board.all_points() {
+                    if let Some(unit) = board.get_unit(p) {
+                        result.push(Dynamic::from(UnitWithPosition {
+                            unit: unit.clone(),
+                            position: p,
+                            transport_index: None,
+                        }));
+                        for (i, unit) in unit.get_transported().iter().enumerate() {
+                            result.push(Dynamic::from(UnitWithPosition {
+                                unit: unit.clone(),
+                                position: p,
+                                transport_index: Some(i),
+                            }));
+                        }
+                    }
+                }
+                result
+            }
+
+            #[rhai_fn(pure, get = "unit")]
+            pub fn get_uwp_unit(uwp: &mut UnitWithPosition) -> Unit<$d> {
+                uwp.unit.clone()
+            }
+
+            #[rhai_fn(pure, get = "position")]
+            pub fn get_uwp_position(uwp: &mut UnitWithPosition) -> Point {
+                uwp.position
+            }
+
+            #[rhai_fn(pure, get = "transport_index")]
+            pub fn get_uwp_transport_index(uwp: &mut UnitWithPosition) -> Dynamic {
+                uwp.transport_index.map(Dynamic::from).unwrap_or(().into())
             }
 
             #[rhai_fn(pure)]

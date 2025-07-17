@@ -8,11 +8,10 @@ fn co_decay() {
 }
 
 fn place_sludge_tokens(OWNER_ID, counter) {
-    for point in BOARD.all_positions() {
-        let unit = BOARD.get_unit(point);
-        if unit?.owner_id != () {
+    for uwp in BOARD.all_units() {
+        if uwp.unit.owner_id != () {
             let token = Token("Sludge");
-            let old_token = for t in BOARD.get_tokens(point) {
+            let old_token = for t in BOARD.get_tokens(uwp.position) {
                 if t.type == token.type {
                     break t;
                 }
@@ -21,12 +20,12 @@ fn place_sludge_tokens(OWNER_ID, counter) {
                 if old_token.get(TAG_SludgeCounter) > counter {
                     continue;
                 } else {
-                    EVENT_HANDLER.remove_token(point, old_token);
+                    EVENT_HANDLER.remove_token(uwp.position, old_token);
                 }
             }
             token.owner_id = OWNER_ID;
             token.set(TAG_SludgeCounter, counter);
-            EVENT_HANDLER.place_token(point, token);
+            EVENT_HANDLER.place_token(uwp.position, token);
         }
     }
 }

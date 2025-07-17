@@ -1,8 +1,7 @@
 
 fn uf_can_buy_hero() {
-    for p in BOARD.all_positions() {
-        let unit = BOARD.get_unit(p);
-        if unit?.owner_id == UNIT.owner_id && unit.get(TAG_HeroOrigin) == POSITION {
+    for uwp in BOARD.all_units() {
+        if uwp.unit.owner_id == UNIT.owner_id && uwp.unit.get(TAG_HeroOrigin) == POSITION {
             return false;
         }
     }
@@ -15,9 +14,8 @@ fn ua_buy_hero_input() {
         let item = ShopItem(hero_type);
         // TODO: could read cost (modification) from another table or even the same one
         item.costs.push(500 + UNIT.value(POSITION) * 100 / (UNIT.get(TAG_Hp) ?? 100));
-        for p in BOARD.all_positions() {
-            let unit = BOARD.get_unit(p);
-            if unit?.owner_id == UNIT.owner_id && unit.hero?.type == hero_type {
+        for uwp in BOARD.all_units() {
+            if uwp.unit.owner_id == UNIT.owner_id && uwp.unit.hero?.type == hero_type {
                 item.enabled = false;
             }
         }
