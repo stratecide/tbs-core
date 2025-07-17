@@ -1,8 +1,8 @@
-;Marine;Sniper;Bazooka
-Airport;true;true;true
-City;true;true;true
-Factory;true;true;true
-Hq;true;true;true
-OilPlatform;true;true;true
-Port;true;true;true
-ConstructionSite;true;true;true
+;Marine;Sniper;Bazooka;LaserShark
+Airport;true;true;true;true
+City;true;true;true;true
+Factory;true;true;true;true
+Hq;true;true;true;true
+OilPlatform;true;true;true;true
+Port;true;true;true;true
+ConstructionSite;true;true;true;true
