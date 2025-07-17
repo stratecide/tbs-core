@@ -78,7 +78,7 @@ mod tests {
 
     #[test_log::test]
     fn straight_line() {
-        let config = Arc::new(Config::test_config());
+        let config = Arc::new(Config::default());
         let map = PointMap::new(8, 5, false);
         let map = WMBuilder::<Direction4>::with_transformations(map, vec![Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(6))]).unwrap();
         let mut map = Map::new(map.build(), &config);

@@ -363,7 +363,7 @@ mod tests {
 
     #[test_log::test]
     fn export_commander_options() {
-        let config = Config::test_config();
+        let config = Config::default();
         let options = PlayerOptions{
             commanders: vec![CommanderType(0)]
         };
@@ -382,7 +382,7 @@ mod tests {
 
     #[test_log::test]
     fn export_game_config() {
-        let config = Arc::new(Config::test_config());
+        let config = Arc::new(Config::default());
         let setting = GameConfig {
             config: config.clone(),
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
@@ -405,7 +405,7 @@ mod tests {
 
     #[test_log::test]
     fn export_game_settings() {
-        let config = Arc::new(Config::test_config());
+        let config = Arc::new(Config::default());
         let setting = GameSettings {
             config: config.clone(),
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),

@@ -504,7 +504,7 @@ pub mod tests {
     pub const TAG_COINS: usize = 15;
     #[test_log::test]
     fn verify_tag_test_constants() {
-        let config = Arc::new(Config::test_config());
+        let config = Arc::new(Config::default());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
         assert_eq!(environment.config.flag_name(FLAG_ZOMBIFIED), "Zombified");
         assert_eq!(environment.config.flag_name(FLAG_UNMOVED), "Unmoved");
@@ -531,7 +531,7 @@ pub mod tests {
 
     #[test_log::test]
     fn unique_ids_are_unique() {
-        let config = Arc::new(Config::test_config());
+        let config = Arc::new(Config::default());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
         // ids get dropped and freed immediately, so all ids are the same (since the rng is fixed)
         for _ in 0..10 {

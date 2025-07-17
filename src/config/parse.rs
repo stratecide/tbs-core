@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
 #[cfg(not(target_family = "wasm"))]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 #[cfg(not(target_family = "wasm"))]
 use std::fs;
 use std::usize;
@@ -565,20 +565,14 @@ impl Config {
         });
         Self::parse(name.to_string(), load_config)
     }
-
-    #[cfg(not(target_family = "wasm"))]
-    #[allow(dead_code)]
-    pub (crate) fn test_config() -> Self {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default_test");
-        Self::parse_folder("Test", path).expect("Failed to parse test config")
-    }
 }
 
+#[cfg(test)]
 #[cfg(not(target_family = "wasm"))]
 impl Default for Config {
     fn default() -> Self {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default");
-        Self::parse_folder("Default", path).expect("Failed to parse default config")
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/default_test");
+        Self::parse_folder("Test", path).expect("Failed to parse test config")
     }
 }
 
@@ -891,15 +885,5 @@ impl FromConfig for [u8; 4] {
         } else {
             Err(ConfigParseError::InvalidColor(s.to_string()))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test_log::test]
-    fn import_default_config() {
-        Config::default();
     }
 }

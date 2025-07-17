@@ -92,7 +92,7 @@ mod tests {
 
     #[test_log::test]
     fn helpers_are_correct() {
-        let config = Config::test_config();
+        let config = Config::default();
         assert_eq!(config.unit_name(UnitType::marine()), "Marine");
         assert_eq!(config.unit_name(UnitType::sniper()), "Sniper");
         assert_eq!(config.unit_name(UnitType::bazooka()), "Bazooka");

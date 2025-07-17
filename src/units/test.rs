@@ -61,7 +61,7 @@ impl MovementType {
 
 #[test_log::test]
 fn unit_builder_transported() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = WMBuilder::<Direction4>::new(PointMap::new(5, 5, false));
     let map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
@@ -73,7 +73,7 @@ fn unit_builder_transported() {
 
 #[test_log::test]
 fn fog_replacement() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -89,7 +89,7 @@ fn fog_replacement() {
 
 #[test_log::test]
 fn drone() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 7, false);
     let map = WMBuilder::<Direction6>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -170,7 +170,7 @@ fn drone() {
 
 #[test_log::test]
 fn repair_unit() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 7, false);
     let map = WMBuilder::<Direction6>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -206,7 +206,7 @@ fn repair_unit() {
 
 #[test_log::test]
 fn end_game() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -231,7 +231,7 @@ fn end_game() {
 
 #[test_log::test]
 fn defeat_player_of_3() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -261,7 +261,7 @@ fn defeat_player_of_3() {
 
 #[test_log::test]
 fn on_death_lose_game() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -288,7 +288,7 @@ fn on_death_lose_game() {
 
 #[test_log::test]
 fn puffer_fish() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -325,7 +325,7 @@ fn puffer_fish() {
 
 #[test_log::test]
 fn capture_pyramid() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -352,7 +352,7 @@ fn capture_pyramid() {
 
 #[test_log::test]
 fn s_factory() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction6> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -380,7 +380,7 @@ fn s_factory() {
 
 #[test_log::test]
 fn marine_movement_types() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -408,7 +408,7 @@ fn marine_movement_types() {
 
 #[test_log::test]
 fn enter_transporter() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -462,7 +462,7 @@ fn chess_movement_exhausts_all() {
 
 #[test_log::test]
 fn chess_castling() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -505,7 +505,7 @@ fn chess_castling() {
 
 #[test_log::test]
 fn chess_en_passant() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -620,7 +620,7 @@ fn chess_en_passant() {
 
 #[test_log::test]
 fn magnet_pulls_through_pipe() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
@@ -644,7 +644,7 @@ fn magnet_pulls_through_pipe() {
 
 #[test_log::test]
 fn fog_surprise() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(8, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);

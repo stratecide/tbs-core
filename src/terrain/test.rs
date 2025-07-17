@@ -44,7 +44,7 @@ impl TerrainType {
 }
 #[test_log::test]
 fn verify_terrain_type_constants() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
     assert_eq!(environment.config.terrain_name(TerrainType::ChessPawnTile), "ChessPawnTile");
     assert_eq!(environment.config.terrain_name(TerrainType::ChessTile), "ChessTile");
@@ -69,7 +69,7 @@ fn verify_terrain_type_constants() {
 #[test_log::test]
 fn capture_city() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
+    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build());
@@ -113,7 +113,7 @@ fn capture_city() {
 #[test_log::test]
 fn build_unit() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
+    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());
@@ -139,7 +139,7 @@ fn build_unit() {
 #[test_log::test]
 fn kraken() {
     let map = PointMap::new(5, 5, false);
-    let map_env = Environment::new_map(Arc::new(Config::test_config()), map.size());
+    let map_env = Environment::new_map(Arc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &map_env);
     for x in 0..map.width() {
@@ -178,7 +178,7 @@ fn kraken() {
 #[test_log::test]
 fn terrain_vision() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
+    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());

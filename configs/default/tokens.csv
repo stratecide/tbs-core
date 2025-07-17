@@ -1,7 +1,0 @@
-Id;Owned;OwnerPlayable;Visibility;VisionRange;ActionScript;OnUnitPath
-CoinPile;Never;;AlwaysVisible;;;on_token/unit_path > collect_coins
-Skull;Always;;Normal;;;on_token/unit_path > remove_if_enemy
-Sludge;Always;;Normal;;;
-AirportBubble;Always;true;Normal;0;token_actions/bubble > buy_airport;on_token/unit_path > remove_if_enemy
-FactoryBubble;Always;true;Normal;0;token_actions/bubble > buy_factory;on_token/unit_path > remove_if_enemy
-PortBubble;Always;true;Normal;0;token_actions/bubble > buy_port;on_token/unit_path > remove_if_enemy

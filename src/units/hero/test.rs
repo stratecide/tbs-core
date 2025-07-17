@@ -40,7 +40,7 @@ impl HeroType {
 
 #[test_log::test]
 fn buy_hero() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -95,7 +95,7 @@ fn buy_hero() {
 
 #[test_log::test]
 fn gain_charge() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -121,7 +121,7 @@ fn gain_charge() {
 
 #[test_log::test]
 fn crystal() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -206,7 +206,7 @@ fn crystal() {
 
 #[test_log::test]
 fn earl_grey() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -259,7 +259,7 @@ fn earl_grey() {
 
 #[test_log::test]
 fn blue_berry() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -296,7 +296,7 @@ fn blue_berry() {
 
 #[test_log::test]
 fn tess() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -328,7 +328,7 @@ fn tess() {
 
 #[test_log::test]
 fn edwin() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -383,7 +383,7 @@ fn edwin() {
 
 #[test_log::test]
 fn jax() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);

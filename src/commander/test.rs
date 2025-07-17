@@ -45,7 +45,7 @@ impl CommanderType {
 }
 #[test_log::test]
 fn verify_commander_type_constants() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
     assert_eq!(environment.config.commander_name(CommanderType::None), "None");
     assert_eq!(environment.config.commander_name(CommanderType::Zombie), "Zombie");
@@ -61,7 +61,7 @@ fn verify_commander_type_constants() {
 
 #[test_log::test]
 fn gain_charge() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction6>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -95,7 +95,7 @@ fn gain_charge() {
 
 #[test_log::test]
 fn zombie() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction6>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -187,7 +187,7 @@ fn zombie() {
 
 #[test_log::test]
 fn simo() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(6, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -301,7 +301,7 @@ fn simo() {
 
 #[test_log::test]
 fn vlad() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(6, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -365,7 +365,7 @@ fn vlad() {
 
 #[test_log::test]
 fn tapio() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(6, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -462,7 +462,7 @@ fn tapio() {
 
 #[test_log::test]
 fn sludge_monster() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -577,7 +577,7 @@ fn sludge_monster() {
 
 #[test_log::test]
 fn celerity() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -705,7 +705,7 @@ fn celerity() {
 
 #[test_log::test]
 fn lageos() {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(8, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);

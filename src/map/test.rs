@@ -12,7 +12,7 @@ use super::point_map::PointMap;
 use super::wrapping_map::{Distortion, WMBuilder};
 
 pub fn chess_board() -> Map<Direction4> {
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(8, 8, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);

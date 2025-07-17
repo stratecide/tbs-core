@@ -19,7 +19,7 @@ use super::*;
 #[test_log::test]
 fn hp_factor() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
+    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     for p in map.all_points() {
@@ -52,7 +52,7 @@ fn hp_factor() {
 #[test_log::test]
 fn terrain_defense() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
+    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Street.instance(&environment).build());
@@ -87,7 +87,7 @@ fn terrain_defense() {
 #[test_log::test]
 fn displacement() {
     let map = PointMap::new(5, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::test_config()), map.size());
+    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_unit(Point::new(1, 0), Some(UnitType::magnet().instance(&environment).set_owner_id(0).set_hp(100).build()));
@@ -132,7 +132,7 @@ fn displacement() {
 #[test_log::test]
 fn dragon_head() {
     // create map
-    let config = Arc::new(Config::test_config());
+    let config = Arc::new(Config::default());
     let map = PointMap::new(4, 4, false);
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new(wmap, &config);
