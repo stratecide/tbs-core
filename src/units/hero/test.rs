@@ -15,8 +15,10 @@ use crate::map::wrapping_map::OrientedPoint;
 use crate::map::wrapping_map::WMBuilder;
 use crate::script::custom_action::run_unit_input_script;
 use crate::script::custom_action::test::CA_UNIT_BUY_HERO;
+use crate::script::custom_action::CustomActionDataOptions;
 use crate::script::custom_action::CustomActionInput;
 use crate::script::custom_action::CustomActionTestResult;
+use crate::script::custom_action::ShopItemKey;
 use crate::tags::TagValue;
 use crate::terrain::TerrainType;
 use crate::units::commands::*;
@@ -44,6 +46,7 @@ fn buy_hero() {
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
     map.set_terrain(Point::new(1, 1), TerrainType::StatueLand.instance(&map_env).set_owner_id(0).build());
+    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hero(Hero::new(HeroType::Jax)).build()));
     map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build()));
     map.set_unit(Point::new(4, 4), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hero(Hero::new(HeroType::CrystalObelisk)).build()));
 
@@ -61,7 +64,24 @@ fn buy_hero() {
     let script = config.custom_actions()[CA_UNIT_BUY_HERO].script.0.unwrap();
     let test_result = run_unit_input_script(script, &*server, &path, None, &[]);
     tracing::debug!("test_result: {:?}", test_result);
-    assert!(matches!(test_result, CustomActionTestResult::Next(_)));
+    let mut jax_index = 0;
+    match test_result {
+        CustomActionTestResult::Next(CustomActionDataOptions::Shop(_, items)) => {
+            for (i, item) in items.into_iter().enumerate() {
+                if item.key == ShopItemKey::HeroType(HeroType::Jax) {
+                    jax_index = i;
+                }
+                assert_eq!(item.enabled, item.key != ShopItemKey::HeroType(HeroType::Jax), "{item:?}");
+            }
+        }
+        _ => panic!("should be CustomActionTestResult::Next")
+    }
+    // can't summon another Jax
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: path.clone(),
+        action: UnitAction::custom(CA_UNIT_BUY_HERO, vec![CustomActionInput::ShopItem(jax_index.into())]),
+    }), Arc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,
@@ -72,7 +92,6 @@ fn buy_hero() {
     assert!(server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
 }
-
 
 #[test_log::test]
 fn gain_charge() {

@@ -15,6 +15,12 @@ fn ua_buy_hero_input() {
         let item = ShopItem(hero_type);
         // TODO: could read cost (modification) from another table or even the same one
         item.costs.push(500 + UNIT.value(POSITION) * 100 / (UNIT.get(TAG_Hp) ?? 100));
+        for p in BOARD.all_positions() {
+            let unit = BOARD.get_unit(p);
+            if unit?.owner_id == UNIT.owner_id && unit.hero?.type == hero_type {
+                item.enabled = false;
+            }
+        }
         options.add(item);
     }
     user_selection(options, false);

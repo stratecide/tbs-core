@@ -43,6 +43,11 @@ mod hero_type_module {
             ().into()
         }
     }
+
+    #[rhai_fn(pure, get = "type")]
+    pub fn get_type(hero: &mut Hero) -> HeroType {
+        hero.typ()
+    }
 }
 
 macro_rules! hero_module {
