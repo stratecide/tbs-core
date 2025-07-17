@@ -73,10 +73,17 @@ fn capture_city() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build());
+    map.set_terrain(Point::new(0, 0), TerrainType::City.instance(&environment).set_owner_id(0).build());
     map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).set_hp(55).build()));
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
     let settings = map.settings().unwrap().build_default();
     let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    // can't capture your own properties
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(Point::new(0, 0)),
+        action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
+    }), Arc::new(|| 0.)).unwrap_err();
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(0, 0), vec![
