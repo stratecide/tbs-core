@@ -197,7 +197,7 @@ impl<D: Direction> EffectPath<D> {
 impl<D: Direction> SupportedZippable<&Environment> for EffectPath<D> {
     fn export(&self, zipper: &mut Zipper, environment: &Environment) {
         self.typ.export(zipper, environment);
-        let has_data = environment.config.effect_data(self.typ) == None;
+        let has_data = environment.config.effect_data(self.typ) != None;
         let export_data = |zipper: &mut Zipper, data: &Option<EffectData<D>>| {
             if has_data {
                 zipper.write_bool(data.is_some());
@@ -227,7 +227,7 @@ impl<D: Direction> SupportedZippable<&Environment> for EffectPath<D> {
     }
     fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
         let typ = EffectType::import(unzipper, environment)?;
-        let has_data = environment.config.effect_data(typ) == None;
+        let has_data = environment.config.effect_data(typ) != None;
         let import_data = |unzipper: &mut Unzipper| {
             if has_data && unzipper.read_bool()? {
                 Ok(Some(EffectData::import(unzipper, environment, typ)?))
