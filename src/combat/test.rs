@@ -166,3 +166,32 @@ fn dragon_head() {
     assert_eq!(hp2, game.get_unit(Point::new(2, 0)).unwrap().get_hp());
     assert_eq!(100, game.get_unit(Point::new(3, 0)).unwrap().get_hp());
 }
+
+#[test_log::test]
+fn cannot_attack_friendly() {
+    let map = PointMap::new(4, 4, false);
+    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
+    let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
+    let mut map = Map::new2(wmap, &environment);
+    for p in map.all_points() {
+        map.set_terrain(p, TerrainType::Street.instance(&environment).build());
+    }
+    map.set_unit(Point::new(3, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(0, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
+    let settings = map.settings().unwrap().build_default();
+    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let path = Path::new(Point::new(0, 1));
+    let options = game.get_unit(Point::new(0, 1)).unwrap().options_after_path(&*game, &path, None, &[]);
+    assert_eq!(options, vec![UnitAction::Wait]);
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: path.clone(),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
+    }), Arc::new(|| 0.)).unwrap_err();
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path,
+        action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(1, 1), Direction4::D0)),
+    }), Arc::new(|| 0.)).unwrap_err();
+}

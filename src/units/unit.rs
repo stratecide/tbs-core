@@ -711,7 +711,18 @@ impl<D: Direction> Unit<D> {
             if self.can_attack_after_moving() || path.steps.len() == 0 {
                 let transporter = transporter.map(|(u, _)| (u, path.start));
                 for input in AttackInput::attackable_positions(game, self, destination, transporter, ballast, &heroes) {
-                    result.push(UnitAction::Attack(input));
+                    if let Some(defender) = game.get_unit(input.target()) {
+                        let target = UnitData {
+                            unit: &defender,
+                            pos: input.target(),
+                            unload_index: None,
+                            ballast: &[],
+                            original_transporter: None,
+                        };
+                        if self.can_target(game, destination, transporter, target, false, &heroes) {
+                            result.push(UnitAction::Attack(input));
+                        }
+                    }
                 }
             }
             result.push(UnitAction::Wait);
