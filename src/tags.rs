@@ -283,7 +283,7 @@ impl<D: Direction> TagValue<D> {
             "UnitType" => Some(Self::UnitType(value.try_cast()?)),
             "UniqueId>" => Some(Self::Unique(value.try_cast()?)),
             err => {
-                tracing::error!("failed to turn dynamic '{err}' into TagValue");
+                crate::error!("failed to turn dynamic '{err}' into TagValue");
                 None
             }
         }?;
@@ -502,7 +502,7 @@ pub mod tests {
     pub const TAG_MOVEMENT_TYPE: usize = 13;
     pub const TAG_SLUDGE_COUNTER: usize = 14;
     pub const TAG_COINS: usize = 15;
-    #[test_log::test]
+    #[test]
     fn verify_tag_test_constants() {
         let config = Arc::new(Config::default());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
@@ -529,7 +529,7 @@ pub mod tests {
         assert_eq!(environment.config.tag_name(TAG_COINS), "Coins");
     }
 
-    #[test_log::test]
+    #[test]
     fn unique_ids_are_unique() {
         let config = Arc::new(Config::default());
         let environment = Environment::new_map(config, MapSize::new(5, 5));

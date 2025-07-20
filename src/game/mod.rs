@@ -55,7 +55,7 @@ mod tests {
     use crate::game::fog::*;
     use crate::VERSION;
 
-    #[test_log::test]
+    #[test]
     fn export_import_chess() {
         let version = Version::parse(VERSION).unwrap();
         let map = crate::map::test::chess_board();
@@ -63,14 +63,14 @@ mod tests {
         let settings = map.settings().unwrap();
 
         for fog_setting in [FogSetting::None, FogSetting::Sharp(0)] {
-            tracing::debug!("fog setting: {fog_setting}");
+            crate::debug!("fog setting: {fog_setting}");
             let mut settings = settings.clone();
             settings.fog_mode = FogMode::Constant(fog_setting);
             let perspective = Perspective::Team(0);
             let (server, events) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
             let client = Game::new_client(map.clone(), settings.build_default(), events.get(&perspective).unwrap());
             let data = server.export();
-            tracing::debug!("data: {data:?}");
+            crate::debug!("data: {data:?}");
             let imported_server = Game::import_server(data.clone(), &config, version.clone()).unwrap();
             server.with(|server| {
                 assert_eq!(server.get_fog(), imported_server.get_fog());

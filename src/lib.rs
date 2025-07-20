@@ -17,6 +17,49 @@ pub use interfaces;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[cfg(feature = "tracing")]
+macro_rules! debug {
+    ($($arg:tt)*) => {{
+        tracing::debug!($($arg)*);
+    }};
+}
+#[cfg(not(feature = "tracing"))]
+macro_rules! debug {
+    ($($arg:tt)*) => {{
+        println!($($arg)*);
+    }};
+}
+
+#[cfg(feature = "tracing")]
+#[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => {{
+        tracing::warn!($($arg)*);
+    }};
+}
+#[cfg(not(feature = "tracing"))]
+#[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => {{
+        println!($($arg)*);
+    }};
+}
+
+#[cfg(feature = "tracing")]
+macro_rules! error {
+    ($($arg:tt)*) => {{
+        tracing::error!($($arg)*);
+    }};
+}
+#[cfg(not(feature = "tracing"))]
+macro_rules! error {
+    ($($arg:tt)*) => {{
+        println!($($arg)*);
+    }};
+}
+
+pub(crate) use {debug, error};
+
 // TODO: create derive macro for FromConfig instead of adding it to listable_enum and enum_with_custom
 
 macro_rules! listable_enum {(

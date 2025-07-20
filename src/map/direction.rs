@@ -430,7 +430,7 @@ impl Add for Translation6 {
         self.d0 += rhs.d0;
         self.d60 += rhs.d60;
         if self.d0.abs() > 1000 || self.d60.abs() > 1000 {
-            tracing::error!("Translation6 are going too far: {:?}!", self);
+            crate::error!("Translation6 are going too far: {:?}!", self);
         }
         self
     }

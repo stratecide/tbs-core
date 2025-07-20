@@ -111,7 +111,7 @@ impl Environment {
     pub(crate) fn log_rhai_error(&self, location: &str, function_name: impl AsRef<str>, error: &EvalAltResult) {
         let config_name = &self.config.name;
         let function_name = function_name.as_ref();
-        tracing::warn!("RHAI error in {location}, config '{config_name}', function '{function_name}':\n{error:?}");
+        crate::warn!("RHAI error in {location}, config '{config_name}', function '{function_name}':\n{error:?}");
     }
 
     fn get_engine_base(&self, is_hex: bool) -> Engine {

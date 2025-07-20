@@ -68,7 +68,7 @@ mod tests {
     use super::PipeState;
 
 
-    #[test_log::test]
+    #[test]
     fn pipe_state() {
         let pipe = PipeState::new(Direction4::D180, Direction4::D90).unwrap();
         assert_eq!(pipe.distortion(Direction4::D0), Some(Distortion::new(false, Direction4::D90)));
@@ -76,7 +76,7 @@ mod tests {
         assert_eq!(pipe.distortion(Direction4::D270).unwrap().update_direction(Direction4::D270), Direction4::D180);
     }
 
-    #[test_log::test]
+    #[test]
     fn straight_line() {
         let config = Arc::new(Config::default());
         let map = PointMap::new(8, 5, false);

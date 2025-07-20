@@ -68,10 +68,10 @@ pub fn create_base_engine() -> Engine {
     // 8 should be enough
     engine.set_max_call_levels(8);
     engine.on_print(|s| {
-        tracing::debug!("RHAI-PRINT '{s}'");
+        crate::debug!("RHAI-PRINT '{s}'");
     });
     engine.on_debug(|s, src, pos| {
-        tracing::debug!("RHAI-DEBUG of {} at {pos:?}: '{s}'", src.unwrap_or("-"));
+        crate::debug!("RHAI-DEBUG of {} at {pos:?}: '{s}'", src.unwrap_or("-"));
     });
     engine
 }

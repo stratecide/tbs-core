@@ -90,7 +90,7 @@ mod tests {
     use super::*;
     use crate::config::config::Config;
 
-    #[test_log::test]
+    #[test]
     fn helpers_are_correct() {
         let config = Config::default();
         assert_eq!(config.unit_name(UnitType::marine()), "Marine");

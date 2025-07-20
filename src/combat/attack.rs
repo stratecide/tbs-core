@@ -298,7 +298,7 @@ impl AttackInstance {
                             &ballast,
                             is_counter,
                         );
-                        tracing::debug!("unit_defense_bonus {column_id} = {result}");
+                        crate::debug!("unit_defense_bonus {column_id} = {result}");
                         result
                     });
                     let handler = handler_.clone();
@@ -325,7 +325,7 @@ impl AttackInstance {
                             &ballast,
                             &counter_,
                         );
-                        tracing::debug!("attack_bonus {column_id} = {result}");
+                        crate::debug!("attack_bonus {column_id} = {result}");
                         result
                     });
                     let result = result_.clone();
@@ -375,7 +375,7 @@ impl AttackInstance {
                             &ballast,
                             &counter_,
                         );
-                        tracing::debug!("on_defend {} scripts", scripts.len());
+                        crate::debug!("on_defend {} scripts", scripts.len());
                         if scripts.len() == 0 {
                             return;
                         }

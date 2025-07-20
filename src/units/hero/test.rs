@@ -38,7 +38,7 @@ impl HeroType {
     pub const Jax: Self = Self(6);
 }
 
-#[test_log::test]
+#[test]
 fn buy_hero() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
@@ -59,11 +59,11 @@ fn buy_hero() {
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(0, 1)).unwrap(), Point::new(0, 1), None), None);
     let path = Path::with_steps(Point::new(0, 1), vec![PathStep::Dir(Direction4::D0)]);
     let options = server.get_unit(Point::new(0, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
-    tracing::debug!("options: {:?}", options);
+    crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::custom(CA_UNIT_BUY_HERO, Vec::new())));
     let script = config.custom_actions()[CA_UNIT_BUY_HERO].script.0.unwrap();
     let test_result = run_unit_input_script(script, &*server, &path, None, &[]);
-    tracing::debug!("test_result: {:?}", test_result);
+    crate::debug!("test_result: {:?}", test_result);
     let mut jax_index = 0;
     match test_result {
         CustomActionTestResult::Next(CustomActionDataOptions::Shop(_, items)) => {
@@ -93,7 +93,7 @@ fn buy_hero() {
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
 }
 
-#[test_log::test]
+#[test]
 fn gain_charge() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
@@ -119,7 +119,7 @@ fn gain_charge() {
     assert!(server.get_unit(Point::new(0, 1)).unwrap().get_charge() > 0);
 }
 
-#[test_log::test]
+#[test]
 fn crystal() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
@@ -146,7 +146,7 @@ fn crystal() {
     // use power
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
-    tracing::debug!("options: {:?}", options);
+    crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -204,7 +204,7 @@ fn crystal() {
     assert!(normal_damage < aura_damage);
 }
 
-#[test_log::test]
+#[test]
 fn earl_grey() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
@@ -241,7 +241,7 @@ fn earl_grey() {
     // use power
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
-    tracing::debug!("options: {:?}", options);
+    crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -257,7 +257,7 @@ fn earl_grey() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn blue_berry() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
@@ -283,7 +283,7 @@ fn blue_berry() {
     // use power
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
-    tracing::debug!("options: {:?}", options);
+    crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -294,7 +294,7 @@ fn blue_berry() {
     assert!(server.get_unit(Point::new(4, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
-#[test_log::test]
+#[test]
 fn tess() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
@@ -315,7 +315,7 @@ fn tess() {
     // use power
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
-    tracing::debug!("options: {:?}", options);
+    crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -326,7 +326,7 @@ fn tess() {
     assert!(*server.get_owning_player(0).unwrap().funds < 9999);
 }
 
-#[test_log::test]
+#[test]
 fn edwin() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
@@ -351,7 +351,7 @@ fn edwin() {
     // use power
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
-    tracing::debug!("options: {:?}", options);
+    crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -381,7 +381,7 @@ fn edwin() {
     assert!(server.get_unit(Point::new(2, 1)).is_some());
 }
 
-#[test_log::test]
+#[test]
 fn jax() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 5, false);
@@ -406,7 +406,7 @@ fn jax() {
     // Jax has no active
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(path.start).unwrap().options_after_path(&*server, &path, None, &[]);
-    tracing::debug!("options: {:?}", options);
+    crate::debug!("options: {:?}", options);
     assert!(!options.iter().any(|o| matches!(o, UnitAction::HeroPower(_, _))));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,

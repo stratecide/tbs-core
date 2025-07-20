@@ -32,6 +32,7 @@ impl TerrainType {
     pub const Flame: Self = Self(8);
     pub const Forest: Self = Self(9);
     pub const Grass: Self = Self(11);
+    pub const Hq: Self = Self(13);
     pub const Kraken: Self = Self(15);
     pub const Mountain: Self = Self(17);
     pub const OilPlatform: Self = Self(18);
@@ -42,7 +43,7 @@ impl TerrainType {
     pub const TentacleDepths: Self = Self(25);
     pub const FairyForest: Self = Self(28);
 }
-#[test_log::test]
+#[test]
 fn verify_terrain_type_constants() {
     let config = Arc::new(Config::default());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
@@ -66,7 +67,7 @@ fn verify_terrain_type_constants() {
 
 // actual tests
 
-#[test_log::test]
+#[test]
 fn capture_city() {
     let map = PointMap::new(4, 4, false);
     let environment = Environment::new_map(Arc::new(Config::default()), map.size());
@@ -110,7 +111,7 @@ fn capture_city() {
     assert_eq!(0, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
 }
 
-#[test_log::test]
+#[test]
 fn build_unit() {
     let map = PointMap::new(4, 4, false);
     let environment = Environment::new_map(Arc::new(Config::default()), map.size());
@@ -136,7 +137,7 @@ fn build_unit() {
     assert!(!game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
-#[test_log::test]
+#[test]
 fn kraken() {
     let map = PointMap::new(5, 5, false);
     let map_env = Environment::new_map(Arc::new(Config::default()), map.size());
@@ -175,7 +176,7 @@ fn kraken() {
     assert!(game.get_unit(Point::new(3, 2)).unwrap().get_hp() < 100);
 }
 
-#[test_log::test]
+#[test]
 fn terrain_vision() {
     let map = PointMap::new(4, 4, false);
     let environment = Environment::new_map(Arc::new(Config::default()), map.size());

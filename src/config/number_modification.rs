@@ -106,7 +106,7 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
                                 let environment = executor.environment();
                                 let function_name = environment.get_rhai_function_name(function_index);
                                 let config_name = &environment.config.name;
-                                tracing::warn!("NumberMod::Rhai({function_name}), config {config_name} returned invalid value of type {invalid}");
+                                crate::warn!("NumberMod::Rhai({function_name}), config {config_name} returned invalid value of type {invalid}");
                                 return value;
                             }
                         };
@@ -129,7 +129,7 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
                                 let environment = executor.environment();
                                 let function_name = environment.get_rhai_function_name(function_index);
                                 let config_name = &environment.config.name;
-                                tracing::warn!("NumberMod::RhaiReplace({function_name}), config {config_name} returned invalid value of type {invalid}");
+                                crate::warn!("NumberMod::RhaiReplace({function_name}), config {config_name} returned invalid value of type {invalid}");
                                 Rational32::from_integer(0)
                             }
                         };
