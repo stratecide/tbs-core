@@ -20,6 +20,9 @@ fn get_captured() {
             terrain.remove(TAG_CaptureProgress);
             terrain.owner_id = unit.owner_id;
             EVENT_HANDLER.replace_terrain(POSITION, terrain);
+            if terrain.type == TerrainType("Hq") {
+                EVENT_HANDLER.make_player_lose(TERRAIN.owner_id);
+            }
         } else {
             EVENT_HANDLER.set_terrain_tag(POSITION, TAG_CaptureOwner, unit.owner_id);
             EVENT_HANDLER.set_terrain_tag(POSITION, TAG_CaptureProgress, progress);
