@@ -78,11 +78,19 @@ impl<D: Direction> ShopItemKey<D> {
     }
 
     pub fn from_dynamic(value: Dynamic) -> Option<Self> {
-        match value.type_name().split("::").last().unwrap() {
+        let mut type_name = value.type_name();
+        if let Some((base, _)) = type_name.split_once('<') {
+            // remove generics from 'tanktics_core::units::unit::Unit<tanktics_core::map::direction::Direction6>'
+            type_name = base;
+        }
+        match type_name.split("::").last().unwrap() {
             "string" => Some(Self::String(value.cast::<ImmutableString>().into_owned())),
             "Unit" => Some(Self::Unit(value.cast())),
             "HeroType" => Some(Self::HeroType(value.cast())),
-            _ => None,
+            _ => {
+                crate::warn!("ShopItemKey::from_dynamic value has type {}", value.type_name());
+                None
+            }
         }
     }
 }

@@ -169,6 +169,28 @@ fn drone() {
 }
 
 #[test]
+fn cannot_buy_unit_without_money() {
+    let config = Arc::new(Config::default());
+    let map = PointMap::new(4, 4, false);
+    let wmap: WrappingMap<Direction6> = WMBuilder::new(map).build();
+    let mut map = Map::new(wmap, &config);
+    let map_env = map.environment().clone();
+    map.set_unit(Point::new(0, 0), Some(UnitType::drone_boat().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(1, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build()));
+    let settings = map.settings().unwrap();
+    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    game.with(|game| {
+        assert_eq!(*game.current_player().funds, 0);
+    });
+    let path = Path::new(Point::new(0, 0));
+    game.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path,
+        action: UnitAction::custom(CA_UNIT_BUILD_UNIT, vec![CustomActionInput::ShopItem(0.into())]),
+    }), Arc::new(|| 0.)).unwrap_err();
+}
+
+#[test]
 fn repair_unit() {
     let config = Arc::new(Config::default());
     let map = PointMap::new(5, 7, false);

@@ -28,6 +28,7 @@ fn unit_can_build(UNIT, POSITION) {
 
 fn build_unit_input(UNIT, POSITION) {
     let options = new_shop("Build Unit");
+    let funds = BOARD.player_funds(UNIT.owner_id);
     for unit_type in CONFIG.table_row("UNIT_BUILD", UNIT.type, true) {
         let unit = Unit(unit_type);
         unit.owner_id = UNIT.owner_id;
@@ -36,7 +37,12 @@ fn build_unit_input(UNIT, POSITION) {
             unit.set(TAG_DroneId, UNIT.get(TAG_DroneStationId));
         }
         let price = unit.value(POSITION);
-        options.add(unit, price);
+        let item = ShopItem(unit);
+        item.costs.push(price);
+        if price > funds {
+            item.enabled = false;
+        }
+        options.add(item);
     }
     let unit = user_selection(options, false).key;
     if UNIT.transport_capacity == 0 {
@@ -83,6 +89,7 @@ fn build_unit(UNIT, POSITION, exhaust, data) {
 
 fn terrain_buy_unit_input(position, terrain_type, owner_id, direction) {
     let options = new_shop("Build Unit");
+    let funds = BOARD.player_funds(owner_id);
     for unit_type in CONFIG.table_row("TERRAIN_BUILD", terrain_type, true) {
         let unit = Unit(unit_type);
         unit.owner_id = owner_id;
@@ -94,7 +101,12 @@ fn terrain_buy_unit_input(position, terrain_type, owner_id, direction) {
             unit.movement_type = MOVEMENT_Amphibious;
         }
         let price = unit.value(position);
-        options.add(unit, price);
+        let item = ShopItem(unit);
+        item.costs.push(price);
+        if price > funds {
+            item.enabled = false;
+        }
+        options.add(item);
     }
     user_selection(options, false);
     success()
