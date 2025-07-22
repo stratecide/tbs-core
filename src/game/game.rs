@@ -382,7 +382,7 @@ impl<D: Direction> GameView<D> for Handle<Game<D>> {
         SharedGameView(Arc::new(self.cloned()))
     }
 
-    fn wrapping_logic(&self) -> BorrowedHandle<crate::map::wrapping_map::WrappingMap<D>> {
+    fn wrapping_logic(&self) -> BorrowedHandle<'_, crate::map::wrapping_map::WrappingMap<D>> {
         self.borrow(|game| game.map.wrapping_logic())
     }
 

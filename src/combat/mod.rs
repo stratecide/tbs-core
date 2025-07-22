@@ -67,7 +67,7 @@ impl<D: Direction> AttackCounterState<D> {
         }
     }
 
-    pub fn attacker(&self) -> Option<UnitData<D>> {
+    pub fn attacker(&self) -> Option<UnitData<'_, D>> {
         match self {
             Self::RealCounter { unit, pos, ballast, original_transporter, .. } => Some(UnitData {
                 unit,

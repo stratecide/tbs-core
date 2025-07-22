@@ -112,7 +112,7 @@ macro_rules! impl_game_view {
                 SharedGameView(Arc::new(self.clone()))
             }
 
-            fn wrapping_logic(&self) -> BorrowedHandle<WrappingMap<D>> {
+            fn wrapping_logic(&self) -> BorrowedHandle<'_, WrappingMap<D>> {
                 self.get_inner_view().wrapping_logic()
             }
 

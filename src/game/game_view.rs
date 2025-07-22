@@ -33,7 +33,7 @@ pub trait GameView<D: Direction>: Send + Sync {
      */
     fn as_shared(&self) -> SharedGameView<D>;
 
-    fn wrapping_logic(&self) -> BorrowedHandle<WrappingMap<D>>;
+    fn wrapping_logic(&self) -> BorrowedHandle<'_, WrappingMap<D>>;
 
     // TODO: remove a few of these methods from the trait and turn them into functions that take dyn Gameview as parameter
 
