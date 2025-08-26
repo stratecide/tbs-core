@@ -12,7 +12,6 @@ use crate::tokens::token::Token;
 use crate::handle::{BorrowedHandle, Handle};
 use crate::map::map::*;
 use crate::map::direction::*;
-use crate::game::settings;
 use crate::game::events;
 use crate::game::fog::*;
 use crate::map::pipe::PipeState;
@@ -27,7 +26,7 @@ use super::commands::{Command, CommandError};
 use super::events::Event;
 use super::game_view::GameView;
 use super::rhai_board::SharedGameView;
-use super::settings::GameSettings;
+use super::settings::{GameConfig, GameSettings};
 use super::event_handler;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,18 +35,18 @@ pub struct Game<D: Direction> {
     map: Map<D>,
     pub current_turn: u32,
     ended: bool,
-    pub players: LVec<Player, 16>,
+    pub players: LVec<Player<D>, 16>,
     fog_mode: FogMode,
     fog: HashMap<ClientPerspective, HashMap<Point, FogIntensity>>,
 }
 
 impl<D: Direction> Game<D> {
-    fn new(mut map: Map<D>, settings: settings::GameSettings) -> Self {
+    fn new(mut map: Map<D>, config: &GameConfig<D>, settings: GameSettings) -> Self {
         map.start_game(&Arc::new(settings));
         let settings = map.environment().settings.as_ref().unwrap();
         let fog_mode = settings.fog_mode.clone();
-        let players: Vec<Player> = settings.players.iter()
-            .map(|player| player.build(map.environment()))
+        let players: Vec<Player<D>> = config.players.iter().zip(settings.players.iter())
+            .map(|(pc, ps)| pc.build_player(map.environment(), ps))
             .collect();
         Game {
             environment: map.environment().clone(),
@@ -60,15 +59,15 @@ impl<D: Direction> Game<D> {
         }
     }
 
-    pub fn new_server(map: Map<D>, settings: settings::GameSettings, random: RandomFn) -> (Box<Handle<Self>>, EventsMap<D>) {
-        let this = Handle::new(Self::new(map, settings));
+    pub fn new_server(map: Map<D>, config: &GameConfig<D>, settings: GameSettings, random: RandomFn) -> (Box<Handle<Self>>, EventsMap<D>) {
+        let this = Handle::new(Self::new(map, config, settings));
         // start_server could return Self instead of calling cloned()
         let events = this.cloned().start_server(random);
         (Box::new(this), events)
     }
 
-    pub fn new_client(map: Map<D>, settings: settings::GameSettings, events: &[events::Event<D>]) -> Box<Handle<Self>> {
-        let mut this = Self::new(map, settings);
+    pub fn new_client(map: Map<D>, config: &GameConfig<D>, settings: GameSettings, events: &[events::Event<D>]) -> Box<Handle<Self>> {
+        let mut this = Self::new(map, config, settings);
         for e in events {
             e.apply(&mut this);
         }
@@ -78,7 +77,7 @@ impl<D: Direction> Game<D> {
     pub fn import_server(data: ExportedGame, config: &Arc<Config>, version: Version) -> Result<Box<Self>, ZipperError> {
         if let Some(mut hidden_data) = data.hidden {
             let mut unzipper = Unzipper::new(hidden_data.server, version.clone());
-            let mut game = import_game_base(&mut unzipper, config, true)?;
+            let mut game = import_game_base(&mut unzipper, config)?;
 
             let points = game.map.all_points();
             game.fog.insert(ClientPerspective::Neutral, import_fog(&mut unzipper, &points)?);
@@ -93,14 +92,14 @@ impl<D: Direction> Game<D> {
             Ok(Box::new(game))
         } else {
             let mut unzipper = Unzipper::new(data.public, version);
-            let game = import_game_base(&mut unzipper, config, true)?;
+            let game = import_game_base(&mut unzipper, config)?;
             Ok(Box::new(game))
         }
     }
 
     pub fn import_client(public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, config: &Arc<Config>, version: Version) -> Result<Box<Game<D>>, ZipperError> {
         let mut unzipper = Unzipper::new(public, version.clone());
-        let mut game = import_game_base(&mut unzipper, config, false)?;
+        let mut game = import_game_base(&mut unzipper, config)?;
         let points = game.map.all_points();
         let neutral_fog = if game.is_foggy() {
             import_fog(&mut unzipper, &points)?
@@ -119,10 +118,10 @@ impl<D: Direction> Game<D> {
                 }
             }
             game.fog.insert(ClientPerspective::Team(team), fog);
-            let mut players: Vec<Player> = vec![];
+            let mut players: Vec<Player<D>> = vec![];
             for player in game.players.iter() {
                 players.push(if player.get_team() == ClientPerspective::Team(team) {
-                    Player::import(&mut unzipper, &game.environment, false)?
+                    Player::import(&mut unzipper, &game.environment)?
                 } else {
                     player.clone()
                 });
@@ -175,7 +174,7 @@ impl<D: Direction> Game<D> {
         &mut self.map
     }
 
-    pub fn current_player(&self) -> &Player {
+    pub fn current_player(&self) -> &Player<D> {
         &self.players[self.current_turn as usize % self.players.len()]
     }
 
@@ -214,11 +213,11 @@ impl<D: Direction> Game<D> {
         self.ended = ended;
     }
 
-    pub fn get_owning_player(&self, owner: i8) -> Option<&Player> {
+    pub fn get_owning_player(&self, owner: i8) -> Option<&Player<D>> {
         self.players.iter().find(|player| player.get_owner_id() == owner)
     }
 
-    pub fn get_owning_player_mut(&mut self, owner: i8) -> Option<&mut Player> {
+    pub fn get_owning_player_mut(&mut self, owner: i8) -> Option<&mut Player<D>> {
         self.players.iter_mut().find(|player| player.get_owner_id() == owner)
     }
 
@@ -268,7 +267,7 @@ fn import_fog(unzipper: &mut Unzipper, points: &Vec<Point>) -> Result<HashMap<Po
     Ok(result)
 }
 
-fn create_base_fog<D: Direction>(_map: &Map<D>, players: &[Player]) -> HashMap<ClientPerspective, HashMap<Point, FogIntensity>> {
+fn create_base_fog<D: Direction>(_map: &Map<D>, players: &[Player<D>]) -> HashMap<ClientPerspective, HashMap<Point, FogIntensity>> {
     let mut fog = HashMap::default();
     let neutral_fog: HashMap<Point, FogIntensity> = HashMap::default();
     for player in players {
@@ -282,7 +281,7 @@ fn create_base_fog<D: Direction>(_map: &Map<D>, players: &[Player]) -> HashMap<C
     fog
 }
 
-fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: &Arc<Config>, is_server: bool) -> Result<Game<D>, ZipperError> {
+fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: &Arc<Config>) -> Result<Game<D>, ZipperError> {
     // is_hex: skip because at this point we already know
     unzipper.read_bool()?;
     let mut environment = Environment::new_game(config.clone(), MapSize::new(0, 0), GameSettings::import(unzipper, config.clone())?);
@@ -293,7 +292,7 @@ fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: &Arc<Config>,
     let player_len = unzipper.read_u8(4)? + 1;
     let mut players = vec![];
     for _ in 0..player_len {
-        players.push(Player::import(unzipper, &environment, !is_server && fog_mode.is_foggy(current_turn as usize, player_len as usize))?);
+        players.push(Player::import(unzipper, &environment)?);
     }
     Ok(Game {
         fog: create_base_fog(&map, &players),
@@ -344,8 +343,11 @@ impl<D: Direction> Handle<Game<D>> {
     fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
         zipper.write_bool(D::is_hex());
         let environment = self.environment();
-        environment.settings.as_ref().unwrap().export(zipper);
+        environment.settings.as_ref().unwrap().export(zipper, &environment.config);
         self.wrapping_logic().zip(zipper);
+        self.with(|game| {
+            game.map.get_tag_bag().export(zipper, &environment);
+        });
         for p in self.all_points() {
             self.export_field(zipper, p, &environment, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
         }
@@ -414,7 +416,7 @@ impl<D: Direction> GameView<D> for Handle<Game<D>> {
         self.with(|game| game.current_player().get_owner_id())
     }
 
-    fn get_owning_player(&self, owner: i8) -> Option<Player> {
+    fn get_owning_player(&self, owner: i8) -> Option<Player<D>> {
         self.with(|game| game.get_owning_player(owner).cloned())
     }
 
@@ -512,7 +514,7 @@ impl<D: Direction> GameInterface for Handle<Game<D>> {
             game.fog_mode.zip(&mut zipper);
             zipper.write_u8(game.players.len() as u8 - 1, 4);
             for player in game.players.iter() {
-                player.export(&mut zipper, false);
+                player.export(&mut zipper, &game.environment);
             }
             if game.is_foggy() {
                 let points = game.map.all_points();
@@ -528,7 +530,7 @@ impl<D: Direction> GameInterface for Handle<Game<D>> {
                 game.fog_mode.zip(&mut zipper);
                 zipper.write_u8(game.players.len() as u8 - 1, 4);
                 for player in game.players.iter() {
-                    player.export(&mut zipper, true);
+                    player.fog_replacement().export(&mut zipper, &game.environment);
                 }
                 export_fog(&mut zipper, &points, neutral_fog);
                 let public = zipper.finish();
@@ -547,7 +549,7 @@ impl<D: Direction> GameInterface for Handle<Game<D>> {
                         }
                         for player in game.players.iter() {
                             if player.get_team() == ClientPerspective::Team(team) {
-                                player.export(&mut zipper, false);
+                                player.export(&mut zipper, &game.environment);
                             }
                         }
                         teams.insert(team, zipper.finish());

@@ -3,12 +3,14 @@ use rustc_hash::FxHashSet;
 
 use rhai::*;
 use rhai::plugin::*;
+use num_rational::Rational32;
 
 use interfaces::ClientPerspective;
 
 use crate::game::game_view::GameView;
+use crate::tags::*;
 use crate::map::direction::*;
-use crate::map::map::NeighborMode;
+use crate::map::map::{NeighborMode, get_income_factor};
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::terrain::terrain::Terrain;
@@ -173,23 +175,39 @@ macro_rules! board_module {
                 board.get_terrain(p).expect("script requested terrain at {p:?}, but that point is invalid")
             }
 
-            #[rhai_fn(pure)]
-            pub fn player_funds(board: &mut Board, owner_id: i32) -> i32 {
+            #[rhai_fn(pure, name = "has")]
+            pub fn has_flag(board: &mut Board, owner_id: i32, flag: FlagKey) -> bool {
                 if owner_id < 0 || owner_id > i8::MAX as i32 {
-                    return 0;
+                    return false;
                 }
-                board.get_owning_player(owner_id as i8)
-                .map(|player| *player.funds)
-                .unwrap_or(0)
+                board.get_owning_player(owner_id as i8).map(|p| p.has_flag(flag.0))
+                .unwrap_or(false)
             }
-            #[rhai_fn(pure)]
-            pub fn player_income(board: &mut Board, owner_id: i32) -> i32 {
+
+            #[rhai_fn(pure, name = "has")]
+            pub fn has_tag(board: &mut Board, owner_id: i32, tag: TagKey) -> bool {
                 if owner_id < 0 || owner_id > i8::MAX as i32 {
-                    return 0;
+                    return false;
                 }
-                board.get_owning_player(owner_id as i8)
-                .map(|player| player.get_income())
-                .unwrap_or(0)
+                board.get_owning_player(owner_id as i8).map(|p| p.get_tag(tag.0).is_some())
+                .unwrap_or(false)
+            }
+            #[rhai_fn(pure, name = "get")]
+            pub fn get_tag(board: &mut Board, owner_id: i32, key: TagKey) -> Dynamic {
+                if owner_id < 0 || owner_id > i8::MAX as i32 {
+                    return ().into();
+                }
+                board.get_owning_player(owner_id as i8).and_then(|p| p.get_tag(key.0))
+                .map(|v| v.into_dynamic())
+                .unwrap_or(().into())
+            }
+
+            #[rhai_fn(pure)]
+            pub fn player_income(board: &mut Board, owner_id: i32) -> Rational32 {
+                if owner_id < 0 || owner_id > i8::MAX as i32 {
+                    return Rational32::from_integer(0);
+                }
+                get_income_factor(&**board, owner_id as i8)
             }
 
             #[rhai_fn(pure)]

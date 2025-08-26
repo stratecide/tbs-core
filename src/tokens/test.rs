@@ -63,13 +63,13 @@ fn collect_coin_tokens() {
     map.set_tokens(Point::new(2, 0), vec![coins[1].clone()]);
     let mut settings = map.settings().unwrap();
     for player in &mut settings.players {
-        player.set_income(100);
+        player.get_tag_bag_mut().set_tag(&map_env, TAG_INCOME, 100.into());
     }
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     server.with(|game| {
         for player in &game.players {
-            assert_eq!(*player.funds, 0);
+            assert_eq!(player.get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 0);
         }
     });
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -80,8 +80,8 @@ fn collect_coin_tokens() {
     server.with(|game| {
         assert_eq!(game.get_map().get_tokens(Point::new(0, 0)), &[]);
         assert_eq!(game.get_map().get_tokens(Point::new(2, 0)), &[]);
-        assert_eq!(*game.players[0].funds, 150);
-        assert_eq!(*game.players[1].funds, 0);
+        assert_eq!(game.players[0].get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 150);
+        assert_eq!(game.players[1].get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 0);
     });
 }
 
@@ -107,11 +107,11 @@ fn bubble_token() {
     map.set_tokens(Point::new(4, 0), vec![bubble]);
     let mut settings = map.settings().unwrap();
     for player in &mut settings.players {
-        player.set_funds(20000);
+        player.get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 20000.into());
     }
     assert_eq!(settings.players.len(), 3);
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(0, 0), vec![

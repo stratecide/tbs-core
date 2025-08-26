@@ -28,7 +28,7 @@ fn unit_can_build(UNIT, POSITION) {
 
 fn build_unit_input(UNIT, POSITION) {
     let options = new_shop("Build Unit");
-    let funds = BOARD.player_funds(UNIT.owner_id);
+    let funds = BOARD.get(UNIT.owner_id, TAG_Funds) ?? 0;
     for unit_type in CONFIG.table_row("UNIT_BUILD", UNIT.type, true) {
         let unit = Unit(unit_type);
         unit.owner_id = UNIT.owner_id;
@@ -84,12 +84,12 @@ fn build_unit(UNIT, POSITION, exhaust, data) {
     } else {
         EVENT_HANDLER.transport_unit(POSITION, unit);
     }
-    EVENT_HANDLER.spend_money(UNIT.owner_id, cost);
+    EVENT_HANDLER.set(UNIT.owner_id, TAG_Funds, (BOARD.get(UNIT.owner_id, TAG_Funds) ?? 0) - cost);
 }
 
 fn terrain_buy_unit_input(position, terrain_type, owner_id, direction) {
     let options = new_shop("Build Unit");
-    let funds = BOARD.player_funds(owner_id);
+    let funds = BOARD.get(owner_id, TAG_Funds) ?? 0;
     for unit_type in CONFIG.table_row("TERRAIN_BUILD", terrain_type, true) {
         let unit = Unit(unit_type);
         unit.owner_id = owner_id;
@@ -118,7 +118,7 @@ fn terrain_buy_unit(position, owner_id, data, exhaust_unit) {
     if exhaust_unit {
         unit.set(FLAG_Exhausted);
     }
-    EVENT_HANDLER.spend_money(owner_id, cost);
+    EVENT_HANDLER.set(owner_id, TAG_Funds, (BOARD.get(owner_id, TAG_Funds) ?? 0) - cost);
     EVENT_HANDLER.place_unit(position, unit);
 }
 

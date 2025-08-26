@@ -261,17 +261,6 @@ impl Environment {
         ClientPerspective::Neutral
     }
 
-    pub fn get_income(&self, owner_id: i8) -> i32 {
-        if let Some(settings) = &self.settings {
-            for player in &settings.players {
-                if player.get_owner_id() == owner_id {
-                    return player.get_income()
-                }
-            }
-        }
-        0
-    }
-
     pub fn get_commander(&self, owner_id: i8) -> CommanderType {
         if let Some(settings) = &self.settings {
             for player in &settings.players {

@@ -100,7 +100,7 @@ impl<D: Direction> Token<D> {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_player(&self, game: &impl GameView<D>) -> Option<Player> {
+    pub fn get_player(&self, game: &impl GameView<D>) -> Option<Player<D>> {
         game.get_owning_player(self.get_owner_id())
     }
 
@@ -120,6 +120,9 @@ impl<D: Direction> Token<D> {
     }
     pub fn get_tag_bag(&self) -> &TagBag<D> {
         &self.tags
+    }
+    pub fn get_tag_bag_mut(&mut self) -> &mut TagBag<D> {
+        &mut self.tags
     }
 
     pub fn has_flag(&self, key: usize) -> bool {

@@ -53,9 +53,9 @@ fn buy_hero() {
     let settings = map.settings().unwrap();
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    settings.players[0].set_funds(999999);
+    settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 999999.into());
 
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(0, 1)).unwrap(), Point::new(0, 1), None), None);
     let path = Path::with_steps(Point::new(0, 1), vec![PathStep::Dir(Direction4::D0)]);
     let options = server.get_unit(Point::new(0, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
@@ -108,7 +108,7 @@ fn gain_charge() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     assert_eq!(server.get_unit(Point::new(0, 1)).unwrap().get_charge(), 0);
     let path = Path::new(Point::new(0, 1));
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -138,7 +138,7 @@ fn crystal() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     let unchanged = server.clone();
     let environment: crate::config::environment::Environment = server.environment().clone();
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
@@ -188,7 +188,7 @@ fn crystal() {
 
     // test crystal obelisk behavior when hero is missing
     map.set_unit(Point::new(1, 1), None);
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     let crystal_damage = 100 - server.get_unit(Point::new(4, 4)).unwrap().get_hp();
     assert!(crystal_damage > 0);
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
@@ -223,7 +223,7 @@ fn earl_grey() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     let heroes = HeroMap::new(&*server, None);
     assert_eq!(
         server.get_unit(Point::new(2, 1)).unwrap().movement_points(&*server, Point::new(2, 1), None, &heroes),
@@ -276,7 +276,7 @@ fn blue_berry() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     assert!(server.get_unit(Point::new(2, 1)).unwrap().get_hp() > 50);
     assert_eq!(server.get_unit(Point::new(4, 4)).unwrap().get_hp(), 50);
     assert!(server.get_unit(Point::new(4, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
@@ -309,9 +309,9 @@ fn tess() {
     let settings = map.settings().unwrap();
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    settings.players[0].set_funds(9999);
+    settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 9999.into());
 
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     // use power
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
@@ -323,7 +323,7 @@ fn tess() {
         action: UnitAction::hero_power(1, vec![CustomActionInput::ShopItem(3.into()), CustomActionInput::Direction(Direction4::D0)]),
     }), Arc::new(|| 0.)).unwrap();
     assert!(!server.get_unit(Point::new(2, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
-    assert!(*server.get_owning_player(0).unwrap().funds < 9999);
+    assert!(server.get_owning_player(0).unwrap().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>() < 9999);
 }
 
 #[test]
@@ -346,7 +346,7 @@ fn edwin() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     let unchanged = server.clone();
     // use power
     let path = Path::new(Point::new(1, 1));
@@ -402,7 +402,7 @@ fn jax() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     // Jax has no active
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(path.start).unwrap().options_after_path(&*server, &path, None, &[]);

@@ -2,7 +2,6 @@
 use std::sync::{Arc, MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 
 use interfaces::{ClientPerspective, Perspective as IPerspective, RandomFn};
-use num_rational::Rational32;
 use rhai::{Dynamic, Scope};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
@@ -62,7 +61,7 @@ impl<D: Direction> EventHandlerInner<D> {
         self.game.with_mut(|game| event.apply(game));
         for (key, events) in self.events.iter_mut() {
             if let Ok(perspective) = key.try_into() {
-                if let Some(event) = event.fog_replacement(&self.game, perspective) {
+                for event in event.fog_replacement(&self.game, perspective) {
                     events.push(event);
                 }
             }
@@ -277,24 +276,7 @@ impl<D: Direction> EventHandler<D> {
         // hide / reveal player funds if fog started / ended
         let was_foggy = fog_before.is_some();
         if was_foggy != self.get_game().is_foggy() {
-            let player_ids: Vec<i8> = self.with_game(|game| game.players.iter().map(|player| player.get_owner_id()).collect());
-            if was_foggy {
-                for player_id in player_ids {
-                    self.add_event(Event::PureRevealFunds(player_id.into()));
-                }
-            } else {
-                for player_id in player_ids {
-                    self.add_event(Event::PureHideFunds(player_id.into()));
-                }
-            }
-        }
-
-        let owner_id = self.get_game().current_owner();
-
-        let income = Rational32::from_integer(self.with_game(|game| game.current_player().get_income())) * Map::get_income_factor(&*self.get_game(), owner_id);
-        let income = income.to_integer();
-        if income != 0 {
-            self.money_income(owner_id, income);
+            self.add_event(Event::PurePlayerFog);
         }
 
         self.trigger_all_global_events(|conf| conf.on_start_turn);
@@ -459,26 +441,6 @@ impl<D: Direction> EventHandler<D> {
         }
     }
 
-    pub fn money_income(&mut self, owner: i8, change: i32) {
-        if change != 0 {
-            // TODO: add effect depending on change < 0
-            self.add_event(Event::MoneyChange(owner.into(), change.into()));
-        }
-    }
-
-    pub fn money_change(&mut self, owner: i8, change: i32) {
-        if change != 0 {
-            // TODO: add effect depending on change < 0
-            self.add_event(Event::MoneyChange(owner.into(), change.into()));
-        }
-    }
-
-    pub fn money_buy(&mut self, owner: i8, cost: i32) {
-        if cost > 0 {
-            self.add_event(Event::MoneyChange(owner.into(), (-cost).into()));
-        }
-    }
-
     pub fn player_dies(&mut self, owner_id: i8) {
         if self.with_game(|game| game.get_owning_player(owner_id).map(|player| !player.dead).unwrap_or(false)) {
             self.add_event(Event::PlayerDies(owner_id.into()));
@@ -489,6 +451,37 @@ impl<D: Direction> EventHandler<D> {
             if self.with_game(|game| !game.has_ended() && game.current_player().dead) {
                 self.end_turn();
             }
+        }
+    }
+
+    pub fn set_player_flag(&mut self, owner_id: i8, flag: usize) {
+        if self.with_game(|g| g.get_owning_player(owner_id).map(|p| !p.has_flag(flag)).unwrap_or(false)) {
+            self.add_event(Event::PlayerFlag(Owner(owner_id), FlagKey(flag)));
+        }
+    }
+    pub fn remove_player_flag(&mut self, owner_id: i8, flag: usize) {
+        if self.with_game(|g| g.get_owning_player(owner_id).map(|p| p.has_flag(flag)).unwrap_or(false)) {
+            self.add_event(Event::PlayerFlag(Owner(owner_id), FlagKey(flag)));
+        }
+    }
+
+    pub fn set_player_tag(&mut self, owner_id: i8, key: usize, value: TagValue<D>) {
+        if !value.has_valid_type(&self.environment(), key) {
+            return;
+        }
+        match self.with_game(|g| g.get_owning_player(owner_id).map(|p| p.get_tag(key))) {
+            None => (), // player doesn't exist
+            Some(None) => self.add_event(Event::PlayerSetTag(Owner(owner_id), TagKeyValues(TagKey(key), [value]))),
+            Some(Some(old)) => {
+                if old != value {
+                    self.add_event(Event::PlayerReplaceTag(Owner(owner_id), TagKeyValues(TagKey(key), [old, value])));
+                }
+            }
+        }
+    }
+    pub fn remove_player_tag(&mut self, owner_id: i8, key: usize) {
+        if let Some(old) = self.with_game(|g| g.get_owning_player(owner_id).and_then(|p| p.get_tag(key))) {
+            self.add_event(Event::PlayerRemoveTag(Owner(owner_id), TagKeyValues(TagKey(key), [old])));
         }
     }
 

@@ -134,7 +134,7 @@ impl<D: Direction> Terrain<D> {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_player(&self, game: &impl GameView<D>) -> Option<Player> {
+    pub fn get_player(&self, game: &impl GameView<D>) -> Option<Player<D>> {
         game.get_owning_player(self.get_owner_id())
     }
 

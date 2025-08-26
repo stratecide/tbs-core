@@ -74,33 +74,41 @@ macro_rules! event_handler_module {
                 handler.player_dies(owner_id as i8)
             }
 
-            pub fn gain_money(mut handler: Handler, owner_id: i32, amount: i32) {
-                if owner_id < 0 || owner_id > i8::MAX as i32 || amount <= 0 {
-                    return;
-                }
-                let owner_id = owner_id as i8;
-                if handler.with_game(|game| game.get_owning_player(owner_id).map(|player| !player.dead).unwrap_or(false)) {
-                    handler.money_income(owner_id, amount)
-                }
-            }
-
-            pub fn spend_money(mut handler: Handler, owner_id: i32, amount: i32) {
-                if owner_id < 0 || owner_id > i8::MAX as i32 {
-                    return;
-                }
-                let owner_id = owner_id as i8;
-                if handler.with_game(|game| game.get_owning_player(owner_id).is_some()) {
-                    handler.money_buy(owner_id, amount);
-                }
-            }
-
             pub fn generate_unique_id(handler: Handler, tag: TagKey) -> Dynamic {
                 let environment = handler.environment();
                 super::UniqueId::new(&environment, tag.0, handler.rng())
                 .map(Dynamic::from)
                 .unwrap_or(().into())
             }
-        
+
+            #[rhai_fn(name = "set")]
+            pub fn set_player_flag(mut handler: Handler, owner_id: i32, flag: FlagKey) {
+                if owner_id >= 0 && owner_id <= i8::MAX as i32 {
+                    handler.set_player_flag(owner_id as i8, flag.0);
+                }
+            }
+            #[rhai_fn(name = "remove")]
+            pub fn remove_player_flag(mut handler: Handler, owner_id: i32, flag: FlagKey) {
+                if owner_id >= 0 && owner_id <= i8::MAX as i32 {
+                    handler.remove_player_flag(owner_id as i8, flag.0);
+                }
+            }
+
+            #[rhai_fn(name = "set")]
+            pub fn set_player_tag(mut handler: Handler, owner_id: i32, key: TagKey, value: Dynamic) {
+                if owner_id >= 0 && owner_id <= i8::MAX as i32 {
+                    if let Some(value) = TagValue::from_dynamic(value, key.0, &handler.environment()) {
+                        handler.set_player_tag(owner_id as i8, key.0, value);
+                    };
+                }
+            }
+            #[rhai_fn(name = "remove")]
+            pub fn remove_player_tag(mut handler: Handler, owner_id: i32, key: TagKey) {
+                if owner_id >= 0 && owner_id <= i8::MAX as i32 {
+                    handler.remove_player_tag(owner_id as i8, key.0);
+                }
+            }
+
             pub fn set_unit_flag(mut handler: Handler, position: Point, flag: FlagKey) {
                 if handler.with_map(|map| map.get_unit(position).is_none()) {
                     return;

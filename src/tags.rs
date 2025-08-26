@@ -8,6 +8,7 @@ use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
 use crate::config::tag_config::TagType;
 use crate::map::direction::Direction;
+use crate::map::map::Map;
 use crate::map::point::Point;
 use crate::map::point_map::MAX_AREA;
 use crate::map::wrapping_map::Distortion;
@@ -17,7 +18,7 @@ use crate::units::unit_types::UnitType;
 use crate::units::UnitVisibility;
 
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagBag<D: Direction> {
     flags: Vec<usize>,
     tags: FxHashMap<usize, TagValue<D>>
@@ -177,6 +178,21 @@ pub enum TagValue<D: Direction> {
 
 const TAG_VALUE_ENUM_BITS: u8 = 4;
 impl<D: Direction> TagValue<D> {
+    pub fn default_value(map: &Map<D>, tag_key: usize, random: f32) -> Self {
+        match map.environment().config.tag_type(tag_key) {
+            TagType::Flag => panic!("Flag {tag_key} doesn't have a TagValue"),
+            TagType::Unique { .. } => {
+                Self::Unique(UniqueId::new(map.environment(), tag_key, random).expect(&format!("Couldn't generate unique ID for {tag_key}")))
+            },
+            TagType::Point => Self::Point(map.all_points()[0]),
+            TagType::Direction => Self::Direction(D::angle_0()),
+            TagType::UnitType => Self::UnitType(UnitType(0)),
+            TagType::TerrainType => Self::TerrainType(map.environment().config.default_terrain),
+            TagType::MovementType => Self::MovementType(map.environment().config.movement_types()[0]),
+            TagType::Int { default, .. } => Self::Int(Int32(*default)),
+        }
+    }
+
     fn export(&self, zipper: &mut Zipper, environment: &Environment, tag_key: usize) {
         match self {
             Self::Unique(value) => {
@@ -233,7 +249,7 @@ impl<D: Direction> TagValue<D> {
             (Self::UnitType(_), TagType::UnitType) => true,
             (Self::TerrainType(_), TagType::TerrainType) => true,
             (Self::MovementType(_), TagType::MovementType) => true,
-            (Self::Int(value), TagType::Int { min, max }) => {
+            (Self::Int(value), TagType::Int { min, max, .. }) => {
                 value.0 >= *min && value.0 <= *max
             }
             _ => false
@@ -273,7 +289,7 @@ impl<D: Direction> TagValue<D> {
         let result = match value.type_name().split("::").last().unwrap() {
             "Direction" => Some(Self::Direction(value.cast())),
             "i32" => {
-                let TagType::Int { min, max } = environment.config.tag_type(key) else {
+                let TagType::Int { min, max, .. } = environment.config.tag_type(key) else {
                     return None;
                 };
                 Some(Self::Int(Int32(value.cast::<i32>().max(*min).min(*max))))
@@ -302,14 +318,14 @@ impl<D: Direction> From<i32> for TagValue<D> {
 
 impl Int32 {
     fn export(&self, zipper: &mut Zipper, environment: &Environment, tag_key: usize) {
-        let TagType::Int { min, max } = environment.config.tag_type(tag_key) else {
+        let TagType::Int { min, max, .. } = environment.config.tag_type(tag_key) else {
             panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.config.tag_name(tag_key));
         };
         let bits = bits_needed_for_max_value((*max - *min) as u32);
         zipper.write_u32((self.0 - *min) as u32, bits);
     }
     fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Self, ZipperError> {
-        let TagType::Int { min, max } = environment.config.tag_type(tag_key) else {
+        let TagType::Int { min, max, .. } = environment.config.tag_type(tag_key) else {
             panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.config.tag_name(tag_key));
         };
         let bits = bits_needed_for_max_value((*max - *min) as u32);
@@ -474,11 +490,14 @@ def_package! {
 pub mod tests {
     use std::sync::Arc;
 
+    use semver::Version;
+
     use crate::config::config::Config;
     use crate::config::environment::Environment;
+    use crate::map::direction::Direction4;
     use crate::map::point_map::MapSize;
 
-    use super::UniqueId;
+    use super::*;
 
     pub const FLAG_ZOMBIFIED: usize = 0;
     pub const FLAG_UNMOVED: usize = 1;
@@ -502,6 +521,8 @@ pub mod tests {
     pub const TAG_MOVEMENT_TYPE: usize = 13;
     pub const TAG_SLUDGE_COUNTER: usize = 14;
     pub const TAG_COINS: usize = 15;
+    pub const TAG_FUNDS: usize = 16;
+    pub const TAG_INCOME: usize = 17;
     #[test]
     fn verify_tag_test_constants() {
         let config = Arc::new(Config::default());
@@ -527,6 +548,8 @@ pub mod tests {
         assert_eq!(environment.config.tag_name(TAG_MOVEMENT_TYPE), "MovementType");
         assert_eq!(environment.config.tag_name(TAG_SLUDGE_COUNTER), "SludgeCounter");
         assert_eq!(environment.config.tag_name(TAG_COINS), "Coins");
+        assert_eq!(environment.config.tag_name(TAG_FUNDS), "Funds");
+        assert_eq!(environment.config.tag_name(TAG_INCOME), "Income");
     }
 
     #[test]
@@ -548,5 +571,19 @@ pub mod tests {
             assert_eq!(uid.id, i * 2 + 1);
             ids.push(uid);
         }
+    }
+
+    #[test]
+    fn export_import_tag_bag() {
+        let config = Arc::new(Config::default());
+        let environment = Environment::new_map(config, MapSize::new(5, 5));
+
+        let tags: TagBag<Direction4> = TagBag::new();
+        let mut zipper = Zipper::new();
+        tags.export(&mut zipper, &environment);
+        let bytes = zipper.finish();
+        let mut unzipper = Unzipper::new(bytes, Version::parse(crate::VERSION).unwrap());
+        let imported = TagBag::import(&mut unzipper, &environment).unwrap();
+        assert_eq!(tags, imported);
     }
 }

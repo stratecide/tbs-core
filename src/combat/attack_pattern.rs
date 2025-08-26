@@ -2,7 +2,7 @@ use num_rational::Rational32;
 use rustc_hash::FxHashSet;
 use rhai::{Array, Scope, Shared};
 use zipper::*;
-use zipper_derive::Zippable;
+use zipper::zipper_derive::Zippable;
 
 use crate::config::environment::Environment;
 use crate::config::file_loader::FileLoader;

@@ -1,14 +1,19 @@
+use std::collections::HashSet;
 use std::error::Error;
 use executor::Executor;
 use rhai::Scope;
 use rustc_hash::FxHashMap as HashMap;
 
+use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
 use crate::game::event_handler::EventHandler;
+use crate::game::game::Game;
 use crate::game::game_view::GameView;
+use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::*;
+use crate::tags::FlagKey;
 use crate::units::hero::HeroMap;
 use crate::units::UnitData;
 
@@ -34,6 +39,7 @@ impl TableLine for GlobalEventConfig {
             data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
         };
         let typ = match get(H::Type)?.trim().to_lowercase().as_str() {
+            "global" => GlobalEventType::Global(parse_vec_def(data, H::Filter, Vec::new(), loader)?),
             "unit" => GlobalEventType::Unit(parse_vec_def(data, H::Filter, Vec::new(), loader)?),
             "token" => GlobalEventType::Token(parse_vec_def(data, H::Filter, Vec::new(), loader)?),
             "terrain" => GlobalEventType::Terrain(parse_vec_def(data, H::Filter, Vec::new(), loader)?),
@@ -69,22 +75,35 @@ crate::listable_enum! {
 
 #[derive(Debug)]
 pub(crate) enum GlobalEventType {
+    Global(Vec<GlobalFilter>),
     Terrain(Vec<TerrainFilter>),
     Token(Vec<TokenFilter>),
     Unit(Vec<UnitFilter>),
 }
 
 impl GlobalEventType {
-    pub fn test_global<D: Direction>(&self, _game: &impl GameView<D>) -> Option<Scope<'static>> {
+    pub fn test_global<D: Direction>(&self, game: &Handle<Game<D>>) -> Option<Scope<'static>> {
         match self {
-            _ => None
+            Self::Global(filter) => {
+                let environment = game.environment();
+                let engine = environment.get_engine_board(game);
+                let mut scope = Scope::new();
+                scope.push_constant(CONST_NAME_OWNER_ID, game.with(|g| g.current_player().get_owner_id()) as i32);
+                let executor = Executor::new(engine, scope.clone(), environment);
+                if game.with(|g| filter.iter().all(|filter| filter.check(g, &executor))) {
+                    return Some(scope);
+                }
+            }
+            _ => ()
         }
+        None
     }
 
     pub fn test_local<D: Direction>(&self, handler: &mut EventHandler<D>, pos: Point, heroes: &HeroMap<D>) -> Vec<Scope<'static>> {
         let current_owner_id = handler.get_game().current_owner() as i32;
         let mut result = Vec::new();
         match self {
+            Self::Global(_) => (),
             Self::Terrain(filter) => {
                 let game = &*handler.get_game();
                 let terrain = game.get_terrain(pos).unwrap();
@@ -156,5 +175,93 @@ impl GlobalEventType {
             }
         }
         result
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub(crate) enum GlobalFilter {
+    Rhai(usize),
+    Commander(CommanderType, Option<u8>),
+    Alive,
+    Round(Vec<u32>),
+    Flag(HashSet<FlagKey>),
+    Not(Vec<Self>),
+}
+
+impl FromConfig for GlobalFilter {
+    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+        let (base, mut remainder) = string_base(s);
+        Ok((match base {
+            "Rhai" | "Script" => {
+                let (name, r) = parse_tuple1::<String>(remainder, loader)?;
+                remainder = r;
+                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+            }
+            "Commander" | "Co" => {
+                if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
+                    remainder = r;
+                    Self::Commander(commander, Some(power))
+                } else {
+                    let (commander, r) = parse_tuple1(remainder, loader)?;
+                    remainder = r;
+                    Self::Commander(commander, None)
+                }
+            }
+            "Alive" => Self::Alive,
+            "Round" => {
+                let (list, r) = parse_inner_vec::<u32>(remainder, true, loader)?;
+                remainder = r;
+                Self::Round(list.into_iter().collect())
+            }
+            "Flag" | "F" => {
+                let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
+                remainder = r;
+                Self::Flag(list.into_iter().collect())
+            }
+            "Not" => {
+                let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
+                remainder = r;
+                Self::Not(list)
+            }
+            _ => return Err(ConfigParseError::UnknownEnumMember(format!("GlobalFilter::{s}")))
+        }, remainder))
+    }
+}
+
+impl GlobalFilter {
+    pub fn check<D: Direction>(
+        &self,
+        game: &Game<D>,
+        executor: &Executor,
+    ) -> bool {
+        match self {
+            Self::Rhai(function_index) => {
+                match executor.run(*function_index, ()) {
+                    Ok(result) => result,
+                    Err(_e) => {
+                        // TODO: log error
+                        false
+                    }
+                }
+            }
+            Self::Commander(commander_type, power) => {
+                let commander = &game.current_player().commander;
+                commander.typ() == *commander_type
+                && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
+            }
+            Self::Alive => !game.current_player().dead,
+            Self::Round(rounds) => rounds.contains(&(game.current_turn() as u32 / game.players.len() as u32)),
+            Self::Flag(flags) => {
+                let player = game.current_player();
+                flags.iter().any(|flag| player.has_flag(flag.0))
+            }
+            Self::Not(negated) => {
+                // returns true if at least one check returns false
+                // if you need all checks to return false, put them into separate Self::Not wrappers instead
+                negated.iter()
+                .any(|negated| !negated.check(game, executor))
+            }
+        }
     }
 }

@@ -922,7 +922,7 @@ mod tests {
             ]
         );
         let settings = map.settings().unwrap();
-        let (game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+        let (game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
         let environment = game.environment();
         let rook = UnitType::rook().instance(&environment).set_owner_id(0).build();
         rook.shortest_path_to(&*game, &Path::new(Point::new(3, 2)), None, Point::new(0, 3)).unwrap();

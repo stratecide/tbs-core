@@ -2,7 +2,8 @@
 fn collect_coins(position, token) {
     EVENT_HANDLER.remove_token(position, token);
     let coins = token.get(TAG_Coins) ?? 0;
-    EVENT_HANDLER.gain_money(UNIT.owner_id, Fraction(coins * BOARD.player_income(UNIT.owner_id), 2).ceil());
+    let funds = BOARD.get(UNIT.owner_id, TAG_Funds) ?? 0;
+    EVENT_HANDLER.set(UNIT.owner_id, TAG_Funds, funds + Fraction(coins * BOARD.get(UNIT.owner_id, TAG_Income), 2).ceil());
 }
 
 fn remove_if_enemy(position, token) {

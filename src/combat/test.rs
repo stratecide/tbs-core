@@ -33,8 +33,9 @@ fn hp_factor() {
     map.set_unit(Point::new(1, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(75).build()));
     map.set_unit(Point::new(2, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(50).build()));
     map.set_unit(Point::new(3, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(25).build()));
-    let settings = map.settings().unwrap().build_default();
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let map_settings = map.settings().unwrap();
+    let settings = map_settings.build_default();
+    let (mut game, _) = Game::new_server(map, &map_settings, settings, Arc::new(|| 0.));
     for x in 0..4 {
         game.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
@@ -67,8 +68,9 @@ fn terrain_defense() {
     map.set_unit(Point::new(1, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(2, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(3, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
-    let settings = map.settings().unwrap().build_default();
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let map_settings = map.settings().unwrap();
+    let settings = map_settings.build_default();
+    let (mut game, _) = Game::new_server(map,&map_settings, settings, Arc::new(|| 0.));
     for x in 0..4 {
         game.handle_command(Command::UnitCommand(UnitCommand {
             unload_index: None,
@@ -96,8 +98,9 @@ fn displacement() {
     map.set_unit(Point::new(2, 1), Some(UnitType::destroyer().instance(&environment).set_owner_id(1).set_hp(100).build()));
     //map.set_unit(Point::new(3, 1), Some(UnitType::destroyer().instance(&environment).set_owner_id(1).set_hp(100).build_with_defaults()));
     map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&environment).set_owner_id(1).set_hp(100).build()));
-    let settings = map.settings().unwrap().build_default();
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let map_settings = map.settings().unwrap();
+    let settings = map_settings.build_default();
+    let (mut game, _) = Game::new_server(map,&map_settings, settings, Arc::new(|| 0.));
     let unchanged = game.clone();
 
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -142,8 +145,9 @@ fn dragon_head() {
     map.set_unit(Point::new(2, 0), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     map.set_unit(Point::new(3, 0), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     // create game
-    let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let map_settings = map.settings().unwrap();
+    let settings = map_settings.build_default();
+    let (mut game, _) = Game::new_server(map,&map_settings, settings, Arc::new(|| 0.));
     let unchanged = game.clone();
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -179,8 +183,9 @@ fn cannot_attack_friendly() {
     map.set_unit(Point::new(3, 0), Some(UnitType::bazooka().instance(&environment).set_owner_id(1).set_hp(100).build()));
     map.set_unit(Point::new(0, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(1, 1), Some(UnitType::bazooka().instance(&environment).set_owner_id(0).set_hp(100).build()));
-    let settings = map.settings().unwrap().build_default();
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let map_settings = map.settings().unwrap();
+    let settings = map_settings.build_default();
+    let (mut game, _) = Game::new_server(map,&map_settings, settings, Arc::new(|| 0.));
     let path = Path::new(Point::new(0, 1));
     let options = game.get_unit(Point::new(0, 1)).unwrap().options_after_path(&*game, &path, None, &[]);
     assert_eq!(options, vec![UnitAction::Wait]);

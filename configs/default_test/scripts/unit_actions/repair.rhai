@@ -22,12 +22,12 @@ fn repair_unit(EVENT_HANDLER, unit, position, amount) {
     unit2.set(TAG_Hp, 100);
     let full_price = unit2.value(position);
     if full_price > 0 {
-        let funds = BOARD.player_funds(unit.owner_id);
+        let funds = BOARD.get(unit.owner_id, TAG_Funds) ?? 0;
         amount = min(amount, funds * 100 / full_price);
     }
     if amount > 0 {
         let cost = full_price * amount / 100;
-        EVENT_HANDLER.spend_money(unit.owner_id, cost);
+        EVENT_HANDLER.set(unit.owner_id, TAG_Funds, (BOARD.get(unit.owner_id, TAG_Funds) ?? 0) - cost);
         EVENT_HANDLER.set_unit_flag(position, FLAG_Repairing);
         EVENT_HANDLER.effect(change_unit_hp(position, amount));
     }

@@ -66,16 +66,17 @@ impl<D: Direction> SupportedZippable<&Environment> for (Point, FogIntensity, Fie
 pub enum Event<D:Direction> {
     // global
     NextTurn,
-    MoneyChange(Owner, Funds),
-    PlayerDies(Owner),
     GameEnds,
     // fog events
     PureFogChange(Perspective, LVec<(Point, FogIntensity, FogIntensity), {point_map::MAX_AREA}>),
     FogChange(Perspective, LVec<(Point, FogIntensity, FieldData<D>, FogIntensity, FieldData<D>), {point_map::MAX_AREA}>),
-    PureHideFunds(Owner),
-    HideFunds(Owner, Funds),
-    PureRevealFunds(Owner),
-    RevealFunds(Owner, Funds),
+    // player events
+    PlayerDies(Owner),
+    PurePlayerFog,
+    PlayerFlag(Owner, FlagKey),
+    PlayerSetTag(Owner, TagKeyValues<1, D>),
+    PlayerRemoveTag(Owner, TagKeyValues<1, D>),
+    PlayerReplaceTag(Owner, TagKeyValues<2, D>),
     // commander events
     CommanderCharge(Owner, CommanderChargeChange),
     CommanderPowerIndex(Owner, U<31>, U<31>),
@@ -136,14 +137,6 @@ impl<D: Direction> Event<D> {
         match self {
             // global
             Self::NextTurn => game.current_turn += 1,
-            Self::MoneyChange(owner, change) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds += **change;
-                }
-            }
-            Self::PlayerDies(owner) => {
-                game.get_owning_player_mut(owner.0).unwrap().dead = true;
-            }
             Self::GameEnds => {
                 game.set_ended(true);
             }
@@ -160,17 +153,22 @@ impl<D: Direction> Event<D> {
                     apply_vision_changes(game, team, *pos, *intensity, fd);
                 }
             }
-            Self::PureHideFunds(_) => {}
-            Self::HideFunds(owner, _) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds = 0.into();
-                }
+            // player
+            Self::PlayerDies(owner) => {
+                game.get_owning_player_mut(owner.0).unwrap().dead = true;
             }
-            Self::PureRevealFunds(_) => {}
-            Self::RevealFunds(owner, value) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds = *value;
-                }
+            Self::PurePlayerFog => (), // server doesn't hide/reveal player flags/tags
+            Self::PlayerFlag(owner, flag) => {
+                let environment = game.environment().clone();
+                game.get_owning_player_mut(owner.0).unwrap().flip_flag(&environment, flag.0);
+            }
+            Self::PlayerSetTag(owner, TagKeyValues(key, [value])) |
+            Self::PlayerReplaceTag(owner, TagKeyValues(key, [_, value])) => {
+                let environment = game.environment().clone();
+                game.get_owning_player_mut(owner.0).unwrap().set_tag(&environment, key.0, value.clone());
+            }
+            Self::PlayerRemoveTag(owner, TagKeyValues(key, [_])) => {
+                game.get_owning_player_mut(owner.0).unwrap().remove_tag(key.0);
             }
             // commander
             Self::CommanderCharge(owner, delta) => {
@@ -294,14 +292,6 @@ impl<D: Direction> Event<D> {
         match self {
             // global
             Self::NextTurn => game.current_turn -= 1,
-            Self::MoneyChange(owner, change) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds -= **change;
-                }
-            }
-            Self::PlayerDies(owner) => {
-                game.get_owning_player_mut(owner.0).unwrap().dead = false;
-            }
             Self::GameEnds => {
                 game.set_ended(false);
             }
@@ -318,17 +308,22 @@ impl<D: Direction> Event<D> {
                     apply_vision_changes(game, team, *pos, *intensity, fd);
                 }
             }
-            Self::PureHideFunds(_) => {}
-            Self::HideFunds(owner, value) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds = *value;
-                }
+            // player
+            Self::PlayerDies(owner) => {
+                game.get_owning_player_mut(owner.0).unwrap().dead = false;
             }
-            Self::PureRevealFunds(_) => {}
-            Self::RevealFunds(owner, _) => {
-                if let Some(player) = game.get_owning_player_mut(owner.0) {
-                    player.funds = 0.into();
-                }
+            Self::PurePlayerFog => (), // server doesn't hide/reveal player flags/tags
+            Self::PlayerFlag(owner, flag) => {
+                let environment = game.environment().clone();
+                game.get_owning_player_mut(owner.0).unwrap().flip_flag(&environment, flag.0);
+            }
+            Self::PlayerSetTag(owner, TagKeyValues(key, [_])) => {
+                game.get_owning_player_mut(owner.0).unwrap().remove_tag(key.0);
+            }
+            Self::PlayerRemoveTag(owner, TagKeyValues(key, [value])) |
+            Self::PlayerReplaceTag(owner, TagKeyValues(key, [value, _])) => {
+                let environment = game.environment().clone();
+                game.get_owning_player_mut(owner.0).unwrap().set_tag(&environment, key.0, value.clone());
             }
             // commander
             Self::CommanderCharge(owner, delta) => {
@@ -448,26 +443,12 @@ impl<D: Direction> Event<D> {
             Self::Effects(_) => {}
         }
     }
-    pub fn fog_replacement(&self, game: &Handle<Game<D>>, team: ClientPerspective) -> Option<Event<D>> {
+    pub fn fog_replacement(&self, game: &Handle<Game<D>>, team: ClientPerspective) -> Vec<Event<D>> {
+        let mut result = Vec::new();
         match self {
             // global
-            Self::NextTurn => Some(Self::NextTurn),
-            Self::MoneyChange(owner, _) => {
-                if !game.is_foggy() || team == game.get_team(owner.0) {
-                    Some(self.clone())
-                } else {
-                    None
-                }
-            }
-            Self::PlayerDies(_) |
-            Self::GameEnds => Some(self.clone()),
-            Self::PureHideFunds(owner) => {
-                if team != game.get_team(owner.0) {
-                    Some(Self::HideFunds(owner.clone(), game.get_owning_player(owner.0).unwrap().funds))
-                } else {
-                    None
-                }
-            }
+            Self::NextTurn => result.push(Self::NextTurn),
+            Self::GameEnds => result.push(self.clone()),
             // fog
             Self::PureFogChange(t, points) => {
                 if to_client_perspective(t) == team {
@@ -476,65 +457,80 @@ impl<D: Direction> Event<D> {
                         let fd = FieldData::game_field(game, *p);
                         changes.push((*p, *intensity_before, fd.clone().fog_replacement(game, *p, *intensity_before), *intensity, fd.fog_replacement(game, *p, *intensity)));
                     }
-                    Some(Self::FogChange(t.clone(), changes))
-                } else {
-                    None
+                    result.push(Self::FogChange(t.clone(), changes))
                 }
             }
             Self::FogChange(_, _) => {
                 panic!("FogChange should only ever be created as replacement for PureFogChange. It shouldn't be replaced itself!");
             }
-            Self::HideFunds(_, _) => {
-                panic!("HideFunds should only ever be created as replacement for PureHideFunds. It shouldn't be replaced itself!");
+            // player
+            Self::PlayerDies(_) => result.push(self.clone()),
+            Self::PurePlayerFog => {
+                game.with(|game| {
+                    for player in game.players.iter()
+                    .filter(|p| p.get_team() != team) {
+                        let foggy = player.fog_replacement();
+                        for flag in player.get_tag_bag().flags()
+                        .filter(|f| !foggy.has_flag(**f)) {
+                            result.push(Self::PlayerFlag(Owner(player.get_owner_id()), FlagKey(*flag)));
+                        }
+                        for (key, value) in player.get_tag_bag().tags()
+                        .filter(|(key, _)| foggy.get_tag(**key).is_none()) {
+                            if game.get_fog_setting().intensity() <= FogIntensity::NormalVision {
+                                result.push(Self::PlayerSetTag(Owner(player.get_owner_id()), TagKeyValues(TagKey(*key), [value.clone()])));
+                            } else {
+                                result.push(Self::PlayerRemoveTag(Owner(player.get_owner_id()), TagKeyValues(TagKey(*key), [value.clone()])));
+                            }
+                        }
+                    }
+                });
             }
-            Self::PureRevealFunds(owner) => {
-                if team != game.get_team(owner.0) {
-                    Some(Self::RevealFunds(owner.clone(), game.get_owning_player(owner.0).unwrap().funds))
-                } else {
-                    None
+            Self::PlayerFlag(owner, FlagKey(key)) => {
+                if team == game.get_team(owner.0)
+                || game.get_fog_setting().intensity() <= FogIntensity::NormalVision
+                || game.environment().config.flag_visibility(*key) == UnitVisibility::AlwaysVisible {
+                    result.push(self.clone())
                 }
             }
-            Self::RevealFunds(_, _) => {
-                panic!("RevealFunds should only ever be created as replacement for PureRevealFunds. It shouldn't be replaced itself!");
+            Self::PlayerSetTag(owner, TagKeyValues(TagKey(key), _)) |
+            Self::PlayerRemoveTag(owner, TagKeyValues(TagKey(key), _)) |
+            Self::PlayerReplaceTag(owner, TagKeyValues(TagKey(key), _)) => {
+                if team == game.get_team(owner.0)
+                || game.get_fog_setting().intensity() <= FogIntensity::NormalVision
+                || game.environment().config.tag_visibility(*key) == UnitVisibility::AlwaysVisible {
+                    result.push(self.clone())
+                }
             }
             // commander
-            Self::CommanderCharge(_, _) => {
-                Some(self.clone())
-            }
-            Self::CommanderPowerIndex(_, _, _) => {
-                Some(self.clone())
-            }
+            Self::CommanderCharge(_, _) |
+            Self::CommanderPowerIndex(_, _, _) => result.push(self.clone()),
             // hero
             Self::HeroSet(pos, _) => {
                 if can_see_unit_at(game, team, *pos, &game.get_unit(*pos).unwrap(), false) {
-                    Some(self.clone())
-                } else {
-                    None
+                    result.push(self.clone())
                 }
             }
             Self::HeroCharge(p, _) |
             Self::HeroPower(p, _, _) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
-                    return Some(self.clone());
+                    return vec![self.clone()];
                 }
                 let unit = game.get_unit(*p).unwrap();
                 if unit.fog_replacement(game, *p, fog_intensity).filter(|u| u.is_hero()).is_some() {
-                    Some(self.clone())
-                } else {
-                    None
+                    result.push(self.clone())
                 }
             }
             Self::HeroChargeTransported(p, unload_index, change) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
-                    return Some(self.clone());
+                    return vec![self.clone()];
                 }
                 let transporter = game.get_unit(*p).unwrap();
                 let transporter_visibility = transporter.visibility(game, *p);
                 let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
-                    return None;
+                    return result;
                 }
                 let unit = &transporter.get_transported()[unload_index.0];
                 if unit.fog_replacement(game, *p, fog_intensity).filter(|u| u.is_hero()).is_some() {
@@ -542,70 +538,58 @@ impl<D: Direction> Event<D> {
                     .take(unload_index.0)
                     .filter(|u| u.fog_replacement(game, *p, fog_intensity).is_some())
                     .count();
-                    Some(Self::HeroChargeTransported(*p, i.into(), *change))
-                } else {
-                    None
+                    result.push(Self::HeroChargeTransported(*p, i.into(), *change))
                 }
             }
             // unit
             Self::UnitAdd(pos, unit) => {
                 if let Some(unit) = unit.fog_replacement(game, *pos, game.get_fog_at(team, *pos)) {
-                    Some(Self::UnitAdd(*pos, unit))
-                } else {
-                    None
+                    result.push(Self::UnitAdd(*pos, unit))
                 }
             }
             Self::UnitRemove(pos, unit) => {
                 if let Some(unit) = unit.fog_replacement(game, *pos, game.get_fog_at(team, *pos)) {
-                    Some(Self::UnitRemove(*pos, unit))
-                } else {
-                    None
+                    result.push(Self::UnitRemove(*pos, unit))
                 }
             }
             Self::UnitAddBoarded(p, unit) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
-                    return Some(self.clone());
+                    return vec![self.clone()];
                 }
                 let transporter = game.get_unit(*p).unwrap();
                 let transporter_visibility = transporter.visibility(game, *p);
                 let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
-                    return None;
+                    return result;
                 }
                 if let Some(unit) = unit.fog_replacement(game, *p, fog_intensity) {
-                    Some(Self::UnitAddBoarded(*p, unit))
-                } else {
-                    None
+                    result.push(Self::UnitAddBoarded(*p, unit))
                 }
             }
             Self::UnitRemoveBoarded(p, unload_index, unit) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
-                    return Some(self.clone());
+                    return vec![self.clone()];
                 }
                 let transporter = game.get_unit(*p).unwrap();
                 let transporter_visibility = transporter.visibility(game, *p);
                 let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
-                    return None;
+                    return result;
                 }
                 if let Some(unit) = unit.fog_replacement(game, *p, fog_intensity) {
                     let i = transporter.get_transported().iter()
                     .take(unload_index.0)
                     .filter(|u| u.fog_replacement(game, *p, fog_intensity).is_some())
                     .count();
-                    Some(Self::UnitRemoveBoarded(*p, i.into(), unit))
-                } else {
-                    None
+                    result.push(Self::UnitRemoveBoarded(*p, i.into(), unit))
                 }
             }
             Self::UnitFlag(p, FlagKey(key)) => {
                 let unit = game.get_unit(*p).unwrap();
                 if visible_unit_with_attribute(game, team, *p, unit.environment().config.flag_visibility(*key)) {
-                    Some(self.clone())
-                } else {
-                    None
+                    result.push(self.clone())
                 }
             }
             Self::UnitSetTag(p, TagKeyValues(TagKey(key), _)) |
@@ -613,41 +597,31 @@ impl<D: Direction> Event<D> {
             Self::UnitReplaceTag(p, TagKeyValues(TagKey(key), _)) => {
                 let unit = game.get_unit(*p).unwrap();
                 if visible_unit_with_attribute(game, team, *p, unit.environment().config.tag_visibility(*key)) {
-                    Some(self.clone())
-                } else {
-                    None
+                    result.push(self.clone())
                 }
             }
             Self::UnitFlagBoarded(p, unload_index, key) => {
                 let unit = game.get_unit(*p).unwrap();
                 if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().config.flag_visibility(key.0)) {
-                    Some(Self::UnitFlagBoarded(*p, unload_index.into(), *key))
-                } else {
-                    None
+                    result.push(Self::UnitFlagBoarded(*p, unload_index.into(), *key))
                 }
             }
             Self::UnitSetTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
                 let unit = game.get_unit(*p).unwrap();
                 if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().config.tag_visibility(key.0)) {
-                    Some(Self::UnitSetTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
-                } else {
-                    None
+                    result.push(Self::UnitSetTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
                 }
             }
             Self::UnitRemoveTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
                 let unit = game.get_unit(*p).unwrap();
                 if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().config.tag_visibility(key.0)) {
-                    Some(Self::UnitRemoveTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
-                } else {
-                    None
+                    result.push(Self::UnitRemoveTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
                 }
             }
             Self::UnitReplaceTagBoarded(p, unload_index, TagKeyValues(key, value)) => {
                 let unit = game.get_unit(*p).unwrap();
                 if let Some(unload_index) = visible_unit_with_attribute_transported(game, team, *p, unload_index.0, unit.environment().config.tag_visibility(key.0)) {
-                    Some(Self::UnitReplaceTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
-                } else {
-                    None
+                    result.push(Self::UnitReplaceTagBoarded(*p, unload_index.into(), TagKeyValues(*key, value.clone())))
                 }
             }
             // terrain
@@ -656,9 +630,7 @@ impl<D: Direction> Event<D> {
                 let before = before.fog_replacement(fog_intensity);
                 let after = after.fog_replacement(fog_intensity);
                 if before != after {
-                    Some(Self::TerrainChange(*pos, before, after))
-                } else {
-                    None
+                    result.push(Self::TerrainChange(*pos, before, after))
                 }
             }
             Self::TerrainFlag(p, FlagKey(key)) => {
@@ -669,9 +641,7 @@ impl<D: Direction> Event<D> {
                     UnitVisibility::Normal |
                     UnitVisibility::Stealth => game.get_fog_at(team, *p) < FogIntensity::Light,
                 } {
-                    Some(self.clone())
-                } else {
-                    None
+                    result.push(self.clone())
                 }
             }
             Self::TerrainSetTag(p, TagKeyValues(TagKey(key), _)) |
@@ -684,16 +654,14 @@ impl<D: Direction> Event<D> {
                     UnitVisibility::Normal |
                     UnitVisibility::Stealth => game.get_fog_at(team, *p) < FogIntensity::Light,
                 } {
-                    Some(self.clone())
-                } else {
-                    None
+                    result.push(self.clone())
                 }
             }
             // token
             Self::RemoveToken(p, index, token) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
-                    Some(self.clone())
+                    result.push(self.clone())
                 } else if let Some(token) = token.fog_replacement(fog_intensity) {
                     let mut new_index = 0;
                     for (i, token) in game.get_tokens(*p).into_iter().enumerate() {
@@ -704,15 +672,13 @@ impl<D: Direction> Event<D> {
                             new_index += 1;
                         }
                     }
-                    Some(Self::RemoveToken(*p, new_index.into(), token))
-                } else {
-                    None
+                    result.push(Self::RemoveToken(*p, new_index.into(), token))
                 }
             }
             Self::ReplaceToken(p, old, new) => {
                 let fog_intensity = game.get_fog_at(team, *p);
                 if fog_intensity == FogIntensity::TrueSight {
-                    Some(self.clone())
+                    result.push(self.clone())
                 } else {
                     let old: Vec<Token<D>> = old.iter().filter_map(|token| {
                         token.fog_replacement(fog_intensity)
@@ -721,37 +687,34 @@ impl<D: Direction> Event<D> {
                         token.fog_replacement(fog_intensity)
                     }).collect();
                     if old != new {
-                        Some(Self::ReplaceToken(*p, old.try_into().unwrap(), new.try_into().unwrap()))
-                    } else {
-                        None
+                        result.push(Self::ReplaceToken(*p, old.try_into().unwrap(), new.try_into().unwrap()))
                     }
                 }
             }
             // visual
             Self::Effect(effect) => {
                 if !game.is_foggy() {
-                    Some(self.clone())
+                    result.push(self.clone())
                 } else if let Some(effect) = effect.fog_replacement(game, team) {
-                    Some(Self::Effect(effect))
-                } else {
-                    None
+                    result.push(Self::Effect(effect))
                 }
             }
             Self::Effects(effects) => {
                 if !game.is_foggy() {
-                    Some(self.clone())
+                    result.push(self.clone())
                 } else {
                     let mut effects: Vec<_> = effects.iter()
                     .filter_map(|e| e.fog_replacement(game, team))
                     .collect();
                     match effects.len() {
-                        0 => None,
-                        1 => Some(Self::Effect(effects.pop().unwrap())),
-                        _ => Some(Self::Effects(effects.try_into().unwrap()))
+                        0 => (),
+                        1 => result.push(Self::Effect(effects.pop().unwrap())),
+                        _ => result.push(Self::Effects(effects.try_into().unwrap()))
                     }
                 }
             }
         }
+        result
     }
 }
 

@@ -47,13 +47,6 @@ mod environment_module {
             .collect::<Vec<_>>()
     }
 
-    #[rhai_fn(pure)]
-    pub fn income_factor(environment: &mut Environment, owner_id: i32) -> i32 {
-        environment.settings.as_ref().and_then(|settings| {
-            settings.players.iter().find(|player| player.get_owner_id() as i32 == owner_id)
-            .map(|player| player.get_income())
-        }).unwrap_or(0)
-    }
 }
 
 def_package! {

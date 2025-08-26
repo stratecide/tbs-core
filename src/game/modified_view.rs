@@ -65,7 +65,7 @@ trait ModifiedView<D: Direction> {
     fn current_owner(&self) -> i8 {
         self.get_inner_view().current_owner()
     }
-    fn get_owning_player(&self, owner: i8) -> Option<Player> {
+    fn get_owning_player(&self, owner: i8) -> Option<Player<D>> {
         self.get_inner_view().get_owning_player(owner)
     }
     fn get_fog_setting(&self) -> FogSetting {
@@ -140,7 +140,7 @@ macro_rules! impl_game_view {
             fn current_owner(&self) -> i8 {
                 ModifiedView::current_owner(self)
             }
-            fn get_owning_player(&self, owner: i8) -> Option<Player> {
+            fn get_owning_player(&self, owner: i8) -> Option<Player<D>> {
                 ModifiedView::get_owning_player(self, owner)
             }
             fn get_team(&self, owner: i8) -> ClientPerspective {
@@ -218,7 +218,7 @@ impl_game_view!(IgnoreUnits<D>);
 pub struct UnitMovementView<D: Direction> {
     base: SharedGameView<D>,
     units: HashMap<Point, Option<Unit<D>>>,
-    players: HashMap<i8, Player>,
+    players: HashMap<i8, Player<D>>,
 }
 
 impl<D: Direction> UnitMovementView<D> {
@@ -281,7 +281,7 @@ impl<D: Direction> ModifiedView<D> for UnitMovementView<D> {
         }
     }
 
-    fn get_owning_player(&self, owner: i8) -> Option<Player> {
+    fn get_owning_player(&self, owner: i8) -> Option<Player<D>> {
         self.players.get(&owner).cloned().or(self.get_inner_view().get_owning_player(owner))
     }
 

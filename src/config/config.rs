@@ -16,7 +16,6 @@ use crate::game::game::Game;
 use crate::game::game_view::GameView;
 use crate::game::modified_view::UnitMovementView;
 use crate::game::{import_client, import_server};
-use crate::game::settings::GameConfig;
 use crate::game::GameType;
 use crate::handle::Handle;
 use crate::map::direction::Direction;
@@ -83,7 +82,7 @@ pub struct Config {
     pub(super) max_hero_transport_bonus: usize,
     // terrain
     pub(super) terrains: Vec<TerrainTypeConfig>,
-    pub(super) default_terrain: TerrainType,
+    pub(crate) default_terrain: TerrainType,
     pub(super) movement_cost: HashMap<TerrainType, HashMap<MovementType, Rational32>>,
     pub(super) terrain_flags: HashMap<(usize, TerrainType), TagEditorVisibility>,
     pub(super) terrain_tags: HashMap<(usize, TerrainType), TagEditorVisibility>,
@@ -127,10 +126,6 @@ impl ConfigInterface for Config {
             MapType::Hex(map) => Ok(Box::new(Handle::new(map))),
             MapType::Square(map) => Ok(Box::new(Handle::new(map))),
         }
-    }
-
-    fn parse_game_settings(self: Arc<Self>, bytes: Vec<u8>) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
-        Ok(Box::new(GameConfig::import(self, bytes)?))
     }
 
     fn parse_server(self: Arc<Self>, data: ExportedGame) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
@@ -185,6 +180,9 @@ impl Config {
     pub fn tag_visibility(&self, index: usize) -> UnitVisibility {
         self.tags[index].visibility
     }
+    pub fn tag_config(&self, index: usize) -> &TagConfig {
+        &self.tags[index]
+    }
     pub fn tag_name(&self, index: usize) -> &str {
         &self.tags[index].name
     }
@@ -192,23 +190,35 @@ impl Config {
         self.tags.iter().position(|tag| tag.name.as_str() == name)
     }
 
-    pub fn is_terrain_flag_normal(&self, typ: TerrainType, flag: usize) -> TagEditorVisibility {
+    pub fn flag_ev_terrain(&self, typ: TerrainType, flag: usize) -> TagEditorVisibility {
         self.terrain_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_terrain_tag_normal(&self, typ: TerrainType, tag: usize) -> TagEditorVisibility {
+    pub fn tag_ev_terrain(&self, typ: TerrainType, tag: usize) -> TagEditorVisibility {
         self.terrain_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_token_flag_normal(&self, typ: TokenType, flag: usize) -> TagEditorVisibility {
+    pub fn flag_ev_token(&self, typ: TokenType, flag: usize) -> TagEditorVisibility {
         self.token_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_token_tag_normal(&self, typ: TokenType, tag: usize) -> TagEditorVisibility {
+    pub fn tag_ev_token(&self, typ: TokenType, tag: usize) -> TagEditorVisibility {
         self.token_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_unit_flag_normal(&self, typ: UnitType, flag: usize) -> TagEditorVisibility {
+    pub fn flag_ev_unit(&self, typ: UnitType, flag: usize) -> TagEditorVisibility {
         self.unit_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
     }
-    pub fn is_unit_tag_normal(&self, typ: UnitType, tag: usize) -> TagEditorVisibility {
+    pub fn tag_ev_unit(&self, typ: UnitType, tag: usize) -> TagEditorVisibility {
         self.unit_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
+    }
+    pub fn flag_ev_player(&self, flag: usize) -> TagEditorVisibility {
+        self.flags.get(flag).map(|tc| tc.player).unwrap_or(TagEditorVisibility::Hidden)
+    }
+    pub fn tag_ev_player(&self, tag: usize) -> TagEditorVisibility {
+        self.tags.get(tag).map(|tc| tc.player).unwrap_or(TagEditorVisibility::Hidden)
+    }
+    pub fn flag_ev_global(&self, flag: usize) -> TagEditorVisibility {
+        self.flags.get(flag).map(|tc| tc.global).unwrap_or(TagEditorVisibility::Hidden)
+    }
+    pub fn tag_ev_global(&self, tag: usize) -> TagEditorVisibility {
+        self.tags.get(tag).map(|tc| tc.global).unwrap_or(TagEditorVisibility::Hidden)
     }
 
     // units

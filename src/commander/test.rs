@@ -69,12 +69,12 @@ fn gain_charge() {
     map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(2, 1), Some(UnitType::magnet().instance(&map_env).set_owner_id(1).set_hp(100).build()));
 
-    let mut settings = map.settings().unwrap();
-    settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let mut settings = settings.build_default();
+    let mut map_settings = map.settings().unwrap();
+    map_settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Zombie);
     settings.players[1].set_commander(CommanderType::Zombie);
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     server.with(|server| {
         assert_eq!(server.players.get(0).unwrap().commander.get_charge(), 0);
         assert_eq!(server.players.get(1).unwrap().commander.get_charge(), 0);
@@ -118,15 +118,14 @@ fn zombie() {
 
     map.set_terrain(Point::new(3, 1), TerrainType::Factory.instance(&map_env).set_owner_id(0).build());
 
-    let settings = map.settings().unwrap();
-    let mut settings = settings.clone();
-    for player in &settings.players {
+    let mut map_settings = map.settings().unwrap();
+    for player in &map_settings.players {
         assert!(player.get_commander_options().contains(&CommanderType::Zombie));
     }
-    settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let mut settings = settings.build_default();
+    map_settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Zombie);
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -172,7 +171,7 @@ fn zombie() {
     // buy unit
     let mut server = unchanged.clone();
     server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().funds = 1000.into();
+        server.players.get_mut(0).unwrap().set_tag(&environment, TAG_FUNDS, 1000.into());
     });
     server.handle_command(Command::TerrainAction(Point::new(3, 1), vec![
         CustomActionInput::ShopItem(0.into()),
@@ -202,16 +201,14 @@ fn simo() {
     let target_farthest = Point::new(5, 1);
     map.set_unit(target_farthest, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
 
-    let settings = map.settings().unwrap();
-
-    let mut settings = settings.clone();
-    for player in &settings.players {
+    let mut map_settings = map.settings().unwrap();
+    for player in &map_settings.players {
         assert!(player.get_commander_options().contains(&CommanderType::Simo));
     }
-    settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let mut settings = settings.build_default();
+    map_settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Simo);
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -315,14 +312,14 @@ fn vlad() {
     let target_far = Point::new(5, 4);
     map.set_unit(target_far, Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(50).build()));
 
-    let mut settings = map.settings().unwrap();
-    for player in &settings.players {
+    let mut map_settings = map.settings().unwrap();
+    for player in &map_settings.players {
         assert!(player.get_commander_options().contains(&CommanderType::Vlad));
     }
-    settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let mut sett = settings.build_default();
-    sett.players[0].set_commander(CommanderType::Vlad);
-    let (mut server, _) = Game::new_server(map.clone(), sett, Arc::new(|| 0.));
+    map_settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = map_settings.build_default();
+    settings.players[0].set_commander(CommanderType::Vlad);
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
 
     // d2d daylight
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -333,10 +330,10 @@ fn vlad() {
     assert_eq!(server.get_unit(arty_pos).unwrap().get_hp(), 50);
 
     // d2d night
-    settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
-    let mut settings = settings.build_default();
+    map_settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
+    let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Vlad);
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -389,14 +386,14 @@ fn tapio() {
     map.set_terrain(Point::new(3, 0), TerrainType::FairyForest.instance(&map_env).set_owner_id(1).build());
     map.set_unit(Point::new(3, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
 
-    let mut settings = map.settings().unwrap();
-    for player in &settings.players {
+    let mut map_settings = map.settings().unwrap();
+    for player in &map_settings.players {
         assert!(player.get_commander_options().contains(&CommanderType::Tapio));
     }
-    settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
-    let mut settings = settings.build_default();
+    map_settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
+    let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Tapio);
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -442,8 +439,9 @@ fn tapio() {
 
     // ACTIVE: see into fairy forests, build units from fairy forests
     let mut server = unchanged.clone();
+    let environment = server.environment();
     server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().funds = 10000.into();
+        server.players.get_mut(0).unwrap().set_tag(&environment, TAG_FUNDS, 10000.into());
     });
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
@@ -479,16 +477,14 @@ fn sludge_monster() {
     map.set_unit(Point::new(1, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build()));
     map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
 
-    let settings = map.settings().unwrap();
-
-    let mut settings = settings.clone();
-    for player in &settings.players {
+    let mut map_settings = map.settings().unwrap();
+    for player in &map_settings.players {
         assert!(player.get_commander_options().contains(&CommanderType::SludgeMonster));
     }
-    settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let mut settings = settings.build_default();
+    map_settings.fog_mode = FogMode::Constant(FogSetting::None);
+    let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::SludgeMonster);
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     let environment = server.environment();
     let sludge_token = move |owner_id: i8, counter: i32| {
         let mut sludge = Token::new(environment.clone(), TokenType::SLUDGE);
@@ -597,18 +593,16 @@ fn celerity() {
 
     map.set_terrain(Point::new(0, 4), TerrainType::Factory.instance(&map_env).set_owner_id(0).build());
 
-    let settings = map.settings().unwrap();
-
-    let mut settings = settings.clone();
-    for player in &settings.players {
+    let mut map_settings = map.settings().unwrap();
+    for player in &map_settings.players {
         assert!(player.get_commander_options().contains(&CommanderType::Celerity));
     }
-    settings.fog_mode = FogMode::Constant(FogSetting::None);
+    map_settings.fog_mode = FogMode::Constant(FogSetting::None);
     let funds = 10000;
-    settings.players[0].set_funds(funds);
+    map_settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, funds.into());
 
     // get some default values without using Celerity
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, map_settings.build_default(), Arc::new(|| 0.));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 2)),
@@ -618,12 +612,12 @@ fn celerity() {
     server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
     ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
-    let default_cost = funds - server.with(|server| *server.current_player().funds);
+    let default_cost = funds - server.with(|server| server.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>());
     assert!(!server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL).is_some());
 
-    let mut settings = settings.build_default();
+    let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Celerity);
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     let environment = server.environment().clone();
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
@@ -633,7 +627,7 @@ fn celerity() {
     server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
     ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
-    assert!(funds - server.with(|server| *server.current_player().funds) < default_cost);
+    assert!(funds - server.with(|server| server.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()) < default_cost);
     assert_eq!(server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL), None, "New units are Level 0");
 
     // level attack bonuses
@@ -715,14 +709,14 @@ fn lageos() {
     map.set_unit(Point::new(1, 0), Some(UnitType::attack_heli().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(1, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build()));
 
-    let settings = map.settings().unwrap();
-    for player in &settings.players {
+    let map_settings = map.settings().unwrap();
+    for player in &map_settings.players {
         assert!(player.get_commander_options().contains(&CommanderType::Lageos));
     }
     // get some default values without using Lageos
-    let mut settings = map.settings().unwrap().build_default();
+    let mut settings = map_settings.build_default();
     settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -738,10 +732,10 @@ fn lageos() {
     let damage_to_neutral_tank = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
     let neutral_vision_range = (0..map.width()).find(|x| server.get_fog_at(ClientPerspective::Team(0), Point::new(*x, 0)) == FogIntensity::Dark).unwrap();
 
-    let mut settings = map.settings().unwrap().build_default();
+    let mut settings = map_settings.build_default();
     settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
     settings.players[0].set_commander(CommanderType::Lageos);
-    let (mut server, _) = Game::new_server(map.clone(), settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });

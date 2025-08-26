@@ -1,4 +1,5 @@
 Type;Filter;StartTurn;EndTurn
+Global;;on_start_turn > income;
 Unit;OwnerTurn, Not(Carried), Tag(DroneStationId);on_unit/start_turn > return_drones;
 Unit;OwnerTurn, Not(Carried), Tag(DroneId);on_unit/start_turn > self_destruct;
 Unit;OwnerTurn, Not(Carried), Not(Tag(DroneId)), U(LightDrone);on_unit/start_turn > damage_50;

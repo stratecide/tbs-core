@@ -57,7 +57,7 @@ pub trait GameView<D: Direction>: Send + Sync {
     fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>>;
 
     fn current_owner(&self) -> i8;
-    fn get_owning_player(&self, owner: i8) -> Option<Player>;
+    fn get_owning_player(&self, owner: i8) -> Option<Player<D>>;
     fn get_team(&self, owner: i8) -> ClientPerspective;
     fn is_foggy(&self) -> bool {
         self.get_fog_setting().intensity() != FogIntensity::TrueSight

@@ -21,6 +21,7 @@ use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::player::Player;
+use crate::tags::TagBag;
 use crate::units::hero::HeroMap;
 use crate::VERSION;
 use crate::tokens;
@@ -37,6 +38,7 @@ where D: Direction
 {
     environment: Environment,
     wrapping_logic: WrappingMap<D>,
+    tags: TagBag<D>,
     pipes: HashMap<Point, Vec<PipeState<D>>>,
     terrain: HashMap<Point, Terrain<D>>,
     units: HashMap<Point, Unit<D>>,
@@ -47,6 +49,7 @@ impl<D: Direction> Debug for Map<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{:?}", self.environment)?;
         writeln!(f, "{:?}", self.wrapping_logic)?;
+        self.tags.debug(f, &self.environment)?;
         for p in self.all_points() {
             write!(f, "{},{}: {:?}", p.x, p.y, self.terrain.get(&p).unwrap())?;
             if let Some(tokens) = self.tokens.get(&p) {
@@ -78,6 +81,7 @@ impl<D: Direction> Map<D> {
         Map {
             environment,
             wrapping_logic,
+            tags: TagBag::new(),
             pipes: HashMap::default(),
             terrain,
             units: HashMap::default(),
@@ -93,6 +97,7 @@ impl<D: Direction> Map<D> {
         Map {
             environment: environment.clone(),
             wrapping_logic,
+            tags: TagBag::new(),
             pipes: HashMap::default(),
             terrain,
             units: HashMap::default(),
@@ -102,6 +107,10 @@ impl<D: Direction> Map<D> {
 
     pub fn environment(&self) -> &Environment {
         &self.environment
+    }
+
+    pub fn get_tag_bag(&self) -> &TagBag<D> {
+        &self.tags
     }
 
     pub fn wrapping_logic(&self) -> &WrappingMap<D> {
@@ -399,20 +408,7 @@ impl<D: Direction> Map<D> {
         }
         corrected
     }
-    
-    pub fn get_income_factor(map: &impl GameView<D>, owner_id: i8) -> Rational32 {
-        // income from properties
-        let mut income_factor = Rational32::from_integer(0);
-        let hero_map = HeroMap::new(map, Some(owner_id));
-        for p in map.all_points() {
-            let t = map.get_terrain(p).unwrap();
-            if t.get_owner_id() == owner_id {
-                income_factor += t.income_factor(map, p, hero_map.get(p, owner_id));
-            }
-        }
-        income_factor
-    }
-    
+
     pub fn get_viable_player_ids(&self, _game: &impl GameView<D>) -> Vec<u8> {
         let mut owners = HashSet::default();
         for p in self.all_points() {
@@ -448,6 +444,7 @@ impl<D: Direction> Map<D> {
     pub fn import_from_unzipper(unzipper: &mut Unzipper, environment: &mut Environment) -> Result<Self, ZipperError> {
         let wrapping_logic = WrappingMap::unzip(unzipper)?;
         environment.map_size = wrapping_logic.pointmap().size();
+        let tags = TagBag::import(unzipper, environment)?;
         let mut pipes = HashMap::default();
         let mut terrain = HashMap::default();
         let mut units = HashMap::default();
@@ -468,6 +465,7 @@ impl<D: Direction> Map<D> {
         Ok(Self {
             environment: environment.clone(),
             wrapping_logic,
+            tags,
             pipes,
             terrain,
             units,
@@ -490,17 +488,17 @@ impl<D: Direction> Map<D> {
         }
     }
 
-    pub fn settings(&self) -> Result<GameConfig, NotPlayable> {
+    pub fn settings(&self) -> Result<GameConfig<D>, NotPlayable> {
         let as_view = Handle::new(self.clone());
         let owners = self.get_viable_player_ids(&as_view);
         if owners.len() < 2 {
             return Err(NotPlayable::TooFewPlayers);
         }
-        let players:Vec<PlayerConfig> = owners.into_iter()
-            .map(|owner| PlayerConfig::new(owner, &self.environment.config))
+        let random: RandomFn = Arc::new(|| 0.);
+        let players:Vec<PlayerConfig<D>> = owners.into_iter()
+            .map(|owner| PlayerConfig::new(owner, self, &random))
             .collect();
         Ok(settings::GameConfig {
-            config: self.environment.config.clone(),
             fog_mode: FogMode::Constant(FogSetting::Light(0)),
             players: players.try_into().unwrap(),
         })
@@ -596,7 +594,7 @@ impl<D: Direction> GameView<D> for Handle<Map<D>> {
         -1
     }
 
-    fn get_owning_player(&self, _: i8) -> Option<Player> {
+    fn get_owning_player(&self, _: i8) -> Option<Player<D>> {
         None
     }
 
@@ -690,6 +688,7 @@ impl<D: Direction> MapInterface for Handle<Map<D>> {
         zipper.write_bool(D::is_hex());
         self.with(|map| {
             map.wrapping_logic.zip(&mut zipper);
+            map.tags.export(&mut zipper, &map.environment);
             for p in map.all_points() {
                 map.get_field_data(p).export(&mut zipper, &map.environment);
             }
@@ -727,30 +726,43 @@ impl<D: Direction> MapInterface for Handle<Map<D>> {
         if owners.len() < 2 {
             return Err(Box::new(NotPlayable::TooFewPlayers));
         }
-        let players:Vec<PlayerConfig> = owners.into_iter()
-            .map(|owner| PlayerConfig::new(owner, &self.environment().config))
-            .collect();
+        let random: RandomFn = Arc::new(|| 0.);
+        let players:Vec<PlayerConfig<D>> = self.with(|map| {
+            owners.into_iter()
+            .map(|owner| PlayerConfig::new(owner, map, &random))
+            .collect()
+        });
         Ok(Box::new(settings::GameConfig {
-            config: self.environment().config.clone(),
             fog_mode: FogMode::Constant(FogSetting::Light(0)),
             players: players.try_into().unwrap(),
         }))
     }
 
     fn parse_settings(&self, bytes: Vec<u8>) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
-        let settings = GameConfig::import(self.environment().config.clone(), bytes)?;
+        let settings = self.with(|map| {
+            GameConfig::import(map, bytes)
+        })?;
         Ok(Box::new(settings))
     }
 
+    fn check_player_setting(&self, game_settings: Vec<u8>, player_index: usize, bytes: Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
+        self.with(|map| {
+            let settings = GameConfig::import(map, game_settings)?;
+            settings.check_player_setting(&map.environment.config, player_index, bytes)
+        })
+    }
+
     fn game_creator(self: Box<Self>, settings: Vec<u8>, player_settings: Vec<Vec<u8>>) -> Result<Box<dyn GameCreationInterface>, Box<dyn Error>> {
-        let settings = GameConfig::import(self.environment().config.clone(), settings)?;
+        let settings = self.with(|map| {
+            GameConfig::import(map, settings)
+        })?;
         if player_settings.len() != settings.players.len() {
             return Err(Box::new(PlayerSettingError::PlayerCount(settings.players.len(), player_settings.len())));
         }
         let mut player_selection = Vec::with_capacity(player_settings.len());
         for bytes in player_settings {
             let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION).unwrap());
-            player_selection.push(PlayerSelectedOptions::import(&mut unzipper, &settings.config)?);
+            player_selection.push(PlayerSelectedOptions::import(&mut unzipper, &self.environment().config)?);
         }
         Ok(Box::new(GameCreation {
             map: self.with(|map| map.clone()),
@@ -784,22 +796,22 @@ impl Error for NotPlayable {}
 
 pub struct GameCreation<D: Direction> {
     pub map: Map<D>,
-    pub settings: settings::GameConfig,
+    pub settings: settings::GameConfig<D>,
     pub player_selection: Vec<settings::PlayerSelectedOptions>,
 }
 
 impl<D: Direction> GameCreationInterface for GameCreation<D> {
     fn server(self: Box<Self>, random: RandomFn) -> (Box<dyn GameInterface>, Events) {
         let settings = self.settings.build(&self.player_selection, &random);
-        let (server, events) = Game::new_server(self.map, settings, random);
+        let (server, events) = Game::new_server(self.map, &self.settings, settings, random);
         let events = server.with(|s| events.export(s.environment()));
         (server, events)
     }
 
     fn server_and_client(self: Box<Self>, client_perspective: ClientPerspective, random: RandomFn) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
         let settings = self.settings.build(&self.player_selection, &random);
-        let (server, events) = Game::new_server(self.map.clone(), settings.clone(), random);
-        let client = Game::new_client(self.map, settings, events.get(&client_perspective.into()).unwrap_or(&[]));
+        let (server, events) = Game::new_server(self.map.clone(), &self.settings, settings.clone(), random);
+        let client = Game::new_client(self.map, &self.settings, settings, events.get(&client_perspective.into()).unwrap_or(&[]));
         let events = server.with(|s| events.export(s.environment()));
         (server, client, events)
     }
@@ -969,4 +981,17 @@ pub fn cannon_range_in_layers<D: Direction>(map: &impl GameView<D>, center: Poin
         }
     }
     result
+}
+
+pub fn get_income_factor<D: Direction>(map: &impl GameView<D>, owner_id: i8) -> Rational32 {
+    // income from properties
+    let mut income_factor = Rational32::from_integer(0);
+    let hero_map = HeroMap::new(map, Some(owner_id));
+    for p in map.all_points() {
+        let t = map.get_terrain(p).unwrap();
+        if t.get_owner_id() == owner_id {
+            income_factor += t.income_factor(map, p, hero_map.get(p, owner_id));
+        }
+    }
+    income_factor
 }

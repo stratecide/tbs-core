@@ -5,7 +5,9 @@ fn heal_10() {
 
 fn earn_income() {
     let owner_id = UNIT.owner_id;
-    EVENT_HANDLER.gain_money(owner_id, CONFIG.income_factor(owner_id));
+    let income = BOARD.get(owner_id, TAG_Income) ?? 0;
+    let funds = BOARD.get(owner_id, TAG_Funds) ?? 0;
+    EVENT_HANDLER.set(owner_id, TAG_Funds, funds + income);
 }
 
 fn damage_10() {

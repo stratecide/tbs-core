@@ -103,9 +103,9 @@ fn drone() {
     map.set_unit(Point::new(1, 6), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build()));
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    settings.players[0].set_funds(1000);
-    let (mut server, events) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
-    let mut client = Game::new_client(map, settings.build_default(), events.get(&Perspective::Team(0)).unwrap());
+    settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 1000.into());
+    let (mut server, events) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let mut client = Game::new_client(map, &settings, settings.build_default(), events.get(&Perspective::Team(0)).unwrap());
     assert!(server.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).is_none());
     let events = server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -178,9 +178,9 @@ fn cannot_buy_unit_without_money() {
     map.set_unit(Point::new(0, 0), Some(UnitType::drone_boat().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(1, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     game.with(|game| {
-        assert_eq!(*game.current_player().funds, 0);
+        assert_eq!(game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 0);
     });
     let path = Path::new(Point::new(0, 0));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -207,15 +207,15 @@ fn repair_unit() {
     map.set_unit(Point::new(1, 6), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build()));
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    settings.players[0].set_funds(1000);
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 1000.into());
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_hp(), 1);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 4)),
         action: UnitAction::custom(CA_UNIT_REPAIR, Vec::new()),
     }), Arc::new(|| 0.)).unwrap();
-    assert!(*server.get_owning_player(0).unwrap().funds < 1000);
+    assert!(server.get_owning_player(0).unwrap().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>() < 1000);
     assert!(server.get_unit(Point::new(3, 4)).unwrap().get_hp() > 1);
     assert!(server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_REPAIRING));
     assert!(server.get_unit(Point::new(3, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
@@ -236,7 +236,7 @@ fn end_game() {
     map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -262,7 +262,7 @@ fn defeat_player_of_3() {
     map.set_unit(Point::new(0, 1), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build()));
     map.set_unit(Point::new(0, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(2).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -293,7 +293,7 @@ fn on_death_lose_game() {
     map.set_unit(Point::new(0, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build()));
     map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -324,7 +324,7 @@ fn puffer_fish() {
     map.set_unit(Point::new(1, 1), Some(UnitType::puffer_fish().instance(&map_env).build()));
     map.set_unit(Point::new(2, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
@@ -357,7 +357,7 @@ fn capture_pyramid() {
     map.set_unit(Point::new(0, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).build()));
     map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -383,9 +383,12 @@ fn s_factory() {
     map.set_unit(Point::new(1, 3), Some(UnitType::pyramid().instance(&map_env).set_owner_id(0).set_hp(1).build()));
     map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     game.with(|game| {
-        assert_eq!(*game.current_player().funds, game.current_player().get_income() * 2);
+        assert_eq!(
+            game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(),
+            game.current_player().get_tag(TAG_INCOME).unwrap().into_dynamic().cast::<i32>() + 100
+        );
     });
     assert!(!game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     let to_build = UnitType::marine().instance(&game.environment())
@@ -415,8 +418,8 @@ fn marine_movement_types() {
     map.set_tokens(Point::new(1, 0), vec![bubble]);
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).build()));
     let mut settings = map.settings().unwrap();
-    settings.players[0].set_funds(1000);
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 1000.into());
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     let environment = game.environment();
     game.handle_command(Command::TokenAction(Point::new(0, 0), vec![
         CustomActionInput::ShopItem(0.into()),
@@ -441,7 +444,7 @@ fn enter_transporter() {
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     // create game
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     // test
     let transporter = game.get_unit(Point::new(2, 0)).unwrap();
     assert_eq!(transporter.get_transported().len(), 0);
@@ -463,7 +466,7 @@ fn enter_transporter() {
 fn chess_movement_exhausts_all() {
     let map = chess_board();
     let settings = map.settings().unwrap();
-    let mut server = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.)).0;
+    let mut server = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.)).0;
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(0, 6), vec![PathStep::Dir(Direction4::D90), PathStep::Dir(Direction4::D90)]),
@@ -499,7 +502,7 @@ fn chess_castling() {
     map.set_unit(Point::new(2, 2), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(1).build()));
 
     let settings = map.settings().unwrap();
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(4, 4), vec![PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180), PathStep::Dir(Direction4::D180)]),
@@ -543,7 +546,7 @@ fn chess_en_passant() {
 
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let (mut server, _) = Game::new_server(map.clone(), settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
     let unchanged = server.clone();
     // take pawn normally
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -651,8 +654,8 @@ fn magnet_pulls_through_pipe() {
     map.set_pipes(Point::new(2, 0), vec![PipeState::new(Direction4::D0, Direction4::D180).unwrap()]);
     map.set_unit(Point::new(1, 2), Some(UnitType::magnet().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(3, 0), Some(UnitType::sniper().instance(&map_env).set_owner_id(1).set_hp(100).build()));
-    let settings = map.settings().unwrap().build_default();
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let settings = map.settings().unwrap();
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
 
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -675,8 +678,7 @@ fn fog_surprise() {
     map.set_unit(Point::new(6, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).set_hp(100).build()));
     let mut settings = map.settings().unwrap();
     settings.fog_mode = FogMode::Constant(FogSetting::ExtraDark(0));
-    let settings = settings.build_default();
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
 
     // no fog during the first turn
     game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();

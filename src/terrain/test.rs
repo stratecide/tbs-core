@@ -79,8 +79,8 @@ fn capture_city() {
     map.set_terrain(Point::new(0, 0), TerrainType::City.instance(&environment).set_owner_id(0).build());
     map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).set_hp(55).build()));
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
-    let settings = map.settings().unwrap().build_default();
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let settings = map.settings().unwrap();
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     // can't capture your own properties
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -122,8 +122,8 @@ fn capture_hq() {
     map.set_terrain(Point::new(0, 0), TerrainType::Hq.instance(&environment).set_owner_id(1).build());
     map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).build()));
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
-    let settings = map.settings().unwrap().build_default();
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let settings = map.settings().unwrap();
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
@@ -147,13 +147,13 @@ fn build_unit() {
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build());
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
     let mut settings = map.settings().unwrap();
-    settings.players[0].set_income(1000);
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
-    assert_eq!(1000, game.with(|game| *game.current_player().funds));
+    settings.players[0].get_tag_bag_mut().set_tag(&environment, TAG_INCOME, 1000.into());
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
+    assert_eq!(1000, game.with(|game| game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()));
     game.handle_command(Command::TerrainAction(Point::new(0, 0), vec![
         CustomActionInput::ShopItem(0.into()),
     ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
-    assert!(game.with(|game| *game.current_player().funds) < 1000);
+    assert!(game.with(|game| game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()) < 1000);
     assert_eq!(0, game.get_unit(Point::new(0, 0)).unwrap().get_owner_id());
     assert!(game.get_unit(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
     //assert_eq!(Some(TagValue::Int(Int32(1))), game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_BUILT_THIS_TURN));
@@ -180,7 +180,7 @@ fn kraken() {
     map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(3, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
     let environment = game.environment();
     assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::tentacle().instance(&environment).set_hp(100).build()));
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(7.into()));
@@ -212,11 +212,11 @@ fn terrain_vision() {
     map.set_terrain(Point::new(3, 0), TerrainType::City.instance(&environment).set_owner_id(0).build());
     map.set_terrain(Point::new(0, 3), TerrainType::Airport.instance(&environment).set_owner_id(1).build());
     map.set_terrain(Point::new(3, 3), TerrainType::City.instance(&environment).set_owner_id(-1).build());
-    let mut settings = map.settings().unwrap();
-    settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
-    let mut settings = settings.build_default();
+    let mut map_settings = map.settings().unwrap();
+    map_settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
+    let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Lageos);
-    let (mut game, _) = Game::new_server(map, settings, Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &map_settings, settings, Arc::new(|| 0.));
     game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
     // neutral city gives no vision to anybody
     assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(3, 3)));
