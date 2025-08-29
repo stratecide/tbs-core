@@ -22,6 +22,7 @@ use zipper_derive::Zippable;
 #[derive(Debug, Clone)]
 pub struct GameConfig<D: Direction> {
     pub fog_mode: FogMode,
+    pub tags: TagBag<D>,
     pub players: Vec<PlayerConfig<D>>,
 }
 
@@ -61,6 +62,7 @@ impl<D: Direction> GameConfig<D> {
     pub fn import(map: &Map<D>, bytes: Vec<u8>) -> Result<Self, ZipperError> {
         let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION).unwrap());
         let fog_mode = FogMode::unzip(&mut unzipper)?;
+        let tags = TagBag::import(&mut unzipper, map.environment())?;
         let mut players = Vec::new();
         for _ in 0..unzipper.read_u8(bits_needed_for_max_value(map.environment().config.max_player_count() as u32 - 1))? + 1 {
             players.push(PlayerConfig::import(&mut unzipper, map.environment())?);
@@ -68,6 +70,7 @@ impl<D: Direction> GameConfig<D> {
         unzipper.finish()?;
         Ok(Self {
             fog_mode,
+            tags,
             players,
         })
     }
@@ -75,6 +78,7 @@ impl<D: Direction> GameConfig<D> {
     pub fn export(&self, map: &Map<D>) -> Vec<u8> {
         let mut zipper = Zipper::new();
         self.fog_mode.zip(&mut zipper);
+        self.tags.export(&mut zipper, map.environment());
         zipper.write_u8((self.players.len() - 1) as u8, bits_needed_for_max_value(map.environment().config.max_player_count() as u32 - 1));
         for p in &self.players {
             p.export(&mut zipper, map.environment());
@@ -86,6 +90,7 @@ impl<D: Direction> GameConfig<D> {
 impl<D: Direction> PartialEq for GameConfig<D> {
     fn eq(&self, other: &Self) -> bool {
         self.fog_mode == other.fog_mode &&
+        self.tags == other.tags &&
         self.players == other.players
     }
 }
@@ -363,6 +368,7 @@ mod tests {
         let random: RandomFn = Arc::new(|| 0.5);
         let setting = GameConfig {
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
+            tags: TagBag::new(),
             players: vec![
                 PlayerConfig::new(0, &map, &random),
                 PlayerConfig {

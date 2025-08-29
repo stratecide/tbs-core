@@ -42,6 +42,7 @@ pub struct Game<D: Direction> {
 
 impl<D: Direction> Game<D> {
     fn new(mut map: Map<D>, config: &GameConfig<D>, settings: GameSettings) -> Self {
+        *map.get_tag_bag_mut() = config.tags.clone();
         map.start_game(&Arc::new(settings));
         let settings = map.environment().settings.as_ref().unwrap();
         let fog_mode = settings.fog_mode.clone();

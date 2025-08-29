@@ -112,6 +112,9 @@ impl<D: Direction> Map<D> {
     pub fn get_tag_bag(&self) -> &TagBag<D> {
         &self.tags
     }
+    pub fn get_tag_bag_mut(&mut self) -> &mut TagBag<D> {
+        &mut self.tags
+    }
 
     pub fn wrapping_logic(&self) -> &WrappingMap<D> {
         &self.wrapping_logic
@@ -500,6 +503,7 @@ impl<D: Direction> Map<D> {
             .collect();
         Ok(settings::GameConfig {
             fog_mode: FogMode::Constant(FogSetting::Light(0)),
+            tags: self.tags.clone(),
             players: players.try_into().unwrap(),
         })
     }
@@ -734,6 +738,7 @@ impl<D: Direction> MapInterface for Handle<Map<D>> {
         });
         Ok(Box::new(settings::GameConfig {
             fog_mode: FogMode::Constant(FogSetting::Light(0)),
+            tags: self.with(|map| map.tags.clone()),
             players: players.try_into().unwrap(),
         }))
     }
