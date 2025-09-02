@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap as HashMap;
+use uniform_smart_pointer::Urc;
 use std::error::Error;
-use std::sync::Arc;
 
 use interfaces::*;
 use num_rational::Rational32;
@@ -121,21 +121,21 @@ impl ConfigInterface for Config {
         &self.name
     }
 
-    fn parse_map(self: Arc<Self>, bytes: Vec<u8>) -> Result<Box<dyn MapInterface>, Box<dyn Error>> {
+    fn parse_map(self: Urc<Self>, bytes: Vec<u8>) -> Result<Box<dyn MapInterface>, Box<dyn Error>> {
         match import_map(&self, bytes, Version::parse(VERSION)?)? {
             MapType::Hex(map) => Ok(Box::new(Handle::new(map))),
             MapType::Square(map) => Ok(Box::new(Handle::new(map))),
         }
     }
 
-    fn parse_server(self: Arc<Self>, data: ExportedGame) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
+    fn parse_server(self: Urc<Self>, data: ExportedGame) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
         match import_server(&self, data, Version::parse(VERSION)?)? {
             GameType::Hex(game) => Ok(Box::new(Handle::new(game))),
             GameType::Square(game) => Ok(Box::new(Handle::new(game))),
         }
     }
 
-    fn parse_client(self: Arc<Self>, public: Vec<u8>, secret: Option<(Team, Vec<u8>)>) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
+    fn parse_client(self: Urc<Self>, public: Vec<u8>, secret: Option<(Team, Vec<u8>)>) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
         match import_client(&self, public, secret, Version::parse(VERSION)?)? {
             GameType::Hex(game) => Ok(Box::new(Handle::new(game))),
             GameType::Square(game) => Ok(Box::new(Handle::new(game))),
@@ -523,8 +523,8 @@ impl Config {
         // build scope
         scope.push_constant(CONST_NAME_POSITION, pos);
         scope.push_constant(CONST_NAME_TERRAIN, terrain.clone());
-        // TODO: heroes (put them into Arc<Vec<>> instead of &[])
-        let executor = Arc::new(Executor::new(engine, scope, game.environment()));
+        // TODO: heroes (put them into Urc<Vec<>> instead of &[])
+        let executor = Urc::new(Executor::new(engine, scope, game.environment()));
         let executor_ = executor.clone();
         let max_len = self.terrain_overrides.len();
         let limit = game.get_terrain_config_limit();
