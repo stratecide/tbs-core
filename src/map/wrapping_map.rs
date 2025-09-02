@@ -700,7 +700,7 @@ impl<D: Direction> Zippable for WrappingMap<D> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use uniform_smart_pointer::Urc;
 
     use super::*;
     use crate::{config::config::Config, game::{game::Game, game_view::GameView}, map::{map::{Map, NeighborMode}, point_map::PointMap}, terrain::TerrainType, units::{movement::Path, unit_types::UnitType}};
@@ -895,7 +895,7 @@ mod tests {
 
     #[test]
     fn straight_line() {
-        let config = Arc::new(Config::default());
+        let config = Urc::new(Config::default());
         let map = PointMap::new(8, 5, false);
         let map = WMBuilder::<Direction4>::with_transformations(map, vec![Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(6))]).unwrap();
         let mut map = Map::new(map.build(), &config);
@@ -922,7 +922,7 @@ mod tests {
             ]
         );
         let settings = map.settings().unwrap();
-        let (game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
+        let (game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
         let environment = game.environment();
         let rook = UnitType::rook().instance(&environment).set_owner_id(0).build();
         rook.shortest_path_to(&*game, &Path::new(Point::new(3, 2)), None, Point::new(0, 3)).unwrap();

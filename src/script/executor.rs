@@ -2,6 +2,7 @@ use std::any::{type_name, Any};
 use std::cell::RefCell;
 
 use rhai::*;
+use uniform_smart_pointer::Urc;
 
 use crate::config::environment::Environment;
 
@@ -34,7 +35,7 @@ impl Executor {
         Self::execute_ast(engine, scope, ast, name, args)
     }
 
-    pub fn execute_ast<T: Any>(engine: &Engine, scope: &mut Scope, ast: Shared<AST>, function: impl AsRef<str>, args: impl FuncArgs) -> Result<T, Box<EvalAltResult>> {
+    pub fn execute_ast<T: Any>(engine: &Engine, scope: &mut Scope, ast: Urc<AST>, function: impl AsRef<str>, args: impl FuncArgs) -> Result<T, Box<EvalAltResult>> {
         let options = CallFnOptions::new().eval_ast(false).rewind_scope(true);
         let result: Dynamic = engine.call_fn_with_options(options, scope, &ast, function, args)?;
         result.try_cast_result().map_err(|r| {

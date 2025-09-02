@@ -1,40 +1,38 @@
 use std::fmt::Debug;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
-use std::sync::MappedRwLockReadGuard;
+
+use uniform_smart_pointer::*;
 
 
 
-pub struct Handle<T: ?Sized> {
-    inner: Arc<RwLock<T>>,
-    attack_config_limit: Arc<Mutex<Option<usize>>>,
-    unit_config_limit: Arc<Mutex<Option<usize>>>,
-    terrain_config_limit: Arc<Mutex<Option<usize>>>,
+pub struct Handle<T> {
+    inner: Urc<UrwLock<T>>,
+    attack_config_limit: Urc<Umutex<Option<usize>>>,
+    unit_config_limit: Urc<Umutex<Option<usize>>>,
+    terrain_config_limit: Urc<Umutex<Option<usize>>>,
 }
 
 impl<T> Handle<T> {
     pub fn new(t: T) -> Self {
         Self {
-            inner: Arc::new(RwLock::new(t)),
-            attack_config_limit: Arc::new(Mutex::new(None)),
-            unit_config_limit: Arc::new(Mutex::new(None)),
-            terrain_config_limit: Arc::new(Mutex::new(None)),
+            inner: Urc::new(UrwLock::new(t)),
+            attack_config_limit: Urc::new(Umutex::new(None)),
+            unit_config_limit: Urc::new(Umutex::new(None)),
+            terrain_config_limit: Urc::new(Umutex::new(None)),
         }
     }
 
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
-        let t = self.inner.read().expect("Unable to read Handle");
+        let t = self.inner.read();
         f(&*t)
     }
 
     pub fn with_mut<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R {
-        let mut t = self.inner.write().expect("Unable to write Handle");
+        let mut t = self.inner.write();
         f(&mut *t)
     }
 
-    pub fn borrow<'a, R>(&'a self, f: impl FnOnce(&T) -> &R) -> BorrowedHandle<'a, R> {
-        let guard = self.inner.read().expect("Unable to borrow Handle");
-        BorrowedHandle::Guard(RwLockReadGuard::map(guard, f))
+    pub fn borrow<'a, R>(&'a self, f: impl FnOnce(&T) -> &R) -> ReadGuard<'a, R> {
+        self.inner.read().map(f)
     }
 
     /**
@@ -51,22 +49,22 @@ impl<T> Handle<T> {
     }
 
     pub(crate) fn get_attack_config_limit(&self) -> Option<usize> {
-        self.attack_config_limit.lock().unwrap().clone()
+        self.attack_config_limit.lock().clone()
     }
     pub(crate) fn set_attack_config_limit(&self, limit: Option<usize>) {
-        *self.attack_config_limit.lock().unwrap() = limit;
+        *self.attack_config_limit.lock() = limit;
     }
     pub(crate) fn get_unit_config_limit(&self) -> Option<usize> {
-        self.unit_config_limit.lock().unwrap().clone()
+        self.unit_config_limit.lock().clone()
     }
     pub(crate) fn set_unit_config_limit(&self, limit: Option<usize>) {
-        *self.unit_config_limit.lock().unwrap() = limit;
+        *self.unit_config_limit.lock() = limit;
     }
     pub(crate) fn get_terrain_config_limit(&self) -> Option<usize> {
-        self.terrain_config_limit.lock().unwrap().clone()
+        self.terrain_config_limit.lock().clone()
     }
     pub(crate) fn set_terrain_config_limit(&self, limit: Option<usize>) {
-        *self.terrain_config_limit.lock().unwrap() = limit;
+        *self.terrain_config_limit.lock() = limit;
     }
 }
 
@@ -78,13 +76,13 @@ impl<T: Debug> Debug for Handle<T> {
 
 impl<T: Clone> Clone for Handle<T> {
     fn clone(&self) -> Self {
-        let inner = Arc::new(RwLock::new(self.with(|t| t.clone())));
+        let inner = Urc::new(UrwLock::new(self.with(|t| t.clone())));
         // TODO: should this panic if self.unit_config_limit or self.terrain_config_limit aren't None?
         Self {
             inner,
-            attack_config_limit: Arc::new(Mutex::new(None)),
-            unit_config_limit: Arc::new(Mutex::new(None)),
-            terrain_config_limit: Arc::new(Mutex::new(None)),
+            attack_config_limit: Urc::new(Umutex::new(None)),
+            unit_config_limit: Urc::new(Umutex::new(None)),
+            terrain_config_limit: Urc::new(Umutex::new(None)),
         }
     }
 }
@@ -96,20 +94,5 @@ impl<T: PartialEq> PartialEq for Handle<T> {
                 t1.eq(t2)
             })
         })
-    }
-}
-
-pub enum BorrowedHandle<'a, T> {
-    Guard(MappedRwLockReadGuard<'a, T>),
-    Ref(&'a T),
-}
-
-impl<'a, T> Deref for BorrowedHandle<'a, T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Guard(t) => &**t,
-            Self::Ref(t) => t
-        }
     }
 }

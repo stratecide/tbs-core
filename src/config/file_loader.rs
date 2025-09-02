@@ -4,6 +4,7 @@ use std::ops::RangeInclusive;
 
 use rhai::*;
 use rustc_hash::FxHashMap as HashMap;
+use uniform_smart_pointer::Urc;
 
 use crate::script::create_base_engine;
 
@@ -12,14 +13,14 @@ use super::ConfigParseError;
 
 pub struct FunctionPointer {
     pub index: usize,
-    pub parameters: Shared<Vec<String>>,
+    pub parameters: Urc<Vec<String>>,
 }
 
 pub struct FileLoader {
     load_file: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>,
     engine: Engine,
-    unoptimized_asts: HashMap<String, Shared<AST>>,
-    rhai_functions: Vec<(String, String, Shared<Vec<String>>)>,
+    unoptimized_asts: HashMap<String, Urc<AST>>,
+    rhai_functions: Vec<(String, String, Urc<Vec<String>>)>,
     pub movement_types: Vec<String>,
     pub unit_types: Vec<String>,
     pub terrain_types: Vec<String>,
@@ -131,7 +132,7 @@ impl FileLoader {
             .next() else {
                 return Err(ConfigParseError::ScriptFunctionNotFound(filename, name.to_string()));
             };
-            self.rhai_functions.push((filename, name.to_string(), Shared::new(parameters)));
+            self.rhai_functions.push((filename, name.to_string(), Urc::new(parameters)));
             self.rhai_functions.len() - 1
         };
         Ok(FunctionPointer {
@@ -140,7 +141,7 @@ impl FileLoader {
         })
 }
 
-    pub(super) fn load_rhai_module(&mut self, filename: &String) -> Result<Shared<AST>, ConfigParseError> {
+    pub(super) fn load_rhai_module(&mut self, filename: &String) -> Result<Urc<AST>, ConfigParseError> {
         if let Some(ast) = self.unoptimized_asts.get(filename) {
             Ok(ast.clone())
         } else {
@@ -149,7 +150,7 @@ impl FileLoader {
                 .map_err(|_| ConfigParseError::FileMissing(path.clone()))?;
             let ast = self.engine.compile(script)
                 .map_err(|e| ConfigParseError::ScriptCompilation(path.clone(), e.to_string()))?;
-            let ast = Shared::new(ast);
+            let ast = Urc::new(ast);
             if filename != GLOBAL_SCRIPT {
                 self.unoptimized_asts.insert(filename.clone(), ast.clone());
             }
@@ -164,7 +165,7 @@ impl FileLoader {
             match filename.as_str() {
                 GLOBAL_SCRIPT => (),
                 _ => {
-                    asts.push(Shared::into_inner(ast).unwrap());
+                    asts.push(Urc::into_inner(ast).unwrap());
                     indices.insert(filename, i);
                 }
             }

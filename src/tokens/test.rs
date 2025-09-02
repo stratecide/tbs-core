@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use uniform_smart_pointer::Urc;
 
 use crate::config::config::Config;
 use crate::config::environment::Environment;
@@ -35,7 +35,7 @@ impl TokenType {
 
 #[test]
 fn verify_token_test_constants() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
     assert_eq!(environment.config.token_name(TokenType::COINS), "CoinPile");
     assert_eq!(environment.config.token_name(TokenType::SKULL), "Skull");
@@ -47,7 +47,7 @@ fn verify_token_test_constants() {
 
 #[test]
 fn collect_coin_tokens() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -66,7 +66,7 @@ fn collect_coin_tokens() {
         player.get_tag_bag_mut().set_tag(&map_env, TAG_INCOME, 100.into());
     }
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     server.with(|game| {
         for player in &game.players {
             assert_eq!(player.get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 0);
@@ -76,7 +76,7 @@ fn collect_coin_tokens() {
         unload_index: None,
         path: Path::with_steps(Point::new(0, 0), vec![PathStep::Dir(Direction4::D0), PathStep::Dir(Direction4::D0)]),
         action: UnitAction::Wait,
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     server.with(|game| {
         assert_eq!(game.get_map().get_tokens(Point::new(0, 0)), &[]);
         assert_eq!(game.get_map().get_tokens(Point::new(2, 0)), &[]);
@@ -87,7 +87,7 @@ fn collect_coin_tokens() {
 
 #[test]
 fn bubble_token() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(7, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -111,7 +111,7 @@ fn bubble_token() {
     }
     assert_eq!(settings.players.len(), 3);
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(0, 0), vec![
@@ -122,24 +122,24 @@ fn bubble_token() {
             PathStep::Dir(Direction4::D0),
         ]),
         action: UnitAction::Wait,
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(2, 0)), Vec::new());
     // factory bubble
     server.handle_command(Command::TokenAction(Point::new(1, 0), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(1, 0)), Vec::new());
     assert_eq!(server.get_unit(Point::new(1, 0)).unwrap(), UnitType::small_tank().instance(&server.environment()).set_owner_id(0).set_hp(100).build());
     // airport bubble
     server.handle_command(Command::TokenAction(Point::new(3, 0), vec![
         CustomActionInput::ShopItem(1.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(3, 0)), Vec::new());
     assert_eq!(server.get_unit(Point::new(3, 0)).unwrap(), UnitType::attack_heli().instance(&server.environment()).set_owner_id(0).set_hp(100).build());
     // port bubble
     server.handle_command(Command::TokenAction(Point::new(4, 0), vec![
         CustomActionInput::ShopItem(7.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(4, 0)), Vec::new());
     assert_eq!(server.get_unit(Point::new(4, 0)).unwrap(), UnitType::destroyer().instance(&server.environment()).set_owner_id(0).set_hp(100).build());
 }

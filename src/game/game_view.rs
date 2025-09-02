@@ -3,8 +3,8 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use interfaces::ClientPerspective;
 
 use crate::config::environment::Environment;
+use uniform_smart_pointer::{ReadGuard, SendSyncBound};
 use crate::tokens::token::Token;
-use crate::handle::BorrowedHandle;
 use crate::map::map::NeighborMode;
 use crate::map::pipe::PipeState;
 use crate::map::point::Point;
@@ -19,7 +19,7 @@ use super::rhai_board::SharedGameView;
 use super::Direction;
 
 
-pub trait GameView<D: Direction>: Send + Sync {
+pub trait GameView<D: Direction>: SendSyncBound {
     fn environment(&self) -> Environment;
     fn all_points(&self) -> Vec<Point>;
     fn get_pipes(&self, p: Point) -> Vec<PipeState<D>>;
@@ -33,7 +33,7 @@ pub trait GameView<D: Direction>: Send + Sync {
      */
     fn as_shared(&self) -> SharedGameView<D>;
 
-    fn wrapping_logic(&self) -> BorrowedHandle<'_, WrappingMap<D>>;
+    fn wrapping_logic(&self) -> ReadGuard<'_, WrappingMap<D>>;
 
     // TODO: remove a few of these methods from the trait and turn them into functions that take dyn Gameview as parameter
 

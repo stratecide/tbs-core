@@ -10,10 +10,9 @@ pub mod rhai_board;
 pub mod modified_view;
 pub mod event_fx;
 
-use std::sync::Arc;
-
 use interfaces::ExportedGame;
 use semver::Version;
+use uniform_smart_pointer::Urc;
 use zipper::{Unzipper, ZipperError};
 
 use crate::{config::config::Config, map::direction::*};
@@ -25,7 +24,7 @@ pub enum GameType {
     Hex(Game<Direction6>),
 }
 
-pub fn import_server(config: &Arc<Config>, data: ExportedGame, version: Version) -> Result<GameType, ZipperError> {
+pub fn import_server(config: &Urc<Config>, data: ExportedGame, version: Version) -> Result<GameType, ZipperError> {
     let mut unzipper = Unzipper::new(vec![data.public[0]], version.clone());
     if unzipper.read_bool()? {
         Ok(GameType::Hex(*Game::import_server(data, config, version)?))
@@ -34,7 +33,7 @@ pub fn import_server(config: &Arc<Config>, data: ExportedGame, version: Version)
     }
 }
 
-pub fn import_client(config: &Arc<Config>, public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, version: Version) -> Result<GameType, ZipperError> {
+pub fn import_client(config: &Urc<Config>, public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, version: Version) -> Result<GameType, ZipperError> {
     let mut unzipper = Unzipper::new(vec![public[0]], version.clone());
     if unzipper.read_bool()? {
         Ok(GameType::Hex(*Game::import_client(public, team_view, config, version)?))
@@ -45,12 +44,10 @@ pub fn import_client(config: &Arc<Config>, public: Vec<u8>, team_view: Option<(u
 
 #[cfg(test)]
 mod tests {
-
-    use std::sync::Arc;
-
     use interfaces::game_interface::*;
     use interfaces::Perspective;
     use semver::Version;
+    use uniform_smart_pointer::Urc;
     use crate::game::game::*;
     use crate::game::fog::*;
     use crate::VERSION;
@@ -67,7 +64,7 @@ mod tests {
             let mut settings = settings.clone();
             settings.fog_mode = FogMode::Constant(fog_setting);
             let perspective = Perspective::Team(0);
-            let (server, events) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+            let (server, events) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
             let client = Game::new_client(map.clone(), &settings, settings.build_default(), events.get(&perspective).unwrap());
             let data = server.export();
             crate::debug!("data: {data:?}");

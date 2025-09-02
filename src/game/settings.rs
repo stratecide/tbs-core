@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Display};
-use std::sync::Arc;
 
 use crate::commander::Commander;
 use crate::commander::commander_type::CommanderType;
@@ -15,6 +14,7 @@ use super::fog::FogMode;
 use interfaces::map_interface::GameSettingsInterface;
 use interfaces::{PlayerMeta, RandomFn};
 use semver::Version;
+use uniform_smart_pointer::Urc;
 use zipper::*;
 use zipper_derive::Zippable;
 
@@ -41,7 +41,7 @@ impl<D: Direction> GameConfig<D> {
         let player_selections: Vec<_> = (0..self.players.len()).map(|_| PlayerSelectedOptions {
             commander: None,
         }).collect();
-        let random: RandomFn = Arc::new(|| 0.);
+        let random: RandomFn = Urc::new(|| 0.);
         Self::build(&self, &player_selections, &random)
     }
 
@@ -109,7 +109,7 @@ impl PartialEq for GameSettings {
 }
 
 impl GameSettings {
-    pub fn import(unzipper: &mut Unzipper, config: Arc<Config>) -> Result<Self, ZipperError> {
+    pub fn import(unzipper: &mut Unzipper, config: Urc<Config>) -> Result<Self, ZipperError> {
         let fog_mode = FogMode::unzip(unzipper)?;
         let mut players = Vec::new();
         for _ in 0..unzipper.read_u8(bits_needed_for_max_value(config.max_player_count() as u32 - 1))? + 1 {
@@ -317,10 +317,9 @@ impl PlayerSettings {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use interfaces::RandomFn;
     use semver::Version;
+    use uniform_smart_pointer::Urc;
     use zipper::{SupportedZippable, Unzipper, Zipper};
 
     use crate::commander::commander_type::CommanderType;
@@ -338,7 +337,7 @@ mod tests {
 
     #[test]
     fn export_commander_options() {
-        let config = Arc::new(Config::default());
+        let config = Urc::new(Config::default());
         let environment = Environment::new_map(config.clone(), MapSize::new(4, 5));
         let options = PlayerOptions{
             commanders: vec![CommanderType(0)]
@@ -358,14 +357,14 @@ mod tests {
 
     #[test]
     fn export_game_config() {
-        let config = Arc::new(Config::default());
+        let config = Urc::new(Config::default());
         let map = PointMap::new(8, 8, false);
         let map = WMBuilder::<Direction4>::new(map);
         let map = Map::new(map.build(), &config);
         let environment = map.environment().clone();
         let mut tags = TagBag::new();
         tags.set_tag(&environment, 12, TagValue::Direction(Direction4::D90));
-        let random: RandomFn = Arc::new(|| 0.5);
+        let random: RandomFn = Urc::new(|| 0.5);
         let setting = GameConfig {
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
             tags: TagBag::new(),
@@ -387,7 +386,7 @@ mod tests {
 
     #[test]
     fn export_game_settings() {
-        let config = Arc::new(Config::default());
+        let config = Urc::new(Config::default());
         let setting = GameSettings {
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
             players: vec![

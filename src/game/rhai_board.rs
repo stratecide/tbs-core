@@ -8,6 +8,7 @@ use num_rational::Rational32;
 use interfaces::ClientPerspective;
 
 use crate::game::game_view::GameView;
+use uniform_smart_pointer::Urc;
 use crate::tags::*;
 use crate::map::direction::*;
 use crate::map::map::{NeighborMode, get_income_factor};
@@ -17,10 +18,10 @@ use crate::terrain::terrain::Terrain;
 use crate::units::unit::Unit;
 
 #[derive(Clone)]
-pub struct SharedGameView<D: Direction>(pub Shared<dyn GameView<D>>);
+pub struct SharedGameView<D: Direction>(pub Urc<dyn GameView<D>>);
 
 impl<D: Direction> Deref for SharedGameView<D> {
-    type Target = Shared<dyn GameView<D>>;
+    type Target = Urc<dyn GameView<D>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

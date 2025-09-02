@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::Arc;
 
 use interfaces::ClientPerspective;
 use rustc_hash::FxHashSet;
+use uniform_smart_pointer::Urc;
 use zipper::*;
 
 use crate::commander::commander_type::CommanderType;
@@ -67,7 +67,7 @@ impl<D: Direction> Token<D> {
         stack.into_iter().rev().collect()
     }
 
-    pub(crate) fn start_game(&mut self, settings: &Arc<GameSettings>) {
+    pub(crate) fn start_game(&mut self, settings: &Urc<GameSettings>) {
         self.environment.start_game(settings);
     }
 

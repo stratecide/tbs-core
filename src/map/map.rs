@@ -2,7 +2,6 @@ use num_rational::Rational32;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display};
-use std::sync::Arc;
 
 use interfaces::*;
 use semver::Version;
@@ -20,6 +19,7 @@ use crate::handle::Handle;
 use crate::map::wrapping_map::*;
 use crate::map::direction::*;
 use crate::map::point::*;
+use uniform_smart_pointer::{ReadGuard, Urc};
 use crate::player::Player;
 use crate::tags::TagBag;
 use crate::units::hero::HeroMap;
@@ -68,11 +68,11 @@ impl<D: Direction> Debug for Map<D> {
 }
 
 impl<D: Direction> Map<D> {
-    pub fn new_handled(wrapping_logic: WrappingMap<D>, config: &Arc<Config>) -> Handle<Self> {
+    pub fn new_handled(wrapping_logic: WrappingMap<D>, config: &Urc<Config>) -> Handle<Self> {
         Handle::new(Self::new(wrapping_logic, config))
     }
 
-    pub fn new(wrapping_logic: WrappingMap<D>, config: &Arc<Config>) -> Self {
+    pub fn new(wrapping_logic: WrappingMap<D>, config: &Urc<Config>) -> Self {
         let environment = Environment::new_map(config.clone(), wrapping_logic.pointmap().size());
         let mut terrain = HashMap::default();
         for p in wrapping_logic.pointmap().get_valid_points() {
@@ -476,7 +476,7 @@ impl<D: Direction> Map<D> {
         })
     }
 
-    pub(crate) fn start_game(&mut self, settings: &Arc<GameSettings>) {
+    pub(crate) fn start_game(&mut self, settings: &Urc<GameSettings>) {
         self.environment.start_game(settings);
         for p in self.all_points() {
             self.terrain.get_mut(&p).unwrap().start_game(settings);
@@ -497,7 +497,7 @@ impl<D: Direction> Map<D> {
         if owners.len() < 2 {
             return Err(NotPlayable::TooFewPlayers);
         }
-        let random: RandomFn = Arc::new(|| 0.);
+        let random: RandomFn = Urc::new(|| 0.);
         let players:Vec<PlayerConfig<D>> = owners.into_iter()
             .map(|owner| PlayerConfig::new(owner, self, &random))
             .collect();
@@ -563,10 +563,10 @@ impl<D: Direction> GameView<D> for Handle<Map<D>> {
     }
 
     fn as_shared(&self) -> SharedGameView<D> {
-        SharedGameView(Arc::new(self.cloned()))
+        SharedGameView(Urc::new(self.cloned()))
     }
 
-    fn wrapping_logic(&self) -> crate::handle::BorrowedHandle<'_, WrappingMap<D>> {
+    fn wrapping_logic(&self) -> ReadGuard<'_, WrappingMap<D>> {
         self.borrow(|map| map.wrapping_logic())
     }
 
@@ -644,7 +644,7 @@ pub enum MapType {
     Hex(Map<Direction6>),
 }
 
-pub fn import_map(config: &Arc<Config>, bytes: Vec<u8>, version: Version) -> Result<MapType, ZipperError> {
+pub fn import_map(config: &Urc<Config>, bytes: Vec<u8>, version: Version) -> Result<MapType, ZipperError> {
     let mut environment = Environment::new_map(config.clone(), MapSize::new(0, 0));
     let mut unzipper = Unzipper::new(bytes, version);
     if unzipper.read_bool()? {
@@ -730,7 +730,7 @@ impl<D: Direction> MapInterface for Handle<Map<D>> {
         if owners.len() < 2 {
             return Err(Box::new(NotPlayable::TooFewPlayers));
         }
-        let random: RandomFn = Arc::new(|| 0.);
+        let random: RandomFn = Urc::new(|| 0.);
         let players:Vec<PlayerConfig<D>> = self.with(|map| {
             owners.into_iter()
             .map(|owner| PlayerConfig::new(owner, map, &random))
@@ -850,7 +850,7 @@ pub fn get_unit<D: Direction>(map: &impl GameView<D>, p: Point, unload_index: Op
  */
 pub fn get_line<D: Direction>(map: &impl GameView<D>, start: Point, d: D, range: usize, mode: NeighborMode) -> Vec<(Point, Distortion<D>)> {
     let mut result = vec![(start, Distortion::neutral())];
-    let wrapping_logic: crate::handle::BorrowedHandle<'_, WrappingMap<D>>;
+    let wrapping_logic: ReadGuard<'_, WrappingMap<D>>;
     let get_next: Box<dyn Fn(Point, D) -> Option<(Point, Distortion<D>)>> = match mode {
         NeighborMode::Direct => {
             wrapping_logic = map.wrapping_logic();

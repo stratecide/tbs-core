@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use rhai::*;
 use rhai::plugin::*;
 use rustc_hash::{FxHashMap, FxHashSet};
+use uniform_smart_pointer::Urc;
 use zipper::*;
 
 use crate::config::environment::Environment;
@@ -167,7 +167,7 @@ impl<D: Direction> SupportedZippable<&Environment> for TagBag<D> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TagValue<D: Direction> {
-    Unique(Arc<UniqueId>),
+    Unique(Urc<UniqueId>),
     Int(Int32),
     Point(Point),
     Direction(D),
@@ -340,8 +340,8 @@ pub struct UniqueId {
     id: usize,
 }
 
-impl<D: Direction> From<Arc<UniqueId>> for TagValue<D> {
-    fn from(value: Arc<UniqueId>) -> Self {
+impl<D: Direction> From<Urc<UniqueId>> for TagValue<D> {
+    fn from(value: Urc<UniqueId>) -> Self {
         Self::Unique(value)
     }
 }
@@ -353,11 +353,11 @@ impl UniqueId {
         pool.insert(self.id);
     }
 
-    pub fn new(environment: &Environment, tag_key: usize, random: f32) -> Option<Arc<Self>> {
+    pub fn new(environment: &Environment, tag_key: usize, random: f32) -> Option<Urc<Self>> {
         // "add_unique_id" isn't needed here
         // because "generate_unique_id" automatically adds the generated id to the pool
         let id = environment.generate_unique_id(tag_key, random)?;
-        Some(Arc::new(Self {
+        Some(Urc::new(Self {
             environment: environment.clone(),
             tag: tag_key,
             id,
@@ -373,11 +373,11 @@ impl UniqueId {
         zipper.write_u32(self.id as u32, bits);
     }
 
-    fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Arc<Self>, ZipperError> {
+    fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Urc<Self>, ZipperError> {
         let bits = bits_needed_for_max_value(Self::MAX_VALUE as u32);
         let id = Self::MAX_VALUE.min(unzipper.read_u32(bits)? as usize);
         environment.add_unique_id(tag_key, id);
-        Ok(Arc::new(Self {
+        Ok(Urc::new(Self {
             environment: environment.clone(),
             tag: tag_key,
             id,
@@ -457,7 +457,7 @@ impl FromConfig for TagKey {
 
 #[export_module]
 mod tag_module {
-    pub type UniqueId = Arc<super::UniqueId>;
+    pub type UniqueId = Urc<super::UniqueId>;
 
     #[rhai_fn(pure, name = "==")]
     pub fn eq(u1: &mut UniqueId, u2: UniqueId) -> bool {
@@ -488,8 +488,6 @@ def_package! {
 
 #[cfg(test)]
 pub mod tests {
-    use std::sync::Arc;
-
     use semver::Version;
 
     use crate::config::config::Config;
@@ -525,7 +523,7 @@ pub mod tests {
     pub const TAG_INCOME: usize = 17;
     #[test]
     fn verify_tag_test_constants() {
-        let config = Arc::new(Config::default());
+        let config = Urc::new(Config::default());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
         assert_eq!(environment.config.flag_name(FLAG_ZOMBIFIED), "Zombified");
         assert_eq!(environment.config.flag_name(FLAG_UNMOVED), "Unmoved");
@@ -554,7 +552,7 @@ pub mod tests {
 
     #[test]
     fn unique_ids_are_unique() {
-        let config = Arc::new(Config::default());
+        let config = Urc::new(Config::default());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
         // ids get dropped and freed immediately, so all ids are the same (since the rng is fixed)
         for _ in 0..10 {
@@ -575,7 +573,7 @@ pub mod tests {
 
     #[test]
     fn export_import_tag_bag() {
-        let config = Arc::new(Config::default());
+        let config = Urc::new(Config::default());
         let environment = Environment::new_map(config, MapSize::new(5, 5));
 
         let tags: TagBag<Direction4> = TagBag::new();

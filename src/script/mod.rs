@@ -1,5 +1,6 @@
 use rhai::*;
 use rhai::packages::*;
+use uniform_smart_pointer::Urc;
 
 use crate::config::environment::Environment;
 use crate::game::game_view::GameView;
@@ -118,7 +119,7 @@ def_package! {
         crate::game::rhai_event_handler::EventHandlerPackage6 {}
 }
 
-pub fn with_board<D: Direction, R>(context: NativeCallContext, f: impl FnOnce(&Shared<dyn GameView<D>>) -> R) -> R {
+pub fn with_board<D: Direction, R>(context: NativeCallContext, f: impl FnOnce(&Urc<dyn GameView<D>>) -> R) -> R {
     let board: SharedGameView<D> = context.engine().eval_expression(CONST_NAME_BOARD).expect("BOARD should be in context!");
     f(&board.0)
 }

@@ -1,7 +1,6 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use std::sync::Arc;
-
 use interfaces::ClientPerspective;
+use uniform_smart_pointer::{Urc, ReadGuard};
 
 use crate::config::environment::Environment;
 use crate::tokens::token::Token;
@@ -9,7 +8,6 @@ use crate::map::map::NeighborMode;
 use crate::map::pipe::PipeState;
 use crate::map::point::Point;
 use crate::map::wrapping_map::*;
-use crate::handle::BorrowedHandle;
 use crate::player::Player;
 use crate::terrain::terrain::Terrain;
 use crate::units::hero::{Hero, HeroInfluence};
@@ -109,10 +107,10 @@ macro_rules! impl_game_view {
             }
 
             fn as_shared(&self) -> SharedGameView<D> {
-                SharedGameView(Arc::new(self.clone()))
+                SharedGameView(Urc::new(self.clone()))
             }
 
-            fn wrapping_logic(&self) -> BorrowedHandle<'_, WrappingMap<D>> {
+            fn wrapping_logic(&self) -> ReadGuard<'_, WrappingMap<D>> {
                 self.get_inner_view().wrapping_logic()
             }
 
@@ -381,10 +379,10 @@ impl<D: Direction> ModifiedView<D> for MovingHeroView<D> {
 
 impl_game_view!(MovingHeroView<D>);
 
-impl<D: Direction> ModifiedView<D> for Arc<dyn GameView<D>> {
+impl<D: Direction> ModifiedView<D> for Urc<dyn GameView<D>> {
     fn get_inner_view(&self) -> &dyn GameView<D> {
         &**self
     }
 }
 
-impl_game_view!(Arc<dyn GameView<D>>);
+impl_game_view!(Urc<dyn GameView<D>>);

@@ -2,12 +2,12 @@ use std::collections::{HashSet, HashMap};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
 
 use executor::Executor;
 use interfaces::ClientPerspective;
 use num_rational::Rational32;
 use rhai::Scope;
+use uniform_smart_pointer::Urc;
 use zipper::*;
 
 use crate::combat::{AllowedAttackInputDirectionSource, AttackCounterState, AttackInput, AttackPattern};
@@ -93,7 +93,7 @@ impl<D: Direction> Unit<D> {
         }
     }
 
-    pub(crate) fn start_game(&mut self, settings: &Arc<GameSettings>) {
+    pub(crate) fn start_game(&mut self, settings: &Urc<GameSettings>) {
         self.environment.start_game(settings);
         for unit in self.get_transported_mut().deref_mut() {
             unit.start_game(settings);

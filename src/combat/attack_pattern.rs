@@ -1,6 +1,6 @@
 use num_rational::Rational32;
 use rustc_hash::FxHashSet;
-use rhai::{Array, Scope, Shared};
+use rhai::{Array, Scope};
 use zipper::*;
 use zipper::zipper_derive::Zippable;
 
@@ -14,6 +14,7 @@ use crate::map::direction::Direction;
 use crate::map::map::*;
 use crate::map::point::*;
 use crate::map::wrapping_map::{Distortion, OrientedPoint};
+use uniform_smart_pointer::Urc;
 use crate::script::executor::Executor;
 use crate::script::{CONST_NAME_ATTACK_DIRECTION, CONST_NAME_POSITION};
 use crate::tags::{TagKey, TagValue};
@@ -42,7 +43,7 @@ pub enum AttackPattern {
     Straight{ min: Rational32, max: Rational32 },               // uses get_line, can get blocked by units that stand in the way
     TriangleDiagonal{ min: Rational32, max: Rational32 },       // uses range_in_layers
     TriangleStraight{ min: Rational32, max: Rational32 },       // uses cannon_range_in_layers, like BH cannons in advance wars
-    Rhai{ function_index: usize, parameter_names: Shared<Vec<String>>, parameter_values: Vec<Rational32> },
+    Rhai{ function_index: usize, parameter_names: Urc<Vec<String>>, parameter_values: Vec<Rational32> },
 }
 
 impl FromConfig for AttackPattern {

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use uniform_smart_pointer::Urc;
 
 use crate::combat::AttackInput;
 use crate::config::config::Config;
@@ -40,7 +40,7 @@ impl HeroType {
 
 #[test]
 fn buy_hero() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -55,7 +55,7 @@ fn buy_hero() {
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 999999.into());
 
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(0, 1)).unwrap(), Point::new(0, 1), None), None);
     let path = Path::with_steps(Point::new(0, 1), vec![PathStep::Dir(Direction4::D0)]);
     let options = server.get_unit(Point::new(0, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
@@ -81,12 +81,12 @@ fn buy_hero() {
         unload_index: None,
         path: path.clone(),
         action: UnitAction::custom(CA_UNIT_BUY_HERO, vec![CustomActionInput::ShopItem(jax_index.into())]),
-    }), Arc::new(|| 0.)).unwrap_err();
+    }), Urc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,
         action: UnitAction::custom(CA_UNIT_BUY_HERO, vec![CustomActionInput::ShopItem(0.into())]),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(1, 1)).unwrap().get_hero(), Some(&Hero::new(HeroType::Crystal)));
     assert_eq!(server.get_unit(Point::new(1, 1)).unwrap().get_tag(TAG_HERO_ORIGIN), Some(TagValue::Point(Point::new(1, 1))));
     assert!(server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
@@ -95,7 +95,7 @@ fn buy_hero() {
 
 #[test]
 fn gain_charge() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -108,20 +108,20 @@ fn gain_charge() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     assert_eq!(server.get_unit(Point::new(0, 1)).unwrap().get_charge(), 0);
     let path = Path::new(Point::new(0, 1));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,
         action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(2, 1), Direction4::D0)),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(0, 1)).unwrap().get_charge() > 0);
 }
 
 #[test]
 fn crystal() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -138,7 +138,7 @@ fn crystal() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     let unchanged = server.clone();
     let environment: crate::config::environment::Environment = server.environment().clone();
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
@@ -152,7 +152,7 @@ fn crystal() {
         unload_index: None,
         path,
         action: UnitAction::hero_power(1, vec![CustomActionInput::Point(Point::new(0, 1))]),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(0, 1)), Some(UnitType::hero_crystal().instance(&environment).set_owner_id(0).set_hp(100).set_hero(Hero::new(HeroType::CrystalObelisk)).build()));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
@@ -160,12 +160,12 @@ fn crystal() {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 1), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let power_aura_damage = 100 - server.get_unit(Point::new(3, 1)).unwrap().get_hp();
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
     assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
 
@@ -175,10 +175,10 @@ fn crystal() {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 1), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let aura_damage = 100 - server.get_unit(Point::new(3, 1)).unwrap().get_hp();
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(4, 4)).unwrap().get_hp(), 100);
     assert_eq!(Hero::hero_influence_at(&*server, Point::new(0, 0), 0).len(), 1);
     assert_eq!(Hero::hero_influence_at(&*server, Point::new(0, 0), 1).len(), 0);
@@ -188,17 +188,17 @@ fn crystal() {
 
     // test crystal obelisk behavior when hero is missing
     map.set_unit(Point::new(1, 1), None);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     let crystal_damage = 100 - server.get_unit(Point::new(4, 4)).unwrap().get_hp();
     assert!(crystal_damage > 0);
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(4, 4)).unwrap().get_hp(), 100 - 2 * crystal_damage);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 1), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let normal_damage = 100 - server.get_unit(Point::new(3, 1)).unwrap().get_hp();
 
     assert!(normal_damage < aura_damage);
@@ -206,7 +206,7 @@ fn crystal() {
 
 #[test]
 fn earl_grey() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -223,7 +223,7 @@ fn earl_grey() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     let heroes = HeroMap::new(&*server, None);
     assert_eq!(
         server.get_unit(Point::new(2, 1)).unwrap().movement_points(&*server, Point::new(2, 1), None, &heroes),
@@ -236,7 +236,7 @@ fn earl_grey() {
         unload_index: None,
         path,
         action: UnitAction::hero_power(1, Vec::new()),
-    }), Arc::new(|| 0.)).unwrap_err();
+    }), Urc::new(|| 0.)).unwrap_err();
     assert_eq!(error, CommandError::InvalidAction);
     // use power
     let path = Path::new(Point::new(1, 1));
@@ -247,7 +247,7 @@ fn earl_grey() {
         unload_index: None,
         path,
         action: UnitAction::hero_power(1, Vec::new()),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert!(!server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     let heroes = HeroMap::new(&*server, None);
     assert!(
@@ -259,7 +259,7 @@ fn earl_grey() {
 
 #[test]
 fn blue_berry() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -276,7 +276,7 @@ fn blue_berry() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     assert!(server.get_unit(Point::new(2, 1)).unwrap().get_hp() > 50);
     assert_eq!(server.get_unit(Point::new(4, 4)).unwrap().get_hp(), 50);
     assert!(server.get_unit(Point::new(4, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
@@ -289,14 +289,14 @@ fn blue_berry() {
         unload_index: None,
         path,
         action: UnitAction::hero_power(1, Vec::new()),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert!(!server.get_unit(Point::new(2, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert!(server.get_unit(Point::new(4, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
 #[test]
 fn tess() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -311,7 +311,7 @@ fn tess() {
     settings.fog_mode = FogMode::Constant(FogSetting::None);
     settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 9999.into());
 
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     // use power
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
@@ -321,14 +321,14 @@ fn tess() {
         unload_index: None,
         path,
         action: UnitAction::hero_power(1, vec![CustomActionInput::ShopItem(3.into()), CustomActionInput::Direction(Direction4::D0)]),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert!(!server.get_unit(Point::new(2, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert!(server.get_owning_player(0).unwrap().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>() < 9999);
 }
 
 #[test]
 fn edwin() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -346,7 +346,7 @@ fn edwin() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     let unchanged = server.clone();
     // use power
     let path = Path::new(Point::new(1, 1));
@@ -357,7 +357,7 @@ fn edwin() {
         unload_index: None,
         path,
         action: UnitAction::hero_power(1, vec![CustomActionInput::Point(Point::new(2, 1)), CustomActionInput::Point(Point::new(0, 4))]),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(2, 1)), Some(friend));
     assert_eq!(server.get_unit(Point::new(0, 4)), Some(enemy));
 
@@ -366,7 +366,7 @@ fn edwin() {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 2), Direction4::D270))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(2, 2)), None);
     assert!(server.get_unit(Point::new(2, 3)).is_some());
 
@@ -376,14 +376,14 @@ fn edwin() {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(3, 1)), None);
     assert!(server.get_unit(Point::new(2, 1)).is_some());
 }
 
 #[test]
 fn jax() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -402,7 +402,7 @@ fn jax() {
     let mut settings = settings.clone();
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     // Jax has no active
     let path = Path::new(Point::new(1, 1));
     let options = server.get_unit(path.start).unwrap().options_after_path(&*server, &path, None, &[]);
@@ -412,17 +412,17 @@ fn jax() {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
         action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(0, 3), Direction4::D270)),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
         action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(2, 2), Direction4::D270)),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(3, 1)),
         action: UnitAction::Attack(AttackInput::AttackPattern(Point::new(3, 3), Direction4::D270)),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let double_damage = 100 - server.get_unit(Point::new(0, 3)).unwrap().get_hp();
     let reduced_double_damage = 100 - server.get_unit(Point::new(2, 2)).unwrap().get_hp();
     let normal_damage = 100 - server.get_unit(Point::new(3, 3)).unwrap().get_hp();

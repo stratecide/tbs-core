@@ -1,6 +1,5 @@
-use std::sync::Arc;
-
 use interfaces::GameInterface;
+use uniform_smart_pointer::Urc;
 
 use crate::combat::AttackInput;
 use crate::commander::commander_type::CommanderType;
@@ -47,7 +46,7 @@ impl TerrainType {
 }
 #[test]
 fn verify_terrain_type_constants() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
     assert_eq!(environment.config.terrain_name(TerrainType::ChessPawnTile), "ChessPawnTile");
     assert_eq!(environment.config.terrain_name(TerrainType::ChessTile), "ChessTile");
@@ -72,7 +71,7 @@ fn verify_terrain_type_constants() {
 #[test]
 fn capture_city() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
+    let environment = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build());
@@ -80,13 +79,13 @@ fn capture_city() {
     map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).set_hp(55).build()));
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     // can't capture your own properties
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
-    }), Arc::new(|| 0.)).unwrap_err();
+    }), Urc::new(|| 0.)).unwrap_err();
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::with_steps(Point::new(0, 0), vec![
@@ -94,11 +93,11 @@ fn capture_city() {
             PathStep::Dir(Direction4::D270),
         ]),
         action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
-    }), Arc::new(|| 0.)).unwrap();
-    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(-1, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
     assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_CAPTURING));
-    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(-1, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
     assert!(!game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_CAPTURING));
     assert_eq!(Some(6.into()), game.get_terrain(Point::new(1, 1)).unwrap().get_tag(TAG_CAPTURE_PROGRESS));
@@ -107,32 +106,32 @@ fn capture_city() {
         unload_index: None,
         path: Path::with_steps(Point::new(1, 1), Vec::new()),
         action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
-    }), Arc::new(|| 0.)).unwrap();
-    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(0, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
 }
 
 #[test]
 fn capture_hq() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
+    let environment = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Hq.instance(&environment).set_owner_id(1).build());
     map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).build()));
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
-    }), Arc::new(|| 0.)).unwrap();
-    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(1, game.get_terrain(Point::new(0, 0)).unwrap().get_owner_id());
     assert!(!game.players()[1].dead);
-    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(0, game.get_terrain(Point::new(0, 0)).unwrap().get_owner_id());
     assert!(game.players()[1].dead);
 }
@@ -140,7 +139,7 @@ fn capture_hq() {
 #[test]
 fn build_unit() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
+    let environment = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());
@@ -148,25 +147,25 @@ fn build_unit() {
     map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
     let mut settings = map.settings().unwrap();
     settings.players[0].get_tag_bag_mut().set_tag(&environment, TAG_INCOME, 1000.into());
-    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     assert_eq!(1000, game.with(|game| game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()));
     game.handle_command(Command::TerrainAction(Point::new(0, 0), vec![
         CustomActionInput::ShopItem(0.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert!(game.with(|game| game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()) < 1000);
     assert_eq!(0, game.get_unit(Point::new(0, 0)).unwrap().get_owner_id());
     assert!(game.get_unit(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
     //assert_eq!(Some(TagValue::Int(Int32(1))), game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_BUILT_THIS_TURN));
     assert!(game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
     // property should get unexhausted when the owner ends their turn
-    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert!(!game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
 #[test]
 fn kraken() {
     let map = PointMap::new(5, 5, false);
-    let map_env = Environment::new_map(Arc::new(Config::default()), map.size());
+    let map_env = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &map_env);
     for x in 0..map.width() {
@@ -180,7 +179,7 @@ fn kraken() {
     map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     map.set_unit(Point::new(3, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build()));
     let settings = map.settings().unwrap();
-    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Arc::new(|| 0.));
+    let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     let environment = game.environment();
     assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::tentacle().instance(&environment).set_hp(100).build()));
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(7.into()));
@@ -188,7 +187,7 @@ fn kraken() {
         unload_index: None,
         path: Path::new(Point::new(3, 2)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(4, 2), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(game.get_unit(Point::new(4, 2)), None);
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(8.into()));
     assert_eq!(game.get_unit(Point::new(3, 2)).unwrap().get_hp(), 100);
@@ -196,7 +195,7 @@ fn kraken() {
         unload_index: None,
         path: Path::new(Point::new(1, 2)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 2), Direction4::D180))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), None);
     assert_eq!(game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_ANGER), Some(2.into()));
     assert!(game.get_unit(Point::new(3, 2)).unwrap().get_hp() < 100);
@@ -205,7 +204,7 @@ fn kraken() {
 #[test]
 fn terrain_vision() {
     let map = PointMap::new(4, 4, false);
-    let environment = Environment::new_map(Arc::new(Config::default()), map.size());
+    let environment = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());
@@ -216,8 +215,8 @@ fn terrain_vision() {
     map_settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Lageos);
-    let (mut game, _) = Game::new_server(map, &map_settings, settings, Arc::new(|| 0.));
-    game.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    let (mut game, _) = Game::new_server(map, &map_settings, settings, Urc::new(|| 0.));
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     // neutral city gives no vision to anybody
     assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(3, 3)));
     assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(3, 3)));

@@ -1,7 +1,6 @@
-use std::sync::Arc;
-
 use interfaces::*;
 use semver::Version;
+use uniform_smart_pointer::Urc;
 use zipper::*;
 use crate::combat::AttackInput;
 use crate::commander::commander_type::CommanderType;
@@ -45,7 +44,7 @@ impl CommanderType {
 }
 #[test]
 fn verify_commander_type_constants() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
     assert_eq!(environment.config.commander_name(CommanderType::None), "None");
     assert_eq!(environment.config.commander_name(CommanderType::Zombie), "Zombie");
@@ -61,7 +60,7 @@ fn verify_commander_type_constants() {
 
 #[test]
 fn gain_charge() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction6>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -74,7 +73,7 @@ fn gain_charge() {
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Zombie);
     settings.players[1].set_commander(CommanderType::Zombie);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     server.with(|server| {
         assert_eq!(server.players.get(0).unwrap().commander.get_charge(), 0);
         assert_eq!(server.players.get(1).unwrap().commander.get_charge(), 0);
@@ -83,7 +82,7 @@ fn gain_charge() {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     server.with(|server| {
         let charge_0 = server.players.get(0).unwrap().commander.get_charge();
         let charge_1 = server.players.get(1).unwrap().commander.get_charge();
@@ -95,7 +94,7 @@ fn gain_charge() {
 
 #[test]
 fn zombie() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction6>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -125,7 +124,7 @@ fn zombie() {
     map_settings.fog_mode = FogMode::Constant(FogSetting::None);
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Zombie);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -139,13 +138,13 @@ fn zombie() {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(2, 1)), None);
     assert_eq!(server.get_tokens(Point::new(1, 1)), vec![]);
     assert_eq!(server.get_tokens(Point::new(2, 1)), vec![skull.clone()]);
     // small power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
     assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
     assert_eq!(server.get_unit(Point::new(1, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::FOOT).build()));
@@ -153,19 +152,19 @@ fn zombie() {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(2, 1)), None);
     assert_eq!(server.get_tokens(Point::new(2, 1)), vec![skull]);
     // big power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
     assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(2, 1)), Vec::new());
     assert_eq!(server.get_unit(Point::new(2, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).build()));
     // buy unit
@@ -175,7 +174,7 @@ fn zombie() {
     });
     server.handle_command(Command::TerrainAction(Point::new(3, 1), vec![
         CustomActionInput::ShopItem(0.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(3, 1)).is_some());
     for p in server.all_points() {
         if let Some(unit) = server.get_unit(p) {
@@ -186,7 +185,7 @@ fn zombie() {
 
 #[test]
 fn simo() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(6, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -208,7 +207,7 @@ fn simo() {
     map_settings.fog_mode = FogMode::Constant(FogSetting::None);
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Simo);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -222,15 +221,15 @@ fn simo() {
         unload_index: None,
         path: Path::new(arty_pos),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(target_close).unwrap().get_hp() < 100);
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 100);
 
     // embrace chaos
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
-    server.handle_command(Command::commander_power(4, Vec::new()), Arc::new(|| 0.)).err().unwrap();
-    server.handle_command(Command::commander_power(5, Vec::new()), Arc::new(|| 0.)).err().unwrap();
+    server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(4, Vec::new()), Urc::new(|| 0.)).err().unwrap();
+    server.handle_command(Command::commander_power(5, Vec::new()), Urc::new(|| 0.)).err().unwrap();
     let arty = server.get_unit(arty_pos).unwrap();
     assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_close).is_some());
     assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far).is_none());
@@ -238,7 +237,7 @@ fn simo() {
         unload_index: None,
         path: Path::new(arty_pos),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let hp_close = server.get_unit(target_close).unwrap().get_hp();
     let hp_far = server.get_unit(target_far).unwrap().get_hp();
     assert!(hp_far < 100);
@@ -246,28 +245,28 @@ fn simo() {
 
     // chaos power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
-    server.handle_command(Command::commander_power(3, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(3, Vec::new()), Urc::new(|| 0.)).unwrap();
     //let arty = server.get_unit(arty_pos).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_far, Direction4::D0))),
-    }), Arc::new(|| 0.)).err().expect("range shouldn't be increased");
+    }), Urc::new(|| 0.)).err().expect("range shouldn't be increased");
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(target_close).unwrap().get_hp() < hp_close);
     assert!(server.get_unit(target_far).unwrap().get_hp() < hp_far);
     assert_eq!(server.get_unit(target_farthest).unwrap().get_hp(), 100);
 
     // order power (small)
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
-    server.handle_command(Command::commander_power(3, Vec::new()), Arc::new(|| 0.)).err().unwrap();
-    server.handle_command(Command::commander_power(4, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(3, Vec::new()), Urc::new(|| 0.)).err().unwrap();
+    server.handle_command(Command::commander_power(4, Vec::new()), Urc::new(|| 0.)).unwrap();
     let arty = server.get_unit(arty_pos).unwrap();
     assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far).is_some());
     assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_farthest).is_none());
@@ -275,14 +274,14 @@ fn simo() {
         unload_index: None,
         path: Path::new(arty_pos),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_far, Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(target_close).unwrap().get_hp(), 100);
     assert!(server.get_unit(target_far).unwrap().get_hp() < 100);
 
     // order power (big)
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
-    server.handle_command(Command::commander_power(5, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(5, Vec::new()), Urc::new(|| 0.)).unwrap();
     let arty = server.get_unit(arty_pos).unwrap();
     assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_close).is_some());
     assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far).is_some());
@@ -291,14 +290,14 @@ fn simo() {
         unload_index: None,
         path: Path::new(arty_pos),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_farthest, Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 100);
     assert!(server.get_unit(target_farthest).unwrap().get_hp() < 100);
 }
 
 #[test]
 fn vlad() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(6, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -319,21 +318,21 @@ fn vlad() {
     map_settings.fog_mode = FogMode::Constant(FogSetting::None);
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Vlad);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
 
     // d2d daylight
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(arty_pos).unwrap().get_hp(), 50);
 
     // d2d night
     map_settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Vlad);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -342,19 +341,19 @@ fn vlad() {
         unload_index: None,
         path: Path::new(arty_pos),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target_close, Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(arty_pos).unwrap().get_hp() > 50);
 
     // small power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(arty_pos).unwrap().get_hp(), 50);
     assert!(server.get_unit(target_close).unwrap().get_hp() < 50);
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 50);
 
     // big power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(arty_pos).unwrap().get_hp() > 50);
     assert!(server.get_unit(target_close).unwrap().get_hp() < 50);
     assert_eq!(server.get_unit(target_far).unwrap().get_hp(), 50);
@@ -362,7 +361,7 @@ fn vlad() {
 
 #[test]
 fn tapio() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(6, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -393,7 +392,7 @@ fn tapio() {
     map_settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Tapio);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
@@ -405,7 +404,7 @@ fn tapio() {
             unload_index: None,
             path: Path::new(Point::new(0, i)),
             action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, i), Direction4::D0))),
-        }), Arc::new(|| 0.)).unwrap();
+        }), Urc::new(|| 0.)).unwrap();
     }
     assert!(server.get_unit(Point::new(1, 0)).unwrap().get_hp() > server.get_unit(Point::new(1, 1)).unwrap().get_hp(), "stronger attack from grass than street");
     assert!(server.get_unit(Point::new(1, 1)).unwrap().get_hp() > server.get_unit(Point::new(1, 2)).unwrap().get_hp(), "stronger attack from forest than grass");
@@ -413,25 +412,25 @@ fn tapio() {
     let fairy_forest_hp = server.get_unit(Point::new(0, 3)).unwrap().get_hp();
 
     // fairy forest heals
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(5, 4)).unwrap().get_hp() > 1, "heals even enemy units");
     assert_eq!(server.get_unit(Point::new(0, 3)).unwrap().get_hp(), fairy_forest_hp, "only heal on your own start turn event");
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(0, 3)).unwrap().get_hp() > fairy_forest_hp, "heal on your own start turn event");
 
     // ACTIVE: turn grass into fairy forests
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(1, vec![CustomActionInput::Point(Point::new(3, 0))]), Arc::new(|| 0.)).err().expect("can't turn street into fairy forest");
+    server.handle_command(Command::commander_power(1, vec![CustomActionInput::Point(Point::new(3, 0))]), Urc::new(|| 0.)).err().expect("can't turn street into fairy forest");
     for i in 0..2 {
         let charge_before = server.with(|server| server.players[0].commander.charge);
-        server.handle_command(Command::commander_power(1, vec![CustomActionInput::Point(Point::new(2, i))]), Arc::new(|| 0.)).expect(&format!("loop {i}"));
+        server.handle_command(Command::commander_power(1, vec![CustomActionInput::Point(Point::new(2, i))]), Urc::new(|| 0.)).expect(&format!("loop {i}"));
         assert!(server.with(|server| server.players[0].commander.charge) < charge_before);
         assert_eq!(server.get_terrain(Point::new(2, i)).unwrap().typ(), TerrainType::FairyForest);
     }
 
     // ACTIVE: destroy own fairy forests, dealing damage to enemies nearby
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_terrain(Point::new(5, 3)).unwrap().typ(), TerrainType::Grass);
     assert_eq!(server.get_terrain(Point::new(3, 0)).unwrap().typ(), TerrainType::FairyForest, "power doesn't affect others players' fairy forests");
     assert_eq!(server.get_unit(Point::new(0, 2)).unwrap().get_hp(), 100, "don't hurt your own units");
@@ -443,24 +442,24 @@ fn tapio() {
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().set_tag(&environment, TAG_FUNDS, 10000.into());
     });
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_ne!(server.get_fog_at(ClientPerspective::Team(0), Point::new(5, 3)), FogIntensity::TrueSight);
     server.handle_command(Command::TerrainAction(Point::new(5, 3), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).err().unwrap();
-    server.handle_command(Command::commander_power(3, Vec::new()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).err().unwrap();
+    server.handle_command(Command::commander_power(3, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_fog_at(ClientPerspective::Team(0), Point::new(5, 3)), FogIntensity::TrueSight);
     server.handle_command(Command::TerrainAction(Point::new(5, 3), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(5, 3)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert_eq!(server.get_terrain(Point::new(5, 3)).unwrap().typ(), TerrainType::Grass);
 }
 
 #[test]
 fn sludge_monster() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -484,7 +483,7 @@ fn sludge_monster() {
     map_settings.fog_mode = FogMode::Constant(FogSetting::None);
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::SludgeMonster);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     let environment = server.environment();
     let sludge_token = move |owner_id: i8, counter: i32| {
         let mut sludge = Token::new(environment.clone(), TokenType::SLUDGE);
@@ -503,21 +502,21 @@ fn sludge_monster() {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let default_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
     let mut server = unchanged.clone();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D180))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let sludge_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
     let mut server = unchanged.clone();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 2)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D90))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let oil_platform_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
     assert!(default_attack < oil_platform_attack, "{default_attack} < {oil_platform_attack}");
     assert!(sludge_attack > oil_platform_attack, "{sludge_attack} > {oil_platform_attack} but sludge token should give +25% and oil platform only +20%");
@@ -529,14 +528,14 @@ fn sludge_monster() {
         unload_index: None,
         path: Path::new(Point::new(1, 0)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D270))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(1, 0)), &[sludge_token(0, 0)]);
 
     // small power
     let mut server = unchanged.clone();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     assert_eq!(server.get_tokens(Point::new(1, 1)), &[]);
-    server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
     assert_eq!(server.get_tokens(Point::new(1, 1)), &[sludge_token(0, 0)]);
 
@@ -545,21 +544,21 @@ fn sludge_monster() {
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     assert_eq!(server.get_tokens(Point::new(1, 1)), &[]);
     assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(1, 0)]);
-    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 1)]);
     assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(0, 1)]);
     // tokens vanish over time
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 1)]);
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     let mut server = unchanged.clone();
     assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(1, 0)]);
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(2, 1)), &[]);
 
     // can't repair
@@ -568,12 +567,12 @@ fn sludge_monster() {
         unload_index: None,
         path: Path::new(Point::new(1, 0)),
         action: UnitAction::custom(1, Vec::new()),
-    }), Arc::new(|| 0.)), Err(CommandError::InvalidAction));
+    }), Urc::new(|| 0.)), Err(CommandError::InvalidAction));
 }
 
 #[test]
 fn celerity() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(5, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -602,22 +601,22 @@ fn celerity() {
     map_settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, funds.into());
 
     // get some default values without using Celerity
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, map_settings.build_default(), Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, map_settings.build_default(), Urc::new(|| 0.));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 2)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 2), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let default_attack = 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp();
     server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     let default_cost = funds - server.with(|server| server.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>());
     assert!(!server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL).is_some());
 
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Celerity);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     let environment = server.environment().clone();
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
@@ -626,7 +625,7 @@ fn celerity() {
 
     server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
-    ].try_into().unwrap()), Arc::new(|| 0.)).unwrap();
+    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert!(funds - server.with(|server| server.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()) < default_cost);
     assert_eq!(server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL), None, "New units are Level 0");
 
@@ -640,9 +639,9 @@ fn celerity() {
                 unload_index: None,
                 path: Path::new(Point::new(2, 2)),
                 action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(target, d))),
-            }), Arc::new(|| 0.)).unwrap();
-            server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
-            server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+            }), Urc::new(|| 0.)).unwrap();
+            server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+            server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
         }
         if i > 0 {
             assert_eq!(server.get_unit(Point::new(2, 1)), None);
@@ -657,24 +656,24 @@ fn celerity() {
 
     // small power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(0, 0)).unwrap().get_hp() > 1);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 2)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 2), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(default_attack, 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
 
     // big power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(0, 0)).unwrap().get_hp(), 1);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 2)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(3, 2), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     assert_eq!(attack_damage[3], 100 - server.get_unit(Point::new(3, 2)).unwrap().get_hp());
 
     let convoy: Unit<Direction6> = UnitType::convoy().instance(&environment).set_owner_id(0).set_transported(vec![
@@ -699,7 +698,7 @@ fn celerity() {
 
 #[test]
 fn lageos() {
-    let config = Arc::new(Config::default());
+    let config = Urc::new(Config::default());
     let map = PointMap::new(8, 5, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
@@ -716,18 +715,18 @@ fn lageos() {
     // get some default values without using Lageos
     let mut settings = map_settings.build_default();
     settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 0), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let damage_to_neutral_heli = 100 - server.get_unit(Point::new(1, 0)).unwrap().get_hp();
     let damage_to_neutral_tank = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
     let neutral_vision_range = (0..map.width()).find(|x| server.get_fog_at(ClientPerspective::Team(0), Point::new(*x, 0)) == FogIntensity::Dark).unwrap();
@@ -735,24 +734,24 @@ fn lageos() {
     let mut settings = map_settings.build_default();
     settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
     settings.players[0].set_commander(CommanderType::Lageos);
-    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Arc::new(|| 0.));
+    let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     server.with_mut(|server| {
         server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     });
     let unchanged = server.clone();
 
     // Lageos' air-units have have higher defense, Lageos has +1 vision
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 0), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
-    }), Arc::new(|| 0.)).unwrap();
+    }), Urc::new(|| 0.)).unwrap();
     let damage_to_lageos_heli = 100 - server.get_unit(Point::new(1, 0)).unwrap().get_hp();
     assert!(damage_to_neutral_heli > damage_to_lageos_heli, "{damage_to_neutral_heli} > {damage_to_lageos_heli}");
     assert_eq!(damage_to_neutral_tank, 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp());
@@ -760,12 +759,12 @@ fn lageos() {
 
     // small power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(1, Vec::new()), Arc::new(|| 0.)).unwrap_err();
+    server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::commander_power(1, vec![
         CustomActionInput::Point(Point::new(0, 1)),
         CustomActionInput::Point(Point::new(0, 1)),
         CustomActionInput::Point(Point::new(2, 1)),
-    ]), Arc::new(|| 0.)).unwrap();
+    ]), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(1, 0)).unwrap().get_hp(), 100);
     assert!(server.get_unit(Point::new(0, 1)).unwrap().get_hp() < 100);
     assert!(server.get_unit(Point::new(0, 0)).unwrap().get_hp() < 100);
@@ -774,20 +773,20 @@ fn lageos() {
 
     // big power
     let mut server = unchanged.clone();
-    server.handle_command(Command::commander_power(2, Vec::new()), Arc::new(|| 0.)).unwrap_err();
+    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::commander_power(2, vec![
         CustomActionInput::Point(Point::new(0, 1)),
         CustomActionInput::Point(Point::new(0, 1)),
-    ]), Arc::new(|| 0.)).unwrap_err();
+    ]), Urc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::commander_power(2, vec![
         CustomActionInput::Point(Point::new(0, 1)),
-    ]), Arc::new(|| 0.)).unwrap();
+    ]), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_unit(Point::new(1, 0)).unwrap().get_hp(), 100);
     assert!(server.get_unit(Point::new(0, 1)).unwrap().get_hp() < 100);
     assert!(server.get_unit(Point::new(1, 1)).unwrap().get_hp() < 100);
     assert!(server.get_unit(Point::new(0, 1)).unwrap().has_flag(FLAG_STUNNED));
     assert!(server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     assert!(!server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_STUNNED));
-    server.handle_command(Command::EndTurn, Arc::new(|| 0.)).unwrap();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(0, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
 }

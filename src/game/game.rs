@@ -1,6 +1,7 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::error::Error;
-use std::sync::Arc;
+use uniform_smart_pointer::Urc;
+use uniform_smart_pointer::ReadGuard;
 
 use zipper::*;
 use interfaces::*;
@@ -9,7 +10,7 @@ use semver::Version;
 use crate::config::environment::Environment;
 use crate::config::config::Config;
 use crate::tokens::token::Token;
-use crate::handle::{BorrowedHandle, Handle};
+use crate::handle::Handle;
 use crate::map::map::*;
 use crate::map::direction::*;
 use crate::game::events;
@@ -43,7 +44,7 @@ pub struct Game<D: Direction> {
 impl<D: Direction> Game<D> {
     fn new(mut map: Map<D>, config: &GameConfig<D>, settings: GameSettings) -> Self {
         *map.get_tag_bag_mut() = config.tags.clone();
-        map.start_game(&Arc::new(settings));
+        map.start_game(&Urc::new(settings));
         let settings = map.environment().settings.as_ref().unwrap();
         let fog_mode = settings.fog_mode.clone();
         let players: Vec<Player<D>> = config.players.iter().zip(settings.players.iter())
@@ -75,7 +76,7 @@ impl<D: Direction> Game<D> {
         Box::new(Handle::new(this))
     }
 
-    pub fn import_server(data: ExportedGame, config: &Arc<Config>, version: Version) -> Result<Box<Self>, ZipperError> {
+    pub fn import_server(data: ExportedGame, config: &Urc<Config>, version: Version) -> Result<Box<Self>, ZipperError> {
         if let Some(mut hidden_data) = data.hidden {
             let mut unzipper = Unzipper::new(hidden_data.server, version.clone());
             let mut game = import_game_base(&mut unzipper, config)?;
@@ -98,7 +99,7 @@ impl<D: Direction> Game<D> {
         }
     }
 
-    pub fn import_client(public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, config: &Arc<Config>, version: Version) -> Result<Box<Game<D>>, ZipperError> {
+    pub fn import_client(public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, config: &Urc<Config>, version: Version) -> Result<Box<Game<D>>, ZipperError> {
         let mut unzipper = Unzipper::new(public, version.clone());
         let mut game = import_game_base(&mut unzipper, config)?;
         let points = game.map.all_points();
@@ -282,7 +283,7 @@ fn create_base_fog<D: Direction>(_map: &Map<D>, players: &[Player<D>]) -> HashMa
     fog
 }
 
-fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: &Arc<Config>) -> Result<Game<D>, ZipperError> {
+fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: &Urc<Config>) -> Result<Game<D>, ZipperError> {
     // is_hex: skip because at this point we already know
     unzipper.read_bool()?;
     let mut environment = Environment::new_game(config.clone(), MapSize::new(0, 0), GameSettings::import(unzipper, config.clone())?);
@@ -382,10 +383,11 @@ impl<D: Direction> GameView<D> for Handle<Game<D>> {
     }
 
     fn as_shared(&self) -> SharedGameView<D> {
-        SharedGameView(Arc::new(self.cloned()))
+        let test: Urc<dyn GameView<D>> = Urc::new(self.cloned());
+        SharedGameView(test)
     }
 
-    fn wrapping_logic(&self) -> BorrowedHandle<'_, crate::map::wrapping_map::WrappingMap<D>> {
+    fn wrapping_logic(&self) -> ReadGuard<'_, crate::map::wrapping_map::WrappingMap<D>> {
         self.borrow(|game| game.map.wrapping_logic())
     }
 

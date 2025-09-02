@@ -1,4 +1,5 @@
 use rustc_hash::FxHashMap as HashMap;
+use uniform_smart_pointer::Urc;
 use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -100,7 +101,7 @@ impl Config {
         }
 
         let global_ast = file_loader.load_rhai_module(&GLOBAL_SCRIPT.to_string())?;
-        let global_ast = Shared::into_inner(global_ast).unwrap();
+        let global_ast = Urc::into_inner(global_ast).unwrap();
         let mut global_constants = Scope::new();
         for (name, _, value) in global_ast.iter_literal_variables(true, false) {
             global_constants.push_constant(name, value);

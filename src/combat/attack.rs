@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use executor::Executor;
 use interfaces::ClientPerspective;
 use num_rational::Rational32;
@@ -15,6 +13,7 @@ use crate::map::direction::Direction;
 use crate::map::map::{get_line, get_unit, NeighborMode};
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
+use uniform_smart_pointer::*;
 use crate::script::*;
 use crate::units::hero::{HeroMap, HeroMapWithId};
 use crate::units::movement::{Path, PathStep, TBallast};
@@ -204,13 +203,13 @@ impl AttackInstance {
             }
             AttackInstanceScript::Rhai { build_script } => {
                 let engine_inner = environment.get_engine_board(&*handler.get_game());
-                let handler_ = Arc::new(Mutex::new(handler.clone()));
-                let result_ = Arc::new(Mutex::new(Vec::new()));
+                let handler_ = Urc::new(Umutex::new(handler.clone()));
+                let result_ = Urc::new(Umutex::new(Vec::new()));
                 let mut engine = environment.get_engine_board(&*handler.get_game());
                 {
                     let handler = handler_.clone();
                     engine.register_fn("remember_unit", move |p: Point| -> Dynamic {
-                        let mut handler = handler.lock().unwrap();
+                        let mut handler = handler.lock();
                         if handler.get_game().get_unit(p).is_some() {
                             Dynamic::from(handler.observe_unit(p, None))
                         } else {
@@ -219,7 +218,7 @@ impl AttackInstance {
                     });
                     let handler = handler_.clone();
                     engine.register_fn("remember_unit", move |p: Point, unload_index: i32| {
-                        let mut handler = handler.lock().unwrap();
+                        let mut handler = handler.lock();
                         if unload_index < 0 {
                             return ().into();
                         }
@@ -238,7 +237,7 @@ impl AttackInstance {
                     let ballast = temporary_ballast.to_vec();
                     engine.register_fn("attacker_bonus", move |defender_id: UnitId<D>, column_id: ImmutableString, base_value: Rational32| -> Rational32 {
                         let handler = handler.clone();
-                        let handler = handler.lock().unwrap();
+                        let handler = handler.lock();
                         let Some(defender_pos) = handler.get_observed_unit_pos(defender_id.0) else {
                             return base_value;
                         };
@@ -273,7 +272,7 @@ impl AttackInstance {
                     let attacker_ballast = temporary_ballast.to_vec();
                     engine.register_fn("defender_bonus", move |defender_id: UnitId<D>, column_id: &str, base_value: Rational32| {
                         let handler = handler.clone();
-                        let handler = handler.lock().unwrap();
+                        let handler = handler.lock();
                         let Some(defender_pos) = handler.get_observed_unit_pos(defender_id.0) else {
                             return base_value;
                         };
@@ -310,7 +309,7 @@ impl AttackInstance {
                     let counter_ = counter_state.clone();
                     engine.register_fn("attack_bonus", move |column_id: &str, base_value: Rational32| {
                         let handler = handler.clone();
-                        let handler = handler.lock().unwrap();
+                        let handler = handler.lock();
                         let game = handler.get_game();
                         let result = game.environment().config.attack_bonus(
                             &column_id.to_string(),
@@ -331,7 +330,7 @@ impl AttackInstance {
                     let result = result_.clone();
                     let (ast, _) = environment.get_rhai_function(&engine, *build_script);
                     engine.register_fn("add_script", move |attack_script: AttackScript| {
-                        result.lock().unwrap().push((
+                        result.lock().push((
                             attack_script.arguments,
                             None,
                             AttackExecutableScript::Rhai {
@@ -350,7 +349,7 @@ impl AttackInstance {
                     let counter_ = counter_state.clone();
                     engine.register_fn("on_defend", move |defend_script: OnDefendScript<D>| {
                         let handler = handler.clone();
-                        let handler = handler.lock().unwrap();
+                        let handler = handler.lock();
                         let Some(defender_pos) = handler.get_observed_unit_pos(defend_script.defender_id.0) else {
                             return;
                         };
@@ -379,7 +378,7 @@ impl AttackInstance {
                         if scripts.len() == 0 {
                             return;
                         }
-                        let mut result = result.lock().unwrap();
+                        let mut result = result.lock();
                         let environment = game.environment();
                         for (function_index, priority) in scripts {
                             let (ast, function_name) = environment.get_rhai_function(&engine_inner, function_index);
@@ -405,7 +404,7 @@ impl AttackInstance {
                     .map(|dp| Dynamic::from(self.direction_modifier.modify(dp)))
                     .collect::<Array>());
                 match Executor::execute(&environment, &engine, &mut scope, *build_script, ()) {
-                    Ok(()) => result = result_.lock().unwrap().drain(..).collect(),
+                    Ok(()) => result = result_.lock().drain(..).collect(),
                     Err(e) => {
                         environment.log_rhai_error("AttackSplash preparation", environment.get_rhai_function_name(*build_script), &e);
                         handler.effect_glitch();
@@ -560,11 +559,11 @@ impl<D: Direction> AttackExecutable<D> {
             AttackExecutableScript::Rhai { ast, script } => {
                 let environment = handler.environment();
                 let mut engine = environment.get_engine_handler(handler);
-                let scripted_attacks = Arc::new(Mutex::new(Vec::new()));
+                let scripted_attacks = Urc::new(Umutex::new(Vec::new()));
                 let scripted_attacks_ = scripted_attacks.clone();
                 engine.register_fn("add_attack", move |atk: ScriptedAttack<D>| {
                     //tracing::debug!("add attack with prio {}", atk.priority);
-                    scripted_attacks_.lock().unwrap().push(atk);
+                    scripted_attacks_.lock().push(atk);
                 });
                 let mut scope = Scope::new();
                 scope.push_constant(CONST_NAME_ATTACKER, self.attacker);
@@ -579,7 +578,7 @@ impl<D: Direction> AttackExecutable<D> {
                         handler.effect_glitch();
                     }
                 }
-                let mut scripted_attacks = scripted_attacks.lock().unwrap();
+                let mut scripted_attacks = scripted_attacks.lock();
                 scripted_attacks.drain(..).collect()
             }
         }
@@ -594,7 +593,7 @@ pub enum AttackExecutableScript {
         neighbor_mode: NeighborMode,
     },
     Rhai {
-        ast: Shared<AST>,
+        ast: Urc<AST>,
         script: ImmutableString,
     },
 }

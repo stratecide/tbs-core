@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
 use interfaces::ClientPerspective;
 use packages::Package;
 use rhai::*;
@@ -13,6 +12,7 @@ use crate::game::settings::GameSettings;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
+use uniform_smart_pointer::*;
 use crate::script::*;
 use crate::tags::*;
 use crate::terrain::terrain::*;
@@ -30,36 +30,36 @@ use super::tag_config::*;
 #[derive(Clone)]
 pub struct Environment {
     pub map_size: MapSize,
-    pub config: Arc<Config>,
-    pub settings: Option<Arc<GameSettings>>,
+    pub config: Urc<Config>,
+    pub settings: Option<Urc<GameSettings>>,
     // cache compilation
-    compiled_asts: Arc<Mutex<HashMap<usize, Shared<AST>>>>,
-    unique_ids: Arc<Mutex<HashMap<String, FxHashSet<usize>>>>,
+    compiled_asts: Urc<Umutex<HashMap<usize, Urc<AST>>>>,
+    unique_ids: Urc<Umutex<HashMap<String, FxHashSet<usize>>>>,
 }
 
 impl Environment {
-    pub fn new_map(config: Arc<Config>, map_size: MapSize) -> Self {
+    pub fn new_map(config: Urc<Config>, map_size: MapSize) -> Self {
         Self {
             map_size,
             settings: None,
-            compiled_asts: Arc::default(),
+            compiled_asts: Urc::default(),
             unique_ids: Self::setup_unique_ids(&config),
             config,
         }
     }
 
-    pub fn new_game(config: Arc<Config>, map_size: MapSize, settings: GameSettings) -> Self {
+    pub fn new_game(config: Urc<Config>, map_size: MapSize, settings: GameSettings) -> Self {
         Self {
             map_size,
-            settings: Some(Arc::new(settings)),
-            compiled_asts: Arc::default(),
+            settings: Some(Urc::new(settings)),
+            compiled_asts: Urc::default(),
             unique_ids: Self::setup_unique_ids(&config),
             config,
         }
     }
 
-    fn setup_unique_ids(config: &Config) -> Arc<Mutex<HashMap<String, FxHashSet<usize>>>> {
-        Arc::new(Mutex::new(config.tags.iter()
+    fn setup_unique_ids(config: &Config) -> Urc<Umutex<HashMap<String, FxHashSet<usize>>>> {
+        Urc::new(Umutex::new(config.tags.iter()
         .filter_map(|tag_config| {
             match &tag_config.tag_type {
                 TagType::Unique { pool } => Some((pool.clone(), FxHashSet::default())),
@@ -68,7 +68,7 @@ impl Environment {
         }).collect()))
     }
 
-    pub fn start_game(&mut self, settings: &Arc<GameSettings>) {
+    pub fn start_game(&mut self, settings: &Urc<GameSettings>) {
         if self.settings.is_some() {
             panic!("Attempted to start an already started game!")
         }
@@ -82,19 +82,19 @@ impl Environment {
 
     pub(crate) fn add_unique_id(&self, tag_key: usize, id: usize) {
         if let TagType::Unique { pool } = self.config.tag_type(tag_key) {
-            self.unique_ids.lock().unwrap().get_mut(pool).unwrap().insert(id);
+            self.unique_ids.lock().get_mut(pool).unwrap().insert(id);
         }
     }
     pub(crate) fn remove_unique_id(&self, tag_key: usize, id: usize) {
         if let TagType::Unique { pool } = self.config.tag_type(tag_key) {
-            self.unique_ids.lock().unwrap().get_mut(pool).unwrap().remove(&id);
+            self.unique_ids.lock().get_mut(pool).unwrap().remove(&id);
         }
     }
     pub(crate) fn generate_unique_id(&self, tag_key: usize, random: f32) -> Option<usize> {
         let TagType::Unique { pool } = self.config.tag_type(tag_key) else {
             return None;
         };
-        let mut unique_ids = self.unique_ids.lock().unwrap();
+        let mut unique_ids = self.unique_ids.lock();
         let pool = unique_ids.get_mut(pool).unwrap();
         if pool.len() > UniqueId::MAX_VALUE {
             return None;
@@ -170,14 +170,14 @@ impl Environment {
         &self.config.functions[index].1
     }
 
-    pub fn get_rhai_function(&self, engine: &Engine, index: usize) -> (Shared<AST>, &String) {
+    pub fn get_rhai_function(&self, engine: &Engine, index: usize) -> (Urc<AST>, &String) {
         let (ast_index, name) = &self.config.functions[index];
-        let mut asts = self.compiled_asts.lock().unwrap();
+        let mut asts = self.compiled_asts.lock();
         let ast = if let Some(ast) = asts.get(ast_index) {
             ast.clone()
         } else {
             let ast = self.config.asts[*ast_index].clone();
-            let ast = Shared::new(engine.optimize_ast(&self.config.global_constants, ast, OptimizationLevel::Simple));
+            let ast = Urc::new(engine.optimize_ast(&self.config.global_constants, ast, OptimizationLevel::Simple));
             asts.insert(*ast_index, ast.clone());
             ast
         };
@@ -305,7 +305,7 @@ impl Environment {
 
 impl PartialEq for Environment {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.config, &other.config)
+        Urc::ptr_eq(&self.config, &other.config)
         && match (&self.settings, &other.settings) {
             (Some(a), Some(b)) => **a == **b,
             (None, None) => true,

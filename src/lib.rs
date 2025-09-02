@@ -12,6 +12,7 @@ pub mod handle;
 pub mod tags;
 pub mod combat;
 
+use uniform_smart_pointer::SendSyncBound;
 pub use zipper;
 pub use interfaces;
 
@@ -100,7 +101,6 @@ macro_rules! listable_enum {(
         }
     };
 }
-
 pub(crate) use listable_enum;
 
 macro_rules! enum_with_custom {(
@@ -136,9 +136,8 @@ macro_rules! enum_with_custom {(
         }
     };
 }
-
 pub(crate) use enum_with_custom;
 
-pub(crate) fn dyn_opt<T: 'static + Clone + Send + Sync>(value: Option<T>) -> rhai::Dynamic {
+pub(crate) fn dyn_opt<T: 'static + SendSyncBound + Clone>(value: Option<T>) -> rhai::Dynamic {
     value.map(rhai::Dynamic::from).unwrap_or(rhai::Dynamic::UNIT)
 }

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
 
+use uniform_smart_pointer::Umutex;
 use zipper_derive::Zippable;
 use zipper::*;
 
@@ -227,28 +227,28 @@ fn run_input_script<D: Direction>(
     scope: Scope<'static>,
     data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
-    let index = Arc::new(Mutex::new(0));
-    let result = Arc::new(Mutex::new(None));
+    let index = Urc::new(Umutex::new(0));
+    let result = Urc::new(Umutex::new(None));
     let result_ = result.clone();
-    let invalid_data = Arc::new(Mutex::new(false));
+    let invalid_data = Urc::new(Umutex::new(false));
     let data = data.to_vec();
     let environment = game.environment();
     let mut engine = environment.get_engine_board(game);
     engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<Dynamic, Box<EvalAltResult>> {
-        let mut index = index.lock().unwrap();
+        let mut index = index.lock();
         let i = *index;
         *index += 1;
         drop(index);
         if i >= data.len() {
             if or_succeed {
-                *result.lock().unwrap() = Some(CustomActionTestResult::NextOrSuccess(options.clone()));
+                *result.lock() = Some(CustomActionTestResult::NextOrSuccess(options.clone()));
             } else {
-                *result.lock().unwrap() = Some(CustomActionTestResult::Next(options.clone()));
+                *result.lock() = Some(CustomActionTestResult::Next(options.clone()));
             }
             return Err("Script requests Input".into());
         }
         let Some(data) = options.contains(&data[i]) else {
-            *invalid_data.lock().unwrap() = true;
+            *invalid_data.lock() = true;
             return Err(format!("script {script} asks for ({i}) {options:?} but received {:?}", data[i]).into());
         };
         Ok(data.into_dynamic())
@@ -258,7 +258,7 @@ fn run_input_script<D: Direction>(
         Ok(true) => CustomActionTestResult::Success,
         Ok(false) => CustomActionTestResult::Failure,
         Err(e) => {
-            if let Some(result) = result_.lock().unwrap().take() {
+            if let Some(result) = result_.lock().take() {
                 result
             } else {
                 // script had an error
@@ -336,55 +336,55 @@ fn is_script_input_valid<D: Direction>(
     scope: Scope<'static>,
     data: &[CustomActionInput<D>],
 ) -> Option<Vec<CustomActionData<D>>> {
-    let index = Arc::new(Mutex::new(0));
+    let index = Urc::new(Umutex::new(0));
     let index_ = index.clone();
-    let success = Arc::new(Mutex::new(false));
+    let success = Urc::new(Umutex::new(false));
     let success_ = success.clone();
-    let invalid_data = Arc::new(Mutex::new(false));
+    let invalid_data = Urc::new(Umutex::new(false));
     let invalid_data_ = invalid_data.clone();
-    let result = Arc::new(Mutex::new(Vec::new()));
+    let result = Urc::new(Umutex::new(Vec::new()));
     let result_ = result.clone();
     let data_len = data.len();
     let data = data.to_vec();
     let environment = game.environment();
     let mut engine = environment.get_engine_board(game);
     engine.register_fn(FUNCTION_NAME_INPUT_CHOICE, move |options: &mut CustomActionDataOptions<D>, or_succeed: bool| -> Result<Dynamic, Box<EvalAltResult>> {
-        let mut index = index.lock().unwrap();
+        let mut index = index.lock();
         let i = *index;
         *index += 1;
         drop(index);
         if i >= data.len() {
             if or_succeed {
                 // early success
-                *success.lock().unwrap() = true;
+                *success.lock() = true;
             } else {
-                *invalid_data.lock().unwrap() = true;
+                *invalid_data.lock() = true;
             }
             return Err(format!("not enough data ({}) for script {script}", data.len()).into());
         }
         let Some(data) = options.contains(&data[i]) else {
-            *invalid_data.lock().unwrap() = true;
+            *invalid_data.lock() = true;
             return Err(format!("script {script} asks for ({i}) {options:?} but received {:?}", data[i]).into());
         };
-        result.lock().unwrap().push(data.clone());
+        result.lock().push(data.clone());
         Ok(data.into_dynamic())
     });
     let executor = Executor::new(engine, scope, environment);
     match executor.run(script, ()) {
         Ok(b) => {
-            if b && *index_.lock().unwrap() == data_len {
+            if b && *index_.lock() == data_len {
                 // success: input script returned success and input data was used up
-                Some(result_.lock().unwrap().clone())
+                Some(result_.lock().clone())
             } else {
                 // superfluous input data is an error
                 None
             }
         }
         Err(e) => {
-            if *success_.lock().unwrap() {
+            if *success_.lock() {
                 // early success
-                Some(result_.lock().unwrap().clone())
-            } else if *invalid_data_.lock().unwrap() {
+                Some(result_.lock().clone())
+            } else if *invalid_data_.lock() {
                 // wrong data supplied
                 let environment = game.environment();
                 environment.log_rhai_error("is_script_input_valid data", environment.get_rhai_function_name(script), &e);
