@@ -703,7 +703,14 @@ mod tests {
     use uniform_smart_pointer::Urc;
 
     use super::*;
-    use crate::{config::config::Config, game::{game::Game, game_view::GameView}, map::{map::{Map, NeighborMode}, point_map::PointMap}, terrain::TerrainType, units::{movement::Path, unit_types::UnitType}};
+    use crate::config::config::Config;
+    use crate::game::game::Game;
+    use crate::map::board::{Board, BoardView};
+    use crate::map::map::{Map, NeighborMode};
+    use crate::map::point_map::PointMap;
+    use crate::terrain::TerrainType;
+    use crate::units::movement::Path;
+    use crate::units::unit_types::UnitType;
 
     #[test]
     fn distortions() {
@@ -923,8 +930,9 @@ mod tests {
         );
         let settings = map.settings().unwrap();
         let (game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
+        let game = Board::from(&game);
         let environment = game.environment();
         let rook = UnitType::rook().instance(&environment).set_owner_id(0).build();
-        rook.shortest_path_to(&*game, &Path::new(Point::new(3, 2)), None, Point::new(0, 3)).unwrap();
+        rook.shortest_path_to(&game, &Path::new(Point::new(3, 2)), None, Point::new(0, 3)).unwrap();
     }
 }

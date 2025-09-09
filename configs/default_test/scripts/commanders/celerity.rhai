@@ -3,7 +3,7 @@ fn co_recovery() {
     let effects = [];
     for uwp in BOARD.all_units() {
         if uwp.unit.owner_id == OWNER_ID && uwp.unit.has(TAG_Hp) {
-            effects.push(change_unit_hp(uwp.position, 30));
+            effects.push(change_unit_hp(EVENT_HANDLER, uwp.position, 30));
         }
     }
     EVENT_HANDLER.effects(effects);

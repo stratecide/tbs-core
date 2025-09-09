@@ -11,9 +11,10 @@ use crate::commander::Commander;
 use crate::config::environment::Environment;
 use crate::config::OwnershipPredicate;
 use crate::game::fog::{FogIntensity, FogSetting};
-use crate::game::game_view::GameView;
 use crate::game::settings::GameSettings;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
+use crate::map::map::get_neighbors_layers;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Owner, Player};
@@ -100,11 +101,11 @@ impl<D: Direction> Token<D> {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_player(&self, game: &impl GameView<D>) -> Option<Player<D>> {
+    pub fn get_player<'a>(&self, game: &'a impl BoardView<D>) -> Option<&'a Player<D>> {
         game.get_owning_player(self.get_owner_id())
     }
 
-    pub fn get_commander(&self, game: &impl GameView<D>) -> Commander {
+    pub fn get_commander(&self, game: &impl BoardView<D>) -> Commander {
         self.get_player(game)
         .and_then(|player| Some(player.commander.clone()))
         .unwrap_or(Commander::new(&self.environment, CommanderType(0)))
@@ -159,7 +160,7 @@ impl<D: Direction> Token<D> {
         self.tags.translate(translations, odd_if_hex);
     }
 
-    pub fn vision_range(&self, game: &impl GameView<D>) -> Option<usize> {
+    pub fn vision_range(&self, game: &Board<D>) -> Option<usize> {
         let mut range = self.environment.config.token_vision_range(self.typ)?;
         // TODO: add config column for whether fog_setting should increase vision range instead of this check
         if range == 0 {
@@ -178,7 +179,7 @@ impl<D: Direction> Token<D> {
 
     pub fn get_vision(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         pos: Point,
         team: ClientPerspective
     ) -> HashMap<Point, FogIntensity> {
@@ -198,7 +199,7 @@ impl<D: Direction> Token<D> {
             FogSetting::Fade2(_) => 2.max(vision_range) - 2,
             _ => vision_range
         };
-        let layers = game.range_in_layers(pos, vision_range);
+        let layers = get_neighbors_layers(game, pos, vision_range);
         for (i, layer) in layers.into_iter().enumerate() {
             for p in layer {
                 let vision = if i < normal_range {

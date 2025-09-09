@@ -1,6 +1,7 @@
 use uniform_smart_pointer::Urc;
 
 use crate::config::config::Config;
+use crate::map::board::BoardView;
 use crate::tags::tests::*;
 use crate::terrain::TerrainType;
 use crate::units::unit_types::UnitType;

@@ -5,7 +5,6 @@ use crate::config::config::Config;
 use crate::game::commands::*;
 use crate::game::fog::*;
 use crate::game::game::Game;
-use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::map::Map;
 use crate::map::point::Point;
@@ -56,13 +55,14 @@ fn buy_hero() {
     settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 999999.into());
 
     let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(0, 1)).unwrap(), Point::new(0, 1), None), None);
+    let board = Board::new(&server);
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(0, 1)).unwrap(), Point::new(0, 1), None), None);
     let path = Path::with_steps(Point::new(0, 1), vec![PathStep::Dir(Direction4::D0)]);
-    let options = server.get_unit(Point::new(0, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
+    let options = server.get_unit(Point::new(0, 1)).unwrap().options_after_path(&board, &path, None, &[]);
     crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::custom(CA_UNIT_BUY_HERO, Vec::new())));
     let script = config.custom_actions()[CA_UNIT_BUY_HERO].script.0.unwrap();
-    let test_result = run_unit_input_script(script, &*server, &path, None, &[]);
+    let test_result = run_unit_input_script(script, &board, &path, None, &[]);
     crate::debug!("test_result: {:?}", test_result);
     let mut jax_index = 0;
     match test_result {
@@ -87,10 +87,11 @@ fn buy_hero() {
         path,
         action: UnitAction::custom(CA_UNIT_BUY_HERO, vec![CustomActionInput::ShopItem(0.into())]),
     }), Urc::new(|| 0.)).unwrap();
+    let board = Board::new(&server);
     assert_eq!(server.get_unit(Point::new(1, 1)).unwrap().get_hero(), Some(&Hero::new(HeroType::Crystal)));
     assert_eq!(server.get_unit(Point::new(1, 1)).unwrap().get_tag(TAG_HERO_ORIGIN), Some(TagValue::Point(Point::new(1, 1))));
     assert!(server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
 }
 
 #[test]
@@ -141,11 +142,12 @@ fn crystal() {
     let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     let unchanged = server.clone();
     let environment: crate::config::environment::Environment = server.environment().clone();
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
+    let board = Board::new(&server);
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
     // use power
     let path = Path::new(Point::new(1, 1));
-    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
+    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&board, &path, None, &[]);
     crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -153,9 +155,10 @@ fn crystal() {
         path,
         action: UnitAction::hero_power(1, vec![CustomActionInput::Point(Point::new(0, 1))]),
     }), Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_unit(Point::new(0, 1)), Some(UnitType::hero_crystal().instance(&environment).set_owner_id(0).set_hp(100).set_hero(Hero::new(HeroType::CrystalObelisk)).build()));
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
+    let board = Board::new(&server);
+    assert_eq!(server.get_unit(Point::new(0, 1)), Some(&UnitType::hero_crystal().instance(&environment).set_owner_id(0).set_hp(100).set_hero(Hero::new(HeroType::CrystalObelisk)).build()));
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(2, 1)),
@@ -163,11 +166,13 @@ fn crystal() {
     }), Urc::new(|| 0.)).unwrap();
     let power_aura_damage = 100 - server.get_unit(Point::new(3, 1)).unwrap().get_hp();
     server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
+    let board = Board::new(&server);
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(3));
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(3));
     server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
-    assert_eq!(Hero::aura_range(&*server, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
+    let board = Board::new(&server);
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(4, 4)).unwrap(), Point::new(4, 4), None), Some(2));
 
     // don't use power
     let mut server = unchanged.clone();
@@ -179,10 +184,11 @@ fn crystal() {
     let aura_damage = 100 - server.get_unit(Point::new(3, 1)).unwrap().get_hp();
     server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    let board = Board::new(&server);
     assert_eq!(server.get_unit(Point::new(4, 4)).unwrap().get_hp(), 100);
-    assert_eq!(Hero::hero_influence_at(&*server, Point::new(0, 0), 0).len(), 1);
-    assert_eq!(Hero::hero_influence_at(&*server, Point::new(0, 0), 1).len(), 0);
-    assert_eq!(Hero::hero_influence_at(&*server, Point::new(0, 0), -1).len(), 1);
+    assert_eq!(Hero::hero_influence_at(&board, Point::new(0, 0), Some(0)).len(), 1);
+    assert_eq!(Hero::hero_influence_at(&board, Point::new(0, 0), Some(1)).len(), 0);
+    assert_eq!(Hero::hero_influence_at(&board, Point::new(0, 0), None).len(), 1);
 
     assert!(aura_damage < power_aura_damage, "{aura_damage} < {power_aura_damage}");
 
@@ -224,10 +230,11 @@ fn earl_grey() {
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
     let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
-    let heroes = HeroMap::new(&*server, None);
+    let board = Board::new(&server);
+    let heroes = HeroMap::new(&board, None);
     assert_eq!(
-        server.get_unit(Point::new(2, 1)).unwrap().movement_points(&*server, Point::new(2, 1), None, &heroes),
-        server.get_unit(Point::new(4, 4)).unwrap().movement_points(&*server, Point::new(4, 4), None, &heroes),
+        server.get_unit(Point::new(2, 1)).unwrap().movement_points(&board, Point::new(2, 1), None, &heroes),
+        server.get_unit(Point::new(4, 4)).unwrap().movement_points(&board, Point::new(4, 4), None, &heroes),
     );
     // hero power shouldn't be available if the hero moves
     let mut path = Path::new(Point::new(1, 1));
@@ -237,10 +244,11 @@ fn earl_grey() {
         path,
         action: UnitAction::hero_power(1, Vec::new()),
     }), Urc::new(|| 0.)).unwrap_err();
+    let board = Board::new(&server);
     assert_eq!(error, CommandError::InvalidAction);
     // use power
     let path = Path::new(Point::new(1, 1));
-    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
+    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&board, &path, None, &[]);
     crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -248,12 +256,13 @@ fn earl_grey() {
         path,
         action: UnitAction::hero_power(1, Vec::new()),
     }), Urc::new(|| 0.)).unwrap();
+    let board = Board::new(&server);
     assert!(!server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
-    let heroes = HeroMap::new(&*server, None);
+    let heroes = HeroMap::new(&board, None);
     assert!(
-        server.get_unit(Point::new(2, 1)).unwrap().movement_points(&*server, Point::new(2, 1), None, &heroes)
+        server.get_unit(Point::new(2, 1)).unwrap().movement_points(&board, Point::new(2, 1), None, &heroes)
         >
-        server.get_unit(Point::new(4, 4)).unwrap().movement_points(&*server, Point::new(4, 4), None, &heroes)
+        server.get_unit(Point::new(4, 4)).unwrap().movement_points(&board, Point::new(4, 4), None, &heroes)
     );
 }
 
@@ -277,12 +286,13 @@ fn blue_berry() {
     settings.fog_mode = FogMode::Constant(FogSetting::None);
 
     let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
+    let board = Board::new(&server);
     assert!(server.get_unit(Point::new(2, 1)).unwrap().get_hp() > 50);
     assert_eq!(server.get_unit(Point::new(4, 4)).unwrap().get_hp(), 50);
     assert!(server.get_unit(Point::new(4, 4)).unwrap().has_flag(FLAG_EXHAUSTED));
     // use power
     let path = Path::new(Point::new(1, 1));
-    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
+    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&board, &path, None, &[]);
     crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -314,7 +324,8 @@ fn tess() {
     let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     // use power
     let path = Path::new(Point::new(1, 1));
-    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
+    let board = Board::new(&server);
+    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&board, &path, None, &[]);
     crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -350,7 +361,8 @@ fn edwin() {
     let unchanged = server.clone();
     // use power
     let path = Path::new(Point::new(1, 1));
-    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&*server, &path, None, &[]);
+    let board = Board::new(&server);
+    let options = server.get_unit(Point::new(1, 1)).unwrap().options_after_path(&board, &path, None, &[]);
     crate::debug!("options: {:?}", options);
     assert!(options.contains(&UnitAction::hero_power(1, Vec::new())));
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -358,8 +370,8 @@ fn edwin() {
         path,
         action: UnitAction::hero_power(1, vec![CustomActionInput::Point(Point::new(2, 1)), CustomActionInput::Point(Point::new(0, 4))]),
     }), Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_unit(Point::new(2, 1)), Some(friend));
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(enemy));
+    assert_eq!(server.get_unit(Point::new(2, 1)), Some(&friend));
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(&enemy));
 
     // knockback with power
     server.handle_command(Command::UnitCommand(UnitCommand {
@@ -405,7 +417,8 @@ fn jax() {
     let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
     // Jax has no active
     let path = Path::new(Point::new(1, 1));
-    let options = server.get_unit(path.start).unwrap().options_after_path(&*server, &path, None, &[]);
+    let board = Board::new(&server);
+    let options = server.get_unit(path.start).unwrap().options_after_path(&board, &path, None, &[]);
     crate::debug!("options: {:?}", options);
     assert!(!options.iter().any(|o| matches!(o, UnitAction::HeroPower(_, _))));
     server.handle_command(Command::UnitCommand(UnitCommand {

@@ -1,9 +1,9 @@
 use rhai::*;
 use rhai::plugin::*;
 
+use crate::config::environment::Environment;
 use crate::map::direction::*;
 use crate::map::point::*;
-use crate::script::get_environment;
 use super::UnitId;
 
 #[export_module]
@@ -30,18 +30,16 @@ mod hero_type_module {
         *u1 != u2
     }
 
+    #[rhai_fn(pure, name = "HeroType")]
+    pub fn new_hero_type(environment: &mut Environment, name: &str) -> Dynamic {
+        environment.config.find_hero_by_name(name)
+        .map(Dynamic::from)
+        .unwrap_or(().into())
+    }
+
     #[rhai_fn(name = "Hero")]
     pub fn new_hero(hero_type: HeroType) -> Hero {
         Hero::new(hero_type)
-    }
-    #[rhai_fn(name = "Hero")]
-    pub fn new_hero_str(context: NativeCallContext, typ: &str) -> Dynamic {
-        let environment = get_environment(context);
-        if let Some(typ) = environment.config.find_hero_by_name(typ) {
-            Dynamic::from(Hero::new(typ))
-        } else {
-            ().into()
-        }
     }
 
     #[rhai_fn(pure, get = "type")]

@@ -13,7 +13,7 @@ fn life_steal_percentage(percentage) {
         }
     }
     if victims.len > 0 {
-        add_script(
+        ATTACK_CONTEXT.add_script(
             Script("do_life_steal", [percentage, victims])
             .sticky()
             .priority(-1)

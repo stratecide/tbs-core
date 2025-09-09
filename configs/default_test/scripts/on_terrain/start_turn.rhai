@@ -1,6 +1,6 @@
 
 fn spawn_tentacle() {
-    let unit = Unit("Tentacle");
+    let unit = Unit(CONFIG, UNIT_Tentacle);
     unit.set(TAG_Hp, 100);
     EVENT_HANDLER.place_unit(POSITION, unit);
 }
@@ -14,13 +14,13 @@ fn get_captured() {
     if unit?.owner_id == OWNER_ID && unit.team != TERRAIN.team && unit.has(FLAG_Capturing) && CONFIG.table_entry("TERRAIN_CAPTURE", unit.type, TERRAIN.type) {
         let progress = (TERRAIN.get(TAG_CaptureProgress) ?? 0) + Fraction(unit.get(TAG_Hp) ?? 100, 10).ceil();
         if progress >= 10 {
-            let terrain = Terrain(TERRAIN.type);
+            let terrain = Terrain(CONFIG, TERRAIN.type);
             terrain.copy_from(TERRAIN);
             terrain.remove(TAG_CaptureOwner);
             terrain.remove(TAG_CaptureProgress);
             terrain.owner_id = unit.owner_id;
             EVENT_HANDLER.replace_terrain(POSITION, terrain);
-            if terrain.type == TerrainType("Hq") {
+            if terrain.type == TerrainType(CONFIG, "Hq") {
                 EVENT_HANDLER.make_player_lose(TERRAIN.owner_id);
             }
         } else {

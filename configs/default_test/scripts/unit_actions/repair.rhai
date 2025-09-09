@@ -20,16 +20,16 @@ fn repair_unit(EVENT_HANDLER, unit, position, amount) {
     amount = min(amount, 100 - hp);
     let unit2 = unit;
     unit2.set(TAG_Hp, 100);
-    let full_price = unit2.value(position);
+    let full_price = unit2.value(EVENT_HANDLER.board, position);
     if full_price > 0 {
-        let funds = BOARD.get(unit.owner_id, TAG_Funds) ?? 0;
+        let funds = EVENT_HANDLER.board.get(unit.owner_id, TAG_Funds) ?? 0;
         amount = min(amount, funds * 100 / full_price);
     }
     if amount > 0 {
         let cost = full_price * amount / 100;
-        EVENT_HANDLER.set(unit.owner_id, TAG_Funds, (BOARD.get(unit.owner_id, TAG_Funds) ?? 0) - cost);
+        EVENT_HANDLER.set(unit.owner_id, TAG_Funds, (EVENT_HANDLER.board.get(unit.owner_id, TAG_Funds) ?? 0) - cost);
         EVENT_HANDLER.set_unit_flag(position, FLAG_Repairing);
-        EVENT_HANDLER.effect(change_unit_hp(position, amount));
+        EVENT_HANDLER.effect(change_unit_hp(EVENT_HANDLER, position, amount));
     }
     EVENT_HANDLER.set_unit_flag(position, FLAG_Exhausted);
 }

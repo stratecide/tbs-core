@@ -2,7 +2,7 @@ const KRAKEN_MAX_ANGER = 8;
 const KRAKEN_ATTACK_RANGE = 3;
 const KRAKEN_DAMAGE = 40;
 
-fn unit_can_build(UNIT, POSITION) {
+fn unit_can_build(BOARD, UNIT, POSITION) {
     let capacity = UNIT.transport_capacity;
     if capacity > 0 {
         // build inside
@@ -26,17 +26,17 @@ fn unit_can_build(UNIT, POSITION) {
     }
 }
 
-fn build_unit_input(UNIT, POSITION) {
+fn build_unit_input(BOARD, PLAYER, UNIT, POSITION) {
     let options = new_shop("Build Unit");
     let funds = BOARD.get(UNIT.owner_id, TAG_Funds) ?? 0;
-    for unit_type in CONFIG.table_row("UNIT_BUILD", UNIT.type, true) {
-        let unit = Unit(unit_type);
+    for unit_type in BOARD.config.table_row("UNIT_BUILD", UNIT.type, true) {
+        let unit = Unit(BOARD.config, unit_type);
         unit.owner_id = UNIT.owner_id;
         unit.set(TAG_Hp, 100);
         if UNIT.get(TAG_DroneStationId) != () {
             unit.set(TAG_DroneId, UNIT.get(TAG_DroneStationId));
         }
-        let price = unit.value(POSITION);
+        let price = unit.value(BOARD, POSITION);
         let item = ShopItem(unit);
         item.costs.push(price);
         if price > funds {
@@ -44,7 +44,7 @@ fn build_unit_input(UNIT, POSITION) {
         }
         options.add(item);
     }
-    let unit = user_selection(options, false).key;
+    let unit = PLAYER.choice(options, false).key;
     if UNIT.transport_capacity == 0 {
         // need to find a place outside
         let options = new_direction_selection(POSITION);
@@ -54,12 +54,12 @@ fn build_unit_input(UNIT, POSITION) {
                 options += n.direction
             }
         }
-        user_selection(options, false);
+        PLAYER.choice(options, false);
     }
     success()
 }
 
-fn build_unit(UNIT, POSITION, exhaust, data) {
+fn build_unit(EVENT_HANDLER, UNIT, POSITION, exhaust, data) {
     EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
     let unit = data[0].key;
     let cost = data[0].costs[0];
@@ -73,8 +73,8 @@ fn build_unit(UNIT, POSITION, exhaust, data) {
     }
     if UNIT.transport_capacity == 0 {
         let direction = data[1];
-        let target = BOARD.get_neighbor(POSITION, direction);
-        if BOARD.get_unit(target) != () {
+        let target = EVENT_HANDLER.board.get_neighbor(POSITION, direction);
+        if EVENT_HANDLER.board.get_unit(target) != () {
             // hidden unit blocks the build, but money isn't spent either
             // TODO: show alert! effect
             return;
@@ -84,14 +84,14 @@ fn build_unit(UNIT, POSITION, exhaust, data) {
     } else {
         EVENT_HANDLER.transport_unit(POSITION, unit);
     }
-    EVENT_HANDLER.set(UNIT.owner_id, TAG_Funds, (BOARD.get(UNIT.owner_id, TAG_Funds) ?? 0) - cost);
+    EVENT_HANDLER.set(UNIT.owner_id, TAG_Funds, (EVENT_HANDLER.board.get(UNIT.owner_id, TAG_Funds) ?? 0) - cost);
 }
 
-fn terrain_buy_unit_input(position, terrain_type, owner_id, direction) {
+fn terrain_buy_unit_input(BOARD, PLAYER, position, terrain_type, owner_id, direction) {
     let options = new_shop("Build Unit");
     let funds = BOARD.get(owner_id, TAG_Funds) ?? 0;
-    for unit_type in CONFIG.table_row("TERRAIN_BUILD", terrain_type, true) {
-        let unit = Unit(unit_type);
+    for unit_type in BOARD.config.table_row("TERRAIN_BUILD", terrain_type, true) {
+        let unit = Unit(BOARD.config, unit_type);
         unit.owner_id = owner_id;
         unit.set(TAG_Hp, 100);
         if direction != () {
@@ -100,7 +100,7 @@ fn terrain_buy_unit_input(position, terrain_type, owner_id, direction) {
         if unit.movement_types.len > 1 && terrain_type == TERRAIN_Port {
             unit.movement_type = MOVEMENT_Amphibious;
         }
-        let price = unit.value(position);
+        let price = unit.value(BOARD, position);
         let item = ShopItem(unit);
         item.costs.push(price);
         if price > funds {
@@ -108,34 +108,34 @@ fn terrain_buy_unit_input(position, terrain_type, owner_id, direction) {
         }
         options.add(item);
     }
-    user_selection(options, false);
+    PLAYER.choice(options, false);
     success()
 }
 
-fn terrain_buy_unit(position, owner_id, data, exhaust_unit) {
+fn terrain_buy_unit(EVENT_HANDLER, position, owner_id, data, exhaust_unit) {
     let unit = data[0].key;
     let cost = data[0].costs[0];
     if exhaust_unit {
         unit.set(FLAG_Exhausted);
     }
-    EVENT_HANDLER.set(owner_id, TAG_Funds, (BOARD.get(owner_id, TAG_Funds) ?? 0) - cost);
+    EVENT_HANDLER.set(owner_id, TAG_Funds, (EVENT_HANDLER.board.get(owner_id, TAG_Funds) ?? 0) - cost);
     EVENT_HANDLER.place_unit(position, unit);
 }
 
-fn exhaust_all_on_chess_board(start_position, owner_id) {
-    let positions = BOARD.spread_search(start_position, |p| {
-        let terrain = BOARD.get_terrain(p);
+fn exhaust_all_on_chess_board(EVENT_HANDLER, start_position, owner_id) {
+    let positions = EVENT_HANDLER.board.spread_search(start_position, |board, p| {
+        let terrain = board.get_terrain(p);
         terrain.type == TERRAIN_ChessTile || terrain.type == TERRAIN_ChessPawnTile
     });
     for p in positions {
-        if BOARD.get_unit(p)?.owner_id == owner_id {
+        if EVENT_HANDLER.board.get_unit(p)?.owner_id == owner_id {
             EVENT_HANDLER.set_unit_flag(p, FLAG_Exhausted);
         }
     }
 }
 
-fn change_unit_hp(position, change) {
-    let unit = BOARD.get_unit(position);
+fn change_unit_hp(EVENT_HANDLER, position, change) {
+    let unit = EVENT_HANDLER.board.get_unit(position);
     EVENT_HANDLER.set_unit_tag(position, TAG_Hp, unit.get(TAG_Hp) + change);
     FX_HpChange(change).at(position)
 }

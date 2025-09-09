@@ -8,8 +8,7 @@ use crate::game::event_fx::{Effect, EffectWithoutPosition};
 use crate::game::events::Event;
 use crate::game::fog::*;
 use crate::game::game::Game;
-use crate::game::game_view::GameView;
-use crate::handle::Handle;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::*;
 use crate::map::map::Map;
 use crate::map::pipe::PipeState;
@@ -79,7 +78,7 @@ fn fog_replacement() {
     let map_env = map.environment().clone();
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&map_env).build());
     let unit = UnitType::sniper().instance(&map_env).set_owner_id(0).set_flag(FLAG_CAPTURING).build();
-    let map_view = Handle::new(map);
+    let map_view = Board::new(&map);
     assert_eq!(
         unit.fog_replacement(&map_view, Point::new(1, 1), FogIntensity::Light),
         Some(map_env.config.unknown_unit().instance(&map_env).build())
@@ -111,11 +110,9 @@ fn drone() {
         path: Path::new(Point::new(3, 4)),
         action: UnitAction::custom(CA_UNIT_BUILD_UNIT, vec![CustomActionInput::ShopItem(0.into())]),
     }), Urc::new(|| 0.)).unwrap();
-    client.with_mut(|client| {
-        for ev in events.get(&Perspective::Team(0)).unwrap() {
-            ev.apply(client);
-        }
-    });
+    for ev in events.get(&Perspective::Team(0)).unwrap() {
+        ev.apply(&mut client);
+    }
     assert!(server.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).is_some());
     assert!(client.get_unit(Point::new(3, 4)).unwrap().get_tag(TAG_DRONE_STATION_ID).is_some());
     assert_eq!(
@@ -153,8 +150,8 @@ fn drone() {
         action: UnitAction::custom(CA_UNIT_BUILD_UNIT, vec![CustomActionInput::ShopItem(0.into())]),
     }), Urc::new(|| 0.)).unwrap_err();
     server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    let drone = server.get_unit(Point::new(4, 4)).unwrap();
-    server.with_mut(|g| g.get_map_mut().set_unit(Point::new(0, 0), Some(drone)));
+    let drone = server.get_unit(Point::new(4, 4)).unwrap().clone();
+    server.get_map_mut().set_unit(Point::new(0, 0), Some(drone));
     assert_eq!(server.get_unit(Point::new(3, 4)).unwrap().get_transported().len(), 0);
     let events = server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     // one drone has returned to the boat, the other died
@@ -178,9 +175,7 @@ fn cannot_buy_unit_without_money() {
     map.set_unit(Point::new(1, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
-    game.with(|game| {
-        assert_eq!(game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 0);
-    });
+    assert_eq!(game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 0);
     let path = Path::new(Point::new(0, 0));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -241,13 +236,11 @@ fn end_game() {
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 1), Direction4::D270))),
     }), Urc::new(|| 0.)).unwrap();
-    game.with(|game| {
-        assert_eq!(game.get_map().get_unit(Point::new(0, 1)), None);
-        assert!(game.has_ended());
-        for (i, player) in game.players.iter().enumerate() {
-            assert_eq!(player.dead, i != 0);
-        }
-    });
+    assert_eq!(game.get_map().get_unit(Point::new(0, 1)), None);
+    assert!(game.has_ended());
+    for (i, player) in game.players.iter().enumerate() {
+        assert_eq!(player.dead, i != 0);
+    }
 }
 
 #[test]
@@ -267,12 +260,10 @@ fn defeat_player_of_3() {
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 1), Direction4::D270))),
     }), Urc::new(|| 0.)).unwrap();
-    game.with(|game| {
-        assert!(!game.has_ended());
-        for (i, player) in game.players.iter().enumerate() {
-            assert_eq!(player.dead, i == 0);
-        }
-    });
+    assert!(!game.has_ended());
+    for (i, player) in game.players.iter().enumerate() {
+        assert_eq!(player.dead, i == 0);
+    }
     assert_eq!(game.current_owner(), 1);
     game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_eq!(game.current_owner(), 2);
@@ -299,12 +290,10 @@ fn on_death_lose_game() {
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 1), Direction4::D270))),
     }), Urc::new(|| 0.)).unwrap();
     assert!(game.get_unit(Point::new(0, 1)).is_none());
-    game.with(|game| {
-        assert!(game.has_ended());
-        for (i, player) in game.players.iter().enumerate() {
-            assert_eq!(player.dead, i != 0);
-        }
-    });
+    assert!(game.has_ended());
+    for (i, player) in game.players.iter().enumerate() {
+        assert_eq!(player.dead, i != 0);
+    }
 }
 
 #[test]
@@ -383,12 +372,10 @@ fn s_factory() {
     map.set_unit(Point::new(0, 3), Some(UnitType::small_tank().instance(&map_env).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
-    game.with(|game| {
-        assert_eq!(
-            game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(),
-            game.current_player().get_tag(TAG_INCOME).unwrap().into_dynamic().cast::<i32>() + 100
-        );
-    });
+    assert_eq!(
+        game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(),
+        game.current_player().get_tag(TAG_INCOME).unwrap().into_dynamic().cast::<i32>() + 100
+    );
     assert!(!game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
     let to_build = UnitType::marine().instance(&game.environment())
         .set_owner_id(0)
@@ -398,7 +385,7 @@ fn s_factory() {
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::custom(CA_UNIT_BUILD_UNIT, vec![CustomActionInput::ShopItem(0.into()), CustomActionInput::Direction(Direction6::D180)]),
     }), Urc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_unit(Point::new(0, 1)).unwrap(), to_build.set_flag(FLAG_EXHAUSTED).build());
+    assert_eq!(*game.get_unit(Point::new(0, 1)).unwrap(), to_build.set_flag(FLAG_EXHAUSTED).build());
     assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
 }
 
@@ -419,15 +406,15 @@ fn marine_movement_types() {
     let mut settings = map.settings().unwrap();
     settings.players[0].get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 1000.into());
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
-    let environment = game.environment();
+    let environment = game.environment().clone();
     game.handle_command(Command::TokenAction(Point::new(0, 0), vec![
         CustomActionInput::ShopItem(0.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_unit(Point::new(0, 0)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(100).set_movement_type(MovementType::FOOT).build()));
+    assert_eq!(game.get_unit(Point::new(0, 0)), Some(&UnitType::marine().instance(&environment).set_owner_id(0).set_hp(100).set_movement_type(MovementType::FOOT).build()));
     game.handle_command(Command::TokenAction(Point::new(1, 0), vec![
         CustomActionInput::ShopItem(0.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(100).set_movement_type(MovementType::AMPHIBIOUS).build()));
+    assert_eq!(game.get_unit(Point::new(1, 0)), Some(&UnitType::marine().instance(&environment).set_owner_id(0).set_hp(100).set_movement_type(MovementType::AMPHIBIOUS).build()));
 }
 
 #[test]
@@ -448,7 +435,8 @@ fn enter_transporter() {
     let transporter = game.get_unit(Point::new(2, 0)).unwrap();
     assert_eq!(transporter.get_transported().len(), 0);
     let path = Path::with_steps(Point::new(0, 0), vec![PathStep::Dir(Direction4::D0), PathStep::Dir(Direction4::D0)]);
-    assert!(game.get_unit(Point::new(0, 0)).unwrap().options_after_path(&*game, &path, None, &[]).contains(&UnitAction::Enter));
+    let board = Board::new(&game);
+    assert!(game.get_unit(Point::new(0, 0)).unwrap().options_after_path(&board, &path, None, &[]).contains(&UnitAction::Enter));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path,

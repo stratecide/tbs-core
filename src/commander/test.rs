@@ -6,6 +6,9 @@ use crate::combat::AttackInput;
 use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
+use crate::map::board::Board;
+use crate::map::board::BoardView;
+use crate::map::map::valid_points;
 use crate::map::point_map::MapSize;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::script::custom_action::CustomActionInput;
@@ -13,7 +16,6 @@ use crate::tokens::token::*;
 use crate::game::commands::*;
 use crate::game::fog::*;
 use crate::game::game::Game;
-use crate::game::game_view::GameView;
 use crate::map::direction::*;
 use crate::map::map::Map;
 use crate::map::point::*;
@@ -74,22 +76,18 @@ fn gain_charge() {
     settings.players[0].set_commander(CommanderType::Zombie);
     settings.players[1].set_commander(CommanderType::Zombie);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
-    server.with(|server| {
-        assert_eq!(server.players.get(0).unwrap().commander.get_charge(), 0);
-        assert_eq!(server.players.get(1).unwrap().commander.get_charge(), 0);
-    });
+    assert_eq!(server.players.get(0).unwrap().commander.get_charge(), 0);
+    assert_eq!(server.players.get(1).unwrap().commander.get_charge(), 0);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
     }), Urc::new(|| 0.)).unwrap();
-    server.with(|server| {
-        let charge_0 = server.players.get(0).unwrap().commander.get_charge();
-        let charge_1 = server.players.get(1).unwrap().commander.get_charge();
-        crate::debug!("charges: {charge_0}, {charge_1}");
-        assert!(charge_0 > 0);
-        assert_eq!(charge_0 * 2, charge_1);
-    });
+    let charge_0 = server.players.get(0).unwrap().commander.get_charge();
+    let charge_1 = server.players.get(1).unwrap().commander.get_charge();
+    crate::debug!("charges: {charge_0}, {charge_1}");
+    assert!(charge_0 > 0);
+    assert_eq!(charge_0 * 2, charge_1);
 }
 
 #[test]
@@ -125,9 +123,7 @@ fn zombie() {
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Zombie);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
-    });
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
     let environment = server.environment().clone();
     let mut skull = Token::new(environment.clone(), TokenType::SKULL);
@@ -146,8 +142,8 @@ fn zombie() {
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
-    assert_eq!(server.get_unit(Point::new(1, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::FOOT).build()));
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(&UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
+    assert_eq!(server.get_unit(Point::new(1, 4)), Some(&UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::FOOT).build()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
@@ -159,24 +155,22 @@ fn zombie() {
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(0, 4)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(0, 4)), Some(UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
+    assert_eq!(server.get_unit(Point::new(0, 4)), Some(&UnitType::marine().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).set_movement_type(MovementType::HOVER).build()));
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(1, 1)),
         action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(2, 1), Direction6::D0))),
     }), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(2, 1)), Vec::new());
-    assert_eq!(server.get_unit(Point::new(2, 1)), Some(UnitType::small_tank().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).build()));
+    assert_eq!(server.get_unit(Point::new(2, 1)), Some(&UnitType::small_tank().instance(&environment).set_owner_id(0).set_hp(50).set_flag(FLAG_ZOMBIFIED).build()));
     // buy unit
     let mut server = unchanged.clone();
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().set_tag(&environment, TAG_FUNDS, 1000.into());
-    });
+    server.players.get_mut(0).unwrap().set_tag(&environment, TAG_FUNDS, 1000.into());
     server.handle_command(Command::TerrainAction(Point::new(3, 1), vec![
         CustomActionInput::ShopItem(0.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert!(server.get_unit(Point::new(3, 1)).is_some());
-    for p in server.all_points() {
+    for p in valid_points(&server) {
         if let Some(unit) = server.get_unit(p) {
             assert!(!unit.has_flag(FLAG_ZOMBIFIED));
         }
@@ -208,15 +202,14 @@ fn simo() {
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Simo);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
-    });
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
 
     // before chaos/order
     let arty = server.get_unit(arty_pos).unwrap();
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_close).is_some());
-    assert_eq!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far), None);
+    let board = Board::new(&server);
+    assert!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_close).is_some());
+    assert_eq!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_far), None);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
@@ -231,8 +224,9 @@ fn simo() {
     server.handle_command(Command::commander_power(4, Vec::new()), Urc::new(|| 0.)).err().unwrap();
     server.handle_command(Command::commander_power(5, Vec::new()), Urc::new(|| 0.)).err().unwrap();
     let arty = server.get_unit(arty_pos).unwrap();
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_close).is_some());
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far).is_none());
+    let board = Board::new(&server);
+    assert!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_close).is_some());
+    assert!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_far).is_none());
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
@@ -268,8 +262,9 @@ fn simo() {
     server.handle_command(Command::commander_power(3, Vec::new()), Urc::new(|| 0.)).err().unwrap();
     server.handle_command(Command::commander_power(4, Vec::new()), Urc::new(|| 0.)).unwrap();
     let arty = server.get_unit(arty_pos).unwrap();
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far).is_some());
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_farthest).is_none());
+    let board = Board::new(&server);
+    assert!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_far).is_some());
+    assert!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_farthest).is_none());
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
@@ -283,9 +278,10 @@ fn simo() {
     server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::commander_power(5, Vec::new()), Urc::new(|| 0.)).unwrap();
     let arty = server.get_unit(arty_pos).unwrap();
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_close).is_some());
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_far).is_some());
-    assert!(arty.shortest_path_to_attack(&*server, &Path::new(arty_pos), None, target_farthest).is_some());
+    let board = Board::new(&server);
+    assert!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_close).is_some());
+    assert!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_far).is_some());
+    assert!(arty.shortest_path_to_attack(&board, &Path::new(arty_pos), None, target_farthest).is_some());
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(arty_pos),
@@ -333,9 +329,7 @@ fn vlad() {
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Vlad);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
-    });
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
@@ -393,9 +387,7 @@ fn tapio() {
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Tapio);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
-    });
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
 
     // passive: deal more damage when attacking from forest / grass
@@ -422,9 +414,9 @@ fn tapio() {
     let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(1, vec![CustomActionInput::Point(Point::new(3, 0))]), Urc::new(|| 0.)).err().expect("can't turn street into fairy forest");
     for i in 0..2 {
-        let charge_before = server.with(|server| server.players[0].commander.charge);
+        let charge_before = server.players[0].commander.charge;
         server.handle_command(Command::commander_power(1, vec![CustomActionInput::Point(Point::new(2, i))]), Urc::new(|| 0.)).expect(&format!("loop {i}"));
-        assert!(server.with(|server| server.players[0].commander.charge) < charge_before);
+        assert!(server.players[0].commander.charge < charge_before);
         assert_eq!(server.get_terrain(Point::new(2, i)).unwrap().typ(), TerrainType::FairyForest);
     }
 
@@ -438,10 +430,8 @@ fn tapio() {
 
     // ACTIVE: see into fairy forests, build units from fairy forests
     let mut server = unchanged.clone();
-    let environment = server.environment();
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().set_tag(&environment, TAG_FUNDS, 10000.into());
-    });
+    let environment = server.environment().clone();
+    server.players.get_mut(0).unwrap().set_tag(&environment, TAG_FUNDS, 10000.into());
     server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
     assert_ne!(server.get_fog_at(ClientPerspective::Team(0), Point::new(5, 3)), FogIntensity::TrueSight);
@@ -484,16 +474,14 @@ fn sludge_monster() {
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::SludgeMonster);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
-    let environment = server.environment();
+    let environment = server.environment().clone();
     let sludge_token = move |owner_id: i8, counter: i32| {
         let mut sludge = Token::new(environment.clone(), TokenType::SLUDGE);
         sludge.set_owner_id(owner_id);
         sludge.set_tag(TAG_SLUDGE_COUNTER, counter.into());
         sludge
     };
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
-    });
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
 
     // no power attack bonuses
@@ -611,22 +599,20 @@ fn celerity() {
     server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
-    let default_cost = funds - server.with(|server| server.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>());
+    let default_cost = funds - server.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>();
     assert!(!server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL).is_some());
 
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Celerity);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
     let environment = server.environment().clone();
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
-    });
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
 
     server.handle_command(Command::TerrainAction(Point::new(0, 4), vec![
         CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
-    assert!(funds - server.with(|server| server.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()) < default_cost);
+    assert!(funds - server.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>() < default_cost);
     assert_eq!(server.get_unit(Point::new(0, 4)).unwrap().get_tag(TAG_LEVEL), None, "New units are Level 0");
 
     // level attack bonuses
@@ -688,9 +674,9 @@ fn celerity() {
     assert_eq!(Ok(convoy), convoy2);
 
     let exported = unchanged.export();
-    let imported = *Game::import_server(exported, &config, Version::parse(VERSION).unwrap()).unwrap();
-    unchanged.with(|unchanged| assert_eq!(imported, *unchanged));
-    assert_eq!(server.get_unit(Point::new(4, 0)), Some(UnitType::convoy().instance(&environment).set_owner_id(0).set_transported(vec![
+    let imported = Game::import_server(exported, &config, Version::parse(VERSION).unwrap()).unwrap();
+    assert_eq!(imported, unchanged);
+    assert_eq!(server.get_unit(Point::new(4, 0)), Some(&UnitType::convoy().instance(&environment).set_owner_id(0).set_transported(vec![
         UnitType::marine().instance(&environment).set_hp(34).build(),
         UnitType::sniper().instance(&environment).set_hp(69).build(),
     ]).set_hp(89).build()));
@@ -735,9 +721,7 @@ fn lageos() {
     settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
     settings.players[0].set_commander(CommanderType::Lageos);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
-    server.with_mut(|server| {
-        server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
-    });
+    server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
 
     // Lageos' air-units have have higher defense, Lageos has +1 vision

@@ -9,7 +9,8 @@ use zipper::*;
 use rhai::*;
 
 use crate::config::environment::Environment;
-use crate::handle::Handle;
+use crate::map::board::{Board, BoardView};
+use crate::map::map::valid_points;
 use crate::map::point::Point;
 use crate::script::custom_action::*;
 use crate::script::*;
@@ -21,7 +22,6 @@ use crate::VERSION;
 use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
 use super::game::Game;
-use super::game_view::GameView;
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
@@ -47,90 +47,80 @@ impl<D: Direction> Command<D> {
             Self::UnitCommand(command) => command.execute(handler),
             Self::TerrainAction(pos, data) => {
                 let team = handler.get_game().current_team();
-                if let Some(err) = handler.with_game(|game| {
-                    if !game.get_map().is_point_valid(pos) {
-                        return Some(CommandError::InvalidPoint(pos));
-                    }
-                    if game.get_fog_at(team, pos) != FogIntensity::TrueSight {
-                        // without TrueSight, a stealthed unit could block this field
-                        return Some(CommandError::NoVision);
-                    }
-                    if game.get_map().get_unit(pos).is_some() {
-                        return Some(CommandError::Blocked(pos));
-                    }
-                    None
-                }) {
-                    return Err(err);
+                if !handler.get_game().get_map().is_point_valid(pos) {
+                    return Err(CommandError::InvalidPoint(pos));
                 }
-                let terrain = handler.get_game().get_terrain(pos).unwrap();
+                if handler.get_game().get_fog_at(team, pos) != FogIntensity::TrueSight {
+                    // without TrueSight, a stealthed unit could block this field
+                    return Err(CommandError::NoVision);
+                }
+                if handler.get_game().get_map().get_unit(pos).is_some() {
+                    return Err(CommandError::Blocked(pos));
+                }
+                let terrain = handler.get_game().get_terrain(pos).unwrap().clone();
                 if terrain.get_owner_id() != handler.get_game().current_owner() {
                     return Err(CommandError::NotYourProperty);
                 }
                 let borrowed_game = handler.get_game();
                 let client_game;
-                let client = if handler.get_game().is_foggy() {
+                let client = if handler.get_game().has_secrets() {
                     let player = handler.get_game().current_owner() as u8;
                     let data = handler.get_game().export();
                     let secret = data.hidden
                     .and_then(|mut h| h.teams.remove(&player))
                     .map(|h| (player, h));
                     let version = Version::parse(VERSION).unwrap();
-                    client_game = Handle::new(*Game::import_client(data.public, secret, &handler.environment().config, version).unwrap());
+                    client_game = Game::import_client(data.public, secret, &handler.environment().config, version).unwrap();
                     &client_game
                 } else {
                     &*borrowed_game
                 };
+                let board = Board::from(client);
                 // check whether the player should even be able to send this command
                 let (script, data) = {
                     // making sure i don't accidently change anything while testing move validity
                     #[allow(unused_variables)]
                     let handler = ();
-                    let heroes = Hero::hero_influence_at(client, pos, client.current_owner());
-                    let (input_script, script) = client.with(|game| {
-                        for token in game.get_map().get_tokens(pos) {
-                            if game.environment().config.token_action_script(token.typ()).is_some() {
+                    let heroes = Hero::hero_influence_at(&board, pos, Some(client.current_owner()));
+                    let (input_script, script) = {
+                        for token in client.get_tokens(pos) {
+                            if client.environment().config.token_action_script(token.typ()).is_some() {
                                 return Err(CommandError::Blocked(pos));
                             }
                         }
-                        game.environment().config.terrain_action_script(client, pos, &terrain, &heroes)
+                        client.environment().config.terrain_action_script(&board, pos, &terrain, &heroes)
                         .ok_or(CommandError::InvalidAction)
-                    })?;
-                    let Some(data) = is_terrain_script_input_valid(input_script, client, pos, terrain.clone(), &data) else {
+                    }?;
+                    let Some(data) = is_terrain_script_input_valid(input_script, &board, pos, terrain.clone(), &data) else {
                         return Err(CommandError::InvalidAction);
                     };
                     (script, data)
                 };
-                drop(borrowed_game);
                 execute_terrain_script(script, handler, pos, terrain, data);
                 Ok(())
             }
             Self::TokenAction(pos, data) => {
                 let team = handler.get_game().current_team();
-                if let Some(err) = handler.with_game(|game| {
-                    if !game.get_map().is_point_valid(pos) {
-                        return Some(CommandError::InvalidPoint(pos));
-                    }
-                    if game.get_fog_at(team, pos) != FogIntensity::TrueSight {
-                        // without TrueSight, a stealthed unit could block this field
-                        return Some(CommandError::NoVision);
-                    }
-                    if game.get_map().get_unit(pos).is_some() {
-                        return Some(CommandError::Blocked(pos));
-                    }
-                    None
-                }) {
-                    return Err(err);
+                if !handler.get_game().get_map().is_point_valid(pos) {
+                    return Err(CommandError::InvalidPoint(pos));
+                }
+                if handler.get_game().get_fog_at(team, pos) != FogIntensity::TrueSight {
+                    // without TrueSight, a stealthed unit could block this field
+                    return Err(CommandError::NoVision);
+                }
+                if handler.get_game().get_unit(pos).is_some() {
+                    return Err(CommandError::Blocked(pos));
                 }
                 let borrowed_game = handler.get_game();
                 let client_game;
-                let client = if handler.get_game().is_foggy() {
+                let client = if handler.get_game().has_secrets() {
                     let player = handler.get_game().current_owner() as u8;
                     let data = handler.get_game().export();
                     let secret = data.hidden
                     .and_then(|mut h| h.teams.remove(&player))
                     .map(|h| (player, h));
                     let version = Version::parse(VERSION).unwrap();
-                    client_game = Handle::new(*Game::import_client(data.public, secret, &handler.environment().config, version).unwrap());
+                    client_game = Game::import_client(data.public, secret, &handler.environment().config, version).unwrap();
                     &client_game
                 } else {
                     &*borrowed_game
@@ -140,37 +130,35 @@ impl<D: Direction> Command<D> {
                     // making sure i don't accidently change anything while testing move validity
                     #[allow(unused_variables)]
                     let handler = ();
-                    client.with(|game| {
-                        let mut script_data = None;
-                        // look from top to bottom
-                        for token in game.get_map().get_tokens(pos).iter()
-                        .rev() {
-                            if let Some((input_script, script)) = game.environment().config.token_action_script(token.typ()) {
-                                if token.get_owner_id() != game.current_player().get_owner_id() {
-                                    return Err(CommandError::Blocked(pos));
-                                }
-                                script_data = is_token_script_input_valid(input_script, client, pos, token.clone(), &data)
-                                .map(|data| (script, token.clone(), data));
-                                break;
+                    let mut script_data = None;
+                    // look from top to bottom
+                    for token in client.get_tokens(pos).iter()
+                    .rev() {
+                        if let Some((input_script, script)) = client.environment().config.token_action_script(token.typ()) {
+                            if token.get_owner_id() != client.current_player().get_owner_id() {
+                                return Err(CommandError::Blocked(pos));
                             }
+                            let board = Board::from(client);
+                            script_data = is_token_script_input_valid(input_script, &board, pos, token.clone(), &data)
+                            .map(|data| (script, token.clone(), data));
+                            break;
                         }
-                        script_data.ok_or(CommandError::InvalidAction)
-                    })?
+                    }
+                    script_data.ok_or(CommandError::InvalidAction)?
                 };
-                drop(borrowed_game);
                 execute_token_script(script, handler, pos, token, data);
                 Ok(())
             }
             Self::CommanderPower(index, data) => {
                 let owner_id = handler.get_game().current_owner();
                 let player = handler.get_game().get_owning_player(owner_id).unwrap();
-                let commander = player.commander;
+                let commander = &player.commander;
                 if !commander.can_activate_power(index.0, false) {
                     return Err(CommandError::PowerNotUsable);
                 }
                 let script = commander.power_activation_script(index.0);
                 let data = if let Some((Some(input_script), _)) = script {
-                    is_commander_script_input_valid(input_script, &*handler.get_game(), &data)
+                    is_commander_script_input_valid(input_script, handler.get_board(), &data)
                     .ok_or(CommandError::PowerNotUsable)?
                 } else if data.len() == 0 {
                     Vec::new()
@@ -193,19 +181,17 @@ impl<D: Direction> Command<D> {
 
 pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execute_scripts: bool) {
     // destroy units that are now dead
-    let all_points = handler.with_map(|map| map.all_points());
-    let environment = handler.environment();
+    let all_points = valid_points(handler.get_game());
+    let environment = handler.environment().clone();
     let is_unit_dead_rhai = environment.is_unit_dead_rhai();
-    let engine = environment.get_engine::<D>();
-    let executor = Executor::new(engine, Scope::new(), environment);
+    let executor = Executor::new(Scope::new(), environment.clone());
     for _ in 0..100 {
         let deaths: FxHashSet<Point> = all_points.iter().cloned()
         .filter(|p| {
-            handler.get_game().get_unit(*p).map(|u| {
-                match executor.run(is_unit_dead_rhai, (u,)) {
+            handler.get_game().get_unit(*p).cloned().map(|u| {
+                match executor.run::<D, bool>(is_unit_dead_rhai, (u,)) {
                     Ok(result) => result,
                     Err(e) => {
-                        let environment = handler.environment();
                         environment.log_rhai_error("cleanup_dead_material::is_unit_dead_rhai", environment.get_rhai_function_name(is_unit_dead_rhai), &e);
                         false
                     }
@@ -230,14 +216,12 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
                         scope.push_constant(CONST_NAME_UNIT, unit.clone());
                         scope.push_constant(CONST_NAME_OTHER_POSITION, ());
                         scope.push_constant(CONST_NAME_OTHER_UNIT, ());
-                        let environment = handler.environment();
-                        let engine = environment.get_engine_handler(handler);
-                        let executor = Executor::new(engine, scope, environment);
+                        let environment = handler.environment().clone();
+                        let executor = handler.executor(scope);
                         for function_index in scripts {
-                            match executor.run(function_index, ()) {
+                            match executor.run::<D, ()>(function_index, ()) {
                                 Ok(()) => (),
                                 Err(e) => {
-                                    let environment = handler.environment();
                                     environment.log_rhai_error("cleanup_dead_material::OnDeath", environment.get_rhai_function_name(function_index), &e);
                                 }
                             }
@@ -247,7 +231,7 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
             );
         }
         // check if a player lost
-        let viable_player_ids = handler.with_map(|map| map.get_viable_player_ids(&*handler.get_game()));
+        let viable_player_ids = handler.get_game().get_map().get_viable_player_ids();
         let players: Vec<u8> = handler.get_game().players().iter()
         .filter(|p| !p.dead)
         .map(|p| p.color_id)

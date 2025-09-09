@@ -1,10 +1,10 @@
 use rhai::*;
 use rhai::plugin::*;
 
+use crate::map::board::BoardPointer;
 use crate::map::direction::*;
 use crate::map::wrapping_map::Distortion;
 use crate::map::point::*;
-use crate::script::with_board;
 use super::movement::*;
 
 macro_rules! movement_module {
@@ -27,10 +27,9 @@ macro_rules! movement_module {
                 Path::new(p)
             }
 
-            #[rhai_fn(name = "add")]
-            pub fn add(context: NativeCallContext, path: &mut Path, d: $d) -> bool {
+            pub fn add(path: &mut Path, board: BoardPointer<$d>, d: $d) -> bool {
                 path.steps.push(PathStep::Dir(d));
-                if with_board(context, |board| path.end(board).is_err()) {
+                if path.end(board.as_ref()).is_err() {
                     path.steps.pop();
                     false
                 } else {
@@ -51,13 +50,13 @@ macro_rules! movement_module {
             pub fn start(path: &mut Path) -> Point {
                 path.start
             }
-            #[rhai_fn(pure, get = "end")]
-            pub fn end(context: NativeCallContext, path: &mut Path) -> Point {
-                with_board(context, |board| path.end(board).expect("User should not be able to create an invalid path").0)
+            #[rhai_fn(pure)]
+            pub fn end(path: &mut Path, board: BoardPointer<$d>) -> Point {
+                path.end(board.as_ref()).expect("User should not be able to create an invalid path").0
             }
-            #[rhai_fn(pure, get = "distortion")]
-            pub fn distortion(context: NativeCallContext, path: &mut Path) -> Distortion<$d> {
-                with_board(context, |board| path.end(board).expect("User should not be able to create an invalid path").1)
+            #[rhai_fn(pure)]
+            pub fn distortion(path: &mut Path, board: BoardPointer<$d>) -> Distortion<$d> {
+                path.end(board.as_ref()).expect("User should not be able to create an invalid path").1
             }
         }
 

@@ -1,4 +1,3 @@
-use executor::Executor;
 use interfaces::GameInterface;
 use rhai::Scope;
 use rustc_hash::FxHashSet as HashSet;
@@ -13,9 +12,10 @@ use crate::config::environment::Environment;
 use crate::config::movement_type_config::MovementPattern;
 use crate::game::commands::*;
 use crate::game::event_handler::*;
-use crate::game::game_view::GameView;
-use crate::handle::Handle;
+use crate::map::board::Board;
+use crate::map::board::BoardView;
 use crate::map::direction::Direction;
+use crate::map::map::valid_points;
 use crate::map::point::Point;
 use crate::game::game::Game;
 use crate::script::custom_action::*;
@@ -64,7 +64,7 @@ impl<D: Direction> UnitAction<D> {
         Self::HeroPower(HeroPowerIndex(index), custom_action_data.try_into().unwrap())
     }
 
-    pub fn build_action_data_if_valid(&self, game: &Handle<Game<D>>, unit: &Unit<D>, path: &Path<D>, _destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Option<Vec<CustomActionData<D>>> {
+    pub fn build_action_data_if_valid(&self, game: &Board<D>, unit: &Unit<D>, path: &Path<D>, _destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Option<Vec<CustomActionData<D>>> {
         let options = unit.options_after_path(game, path, transporter, ballast);
         match self {
             Self::HeroPower(index, data) => {
@@ -109,10 +109,10 @@ impl<D: Direction> UnitAction<D> {
             Self::Wait => true,
             Self::Enter => true,
             Self::Take => {
-                let attacker = handler.get_game().get_unit(end).unwrap();
+                let attacker = handler.get_game().get_unit(end).unwrap().clone();
                 if attacker.movement_pattern() == MovementPattern::Pawn {
                     let mut deaths = HashSet::default();
-                    for dp in handler.get_game().all_points() {
+                    for dp in valid_points(handler.get_game()) {
                         if let Some(u) = handler.get_game().get_unit(dp) {
                             if attacker.could_take(&u, PathStepTakes::Allow) && u.get_en_passant() == Some(end) {
                                 deaths.insert(dp);
@@ -142,14 +142,12 @@ impl<D: Direction> UnitAction<D> {
                                 scope.push_constant(CONST_NAME_UNIT, unit.clone());
                                 scope.push_constant(CONST_NAME_OTHER_POSITION, end);
                                 scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
-                                let environment = handler.environment();
-                                let engine = environment.get_engine_handler(handler);
-                                let executor = Executor::new(engine, scope, environment);
+                                let environment = handler.environment().clone();
+                                let executor = handler.executor(scope);
                                 for function_index in scripts {
-                                    match executor.run(function_index, ()) {
+                                    match executor.run::<D, ()>(function_index, ()) {
                                         Ok(()) => (),
                                         Err(e) => {
-                                            let environment = handler.environment();
                                             environment.log_rhai_error("OnDeath", environment.get_rhai_function_name(function_index), &e);
                                         }
                                     }
@@ -167,8 +165,8 @@ impl<D: Direction> UnitAction<D> {
                     handler.get_observed_unit(unit_id).unwrap().2,
                 ));
                 let attacker = handler.get_game().get_unit(end).unwrap();
-                let heroes = HeroMap::new(&*handler.get_game(), None);
-                let defender = handler.get_game().get_unit(input.target());
+                let heroes = HeroMap::new(handler.get_board(), None);
+                let defender = handler.get_board().get_unit(input.target());
                 if let Some(defender) = defender {
                     let target = UnitData {
                         unit: &defender,
@@ -177,7 +175,7 @@ impl<D: Direction> UnitAction<D> {
                         ballast: &[],
                         original_transporter: None,
                     };
-                    if attacker.can_target(&*handler.get_game(), end, transporter, target, false, &heroes) {
+                    if attacker.can_target(handler.get_board(), end, transporter, target, false, &heroes) {
                         execute_attack(handler, attacker_position, *input, transporter, ballast, AttackCounterState::AllowCounter, true);
                     } else {
                         handler.effect_fog_surprise(end);
@@ -194,7 +192,7 @@ impl<D: Direction> UnitAction<D> {
                 let power = &config.hero_powers(hero.typ())[index.0];
                 handler.add_hero_charge(end, None, -(power.required_charge as i32));
                 handler.hero_power(end, index.0);
-                let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
+                let heroes = Hero::hero_influence_at(handler.get_board(), end, Some(unit.get_owner_id()));
                 if let Some((input_script, function_index)) = power.script {
                     let action_data = input_script.map(|_| action_data);
                     execute_unit_script(function_index, handler, &unit, path, end, transporter, &heroes, ballast, action_data);
@@ -202,17 +200,17 @@ impl<D: Direction> UnitAction<D> {
                 false
             }
             Self::Custom(index, _) => {
-                let unit = handler.get_game().get_unit(end).unwrap();
+                let unit = handler.get_game().get_unit(end).unwrap().clone();
                 let config = handler.environment().config.clone();
                 let custom_action = &config.custom_actions()[index.0];
-                let heroes = Hero::hero_influence_at(&*handler.get_game(), end, unit.get_owner_id());
+                let heroes = Hero::hero_influence_at(handler.get_board(), end, Some(unit.get_owner_id()));
                 let action_data = custom_action.script.0.map(|_| action_data);
                 execute_unit_script(custom_action.script.1, handler, &unit, path, end, transporter, &heroes, ballast, action_data);
                 false
             }
         };
         if needs_to_exhaust {
-            let heroes = HeroMap::new(&*handler.get_game(), None);
+            let heroes = HeroMap::new(handler.get_board(), None);
             handler.on_unit_normal_action(unit_id, path.clone(), false, &heroes, ballast);
         }
     }
@@ -230,14 +228,14 @@ impl<D: Direction> UnitCommand<D> {
     pub fn execute(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
         let borrowed_game = handler.get_game();
         let client_game;
-        let client = if handler.get_game().is_foggy() {
-            let player = handler.get_game().current_player().team;
-            let data = handler.get_game().export();
+        let client = if borrowed_game.has_secrets() {
+            let player = borrowed_game.current_player().get_team().to_i16() as u8;
+            let data = borrowed_game.export();
             let secret = data.hidden
             .and_then(|mut h| h.teams.remove(&player))
             .map(|h| (player, h));
             let version = Version::parse(VERSION).unwrap();
-            client_game = Handle::new(*Game::import_client(data.public, secret, &handler.environment().config, version).unwrap());
+            client_game = Game::import_client(data.public, secret, &handler.environment().config, version).unwrap();
             &client_game
         } else {
             &*borrowed_game
@@ -246,13 +244,10 @@ impl<D: Direction> UnitCommand<D> {
         let start = self.path.start;
         // check whether the player should even be able to send this command
         let action_data = {
-            // making sure i don't accidently change anything while testing move validity
-            #[allow(unused_variables)]
-            let handler = ();
-            if !client.with(|game| game.get_map().is_point_valid(start)) {
+            if !client.get_map().is_point_valid(start) {
                 return Err(CommandError::InvalidPoint(start));
             }
-            let unit = client.get_unit(start).ok_or(CommandError::MissingUnit)?;
+            let unit = client.get_unit(start).ok_or(CommandError::MissingUnit)?.clone();
             let mut transporter = None;
             let unit = if let Some(index) = self.unload_index {
                 transporter = Some((&unit, index.0));
@@ -264,10 +259,11 @@ impl<D: Direction> UnitCommand<D> {
             if client.current_owner() != unit.get_owner_id() {
                 return Err(CommandError::NotYourUnit);
             }
-            if !unit.can_move(client, start) {
+            let board = Board::from(client);
+            if !unit.can_move(&board, start) {
                 return Err(CommandError::UnitCannotMove);
             }
-            let ballast = search_path(client, &unit, &self.path, transporter, |path, p, can_stop_here, _| {
+            let ballast = search_path(&board, &unit, &self.path, transporter, |path, p, can_stop_here, _| {
                 if *path == self.path && board_at_the_end {
                     if let Some(transporter) = client.get_unit(p) {
                         if p != path.start && transporter.can_transport(&unit) {
@@ -285,16 +281,15 @@ impl<D: Direction> UnitCommand<D> {
             } else {
                 ballast.get_entries()
             };
-            self.action.build_action_data_if_valid(client, &unit, &self.path, destination, transporter, ballast)
+            self.action.build_action_data_if_valid(&board, &unit, &self.path, destination, transporter, ballast)
             .ok_or(CommandError::InvalidAction)?
         };
-        drop(borrowed_game);
 
         // now we know that the player entered a valid command
         // check for fog trap
         let mut path_taken = self.path.clone();
         let mut fog_trap = None;
-        let unit = handler.get_game().get_unit(start).unwrap();
+        let unit = handler.get_game().get_unit(start).unwrap().clone();
         let mut transporter = None;
         let unit = if let Some(index) = self.unload_index {
             transporter = Some((&unit, index.0));
@@ -306,9 +301,9 @@ impl<D: Direction> UnitCommand<D> {
         let unit_id = handler.observe_unit(start, self.unload_index.map(|ui| ui.0)).0;
         let mut ballast;
         loop {
-            ballast = search_path(&*handler.get_game(), &unit, &path_taken, transporter, |path, p, can_stop_here, _| {
+            ballast = search_path(handler.get_board(), &unit, &path_taken, transporter, |path, p, can_stop_here, _| {
                 if *path == path_taken && board_at_the_end {
-                    if let Some(transporter) = handler.get_game().get_unit(p) {
+                    if let Some(transporter) = handler.get_board().get_unit(p) {
                         if p != path.start && transporter.can_transport(&unit) {
                             return PathSearchFeedback::Found;
                         }
@@ -321,7 +316,7 @@ impl<D: Direction> UnitCommand<D> {
             if ballast.is_some() || path_taken.len() == 0 {
                 break;
             } else {
-                fog_trap = Some(path_taken.end(&*handler.get_game()).unwrap().0);
+                fog_trap = Some(path_taken.end(handler.get_board()).unwrap().0);
                 path_taken.steps.pop();
             }
         }
@@ -337,7 +332,7 @@ impl<D: Direction> UnitCommand<D> {
         if let Some(fog_trap) = fog_trap {
             // fog trap
             handler.effect_fog_surprise(fog_trap);
-            let heroes = HeroMap::new(&*handler.get_game(), None);
+            let heroes = HeroMap::new(handler.get_board(), None);
             handler.on_unit_normal_action(unit_id, path_taken.clone(), true, &heroes, ballast);
         } else {
             // TODO: need to check whether action can really be executed

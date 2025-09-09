@@ -7,7 +7,7 @@ fn ua_summon_obelisk_input() {
             options += point
         }
     }
-    user_selection(options, false);
+    PLAYER.choice(options, false);
     success()
 }
 
@@ -16,14 +16,14 @@ fn ua_summon_obelisk(data) {
     if BOARD.get_unit(target) != () {
         // TODO: show alert and give charge cost back
     } else {
-        let obelisk = Unit("HeroCrystal");
+        let obelisk = Unit(CONFIG, UNIT_HeroCrystal);
         obelisk.owner_id = UNIT.owner_id;
         obelisk.set(TAG_Hp, 100);
-        obelisk.hero = Hero("CrystalObelisk");
+        obelisk.hero = Hero(HERO_CrystalObelisk);
         // TODO: show summoning effect
         //EVENT_HANDLER.effect(ef_summon_unit(target, obelisk))
         EVENT_HANDLER.place_unit(target, obelisk);
     }
-    exhaust_all_on_chess_board(PATH.start, UNIT.owner_id);
+    exhaust_all_on_chess_board(EVENT_HANDLER, PATH.start, UNIT.owner_id);
     EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
 }

@@ -8,7 +8,7 @@ use crate::config::environment::Environment;
 use crate::game::commands::Command;
 use crate::game::fog::*;
 use crate::game::game::Game;
-use crate::game::game_view::GameView;
+use crate::map::board::BoardView;
 use crate::map::direction::*;
 use crate::map::map::Map;
 use crate::map::point::*;
@@ -148,11 +148,11 @@ fn build_unit() {
     let mut settings = map.settings().unwrap();
     settings.players[0].get_tag_bag_mut().set_tag(&environment, TAG_INCOME, 1000.into());
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
-    assert_eq!(1000, game.with(|game| game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()));
+    assert_eq!(1000, game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>());
     game.handle_command(Command::TerrainAction(Point::new(0, 0), vec![
         CustomActionInput::ShopItem(0.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
-    assert!(game.with(|game| game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>()) < 1000);
+    assert!(game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>() < 1000);
     assert_eq!(0, game.get_unit(Point::new(0, 0)).unwrap().get_owner_id());
     assert!(game.get_unit(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
     //assert_eq!(Some(TagValue::Int(Int32(1))), game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_BUILT_THIS_TURN));
@@ -181,7 +181,7 @@ fn kraken() {
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     let environment = game.environment();
-    assert_eq!(game.get_unit(Point::new(1, 0)), Some(UnitType::tentacle().instance(&environment).set_hp(100).build()));
+    assert_eq!(game.get_unit(Point::new(1, 0)), Some(&UnitType::tentacle().instance(&environment).set_hp(100).build()));
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(7.into()));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,

@@ -7,12 +7,13 @@ use zipper::zipper_derive::*;
 
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
+use crate::map::board::{Board, BoardView};
+use crate::map::map::valid_points;
 use crate::map::point::Point;
 use crate::units::hero::HeroMap;
 use crate::units::unit::Unit;
 use crate::units::UnitVisibility;
 
-use super::game_view::GameView;
 use super::Direction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable, PartialOrd, Ord, Hash)]
@@ -233,17 +234,31 @@ impl VisionMode {
     }
 }
 
-pub fn recalculate_fog<D: Direction>(game: &impl GameView<D>, perspective: ClientPerspective) -> FxHashMap<Point, FogIntensity> {
+pub fn is_foggy<D: Direction>(board: &impl BoardView<D>) -> bool {
+    board.get_fog_setting().intensity() != FogIntensity::TrueSight
+}
+
+pub fn get_visible_unit<D: Direction>(board: &Board<D>, team: ClientPerspective, p: Point) -> Option<Unit<D>> {
+    board.get_unit(p)
+    .and_then(|u| {
+        // use base's fog instead of game.get_fog_at
+        // when the server verifies a unit's available actions, units invisible to the player shouldn't have an influence
+        // but maybe it should be possible to predict the fog
+        u.fog_replacement(board, p, board.get_fog_at(team, p))
+    })
+}
+
+pub fn recalculate_fog<D: Direction>(game: &Board<D>, perspective: ClientPerspective) -> FxHashMap<Point, FogIntensity> {
     let mut fog = FxHashMap::default();
     let strongest_intensity = game.get_fog_setting().intensity();
-    for p in game.all_points() {
+    for p in valid_points(game) {
         fog.insert(p, strongest_intensity);
     }
-    if !game.is_foggy() {
+    if !is_foggy(game) {
         return fog;
     }
     let heroes = HeroMap::new(game, None);
-    for p in game.all_points() {
+    for p in valid_points(game) {
         let terrain = game.get_terrain(p).unwrap();
         let terrain_heroes = if terrain.get_team() != ClientPerspective::Neutral {
             heroes.get(p, terrain.get_owner_id())
@@ -276,14 +291,14 @@ pub fn add_vision(vision: &mut FxHashMap<Point, FogIntensity>, to_add: &FxHashMa
     }
 }
 
-pub fn can_see_unit_at<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {
+pub fn can_see_unit_at<D: Direction>(game: &Board<D>, team: ClientPerspective, position: Point, unit: &Unit<D>, accept_unknowns: bool) -> bool {
     match unit.fog_replacement(game, position, game.get_fog_at(team, position)) {
         None => false,
         Some(unit) => accept_unknowns || unit.typ() != unit.environment().config.unknown_unit(),
     }
 }
 
-pub fn is_unit_visible<D: Direction>(board: &impl GameView<D>, unit: &Unit<D>, p: Point, team: ClientPerspective) -> bool {
+pub fn is_unit_visible<D: Direction>(board: &Board<D>, unit: &Unit<D>, p: Point, team: ClientPerspective) -> bool {
     let fog_intensity = board.get_fog_at(team, p);
     let unit_visibility = unit.visibility(board, p);
     match fog_intensity {
@@ -314,14 +329,14 @@ pub fn is_unit_attribute_visible(fog_intensity: FogIntensity, unit_visibility: U
     }
 }
 
-pub fn visible_unit_with_attribute<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, pos: Point, attribute_visibility: UnitVisibility) -> bool {
+pub fn visible_unit_with_attribute<D: Direction>(game: &Board<D>, team: ClientPerspective, pos: Point, attribute_visibility: UnitVisibility) -> bool {
     let unit = game.get_unit(pos).unwrap();
     let fog_intensity = game.get_fog_at(team, pos);
     let unit_visibility = unit.visibility(game, pos);
     is_unit_attribute_visible(fog_intensity, unit_visibility, attribute_visibility)
 }
 
-pub fn visible_unit_with_attribute_transported<D: Direction>(game: &impl GameView<D>, team: ClientPerspective, pos: Point, unload_index: usize, attribute_visibility: UnitVisibility) -> Option<usize> {
+pub fn visible_unit_with_attribute_transported<D: Direction>(game: &Board<D>, team: ClientPerspective, pos: Point, unload_index: usize, attribute_visibility: UnitVisibility) -> Option<usize> {
     let transporter = game.get_unit(pos).unwrap();
     let fog_intensity = game.get_fog_at(team, pos);
     let transporter_visibility = transporter.visibility(game, pos);

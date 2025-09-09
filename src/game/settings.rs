@@ -5,6 +5,7 @@ use crate::commander::commander_type::CommanderType;
 use crate::config::editor_tag_config::TagEditorVisibility;
 use crate::config::environment::Environment;
 use crate::config::config::Config;
+use crate::map::board::BoardView;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::tags::{TagBag, TagValue};
@@ -326,6 +327,7 @@ mod tests {
     use crate::config::config::Config;
     use crate::config::environment::Environment;
     use crate::game::fog::{FogMode, FogSetting};
+    use crate::map::board::BoardView;
     use crate::map::direction::Direction4;
     use crate::map::map::Map;
     use crate::map::point_map::{MapSize, PointMap};

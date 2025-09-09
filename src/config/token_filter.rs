@@ -3,7 +3,7 @@ use rustc_hash::FxHashSet as HashSet;
 
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
-use crate::game::game_view::GameView;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::executor::Executor;
@@ -71,14 +71,14 @@ impl FromConfig for TokenFilter {
 impl TokenFilter {
     pub fn check<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         pos: Point,
         token: &Token<D>,
         executor: &Executor,
     ) -> bool {
         match self {
             Self::Rhai(function_index) => {
-                match executor.run(*function_index, ()) {
+                match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(_e) => {
                         // TODO: log error

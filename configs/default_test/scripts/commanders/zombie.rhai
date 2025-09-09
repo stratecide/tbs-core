@@ -6,7 +6,7 @@ fn co_resurrection() {
         }
         let skull = EVENT_HANDLER.remove_token(point, "Skull", OWNER_ID);
         if skull != () {
-            let unit = Unit(skull.get(TAG_UnitType));
+            let unit = Unit(CONFIG, skull.get(TAG_UnitType));
             unit.copy_from(skull);
             unit.owner_id = skull.owner_id;
             unit.remove(TAG_UnitType);

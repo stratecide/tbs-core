@@ -2,7 +2,7 @@ use std::error::Error;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
-use crate::game::game_view::GameView;
+use crate::map::board::Board;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
@@ -112,7 +112,7 @@ impl MovementPattern {
         }
     }
 
-    pub fn find_steps<D: Direction>(&self, _map: &impl GameView<D>, _point: Point, step_id: usize, _permanent_ballast: &[PbEntry<D>], temporary_ballast: &[TBallast<D>], extra_movement_options: ExtraMovementOptions) -> Vec<PathStep<D>> {
+    pub fn find_steps<D: Direction>(&self, _map: &Board<D>, _point: Point, step_id: usize, _permanent_ballast: &[PbEntry<D>], temporary_ballast: &[TBallast<D>], extra_movement_options: ExtraMovementOptions) -> Vec<PathStep<D>> {
         let mut result = Vec::new();
         let add_dir = |result: &mut Vec<_>, d: D| {
             result.push(PathStep::Dir(d));

@@ -1,11 +1,11 @@
-use executor::Executor;
 use rhai::*;
 use rustc_hash::FxHashSet;
 
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
 use crate::config::ConfigParseError;
-use crate::game::game_view::GameView;
+use crate::map::board::Board;
+use crate::map::board::BoardView;
 use crate::map::direction::Direction;
 use crate::map::map::*;
 use crate::map::point::*;
@@ -39,7 +39,7 @@ pub struct SplashPattern {
 impl SplashPattern {
     pub fn get_splash<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         attacker: &Unit<D>,
         _temporary_ballast: &[TBallast<D>],
         possible_attack_targets: &Vec<Vec<OrientedPoint<D>>>,
@@ -87,7 +87,7 @@ pub enum SplashDamagePointSource {
 impl SplashDamagePointSource {
     fn add_splash_in_direction<
         D: Direction,
-    >(&self, game: &impl GameView<D>, main_target: OrientedPoint<D>, range: usize, mut add: impl FnMut(usize, Point, Distortion<D>)) {
+    >(&self, game: &Board<D>, main_target: OrientedPoint<D>, range: usize, mut add: impl FnMut(usize, Point, Distortion<D>)) {
         match self {
             Self::AttackPattern => {
                 panic!("Shouldn't call SplashDamagePointSource::AttackPattern.add_splash_in_direction");
@@ -115,14 +115,12 @@ impl SplashDamagePointSource {
                 }
             }
             Self::Rhai(function_index) => {
-                let environment = game.environment();
                 let mut scope = Scope::new();
                 scope.push_constant(CONST_NAME_POSITION, main_target.point);
                 scope.push_constant(CONST_NAME_ATTACK_DIRECTION, main_target.direction);
                 scope.push_constant(CONST_NAME_MIRRORED, main_target.mirrored);
-                let engine = environment.get_engine_board(game);
-                let executor = Executor::new(engine, scope, environment);
-                match executor.run::<Array>(*function_index, ()) {
+                let executor = game.executor(scope);
+                match executor.run::<D, Array>(*function_index, ()) {
                     Ok(lists) => {
                         // Array -> Vec<Vec<PointWithDistortion>>
                         for (i, list) in lists.into_iter().enumerate().take(range) {

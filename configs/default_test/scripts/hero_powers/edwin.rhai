@@ -7,19 +7,19 @@ fn ua_power_input() {
             options += point;
         }
     }
-    let target1 = user_selection(options, false);
+    let target1 = PLAYER.choice(options, false);
     let options = new_point_selection();
     for point in BOARD.positions_in_range(POSITION, 5) {
         if point != target1 && point != POSITION && BOARD.get_unit(point) != () {
             options += point;
         }
     }
-    user_selection(options, false);
+    PLAYER.choice(options, false);
     success()
 }
 
 fn ua_power(data) {
-    exhaust_all_on_chess_board(PATH.start, UNIT.owner_id);
+    exhaust_all_on_chess_board(EVENT_HANDLER, PATH.start, UNIT.owner_id);
     EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
     let target1 = data[0];
     let target2 = data[1];

@@ -1,8 +1,8 @@
 use rhai::*;
 use rhai::plugin::*;
 
+use crate::config::environment::Environment;
 use crate::map::direction::*;
-use crate::script::get_environment;
 use crate::units::movement::MovementType;
 use crate::terrain::TerrainType;
 use crate::tags::*;
@@ -12,9 +12,8 @@ use crate::config::OwnershipPredicate;
 mod terrain_type_module {
     pub type TerrainType = crate::terrain::TerrainType;
 
-    #[rhai_fn(name = "TerrainType")]
-    pub fn new_terrain_type(context: NativeCallContext, name: &str) -> Dynamic {
-        let environment = get_environment(context);
+    #[rhai_fn(pure, name = "TerrainType")]
+    pub fn new_terrain_type(environment: &mut Environment, name: &str) -> Dynamic {
         environment.config.find_terrain_by_name(name)
         .map(Dynamic::from)
         .unwrap_or(().into())
@@ -27,26 +26,6 @@ mod terrain_type_module {
     #[rhai_fn(pure, name = "!=")]
     pub fn tt_neq(t1: &mut TerrainType, t2: TerrainType) -> bool {
         *t1 != t2
-    }
-    #[rhai_fn(pure, name = "==")]
-    pub fn eq_tt_s(context: NativeCallContext, t1: &mut TerrainType, t2: &str) -> bool {
-        let environment = get_environment(context);
-        Some(*t1) == environment.config.find_terrain_by_name(t2)
-    }
-    #[rhai_fn(pure, name = "!=")]
-    pub fn neq_tt_s(context: NativeCallContext, t1: &mut TerrainType, t2: &str) -> bool {
-        let environment = get_environment(context);
-        Some(*t1) != environment.config.find_terrain_by_name(t2)
-    }
-    #[rhai_fn(name = "==")]
-    pub fn eq_s_tt(context: NativeCallContext, t1: &str, t2: TerrainType) -> bool {
-        let environment = get_environment(context);
-        environment.config.find_terrain_by_name(t1) == Some(t2)
-    }
-    #[rhai_fn(name = "!=")]
-    pub fn neq_s_tt(context: NativeCallContext, t1: &str, t2: TerrainType) -> bool {
-        let environment = get_environment(context);
-        environment.config.find_terrain_by_name(t1) != Some(t2)
     }
 }
 
@@ -65,19 +44,9 @@ macro_rules! board_module {
                 *t1 != t2
             }
 
-            #[rhai_fn(name = "Terrain")]
-            pub fn new_terrain(context: NativeCallContext, typ: TerrainType) -> Terrain {
-                let environment = get_environment(context);
-                Terrain::new(environment, typ)
-            }
-            #[rhai_fn(name = "Terrain")]
-            pub fn new_terrain_str(context: NativeCallContext, typ: &str) -> Dynamic {
-                let environment = get_environment(context);
-                if let Some(typ) = environment.config.find_terrain_by_name(typ) {
-                    Dynamic::from(Terrain::new(environment, typ))
-                } else {
-                    ().into()
-                }
+            #[rhai_fn(pure, name = "Terrain")]
+            pub fn new_terrain(environment: &mut Environment, typ: TerrainType) -> Terrain {
+                Terrain::new(environment.clone(), typ)
             }
 
             #[rhai_fn(pure, get = "type")]

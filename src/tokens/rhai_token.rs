@@ -1,9 +1,10 @@
 use rhai::*;
 use rhai::plugin::*;
+
+use crate::config::environment::Environment;
 use crate::map::direction::*;
 use crate::tags::*;
 use crate::units::unit::*;
-use crate::script::get_environment;
 
 use super::*;
 use super::token_types::TokenType;
@@ -11,6 +12,13 @@ use super::token_types::TokenType;
 mod token_type_module {
 
     pub type TokenType = crate::tokens::token_types::TokenType;
+
+    #[rhai_fn(pure, name = "TokenType")]
+    pub fn new_token_type(environment: &mut Environment, name: &str) -> Dynamic {
+        environment.config.find_token_by_name(name)
+        .map(Dynamic::from)
+        .unwrap_or(().into())
+    }
 
     #[rhai_fn(pure, name = "==")]
     pub fn eq(u1: &mut TokenType, u2: TokenType) -> bool {
@@ -28,19 +36,9 @@ macro_rules! token_module {
         mod $name {
             pub type Token = super::token::Token<$d>;
 
-            #[rhai_fn(name = "Token")]
-            pub fn new_token(context: NativeCallContext, typ: TokenType) -> Token {
-                let environment = get_environment(context);
-                Token::new(environment, typ)
-            }
-            #[rhai_fn(name = "Token")]
-            pub fn new_token_str(context: NativeCallContext, typ: &str) -> Dynamic {
-                let environment = get_environment(context);
-                if let Some(typ) = environment.config.find_token_by_name(typ) {
-                    Dynamic::from(Token::new(environment, typ))
-                } else {
-                    ().into()
-                }
+            #[rhai_fn(pure, name = "Token")]
+            pub fn new_token(environment: &mut Environment, typ: TokenType) -> Token {
+                Token::new(environment.clone(), typ)
             }
 
             #[rhai_fn(pure, get = "type")]

@@ -11,9 +11,10 @@ use crate::commander::Commander;
 use crate::config::environment::Environment;
 use crate::config::OwnershipPredicate;
 use crate::game::fog::{FogIntensity, FogSetting};
-use crate::game::game_view::GameView;
 use crate::game::settings::GameSettings;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
+use crate::map::map::get_neighbors_layers;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Owner, Player};
@@ -78,7 +79,7 @@ impl<D: Direction> Terrain<D> {
 
     pub fn income_factor(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
@@ -88,7 +89,7 @@ impl<D: Direction> Terrain<D> {
 
     pub fn vision_range(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
@@ -134,11 +135,11 @@ impl<D: Direction> Terrain<D> {
         self.environment.get_team(self.get_owner_id())
     }
 
-    pub fn get_player(&self, game: &impl GameView<D>) -> Option<Player<D>> {
+    pub fn get_player<'a>(&self, game: &'a impl BoardView<D>) -> Option<&'a Player<D>> {
         game.get_owning_player(self.get_owner_id())
     }
 
-    pub fn get_commander(&self, game: &impl GameView<D>) -> Commander {
+    pub fn get_commander(&self, game: &impl BoardView<D>) -> Commander {
         self.get_player(game)
         .and_then(|player| Some(player.commander.clone()))
         .unwrap_or(Commander::new(&self.environment, CommanderType(0)))
@@ -190,7 +191,7 @@ impl<D: Direction> Terrain<D> {
 
     pub fn get_vision(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
@@ -217,7 +218,7 @@ impl<D: Direction> Terrain<D> {
             FogSetting::Fade2(_) => 2.max(vision_range) - 2,
             _ => vision_range
         };
-        let layers = game.range_in_layers(pos, vision_range);
+        let layers = get_neighbors_layers(game, pos, vision_range);
         for (i, layer) in layers.into_iter().enumerate() {
             for p in layer {
                 let vision = if i < normal_range {

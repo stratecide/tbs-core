@@ -1,6 +1,9 @@
 use zipper::*;
 use zipper_derive::Zippable;
 
+use crate::map::board::BoardView;
+use crate::map::point::Point;
+
 use super::direction::*;
 use super::wrapping_map::Distortion;
 
@@ -53,6 +56,15 @@ impl<D: Direction> Default for PipeState<D> {
     }
 }
 
+pub fn next_pipe_tile<D: Direction>(board: &impl BoardView<D>, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
+    if let Some(disto) = board.get_pipes(point)
+    .iter().find_map(|pipe_state| pipe_state.distortion(direction)) {
+        board.wrapping_logic().get_neighbor(point, disto.update_direction(direction))
+        .and_then(|(p, d)| Some((p, disto + d)))
+    } else {
+        None
+    }
+}
 
 #[cfg(test)]
 mod tests {

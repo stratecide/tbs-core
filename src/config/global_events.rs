@@ -8,8 +8,7 @@ use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
 use crate::game::event_handler::EventHandler;
 use crate::game::game::Game;
-use crate::game::game_view::GameView;
-use crate::handle::Handle;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::*;
@@ -82,15 +81,14 @@ pub(crate) enum GlobalEventType {
 }
 
 impl GlobalEventType {
-    pub fn test_global<D: Direction>(&self, game: &Handle<Game<D>>) -> Option<Scope<'static>> {
+    pub fn test_global<D: Direction>(&self, game: &Game<D>) -> Option<Scope<'static>> {
         match self {
             Self::Global(filter) => {
-                let environment = game.environment();
-                let engine = environment.get_engine_board(game);
                 let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_OWNER_ID, game.with(|g| g.current_player().get_owner_id()) as i32);
-                let executor = Executor::new(engine, scope.clone(), environment);
-                if game.with(|g| filter.iter().all(|filter| filter.check(g, &executor))) {
+                scope.push_constant(CONST_NAME_OWNER_ID, game.current_player().get_owner_id() as i32);
+                let board = Board::from(game);
+                let executor = board.executor(scope.clone());
+                if filter.iter().all(|filter| filter.check(game, &executor)) {
                     return Some(scope);
                 }
             }
@@ -105,40 +103,34 @@ impl GlobalEventType {
         match self {
             Self::Global(_) => (),
             Self::Terrain(filter) => {
-                let game = &*handler.get_game();
-                let terrain = game.get_terrain(pos).unwrap();
+                let terrain = handler.get_game().get_terrain(pos).unwrap();
                 let heroes = heroes.get(pos, terrain.get_owner_id());
-                let environment = game.environment();
-                let engine = environment.get_engine_board(game);
                 let mut scope = Scope::new();
                 scope.push_constant(CONST_NAME_POSITION, pos);
                 scope.push_constant(CONST_NAME_TERRAIN, terrain.clone());
                 scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
-                let executor = Executor::new(engine, scope.clone(), environment);
-                if filter.iter().all(|filter| filter.check(game, pos, &terrain, heroes, &executor)) {
+                let executor = handler.get_board().executor(scope.clone());
+                if filter.iter().all(|filter| filter.check(handler.get_board(), pos, &terrain, heroes, &executor)) {
                     result.push(scope)
                 }
             }
             Self::Token(filter) => {
-                let game = &*handler.get_game();
-                for token in game.get_tokens(pos) {
-                    let environment = game.environment();
-                    let engine = environment.get_engine_board(game);
+                for token in handler.get_game().get_tokens(pos) {
                     let mut scope = Scope::new();
                     scope.push_constant(CONST_NAME_POSITION, pos);
                     scope.push_constant(CONST_NAME_TOKEN, token.clone());
                     scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
-                    let executor = Executor::new(engine, scope.clone(), environment);
-                    if filter.iter().all(|filter| filter.check(game, pos, &token, &executor)) {
+                    let executor = handler.get_board().executor(scope.clone());
+                    if filter.iter().all(|filter| filter.check(handler.get_board(), pos, &token, &executor)) {
                         result.push(scope)
                     }
                 }
             }
             Self::Unit(filter) => {
-                let Some(unit) = handler.get_game().get_unit(pos) else {
+                let Some(unit) = handler.get_game().get_unit(pos).cloned() else {
                     return result
                 };
-                if filter.iter().all(|filter| filter.check(&*handler.get_game(), UnitData {
+                if filter.iter().all(|filter| filter.check(handler.get_board(), UnitData {
                     unit: &unit,
                     pos,
                     unload_index: None,
@@ -155,7 +147,7 @@ impl GlobalEventType {
                     result.push(scope)
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
-                    if filter.iter().all(|filter| filter.check(&*handler.get_game(), UnitData {
+                    if filter.iter().all(|filter| filter.check(handler.get_board(), UnitData {
                         unit: u,
                         pos,
                         unload_index: Some(i),
@@ -237,7 +229,7 @@ impl GlobalFilter {
     ) -> bool {
         match self {
             Self::Rhai(function_index) => {
-                match executor.run(*function_index, ()) {
+                match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(_e) => {
                         // TODO: log error

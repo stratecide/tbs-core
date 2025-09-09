@@ -8,7 +8,7 @@ fn co_red_dance() {
                 let unit = BOARD.get_unit(point);
                 if unit != () && unit.owner_id >= 0 && unit.team != TEAM && !damages.contains(point) {
                     damages.push(point);
-                    effects.push(change_unit_hp(point, -10));
+                    effects.push(change_unit_hp(EVENT_HANDLER, point, -10));
                 }
             }
         }
@@ -25,10 +25,10 @@ fn co_crimson_rain() {
                 let unit = BOARD.get_unit(point);
                 if unit != () && unit.owner_id >= 0 && unit.team != TEAM && !damages.contains(point) {
                     damages.push(point);
-                    effects.push(change_unit_hp(point, -20));
+                    effects.push(change_unit_hp(EVENT_HANDLER, point, -20));
                 }
             }
-            effects.push(change_unit_hp(uwp.position, 10));
+            effects.push(change_unit_hp(EVENT_HANDLER, uwp.position, 10));
         }
     }
     EVENT_HANDLER.effects(effects);

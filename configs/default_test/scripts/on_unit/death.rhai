@@ -1,12 +1,12 @@
 
 fn show_explosion() {
-    EVENT_HANDLER.effect(POSITION, FX_Explosion(UNIT.visibility(POSITION)));
+    EVENT_HANDLER.effect(POSITION, FX_Explosion(UNIT.visibility(BOARD, POSITION)));
 }
 
 fn kraken() {
     for p in BOARD.all_positions() {
         let terrain = BOARD.get_terrain(p);
-        if terrain.type != TerrainType("Kraken") {
+        if terrain.type != TerrainType(CONFIG, "Kraken") {
             continue;
         }
         let anger = ((terrain.get(TAG_Anger) ?? 0) + 1) % (KRAKEN_MAX_ANGER + 1);
@@ -24,7 +24,7 @@ fn kraken() {
         for point in BOARD.positions_in_range(p, KRAKEN_ATTACK_RANGE) {
             let unit = BOARD.get_unit(point);
             if unit?.owner_id >= 0 && unit.has(TAG_Hp) {
-                effects.push(change_unit_hp(point, -KRAKEN_DAMAGE));
+                effects.push(change_unit_hp(EVENT_HANDLER, point, -KRAKEN_DAMAGE));
             }
         }
         // animate HP losses
@@ -39,7 +39,7 @@ fn lose_game() {
 
 fn sludge_1() {
     let counter = 0;
-    let token = Token("Sludge");
+    let token = Token(CONFIG, TOKEN_Sludge);
     let old_token = for t in BOARD.get_tokens(POSITION) {
         if t.type == token.type {
             break t;

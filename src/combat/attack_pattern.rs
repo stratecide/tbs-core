@@ -9,13 +9,12 @@ use crate::config::file_loader::FileLoader;
 use crate::config::parse::{parse_inner_vec, parse_tuple1, parse_tuple2, string_base};
 use crate::config::parse::FromConfig;
 use crate::config::ConfigParseError;
-use crate::game::game_view::GameView;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
 use crate::map::map::*;
 use crate::map::point::*;
 use crate::map::wrapping_map::{Distortion, OrientedPoint};
 use uniform_smart_pointer::Urc;
-use crate::script::executor::Executor;
 use crate::script::{CONST_NAME_ATTACK_DIRECTION, CONST_NAME_POSITION};
 use crate::tags::{TagKey, TagValue};
 use crate::units::hero::HeroMap;
@@ -189,7 +188,7 @@ impl<D: Direction> AttackInput<D> {
     }
 
     pub fn attackable_positions(
-        game: &impl GameView<D>,
+        game: &Board<D>,
         attacker: &Unit<D>,
         attacker_pos: Point,
         transporter: Option<(&Unit<D>, Point)>,
@@ -234,7 +233,7 @@ impl AttackPattern {
     /**
      * Assumes that self's min and max ranges are pre-modified according to unit_powered.csv
      */
-    pub fn possible_attack_targets<D: Direction>(&self, game: &impl GameView<D>, attacker_pos: Point, d: D) -> Vec<Vec<OrientedPoint<D>>> {
+    pub fn possible_attack_targets<D: Direction>(&self, game: &Board<D>, attacker_pos: Point, d: D) -> Vec<Vec<OrientedPoint<D>>> {
         let mut avoid_duplicates = Vec::new();
         let mut result = Vec::new();
         let mut add = |distance: usize, p: Point, distortion: Distortion<D>| {
@@ -249,7 +248,7 @@ impl AttackPattern {
         match self {
             Self::None => (),
             Self::Adjacent => {
-                if let Some((p, distortion)) = game.get_neighbor(attacker_pos, d) {
+                if let Some((p, distortion)) = get_neighbor(game, attacker_pos, d) {
                     add(0, p, distortion);
                 }
             }
@@ -297,13 +296,11 @@ impl AttackPattern {
                 }
             }
             Self::Rhai { function_index, parameter_values, .. } => {
-                let environment = game.environment();
                 let mut scope = Scope::new();
                 scope.push_constant(CONST_NAME_POSITION, attacker_pos);
                 scope.push_constant(CONST_NAME_ATTACK_DIRECTION, d);
-                let engine = environment.get_engine_board(game);
-                let executor = Executor::new(engine, scope, environment);
-                match executor.run::<Array>(*function_index, parameter_values.clone()) {
+                let executor = game.executor(scope);
+                match executor.run::<D, Array>(*function_index, parameter_values.clone()) {
                     Ok(list) => {
                         // Array -> Vec<Vec<PointWithDistortion>>
                         for (i, p) in list.into_iter().enumerate() {

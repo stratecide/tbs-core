@@ -1,4 +1,6 @@
 use std::collections::HashSet;
+use std::rc::Rc;
+use std::cell::RefCell;
 use rhai::*;
 use rhai::plugin::*;
 
@@ -159,6 +161,11 @@ macro_rules! action_data_module {
                     },
                     _ => (),
                 }
+            }
+
+            #[rhai_fn(pure, name = "choice", return_raw)]
+            pub fn user_selection(controller: &mut Rc<RefCell<InputScriptController<$d>>>, options: ActionDataOptions, or_succeed: bool) -> Result<Dynamic, Box<EvalAltResult>> {
+                controller.borrow_mut().user_selection(options, or_succeed)
             }
         }
 

@@ -3,7 +3,7 @@ fn leave_skull(attacker_id, defender_id, damage, direction) {
     if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
         let position = EVENT_HANDLER.get_unit_position(defender_id);
         let defender = EVENT_HANDLER.get_unit(defender_id);
-        let skull = Token("Skull");
+        let skull = Token(CONFIG, TOKEN_Skull);
         skull.copy_from(defender);
         skull.owner_id = EVENT_HANDLER.get_unit(attacker_id).owner_id;
         skull.set(TAG_UnitType, defender.type);
@@ -22,7 +22,7 @@ fn resurrect(attacker_id, defender_id, damage, direction) {
     if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 && EVENT_HANDLER.get_unit_transport_index(defender_id) == () {
         let position = EVENT_HANDLER.get_unit_position(defender_id);
         let defender = EVENT_HANDLER.get_unit(defender_id);
-        let unit = Unit(defender.type);
+        let unit = Unit(CONFIG, defender.type);
         unit.copy_from(defender);
         unit.owner_id = EVENT_HANDLER.get_unit(attacker_id).owner_id;
         unit.movement_type = defender.movement_type;
@@ -46,7 +46,7 @@ fn capture_neutral(attacker_id, defender_id, damage, direction) {
     if EVENT_HANDLER.get(defender_id, TAG_Hp) == 0 {
         let position = EVENT_HANDLER.get_unit_position(defender_id);
         let defender = EVENT_HANDLER.get_unit(defender_id);
-        let new_unit = Unit(defender.type);
+        let new_unit = Unit(CONFIG, defender.type);
         new_unit.copy_from(defender);
         if defender.owner_id == -1 {
             new_unit.owner_id = EVENT_HANDLER.get_unit(attacker_id).owner_id;

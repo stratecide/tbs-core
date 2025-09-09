@@ -6,8 +6,7 @@ use rhai::*;
 use crate::combat::AttackPatternType;
 use crate::commander::commander_type::CommanderType;
 use crate::game::fog::FogIntensity;
-use crate::game::game_view::GameView;
-use crate::script::executor::Executor;
+use crate::map::board::{Board, BoardView};
 use crate::units::UnitData;
 use crate::{dyn_opt, script::*};
 use crate::tags::{FlagKey, TagKey};
@@ -176,7 +175,7 @@ impl FromConfig for UnitFilter {
 impl UnitFilter {
     pub fn check<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit_data: UnitData<D>,
         other_unit_data: Option<UnitData<D>>,
         heroes: &HeroMap<D>,
@@ -185,10 +184,8 @@ impl UnitFilter {
     ) -> bool {
         match self {
             Self::Rhai(function_index) => {
-                let environment = game.environment();
-                let engine = environment.get_engine_board(game);
-                let executor = Executor::new(engine, unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter), environment);
-                match executor.run(*function_index, ()) {
+                let executor = game.executor(unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter));
+                match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {
                         let environment = game.environment();
@@ -289,7 +286,7 @@ impl UnitFilter {
 }
 
 pub(crate) fn unit_filter_scope<D: Direction>(
-    game: &impl GameView<D>,
+    game: &Board<D>,
     unit_data: UnitData<D>,
     other_unit_data: Option<UnitData<D>>,
     _heroes: &HeroMap<D>,

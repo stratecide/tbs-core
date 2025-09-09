@@ -1,17 +1,17 @@
 
 fn co_rot() {
-    place_sludge_tokens(OWNER_ID, 0);
+    place_sludge_tokens(EVENT_HANDLER, OWNER_ID, 0);
 }
 
 fn co_decay() {
-    place_sludge_tokens(OWNER_ID, 1);
+    place_sludge_tokens(EVENT_HANDLER, OWNER_ID, 1);
 }
 
-fn place_sludge_tokens(OWNER_ID, counter) {
-    for uwp in BOARD.all_units() {
+fn place_sludge_tokens(EVENT_HANDLER, OWNER_ID, counter) {
+    for uwp in EVENT_HANDLER.board.all_units() {
         if uwp.unit.owner_id != () {
-            let token = Token("Sludge");
-            let old_token = for t in BOARD.get_tokens(uwp.position) {
+            let token = Token(EVENT_HANDLER.config, TOKEN_Sludge);
+            let old_token = for t in EVENT_HANDLER.board.get_tokens(uwp.position) {
                 if t.type == token.type {
                     break t;
                 }

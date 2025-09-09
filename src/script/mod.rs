@@ -1,11 +1,5 @@
 use rhai::*;
 use rhai::packages::*;
-use uniform_smart_pointer::Urc;
-
-use crate::config::environment::Environment;
-use crate::game::game_view::GameView;
-use crate::game::rhai_board::SharedGameView;
-use crate::map::direction::Direction;
 
 pub mod executor;
 pub mod custom_action;
@@ -16,6 +10,7 @@ mod rhai_fraction;
 pub const CONST_NAME_CONFIG: &'static str = "CONFIG";
 pub const CONST_NAME_BOARD: &'static str = "BOARD";
 pub const CONST_NAME_EVENT_HANDLER: &'static str = "EVENT_HANDLER";
+pub const CONST_NAME_ATTACK_CONTEXT: &'static str = "ATTACK_CONTEXT";
 pub const CONST_NAME_OWNER_ID: &'static str = "OWNER_ID";
 pub const CONST_NAME_TEAM: &'static str = "TEAM";
 pub const CONST_NAME_STARTING_POSITION: &'static str = "STARTING_POSITION";
@@ -48,7 +43,7 @@ pub const CONST_NAME_TARGETS: &'static str = "TARGETS";
 pub const CONST_NAME_SPLASH_DISTANCE: &'static str = "SPLASH_DISTANCE";
 pub const CONST_NAME_ATTACK_PRIORITY: &'static str = "ATTACK_PRIORITY";
 
-pub const FUNCTION_NAME_INPUT_CHOICE: &'static str = "user_selection";
+pub const CONST_NAME_PLAYER: &'static str = "PLAYER";
 pub const FUNCTION_NAME_BLAST_DIRECTION: &'static str = "get_blast_direction";
 
 pub fn create_base_engine() -> Engine {
@@ -89,7 +84,7 @@ def_package! {
         crate::terrain::rhai_terrain::TerrainPackage4,
         crate::map::rhai_point::PositionPackage4,
         crate::map::rhai_direction::DirectionPackage4,
-        crate::game::rhai_board::BoardPackage4,
+        crate::map::rhai_board::BoardPackage4,
         crate::units::rhai_unit::UnitPackage4,
         crate::units::rhai_movement::MovementPackage4,
         crate::units::hero::rhai_hero::HeroPackage4,
@@ -110,20 +105,11 @@ def_package! {
         crate::terrain::rhai_terrain::TerrainPackage6,
         crate::map::rhai_point::PositionPackage6,
         crate::map::rhai_direction::DirectionPackage6,
-        crate::game::rhai_board::BoardPackage6,
+        crate::map::rhai_board::BoardPackage6,
         crate::units::rhai_unit::UnitPackage6,
         crate::units::rhai_movement::MovementPackage6,
         crate::units::hero::rhai_hero::HeroPackage6,
         crate::tokens::rhai_token::TokenPackage6,
         crate::combat::rhai_combat::CombatPackage6,
         crate::game::rhai_event_handler::EventHandlerPackage6 {}
-}
-
-pub fn with_board<D: Direction, R>(context: NativeCallContext, f: impl FnOnce(&Urc<dyn GameView<D>>) -> R) -> R {
-    let board: SharedGameView<D> = context.engine().eval_expression(CONST_NAME_BOARD).expect("BOARD should be in context!");
-    f(&board.0)
-}
-
-pub fn get_environment(context: NativeCallContext) -> Environment {
-    context.engine().eval_expression::<Environment>(CONST_NAME_CONFIG).expect("CONFIG should be in context!")
 }

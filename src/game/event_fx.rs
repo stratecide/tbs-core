@@ -1,14 +1,13 @@
 use interfaces::ClientPerspective;
-use rhai::{FuncRegistration, Module, NativeCallContext};
+use rhai::{FuncRegistration, Module};
 use zipper::*;
 use zipper::zipper_derive::*;
 
 use crate::config::effect_config::{EffectConfig, EffectDataType};
 use crate::config::parse::FromConfig;
-use crate::handle::Handle;
+use crate::map::board::*;
 use crate::map::point::Point;
 use crate::player::Owner;
-use crate::script::{get_environment, with_board};
 use crate::units::unit::Unit;
 use crate::units::movement::{Path, MAX_PATH_LENGTH};
 use crate::terrain::terrain::*;
@@ -19,8 +18,6 @@ use crate::config::environment::Environment;
 use crate::units::UnitVisibility;
 
 use super::fog::FogIntensity;
-use super::game::Game;
-use super::game_view::GameView;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EffectType(pub usize);
@@ -91,7 +88,7 @@ pub enum EffectData<D: Direction> {
 }
 
 impl<D: Direction> EffectData<D> {
-    pub fn fog_replacement(&self, game: &impl GameView<D>, p: Point, fog_intensity: FogIntensity, team: ClientPerspective) -> Option<Self> {
+    pub fn fog_replacement(&self, game: &Board<D>, p: Point, fog_intensity: FogIntensity, team: ClientPerspective) -> Option<Self> {
         match self {
             Self::Terrain(inner) => Some(Self::Terrain(inner.fog_replacement(fog_intensity))),
             Self::Token(inner) => Some(Self::Token(inner.fog_replacement(fog_intensity)?)),
@@ -178,7 +175,7 @@ pub struct EffectPath<D: Direction> {
 }
 
 impl<D: Direction> EffectPath<D> {
-    pub fn new(board: &impl GameView<D>, typ: EffectType, data: EffectData<D>, path: Path<D>) -> Self {
+    pub fn new(board: &impl BoardView<D>, typ: EffectType, data: EffectData<D>, path: Path<D>) -> Self {
         let mut p = path.start;
         let mut steps = Vec::with_capacity(path.steps.len());
         for step in path.steps {
@@ -291,7 +288,7 @@ impl<D: Direction> Effect<D> {
         })
     }
 
-    pub fn fog_replacement(&self, game: &Handle<Game<D>>, team: ClientPerspective) -> Option<Self> {
+    pub fn fog_replacement(&self, game: &Board<D>, team: ClientPerspective) -> Option<Self> {
         let typ = match self {
             Self::Global(eff) => eff.typ,
             Self::Point(eff, _) => eff.typ,
@@ -387,8 +384,7 @@ pub(crate) fn effect_constructor_module<D: Direction>(definitions: &[EffectConfi
             Some(EffectDataType::Visibility) => f.set_into_module(&mut module, move |value: UnitVisibility| {
                 EffectWithoutPosition::new(i, EffectData::<D>::Visibility(value))
             }),
-            Some(EffectDataType::Team) => f.set_into_module(&mut module, move |context: NativeCallContext, mut value: i32| {
-                let environment = get_environment(context);
+            Some(EffectDataType::Team) => f.set_into_module(&mut module, move |environment: &mut Environment, mut value: i32| {
                 if value < 0 || value >= environment.config.max_player_count() as i32 {
                     value = -1;
                 }
@@ -399,10 +395,8 @@ pub(crate) fn effect_constructor_module<D: Direction>(definitions: &[EffectConfi
     FuncRegistration::new("at").set_into_module(&mut module, move |effect: EffectWithoutPosition<D>, p: Point| {
         Effect::Point(effect, p)
     });
-    FuncRegistration::new("path").set_into_module(&mut module, move |context: NativeCallContext, effect: EffectWithoutPosition<D>, path: Path<D>| {
-        with_board(context, |board| {
-            Effect::Path(EffectPath::new(board, effect.typ, effect.data, path))
-        });
+    FuncRegistration::new("path").set_into_module(&mut module, move |board: BoardPointer<D>, effect: EffectWithoutPosition<D>, path: Path<D>| {
+        Effect::Path(EffectPath::new(board.as_ref(), effect.typ, effect.data, path))
     });
     module.into()
 }

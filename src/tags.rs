@@ -7,6 +7,7 @@ use zipper::*;
 use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
 use crate::config::tag_config::TagType;
+use crate::map::board::BoardView;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::map::point::Point;

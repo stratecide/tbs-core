@@ -4,6 +4,7 @@ use std::ops::{Add, Div, Mul, Sub};
 use num_rational::Rational32;
 use rhai::Dynamic;
 
+use crate::map::direction::Direction;
 use crate::script::executor::Executor;
 
 use super::file_loader::FileLoader;
@@ -85,7 +86,7 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
     }
 
     // TODO: prevent overflow / underflow
-    pub fn update_value(&self, value: T, executor: &Executor) -> T {
+    pub fn update_value<D: Direction>(&self, value: T, executor: &Executor) -> T {
         match self.clone() {
             Self::Keep => value,
             Self::Replace(v) => v,
@@ -97,7 +98,7 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
             Self::MulAdd(a, b) => value.mul_r32(a) + b,
             Self::MulSub(a, b) => value.mul_r32(a) - b,
             Self::Rhai(function_index) => {
-                match executor.run::<Dynamic>(function_index, (value.clone(), )) {
+                match executor.run::<D, Dynamic>(function_index, (value.clone(), )) {
                     Ok(t) => {
                         let fraction = match t.type_name().split("::").last().unwrap() {
                             "i32" => Rational32::from_integer(t.cast()),
@@ -120,7 +121,7 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
                 }
             }
             Self::RhaiReplace(function_index) => {
-                match executor.run::<Dynamic>(function_index, ()) {
+                match executor.run::<D, Dynamic>(function_index, ()) {
                     Ok(t) => {
                         let fraction = match t.type_name().split("::").last().unwrap() {
                             "i32" => Rational32::from_integer(t.cast()),
@@ -145,7 +146,7 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
         }
     }
 
-    pub fn update_value_repeatedly<'a>(mut value: T, iter: impl DoubleEndedIterator<Item = Self>, executor: &Executor) -> T {
+    pub fn update_value_repeatedly<'a, D: Direction>(mut value: T, iter: impl DoubleEndedIterator<Item = Self>, executor: &Executor) -> T {
         let mut stack = Vec::new();
         for v in iter.rev() {
             let ignores_previous = v.ignores_previous_value();
@@ -155,7 +156,7 @@ impl<T: MulRational32 + FromConfig + Ord + Clone + Send + Sync + 'static> Number
             }
         }
         while let Some(v) = stack.pop() {
-            value = v.update_value(value, executor);
+            value = v.update_value::<D>(value, executor);
         }
         value
     }

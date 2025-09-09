@@ -9,8 +9,9 @@ mod test;
 use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
 use crate::game::event_handler::EventHandler;
-use crate::game::game_view::GameView;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
+use crate::map::map::{get_neighbors_layers, valid_points};
 use crate::map::point::Point;
 use super::commands::UnitAction;
 use super::unit::Unit;
@@ -142,7 +143,7 @@ impl Hero {
     }
 
     pub fn aura_range<D: Direction>(
-        map: &impl GameView<D>,
+        map: &Board<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
@@ -151,7 +152,7 @@ impl Hero {
     }
 
     pub fn in_range<D: Direction>(
-        map: &impl GameView<D>,
+        map: &Board<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
@@ -161,7 +162,7 @@ impl Hero {
     }
 
     pub fn aura<D: Direction>(
-        map: &impl GameView<D>,
+        map: &Board<D>,
         unit: &Unit<D>,
         unit_pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
@@ -172,7 +173,7 @@ impl Hero {
             _ => return result
         };
         result.insert(unit_pos, aura_range);
-        for layer in map.range_in_layers(unit_pos, aura_range) {
+        for layer in get_neighbors_layers(map, unit_pos, aura_range) {
             aura_range -= 1;
             for p in layer {
                 result.insert(p, aura_range);
@@ -181,12 +182,11 @@ impl Hero {
         result
     }
 
-    // TODO: turn only_owner_id into an option and only return all heroes if it's None instead of negative
-    pub fn hero_influence_at<D: Direction>(map: &impl GameView<D>, point: Point, only_owner_id: i8) -> Vec<HeroInfluence<D>> {
+    pub fn hero_influence_at<D: Direction>(map: &Board<D>, point: Point, only_owner_id: Option<i8>) -> Vec<HeroInfluence<D>> {
         let mut result = Vec::new();
-        for p in map.all_points() {
+        for p in valid_points(map) {
             if let Some(unit) = map.get_unit(p) {
-                if only_owner_id >= 0 && unit.get_owner_id() != only_owner_id {
+                if only_owner_id.is_some() && Some(unit.get_owner_id()) != only_owner_id {
                     continue;
                 }
                 if let Some(hero) = unit.get_hero() {
@@ -203,16 +203,13 @@ impl Hero {
                 }
             }
         }
-        if let Some(mut additional) = map.additional_hero_influence_at(point, only_owner_id) {
-            result.append(&mut additional);
-        }
         result
     }
 
     pub fn add_options_after_path<D: Direction>(
         &self,
         list: &mut Vec<UnitAction<D>>,
-        game: &impl GameView<D>,
+        game: &Board<D>,
     ) {
         for (i, _) in game.environment().config.hero_powers(self.typ).iter().enumerate() {
             if self.can_activate_power(&game.environment(), i, false) {
@@ -247,40 +244,40 @@ impl SupportedZippable<&Environment> for Hero {
 pub type HeroInfluence<D> = (Unit<D>, Hero, Point, Option<usize>, u8);
 pub type HeroInfluenceWithId<D> = (UnitId<D>, Unit<D>, Hero, Point, Option<usize>, u8);
 
-#[derive(Clone)]
-pub struct HeroMap<D: Direction>(rhai::Shared<FxHashMap<(Point, i8), Vec<HeroInfluence<D>>>>);
+pub struct HeroMap<D: Direction> {
+    hero_auras: FxHashMap<(Point, i8), Vec<HeroInfluence<D>>>,
+}
 
 impl <D: Direction> HeroMap<D> {
     pub fn new_empty() -> Self {
-        Self(rhai::Shared::default())
+        Self {
+            hero_auras: FxHashMap::default(),
+        }
     }
 
-    pub fn new(map: &impl GameView<D>, only_owner_id: Option<i8>) -> Self {
-        let mut hero_auras = Self::_new(map, only_owner_id, |unit: &Unit<D>, unit_pos: Point, transporter: Option<(&Unit<D>, usize)>| {
+    pub fn new(map: &Board<D>, only_owner_id: Option<i8>) -> Self {
+        let hero_auras = Self::_new(map, only_owner_id, |unit: &Unit<D>, unit_pos: Point, transporter: Option<(&Unit<D>, usize)>| {
             Box::new(Hero::aura(map, unit, unit_pos, transporter).into_iter())
         });
-        if let Some(additional) = map.additional_hero_influence_map(only_owner_id) {
-            for (key, mut additional) in additional {
-                if let Some(list) = hero_auras.get_mut(&key) {
-                    list.append(&mut additional);
-                } else {
-                    hero_auras.insert(key, additional);
-                }
-            }
+        Self {
+            hero_auras,
+            //only_owner_id,
         }
-        Self(rhai::Shared::new(hero_auras))
     }
 
-    pub fn new_without_aura(map: &impl GameView<D>, only_owner_id: Option<i8>) -> Self {
+    pub fn new_without_aura(map: &Board<D>, only_owner_id: Option<i8>) -> Self {
         let hero_auras = Self::_new(map, only_owner_id, |_, unit_pos: Point, _| {
             Box::new([(unit_pos, 0)].into_iter())
         });
-        Self(rhai::Shared::new(hero_auras))
+        Self {
+            hero_auras,
+            //only_owner_id,
+        }
     }
 
-    fn _new(map: &impl GameView<D>, only_owner_id: Option<i8>, aura: impl Fn(&Unit<D>, Point, Option<(&Unit<D>, usize)>) -> Box<dyn Iterator<Item = (Point, usize)>>) -> FxHashMap<(Point, i8), Vec<HeroInfluence<D>>> {
+    fn _new(map: &Board<D>, only_owner_id: Option<i8>, aura: impl Fn(&Unit<D>, Point, Option<(&Unit<D>, usize)>) -> Box<dyn Iterator<Item = (Point, usize)>>) -> FxHashMap<(Point, i8), Vec<HeroInfluence<D>>> {
         let mut heroes = Vec::new();
-        for p in map.all_points() {
+        for p in valid_points(map) {
             if let Some(unit) = map.get_unit(p) {
                 if only_owner_id.is_some() && Some(unit.get_owner_id()) != only_owner_id {
                     continue;
@@ -298,7 +295,7 @@ impl <D: Direction> HeroMap<D> {
         let mut hero_auras: FxHashMap<(Point, i8), Vec<HeroInfluence<D>>> = FxHashMap::default();
         for hero in heroes {
             let transporter = hero.3.map(|i| (map.get_unit(hero.2).unwrap(), i));
-            for (p, strength) in aura(&hero.0, hero.2, transporter.as_ref().map(|(u, i)| (u, *i))) {
+            for (p, strength) in aura(&hero.0, hero.2, transporter) {
                 let key = (p, hero.0.get_owner_id());
                 let value = (hero.0.clone(), hero.1.clone(), hero.2, hero.3, strength as u8);
                 if let Some(list) = hero_auras.get_mut(&key) {
@@ -313,7 +310,7 @@ impl <D: Direction> HeroMap<D> {
 
     pub(crate) fn with_ids(&self, handler: &mut EventHandler<D>) -> HeroMapWithId<D> {
         let mut hero_auras: FxHashMap<(Point, i8), Vec<HeroInfluenceWithId<D>>> = FxHashMap::default();
-        for (key, list) in self.0.iter() {
+        for (key, list) in self.hero_auras.iter() {
             let list = list.iter()
                 .cloned()
                 .map(|(unit, hero, position, unload_index, strength)| {
@@ -326,34 +323,18 @@ impl <D: Direction> HeroMap<D> {
     }
 
     pub fn get(&self, position: Point, owner_id: i8) -> &[HeroInfluence<D>] {
-        self.0.get(&(position, owner_id)).map(|h| h.as_slice()).unwrap_or(&[])
+        self.hero_auras.get(&(position, owner_id)).map(|h| h.as_slice()).unwrap_or(&[])
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&(Point, i8), &Vec<HeroInfluence<D>>)> {
-        self.0.iter()
+        self.hero_auras.iter()
     }
 
     pub fn iter_owned(&self, owner_id: i8) -> impl Iterator<Item = &HeroInfluence<D>> {
-        self.0.iter()
+        self.hero_auras.iter()
             .filter(move |((_, o), _)| *o == owner_id)
             .map(|(_, influence)| influence)
             .flatten()
-    }
-
-    pub fn with(&self, game: &impl GameView<D>, position: Point, unit: &Unit<D>) -> Self {
-        if let Some(strength) = Hero::aura_range(game, unit, position, None) {
-            let mut map = (*self.0).clone();
-            let key = (position, unit.get_owner_id());
-            let value = (unit.clone(), unit.get_hero().unwrap().clone(), position, None, strength as u8);
-            if let Some(list) = map.get_mut(&key) {
-                list.push(value);
-            } else {
-                map.insert(key, vec![value]);
-            }
-            Self(rhai::Shared::new(map))
-        } else {
-            self.clone()
-        }
     }
 }
 

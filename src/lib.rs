@@ -8,7 +8,6 @@ pub mod game;
 pub mod commander;
 pub mod config;
 pub mod script;
-pub mod handle;
 pub mod tags;
 pub mod combat;
 

@@ -8,8 +8,8 @@ fn unit_movable_test() {
 }
 
 fn calculate_attack_damage(base_damage) {
-    let defense = defender_bonus("Defense", Fraction(1));
-    let damage = base_damage * attacker_bonus("Attack", Fraction(1));
+    let defense = ATTACK_CONTEXT.defender_bonus("Defense", Fraction(1));
+    let damage = base_damage * ATTACK_CONTEXT.attacker_bonus("Attack", Fraction(1));
     if defense > Fraction(1) {
         damage / defense
     } else {
@@ -50,8 +50,8 @@ fn weapon_effects() {
         "Flame" => {
             // fire follows a path
             let path = Path(ATTACKER_POSITION);
-            path.add(ATTACK_DIRECTION);
-            path.add(path.distortion.update_straight_direction(ATTACK_DIRECTION));
+            path.add(BOARD, ATTACK_DIRECTION);
+            path.add(BOARD, path.distortion(BOARD).update_straight_direction(ATTACK_DIRECTION));
             effect(path, FX_Flame());
         }
         "SurfaceMissiles" => {

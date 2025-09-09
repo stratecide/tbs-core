@@ -1,6 +1,6 @@
 
 fn heal_10() {
-    EVENT_HANDLER.effect(change_unit_hp(POSITION, 10));
+    EVENT_HANDLER.effect(change_unit_hp(EVENT_HANDLER, POSITION, 10));
 }
 
 fn earn_income() {
@@ -11,15 +11,15 @@ fn earn_income() {
 }
 
 fn damage_10() {
-    EVENT_HANDLER.effect(change_unit_hp(POSITION, -10));
+    EVENT_HANDLER.effect(change_unit_hp(EVENT_HANDLER, POSITION, -10));
 }
 
 fn damage_20() {
-    EVENT_HANDLER.effect(change_unit_hp(POSITION, -20));
+    EVENT_HANDLER.effect(change_unit_hp(EVENT_HANDLER, POSITION, -20));
 }
 
 fn damage_50() {
-    EVENT_HANDLER.effect(change_unit_hp(POSITION, -50));
+    EVENT_HANDLER.effect(change_unit_hp(EVENT_HANDLER, POSITION, -50));
 }
 
 fn clear_status_flags() {
@@ -39,7 +39,7 @@ fn return_drones() {
         let drone = BOARD.get_unit(p);
         if drone != () && drone.get(TAG_DroneId) == id {
             if capacity == 0 {
-                EVENT_HANDLER.effect(p, FX_Explosion(drone.visibility(p)));
+                EVENT_HANDLER.effect(p, FX_Explosion(drone.visibility(BOARD, p)));
             }
             EVENT_HANDLER.take_unit(p);
             if capacity > 0 {
@@ -51,5 +51,5 @@ fn return_drones() {
 }
 
 fn self_destruct() {
-    EVENT_HANDLER.effect(change_unit_hp(POSITION, -100));
+    EVENT_HANDLER.effect(change_unit_hp(EVENT_HANDLER, POSITION, -100));
 }

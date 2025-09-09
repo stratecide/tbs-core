@@ -7,12 +7,9 @@ use rustc_hash::FxHashMap as HashMap;
 use crate::config::parse::*;
 use crate::game::event_fx::EffectWithoutPosition;
 use crate::game::fog::{is_unit_visible, visible_unit_with_attribute, FogIntensity};
-use crate::game::game::Game;
-use crate::game::game_view::GameView;
-use crate::handle::Handle;
+use crate::map::board::{current_team, Board, BoardView};
 use crate::map::direction::Direction;
 use crate::map::point::Point;
-use crate::script::executor::Executor;
 use crate::script::*;
 use crate::tags::{FlagKey, TagKey};
 
@@ -154,7 +151,7 @@ impl FromConfig for EffectVisibility {
 }
 
 impl EffectVisibility {
-    pub fn fog_replacement<D: Direction>(&self, effect: &EffectWithoutPosition<D>, start: Option<Point>, p: Option<Point>, game: &Handle<Game<D>>, team: ClientPerspective) -> Option<EffectWithoutPosition<D>> {
+    pub fn fog_replacement<D: Direction>(&self, effect: &EffectWithoutPosition<D>, start: Option<Point>, p: Option<Point>, game: &Board<D>, team: ClientPerspective) -> Option<EffectWithoutPosition<D>> {
         match self {
             Self::Rhai(function_index) => {
                 let mut scope = Scope::new();
@@ -164,9 +161,8 @@ impl EffectVisibility {
                 if let Some(p) = p {
                     scope.push_constant(CONST_NAME_POSITION, p);
                 }
-                let engine = game.environment().get_engine_board(game);
-                let executor = Executor::new(engine, scope, game.environment());
-                match executor.run(*function_index, ()) {
+                let executor = game.executor(scope);
+                match executor.run::<D, Option<EffectWithoutPosition<D>>>(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {
                         let environment = game.environment();
@@ -178,7 +174,7 @@ impl EffectVisibility {
             }
             Self::Full => Some(effect.clone()),
             Self::CurrentTeam => {
-                if game.current_team() == team {
+                if current_team(game) == team {
                     Some(effect.clone())
                 } else {
                     None

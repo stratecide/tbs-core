@@ -16,11 +16,11 @@ use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
 use crate::config::ConfigParseError;
 use crate::game::event_handler::EventHandler;
-use crate::game::game_view::GameView;
+use crate::game::fog::get_visible_unit;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
-use crate::script::executor::Executor;
 use crate::units::hero::HeroMap;
 use crate::units::movement::TBallast;
 use crate::units::unit::Unit;
@@ -102,7 +102,7 @@ impl<D: Direction> AttackerPosition<D> {
                 let unit = handler.get_game().get_unit(p).unwrap();
                 match unload_index {
                     Some(i) => unit.get_transported()[i].clone(),
-                    None => unit,
+                    None => unit.clone(),
                 }
             }),
         }
@@ -143,9 +143,9 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
     ) -> Option<(AttackInput<D>, D, Vec<Vec<OrientedPoint<D>>>)> {
         let attacker = self.attacker_position.get_unit(handler)?;
         let attacker_pos = self.attacker_position.get_position(handler)?.0;
-        let game = handler.get_game();
-        let pattern = attacker.attack_pattern(&*game, attacker_pos, &self.counter_state, heroes, self.temporary_ballast);
-        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, &self.counter_state, heroes, self.temporary_ballast);
+        let board = handler.get_board();
+        let pattern = attacker.attack_pattern(board, attacker_pos, &self.counter_state, heroes, self.temporary_ballast);
+        let allowed_directions = attacker.attack_pattern_directions(board, attacker_pos, &self.counter_state, heroes, self.temporary_ballast);
         let mut allowed_directions = allowed_directions.get_dirs(&attacker, self.temporary_ballast);
         let mut direction_hint = self.targeting.direction_hint;
         if let AttackerPosition::Real(UnitId(id, distortion)) = self.attacker_position {
@@ -175,7 +175,7 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
         };
         let mut result = None;
         let possible_attack_targets: Vec<_> = allowed_directions.into_iter()
-            .map(|d| (d, pattern.possible_attack_targets(&*game, attacker_pos, d)))
+            .map(|d| (d, pattern.possible_attack_targets(board, attacker_pos, d)))
             .collect();
         // prefer attacks at minimum range
         let max_range = possible_attack_targets.iter().map(|(_, layers)| layers.len()).max()?;
@@ -215,15 +215,15 @@ pub fn execute_attack<D: Direction>(
     counter_state: AttackCounterState<D>,
     execute_scripts: bool,
 ) {
-    let heroes = HeroMap::new(&*handler.get_game(), None);
+    let heroes = HeroMap::new(handler.get_board(), None);
     let attackers = {
         let attacker_pos = attacker_position.get_position(handler).unwrap().0;
         let attacker = attacker_position.get_unit(handler).unwrap();
-        let unit_id = handler.get_game().get_visible_unit(handler.get_game().current_team(), input.target());
+        let unit_id = get_visible_unit(handler.get_board(), handler.get_game().current_team(), input.target());
         let unit_id = unit_id.map(|_| handler.observe_unit(input.target(), None).0);
-        let game = handler.get_game();
-        let attack_pattern = attacker.attack_pattern(&*game, attacker_pos, &AttackCounterState::NoCounter, &heroes, temporary_ballast);
-        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, &counter_state, &heroes, temporary_ballast);
+        let board = handler.get_board();
+        let attack_pattern = attacker.attack_pattern(board, attacker_pos, &AttackCounterState::NoCounter, &heroes, temporary_ballast);
+        let allowed_directions = attacker.attack_pattern_directions(board, attacker_pos, &counter_state, &heroes, temporary_ballast);
         let allowed_directions = allowed_directions.get_dirs(&attacker, temporary_ballast);
         if allowed_directions.len() == 0 {
             return;
@@ -233,7 +233,7 @@ pub fn execute_attack<D: Direction>(
                 if !allowed_directions.contains(&d) {
                     return;
                 }
-                let attack_pattern = attack_pattern.possible_attack_targets(&*game, attacker_pos, d);
+                let attack_pattern = attack_pattern.possible_attack_targets(board, attacker_pos, d);
                 let Some(dp) = attack_pattern.iter()
                 .flatten()
                 .find(|dp| dp.point == point)
@@ -244,7 +244,7 @@ pub fn execute_attack<D: Direction>(
             }
             AttackInput::SplashPattern(dp) => {
                 let mut patterns = allowed_directions.into_iter()
-                    .map(|d| (d, attack_pattern.possible_attack_targets(&*game, attacker_pos, d)))
+                    .map(|d| (d, attack_pattern.possible_attack_targets(board, attacker_pos, d)))
                     .filter_map(|(d, pattern)| {
                         for (i, layer) in pattern.iter().enumerate() {
                             if layer.contains(&dp) {
@@ -262,7 +262,6 @@ pub fn execute_attack<D: Direction>(
                 (pattern.0, pattern.1, pattern.2)
             }
         };
-        drop(game);
         let mut attackers: Vec<AttackerInfo<D>> = vec![AttackerInfo {
             attacker_position: attacker_position.clone(),
             targeting: AttackTargeting {
@@ -278,7 +277,7 @@ pub fn execute_attack<D: Direction>(
             AttackerPosition::Real(id) if counter_state.allows_counter() => {
                 // add all counter-attackers to attackers list
                 let attacker_id = id;
-                let counter_attackers = find_counter_attackers(&*handler.get_game(), &attacker, attacker_pos, &attack_pattern, input, transporter, temporary_ballast, &heroes);
+                let counter_attackers = find_counter_attackers(handler.get_board(), &attacker, attacker_pos, &attack_pattern, input, transporter, temporary_ballast, &heroes);
                 for (p, counter_direction_hint) in counter_attackers {
                     let unit_id = handler.observe_unit(p, None);
                     attackers.push(AttackerInfo {
@@ -304,12 +303,12 @@ pub fn execute_attack<D: Direction>(
         }
         attackers
     };
-    let game = handler.get_game();
+    let board = handler.get_board();
     let mut attack_map: FxHashMap<i8, Vec<(AttackerInfo<D>, ConfiguredAttack)>> = FxHashMap::default();
     for attacker in attackers {
         let unit = attacker.attacker_position.get_unit(handler).unwrap();
         let pos = attacker.attacker_position.get_position(handler).unwrap().0;
-        for attack in unit.environment().config.unit_configured_attacks(&*game, &unit, pos, attacker.transporter, &attacker.counter_state, &heroes, attacker.temporary_ballast) {
+        for attack in unit.environment().config.unit_configured_attacks(board, &unit, pos, attacker.transporter, &attacker.counter_state, &heroes, attacker.temporary_ballast) {
             let priority = attack.priority;
             let value = (attacker.clone(), attack);
             if let Some(list) = attack_map.get_mut(&priority) {
@@ -319,7 +318,6 @@ pub fn execute_attack<D: Direction>(
             }
         }
     }
-    drop(game);
     let mut priorities: Vec<i8> = attack_map.keys().cloned().collect();
     priorities.sort_by(|a, b| b.cmp(a));
     while let Some(priority) = priorities.pop() {
@@ -327,7 +325,7 @@ pub fn execute_attack<D: Direction>(
         let scripted_attacks = execute_attacks_with_equal_priority(handler, attacks, execute_scripts);
         // on_defend scripts can add attackers. add them to the map here
         if scripted_attacks.len() > 0 {
-            let game = handler.get_game();
+            let board = handler.get_board();
             for atk in scripted_attacks {
                 let Some((pos, None)) = atk.attacker.get_position(handler) else {
                     continue;
@@ -344,7 +342,7 @@ pub fn execute_attack<D: Direction>(
                 let transporter = None;
                 let temporary_ballast = &[];
                 let counter_state = AttackCounterState::FakeCounter;
-                for attack in unit.environment().config.unit_configured_attacks(&*game, &unit, pos, transporter, &counter_state, &heroes, temporary_ballast) {
+                for attack in unit.environment().config.unit_configured_attacks(board, &unit, pos, transporter, &counter_state, &heroes, temporary_ballast) {
                     let prio = attack.priority as i32 + atk.priority;
                     if prio <= priority as i32 || prio > i8::MAX as i32 {
                         // don't add attack instances that should have happened in the past
@@ -372,7 +370,7 @@ pub fn execute_attack<D: Direction>(
 }
 
 fn find_counter_attackers<D: Direction>(
-    game: &impl GameView<D>,
+    game: &Board<D>,
     attacker: &Unit<D>,
     attacker_pos: Point,
     attack_pattern: &Vec<Vec<OrientedPoint<D>>>,
@@ -440,7 +438,7 @@ impl FromConfig for ValidAttackTargets {
 impl ValidAttackTargets {
     pub fn check<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit_data: UnitData<D>,
         other_unit_data: UnitData<D>,
         heroes: &HeroMap<D>,
@@ -452,10 +450,8 @@ impl ValidAttackTargets {
             Self::Friendly => unit_data.unit.get_team() == other_unit_data.unit.get_team(),
             Self::All => true,
             Self::Rhai(function_index) => {
-                let environment = game.environment();
-                let engine = environment.get_engine_board(game);
-                let executor = Executor::new(engine, unit_filter_scope(game, unit_data, Some(other_unit_data), heroes, is_counter), environment);
-                match executor.run(*function_index, ()) {
+                let executor = game.executor(unit_filter_scope(game, unit_data, Some(other_unit_data), heroes, is_counter));
+                match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {
                         let environment = game.environment();

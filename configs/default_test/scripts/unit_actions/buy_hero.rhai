@@ -14,7 +14,7 @@ fn ua_buy_hero_input() {
     for hero_type in CONFIG.table_column("UNIT_HEROES", UNIT.type, true) {
         let item = ShopItem(hero_type);
         // TODO: could read cost (modification) from another table or even the same one
-        let cost = 500 + UNIT.value(POSITION) * 100 / (UNIT.get(TAG_Hp) ?? 100);
+        let cost = 500 + UNIT.value(BOARD, POSITION) * 100 / (UNIT.get(TAG_Hp) ?? 100);
         item.costs.push(cost);
         if cost > funds {
             item.enabled = false;
@@ -29,7 +29,7 @@ fn ua_buy_hero_input() {
         }
         options.add(item);
     }
-    user_selection(options, false);
+    PLAYER.choice(options, false);
     success()
 }
 

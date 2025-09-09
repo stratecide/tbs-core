@@ -8,12 +8,12 @@ edition = "2021"
 [features]
 rendering = ["interfaces/preview"]
 tracing = ["dep:tracing"]
-sync = ["rhai/sync", "uniform-smart-pointer/sync"]
+sync = ["uniform-smart-pointer/sync"]
 
 [dependencies]
 rustc-hash = "1.1"
-uniform-smart-pointer = { path = "../../uniform-smart-pointer" }
-interfaces = { path = "../interfaces" }
+uniform-smart-pointer = { git = "https://github.com/stratecide/uniform-smart-pointer" }
+interfaces = { git = "https://github.com/stratecide/tbs-interfaces" }
 zipper = { git = "https://github.com/stratecide/zipper.git", features = ["debug"] }
 semver = "1.0"
 csv = "1.3"

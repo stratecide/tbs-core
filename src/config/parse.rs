@@ -1,5 +1,3 @@
-use rustc_hash::FxHashMap as HashMap;
-use uniform_smart_pointer::Urc;
 use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -8,14 +6,21 @@ use std::path::PathBuf;
 #[cfg(not(target_family = "wasm"))]
 use std::fs;
 use std::usize;
+use std::rc::Rc;
 
+use rhai::packages::Package;
+use rustc_hash::FxHashMap as HashMap;
+use uniform_smart_pointer::Urc;
 use num_rational::Rational32;
 use rhai::*;
 
 use crate::game::event_fx::effect_constructor_module;
-use crate::map::direction::{Direction4, Direction6};
+use crate::map::direction::{Direction, Direction4, Direction6};
 use crate::script::{create_base_engine, MyPackage4, MyPackage6};
+use crate::tags::{FlagKey, TagKey};
 use crate::terrain::TerrainType;
+use crate::tokens::TokenType;
+use crate::units::hero::HeroType;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
@@ -75,6 +80,7 @@ impl Config {
         load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>>,
     ) -> Result<Self, Box<dyn Error>> {
         let mut file_loader = FileLoader::new(load_config);
+        let mut constants = HashMap::default();
 
         // tags
         let mut flags: Vec<TagConfig> = Vec::new();
@@ -93,11 +99,13 @@ impl Config {
             }
             Ok(())
         })?;
-        for flag in &flags {
+        for (i, flag) in flags.iter().enumerate() {
             file_loader.flags.push(flag.name.clone());
+            constants.insert(format!("FLAG_{}", flag.name), Dynamic::from(FlagKey(i)));
         }
-        for tag in &tags {
+        for (i, tag) in tags.iter().enumerate() {
             file_loader.tags.push(tag.name.clone());
+            constants.insert(format!("TAG_{}", tag.name), Dynamic::from(TagKey(i)));
         }
 
         let global_ast = file_loader.load_rhai_module(&GLOBAL_SCRIPT.to_string())?;
@@ -116,7 +124,9 @@ impl Config {
         // TODO: FileLoader also creates a base engine. no need to create two
         let engine = create_base_engine();
         let global_module = engine.optimize_ast(&global_constants, global_ast.clone(), OptimizationLevel::Simple);
-        let global_module = Module::eval_ast_as_new(Scope::new(), &global_module, &engine)?.into();
+        let global_module: Shared<Module> = Module::eval_ast_as_new(Scope::new(), &global_module, &engine)?.into();
+        let my_package_4 = MyPackage4::new();
+        let my_package_6 = MyPackage6::new();
 
         let mut result = Self {
             name,
@@ -162,12 +172,7 @@ impl Config {
             // shared by terrain, units, commanders, ...
             global_events: Vec::new(),
             // rhai
-            //global_ast,
-            my_package_4: MyPackage4::new(),
-            my_package_6: MyPackage6::new(),
-            global_module,
-            effect_modules: Vec::with_capacity(2),
-            global_constants,
+            engines: Vec::with_capacity(2),
             asts: Vec::new(),
             functions: Vec::new(),
             is_unit_dead_rhai: usize::MAX,
@@ -221,9 +226,10 @@ impl Config {
 
         // movement types
         file_loader.table_with_headers(MOVEMENT_TYPE_CONFIG, |line: MovementTypeConfig| {
-            if result.units.iter().any(|conf| conf.name == line.name) {
+            if result.movement_types.iter().any(|conf| conf.name == line.name) {
                 // TODO: error
             }
+            constants.insert(format!("MOVEMENT_{}", line.name), Dynamic::from(MovementType(result.movement_types.len())));
             result.movement_types.push(line);
             Ok(())
         })?;
@@ -263,8 +269,9 @@ impl Config {
             result.units.push(line);
             Ok(())
         })?;
-        for conf in &result.units {
+        for (i, conf) in result.units.iter().enumerate() {
             file_loader.unit_types.push(conf.name.clone());
+            constants.insert(format!("UNIT_{}", conf.name), Dynamic::from(UnitType(i)));
         }
         match result.units.iter().position(|conf| conf.name == unknown_unit) {
             Some(i) => result.unknown_unit = UnitType(i),
@@ -279,8 +286,9 @@ impl Config {
             result.terrains.push(line);
             Ok(())
         })?;
-        for conf in &result.terrains {
+        for (i, conf) in result.terrains.iter().enumerate() {
             file_loader.terrain_types.push(conf.name.clone());
+            constants.insert(format!("TERRAIN_{}", conf.name), Dynamic::from(TerrainType(i)));
         }
         match result.terrains.iter().position(|conf| conf.name == default_terrain) {
             Some(i) => result.default_terrain = TerrainType(i),
@@ -295,8 +303,9 @@ impl Config {
             result.tokens.push(line);
             Ok(())
         })?;
-        for conf in &result.tokens {
+        for (i, conf) in result.tokens.iter().enumerate() {
             file_loader.token_types.push(conf.name.clone());
+            constants.insert(format!("TOKEN_{}", conf.name), Dynamic::from(TokenType(i)));
         }
 
         // simple effect data
@@ -359,8 +368,9 @@ impl Config {
             Ok(())
         })?;
         result.max_transported += result.max_hero_transport_bonus;
-        for hero in &result.heroes {
-            file_loader.hero_types.push(hero.name.clone());
+        for (i, conf) in result.heroes.iter().enumerate() {
+            file_loader.hero_types.push(conf.name.clone());
+            constants.insert(format!("HERO_{}", conf.name), Dynamic::from(HeroType(i)));
         }
 
         // unit transport
@@ -540,11 +550,14 @@ impl Config {
         [result.token_flags, result.token_tags] = editor_tag_config::parse(TOKEN_TAGS, &mut file_loader)?;
         [result.unit_flags, result.unit_tags] = editor_tag_config::parse(UNIT_TAGS, &mut file_loader)?;
 
+        let constants = Urc::new(constants);
+        result.engines.push(construct_engine::<Direction4>(&my_package_4, &my_package_6, &result.effect_types, global_module.clone(), constants.clone()));
+        result.engines.push(construct_engine::<Direction6>(&my_package_4, &my_package_6, &result.effect_types, global_module, constants));
         let (asts, functions) = file_loader.finish();
-        result.asts = asts;
         result.functions = functions;
-        result.effect_modules.push(effect_constructor_module::<Direction4>(&result.effect_types));
-        result.effect_modules.push(effect_constructor_module::<Direction6>(&result.effect_types));
+        result.asts = asts.into_iter().map(|ast| {
+            Rc::new(engine.optimize_ast(&global_constants, ast, OptimizationLevel::Simple))
+        }).collect();
 
         Ok(result)
     }
@@ -566,6 +579,28 @@ impl Config {
         });
         Self::parse(name.to_string(), load_config)
     }
+}
+
+fn construct_engine<D: Direction>(
+    my_package_4: &MyPackage4,
+    my_package_6: &MyPackage6,
+    effects: &[EffectConfig],
+    global_module: Shared<Module>,
+    constants: Urc<HashMap<String, Dynamic>>,
+) -> Engine {
+    let mut engine = create_base_engine();
+    if D::is_hex() {
+        my_package_6.register_into_engine(&mut engine);
+    } else {
+        my_package_4.register_into_engine(&mut engine);
+    }
+    engine.register_global_module(effect_constructor_module::<D>(effects));
+    engine.register_global_module(global_module);
+    #[allow(deprecated)]
+    engine.on_var(move |name, _index, _context| {
+        Ok(constants.get(name).cloned())
+    });
+    engine
 }
 
 #[cfg(test)]

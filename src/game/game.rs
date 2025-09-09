@@ -1,7 +1,6 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::error::Error;
 use uniform_smart_pointer::Urc;
-use uniform_smart_pointer::ReadGuard;
 
 use zipper::*;
 use interfaces::*;
@@ -9,8 +8,10 @@ use semver::Version;
 
 use crate::config::environment::Environment;
 use crate::config::config::Config;
+use crate::map::board::Board;
+use crate::map::board::BoardView;
+use crate::map::wrapping_map::WrappingMap;
 use crate::tokens::token::Token;
-use crate::handle::Handle;
 use crate::map::map::*;
 use crate::map::direction::*;
 use crate::game::events;
@@ -18,15 +19,12 @@ use crate::game::fog::*;
 use crate::map::pipe::PipeState;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
-use crate::map::wrapping_map::{Distortion, OrientedPoint};
 use crate::terrain::terrain::Terrain;
 use crate::{player::*, VERSION};
 use crate::units::unit::*;
 
 use super::commands::{Command, CommandError};
 use super::events::Event;
-use super::game_view::GameView;
-use super::rhai_board::SharedGameView;
 use super::settings::{GameConfig, GameSettings};
 use super::event_handler;
 
@@ -61,22 +59,27 @@ impl<D: Direction> Game<D> {
         }
     }
 
-    pub fn new_server(map: Map<D>, config: &GameConfig<D>, settings: GameSettings, random: RandomFn) -> (Box<Handle<Self>>, EventsMap<D>) {
-        let this = Handle::new(Self::new(map, config, settings));
-        // start_server could return Self instead of calling cloned()
-        let events = this.cloned().start_server(random);
-        (Box::new(this), events)
+    pub fn new_server(map: Map<D>, config: &GameConfig<D>, settings: GameSettings, random: RandomFn) -> (Self, EventsMap<D>) {
+        let mut this = Self::new(map, config, settings);
+        let events = this.start_server(random);
+        (this, events)
     }
 
-    pub fn new_client(map: Map<D>, config: &GameConfig<D>, settings: GameSettings, events: &[events::Event<D>]) -> Box<Handle<Self>> {
+    pub fn new_client(map: Map<D>, config: &GameConfig<D>, settings: GameSettings, events: &[events::Event<D>]) -> Self {
         let mut this = Self::new(map, config, settings);
         for e in events {
             e.apply(&mut this);
         }
-        Box::new(Handle::new(this))
+        this
     }
 
-    pub fn import_server(data: ExportedGame, config: &Urc<Config>, version: Version) -> Result<Box<Self>, ZipperError> {
+    fn start_server(&mut self, random: RandomFn) -> EventsMap<D> {
+        let mut handler = event_handler::EventHandler::new(self, random);
+        handler.start_turn(None);
+        handler.accept()
+    }
+
+    pub fn import_server(data: ExportedGame, config: &Urc<Config>, version: Version) -> Result<Self, ZipperError> {
         if let Some(mut hidden_data) = data.hidden {
             let mut unzipper = Unzipper::new(hidden_data.server, version.clone());
             let mut game = import_game_base(&mut unzipper, config)?;
@@ -91,19 +94,19 @@ impl<D: Direction> Game<D> {
                 }
             }
 
-            Ok(Box::new(game))
+            Ok(game)
         } else {
             let mut unzipper = Unzipper::new(data.public, version);
             let game = import_game_base(&mut unzipper, config)?;
-            Ok(Box::new(game))
+            Ok(game)
         }
     }
 
-    pub fn import_client(public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, config: &Urc<Config>, version: Version) -> Result<Box<Game<D>>, ZipperError> {
+    pub fn import_client(public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, config: &Urc<Config>, version: Version) -> Result<Game<D>, ZipperError> {
         let mut unzipper = Unzipper::new(public, version.clone());
         let mut game = import_game_base(&mut unzipper, config)?;
         let points = game.map.all_points();
-        let neutral_fog = if game.is_foggy() {
+        let neutral_fog = if game.has_secrets() {
             import_fog(&mut unzipper, &points)?
         } else {
             HashMap::default()
@@ -133,11 +136,7 @@ impl<D: Direction> Game<D> {
             // teams don't receive events for neutral, so neutral fog wouldn't be consistent
             game.fog.insert(ClientPerspective::Neutral, neutral_fog);
         }
-        Ok(Box::new(game))
-    }
-
-    pub fn environment(&self) -> &Environment {
-        &self.environment
+        Ok(game)
     }
 
     pub fn has_ended(&self) -> bool {
@@ -152,20 +151,8 @@ impl<D: Direction> Game<D> {
         self.current_turn as usize
     }
 
-    pub fn get_fog_setting(&self) -> FogSetting {
-        self.fog_mode.fog_setting(self.current_turn(), self.players.len())
-    }
-
     pub fn fog_intensity(&self) -> FogIntensity {
         self.get_fog_setting().intensity()
-    }
-
-    pub fn is_foggy(&self) -> bool {
-        self.fog_intensity() != FogIntensity::TrueSight
-    }
-
-    pub fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
-        self.fog.get(&team).and_then(|fog| fog.get(&position)).cloned().unwrap_or(FogIntensity::TrueSight)
     }
 
     pub fn get_map(&self) -> &Map<D> {
@@ -178,6 +165,10 @@ impl<D: Direction> Game<D> {
 
     pub fn current_player(&self) -> &Player<D> {
         &self.players[self.current_turn as usize % self.players.len()]
+    }
+
+    pub fn current_team(&self) -> ClientPerspective {
+        self.current_player().get_team()
     }
 
     pub fn get_teams(&self) -> HashSet<u8> {
@@ -215,16 +206,8 @@ impl<D: Direction> Game<D> {
         self.ended = ended;
     }
 
-    pub fn get_owning_player(&self, owner: i8) -> Option<&Player<D>> {
-        self.players.iter().find(|player| player.get_owner_id() == owner)
-    }
-
     pub fn get_owning_player_mut(&mut self, owner: i8) -> Option<&mut Player<D>> {
         self.players.iter_mut().find(|player| player.get_owner_id() == owner)
-    }
-
-    pub fn get_team(&self, owner: i8) -> ClientPerspective {
-        self.get_owning_player(owner).map(|p| p.get_team()).unwrap_or(ClientPerspective::Neutral)
     }
 
     pub fn will_be_foggy(&self, turns_later: usize) -> bool {
@@ -243,12 +226,40 @@ impl<D: Direction> Game<D> {
             fog.insert(pos, intensity);
         }
     }
-    
+
+    pub fn handle_command(&mut self, command: Command<D>, random: RandomFn) -> Result<EventsMap<D>, CommandError> {
+        let mut handler = event_handler::EventHandler::new(self, random);
+        match command.execute(&mut handler) {
+            Ok(()) => Ok(handler.accept()),
+            Err(err) => {
+                handler.cancel();
+                Err(err)
+            }
+        }
+    }
+
     pub fn undo(&mut self, events: &[events::Event<D>]) {
         for event in events.iter().rev() {
             event.undo(self);
         }
     }
+
+    fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
+        zipper.write_bool(D::is_hex());
+        let environment = self.environment();
+        environment.settings.as_ref().unwrap().export(zipper, &environment.config);
+        self.wrapping_logic().zip(zipper);
+        self.map.get_tag_bag().export(zipper, &environment);
+        let board = Board::from(self);
+        for p in valid_points(self) {
+            export_field(&board, zipper, p, &environment, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
+        }
+    }
+}
+
+fn export_field<D: Direction>(board: &Board<D>, zipper: &mut Zipper, p: Point, environment: &Environment, fog_intensity: FogIntensity) {
+    let fd = FieldData::game_field(board, p).fog_replacement(board, p, fog_intensity);
+    fd.export(zipper, environment);
 }
 
 fn export_fog(zipper: &mut Zipper, points: &Vec<Point>, fog: &HashMap<Point, FogIntensity>) {
@@ -307,176 +318,55 @@ fn import_game_base<D: Direction>(unzipper: &mut Unzipper, config: &Urc<Config>)
     })
 }
 
-impl<D: Direction> Handle<Game<D>> {
-    fn start_server(self, random: RandomFn) -> EventsMap<D> {
-        let mut handler = event_handler::EventHandler::new(self, random);
-        handler.start_turn(None);
-        handler.accept()
+impl<D: Direction> BoardView<D> for Game<D> {
+    fn environment(&self) -> &Environment {
+        &self.environment
+    }
+    fn wrapping_logic(&self) -> &WrappingMap<D> {
+        self.map.wrapping_logic()
     }
 
-    pub fn is_foggy(&self) -> bool {
-        self.with(|game| game.is_foggy())
+    fn get_pipes(&self, p: Point) -> &[PipeState<D>] {
+        self.map.get_pipes(p)
     }
-
-    pub fn current_team(&self) -> ClientPerspective {
-        self.with(|game| game.current_player().get_team())
+    fn get_terrain(&self, p: Point) -> Option<&Terrain<D>> {
+        self.map.get_terrain(p)
     }
-
-    pub fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
-        self.with(|game| game.get_fog_at(team, position))
+    fn get_tokens(&self, p: Point) -> &[Token<D>] {
+        self.map.get_tokens(p)
     }
-
-    pub fn handle_command(&mut self, command: Command<D>, random: RandomFn) -> Result<EventsMap<D>, CommandError> {
-        let mut handler = event_handler::EventHandler::new(self.cloned(), random);
-        match command.execute(&mut handler) {
-            Ok(()) => Ok(handler.accept()),
-            Err(err) => {
-                handler.cancel();
-                Err(err)
-            }
-        }
-    }
-
-    fn export_field(&self, zipper: &mut Zipper, p: Point, environment: &Environment, fog_intensity: FogIntensity) {
-        let fd = FieldData::game_field(self, p).fog_replacement(self, p, fog_intensity);
-        fd.export(zipper, environment);
-    }
-
-    fn zip(&self, zipper: &mut Zipper, fog: Option<&HashMap<Point, FogIntensity>>) {
-        zipper.write_bool(D::is_hex());
-        let environment = self.environment();
-        environment.settings.as_ref().unwrap().export(zipper, &environment.config);
-        self.wrapping_logic().zip(zipper);
-        self.with(|game| {
-            game.map.get_tag_bag().export(zipper, &environment);
-        });
-        for p in self.all_points() {
-            self.export_field(zipper, p, &environment, fog.and_then(|fog| fog.get(&p).cloned()).unwrap_or(FogIntensity::TrueSight));
-        }
-    }
-
-}
-
-impl<D: Direction> GameView<D> for Handle<Game<D>> {
-    fn environment(&self) -> Environment {
-        self.with(|game| game.environment.clone())
-    }
-
-    fn all_points(&self) -> Vec<Point> {
-        self.with(|game| game.map.all_points())
-    }
-
-    fn get_pipes(&self, p: Point) -> Vec<PipeState<D>> {
-        self.with(|game| game.map.get_pipes(p).to_vec())
-    }
-
-    fn get_terrain(&self, p: Point) -> Option<Terrain<D>> {
-        self.with(|game| game.map.get_terrain(p).cloned())
-    }
-
-    fn get_tokens(&self, p: Point) -> Vec<Token<D>> {
-        self.with(|game| game.map.get_tokens(p).to_vec())
-    }
-
-    fn get_unit(&self, p: Point) -> Option<Unit<D>> {
-        self.with(|game| game.map.get_unit(p).cloned())
-    }
-
-    fn as_shared(&self) -> SharedGameView<D> {
-        let test: Urc<dyn GameView<D>> = Urc::new(self.cloned());
-        SharedGameView(test)
-    }
-
-    fn wrapping_logic(&self) -> ReadGuard<'_, crate::map::wrapping_map::WrappingMap<D>> {
-        self.borrow(|game| game.map.wrapping_logic())
-    }
-
-    fn next_pipe_tile(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
-        self.with(|game| game.map.next_pipe_tile(point, direction))
-    }
-
-    fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
-        self.with(|game| game.map.get_neighbor(p, d))
-    }
-
-    fn get_neighbors(&self, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
-        self.with(|game| game.map.get_neighbors(p, mode))
-    }
-
-    fn width_search(&self, start: Point, f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
-        self.with(|game| game.map.width_search(start, f))
-    }
-
-    fn range_in_layers(&self, center: Point, range: usize) -> Vec<HashSet<Point>> {
-        self.with(|game| game.map.range_in_layers(center, range))
-    }
-
-    fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
-        self.with(|game| game.map.get_line(start, d, length, mode))
+    fn get_unit(&self, p: Point) -> Option<&Unit<D>> {
+        self.map.get_unit(p)
     }
 
     fn current_owner(&self) -> i8 {
-        self.with(|game| game.current_player().get_owner_id())
+        self.current_player().get_owner_id()
     }
-
-    fn get_owning_player(&self, owner: i8) -> Option<Player<D>> {
-        self.with(|game| game.get_owning_player(owner).cloned())
+    fn get_owning_player(&self, owner: i8) -> Option<&Player<D>> {
+        self.players.iter().find(|player| player.get_owner_id() == owner)
     }
-
     fn get_team(&self, owner: i8) -> ClientPerspective {
-        self.with(|game| game.get_team(owner))
+        self.get_owning_player(owner).map(|p| p.get_team()).unwrap_or(ClientPerspective::Neutral)
     }
 
     fn get_fog_setting(&self) -> FogSetting {
-        self.with(|game| game.get_fog_setting())
+        self.fog_mode.fog_setting(self.current_turn(), self.players.len())
     }
-
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity {
-        self.with(|game| game.get_fog_at(team, position))
-    }
-
-    fn get_visible_unit(&self, team: ClientPerspective, p: Point) -> Option<Unit<D>> {
-        self.with(|game| {
-            game.map.get_unit(p)
-            .and_then(|u| {
-                // use base's fog instead of game.get_fog_at
-                // when the server verifies a unit's available actions, units invisible to the player shouldn't have an influence
-                // but maybe it should be possible to predict the fog
-                u.fog_replacement(self, p, self.get_fog_at(team, p))
-            })
-        })
-    }
-    
-    fn get_attack_config_limit(&self) -> Option<usize> {
-        Handle::get_attack_config_limit(self)
-    }
-    fn set_attack_config_limit(&self, limit: Option<usize>) {
-        Handle::set_attack_config_limit(self, limit);
-    }
-    fn get_unit_config_limit(&self) -> Option<usize> {
-        Handle::get_unit_config_limit(self)
-    }
-    fn set_unit_config_limit(&self, limit: Option<usize>) {
-        Handle::set_unit_config_limit(self, limit);
-    }
-    fn get_terrain_config_limit(&self) -> Option<usize> {
-        Handle::get_terrain_config_limit(self)
-    }
-    fn set_terrain_config_limit(&self, limit: Option<usize>) {
-        Handle::set_terrain_config_limit(self, limit);
+        self.fog.get(&team).and_then(|fog| fog.get(&position)).cloned().unwrap_or(FogIntensity::TrueSight)
     }
 }
 
-impl<D: Direction> GameInterface for Handle<Game<D>> {
+impl<D: Direction> GameInterface for Game<D> {
     fn width(&self) -> usize {
-        self.with(|game| game.map.width()) as usize
+        self.map.width() as usize
     }
     fn height(&self) -> usize {
-        self.with(|game| game.map.height()) as usize
+        self.map.height() as usize
     }
 
     fn execute_command(&mut self, command: Vec<u8>, random: RandomFn) -> Result<Events, Box<dyn Error>> {
-        let environment = self.with(|game| game.environment.clone());
+        let environment = self.environment.clone();
         let mut unzipper = Unzipper::new(command, Version::parse(VERSION).unwrap());
         let command = Command::import(&mut unzipper, &environment)?;
         match self.handle_command(command, random) {
@@ -486,120 +376,95 @@ impl<D: Direction> GameInterface for Handle<Game<D>> {
     }
 
     fn redo(&mut self, events: Vec<u8>) {
-        self.with_mut(|game| {
-            let events = Event::import_list(events, &game.environment, Version::parse(VERSION).unwrap()).unwrap();
-            for e in events {
-                e.apply(game);
-            }
-        });
+        let events = Event::import_list(events, &self.environment, Version::parse(VERSION).unwrap()).unwrap();
+        for e in events {
+            e.apply(self);
+        }
     }
 
     fn undo(&mut self, events: Vec<u8>) {
-        self.with_mut(|game| {
-            let events = Event::import_list(events, &game.environment, Version::parse(VERSION).unwrap()).unwrap();
-            for e in events.iter().rev() {
-                e.undo(game);
-            }
-        });
+        let events = Event::import_list(events, &self.environment, Version::parse(VERSION).unwrap()).unwrap();
+        for e in events.iter().rev() {
+            e.undo(self);
+        }
     }
 
     fn has_secrets(&self) -> bool {
-        self.with(|game| game.is_foggy())
+        self.fog_intensity() != FogIntensity::TrueSight
     }
 
     fn export(&self) -> ExportedGame {
-        self.with(|game| {
-            // server perspective
+        // server perspective
+        let mut zipper = Zipper::new();
+        self.zip(&mut zipper, None);
+        zipper.write_u32(self.current_turn, 32);
+        zipper.write_bool(self.ended);
+        self.fog_mode.zip(&mut zipper);
+        zipper.write_u8(self.players.len() as u8 - 1, 4);
+        for player in self.players.iter() {
+            player.export(&mut zipper, &self.environment);
+        }
+        if self.has_secrets() {
+            let points = self.map.all_points();
+            // Server-perspective. only needs neutral fog, the teams' vision is exported later
+            let neutral_fog = self.fog.get(&ClientPerspective::Neutral).unwrap();
+            export_fog(&mut zipper, &points, neutral_fog);
+            let server = zipper.finish();
+            // "None" perspective, visible to all
             let mut zipper = Zipper::new();
-            self.zip(&mut zipper, None);
-            zipper.write_u32(game.current_turn, 32);
-            zipper.write_bool(game.ended);
-            game.fog_mode.zip(&mut zipper);
-            zipper.write_u8(game.players.len() as u8 - 1, 4);
-            for player in game.players.iter() {
-                player.export(&mut zipper, &game.environment);
+            self.zip(&mut zipper, Some(neutral_fog));
+            zipper.write_u32(self.current_turn, 32);
+            zipper.write_bool(self.ended);
+            self.fog_mode.zip(&mut zipper);
+            zipper.write_u8(self.players.len() as u8 - 1, 4);
+            for player in self.players.iter() {
+                player.fog_replacement().export(&mut zipper, &self.environment);
             }
-            if game.is_foggy() {
-                let points = game.map.all_points();
-                // Server-perspective. only needs neutral fog, the teams' vision is exported later
-                let neutral_fog = game.fog.get(&ClientPerspective::Neutral).unwrap();
-                export_fog(&mut zipper, &points, neutral_fog);
-                let server = zipper.finish();
-                // "None" perspective, visible to all
-                let mut zipper = Zipper::new();
-                self.zip(&mut zipper, Some(neutral_fog));
-                zipper.write_u32(game.current_turn, 32);
-                zipper.write_bool(game.ended);
-                game.fog_mode.zip(&mut zipper);
-                zipper.write_u8(game.players.len() as u8 - 1, 4);
-                for player in game.players.iter() {
-                    player.fog_replacement().export(&mut zipper, &game.environment);
-                }
-                export_fog(&mut zipper, &points, neutral_fog);
-                let public = zipper.finish();
-                // team perspectives
-                let mut teams = std::collections::HashMap::new();
-                for team in game.get_living_teams() {
-                    // team perspective, one per team
-                    if let Some(fog) = game.fog.get(&ClientPerspective::Team(team)) {
-                        let mut zipper = Zipper::new();
-                        export_fog(&mut zipper, &points, fog);
-                        for p in &points {
-                            let fog_intensity = fog.get(p).cloned().unwrap_or(FogIntensity::TrueSight);
-                            if fog_intensity < neutral_fog.get(p).cloned().unwrap_or(FogIntensity::TrueSight) {
-                                self.export_field(&mut zipper, *p, &game.environment, fog_intensity);
-                            }
+            export_fog(&mut zipper, &points, neutral_fog);
+            let public = zipper.finish();
+            // team perspectives
+            let mut teams = std::collections::HashMap::new();
+            let board = Board::from(self);
+            for team in self.get_living_teams() {
+                // team perspective, one per team
+                if let Some(fog) = self.fog.get(&ClientPerspective::Team(team)) {
+                    let mut zipper = Zipper::new();
+                    export_fog(&mut zipper, &points, fog);
+                    for p in &points {
+                        let fog_intensity = fog.get(p).cloned().unwrap_or(FogIntensity::TrueSight);
+                        if fog_intensity < neutral_fog.get(p).cloned().unwrap_or(FogIntensity::TrueSight) {
+                            export_field(&board, &mut zipper, *p, &self.environment, fog_intensity);
                         }
-                        for player in game.players.iter() {
-                            if player.get_team() == ClientPerspective::Team(team) {
-                                player.export(&mut zipper, &game.environment);
-                            }
-                        }
-                        teams.insert(team, zipper.finish());
                     }
-                }
-
-                ExportedGame {
-                    public,
-                    hidden: Some(ExportedGameHidden {
-                        server,
-                        teams,
-                    }),
-                }
-            } else {
-                // no need to add fog info to the export
-                let public = zipper.finish();
-                ExportedGame {
-                    public,
-                    hidden: None,
+                    for player in self.players.iter() {
+                        if player.get_team() == ClientPerspective::Team(team) {
+                            player.export(&mut zipper, &self.environment);
+                        }
+                    }
+                    teams.insert(team, zipper.finish());
                 }
             }
-        })
+
+            ExportedGame {
+                public,
+                hidden: Some(ExportedGameHidden {
+                    server,
+                    teams,
+                }),
+            }
+        } else {
+            // no need to add fog info to the export
+            let public = zipper.finish();
+            ExportedGame {
+                public,
+                hidden: None,
+            }
+        }
     }
 
     fn players(&self) -> Vec<PlayerData> {
-        self.with(|game| {
-            game.players.iter()
-            .map(|player| {
-                PlayerData {
-                    color_id: player.get_owner_id() as u8,
-                    team: match player.get_team() {
-                        ClientPerspective::Team(team) => team,
-                        _ => panic!("player should not be neutral"),
-                    },
-                    dead: player.dead,
-                }
-            }).collect()
-        })
-    }
-
-    fn current_turn(&self) -> usize {
-        self.with(|game| game.current_turn) as usize
-    }
-
-    fn current_player(&self) -> PlayerData {
-        self.with(|game| {
-            let player = game.current_player();
+        self.players.iter()
+        .map(|player| {
             PlayerData {
                 color_id: player.get_owner_id() as u8,
                 team: match player.get_team() {
@@ -608,14 +473,28 @@ impl<D: Direction> GameInterface for Handle<Game<D>> {
                 },
                 dead: player.dead,
             }
-        })
+        }).collect()
+    }
+
+    fn current_turn(&self) -> usize {
+        self.current_turn as usize
+    }
+
+    fn current_player(&self) -> PlayerData {
+        let player = self.current_player();
+        PlayerData {
+            color_id: player.get_owner_id() as u8,
+            team: match player.get_team() {
+                ClientPerspective::Team(team) => team,
+                _ => panic!("player should not be neutral"),
+            },
+            dead: player.dead,
+        }
     }
 
     #[cfg(feature = "rendering")]
     fn preview(&self) -> MapPreview {
-        self.with(|game| {
-            game.map.preview()
-        })
+        self.map.preview()
     }
 }
 

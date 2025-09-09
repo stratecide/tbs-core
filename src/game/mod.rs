@@ -5,9 +5,6 @@ pub mod event_handler;
 pub mod rhai_event_handler;
 pub mod commands;
 pub mod fog;
-pub mod game_view;
-pub mod rhai_board;
-pub mod modified_view;
 pub mod event_fx;
 
 use interfaces::ExportedGame;
@@ -27,18 +24,18 @@ pub enum GameType {
 pub fn import_server(config: &Urc<Config>, data: ExportedGame, version: Version) -> Result<GameType, ZipperError> {
     let mut unzipper = Unzipper::new(vec![data.public[0]], version.clone());
     if unzipper.read_bool()? {
-        Ok(GameType::Hex(*Game::import_server(data, config, version)?))
+        Ok(GameType::Hex(Game::import_server(data, config, version)?))
     } else {
-        Ok(GameType::Square(*Game::import_server(data, config, version)?))
+        Ok(GameType::Square(Game::import_server(data, config, version)?))
     }
 }
 
 pub fn import_client(config: &Urc<Config>, public: Vec<u8>, team_view: Option<(u8, Vec<u8>)>, version: Version) -> Result<GameType, ZipperError> {
     let mut unzipper = Unzipper::new(vec![public[0]], version.clone());
     if unzipper.read_bool()? {
-        Ok(GameType::Hex(*Game::import_client(public, team_view, config, version)?))
+        Ok(GameType::Hex(Game::import_client(public, team_view, config, version)?))
     } else {
-        Ok(GameType::Square(*Game::import_client(public, team_view, config, version)?))
+        Ok(GameType::Square(Game::import_client(public, team_view, config, version)?))
     }
 }
 
@@ -50,6 +47,7 @@ mod tests {
     use uniform_smart_pointer::Urc;
     use crate::game::game::*;
     use crate::game::fog::*;
+    use crate::map::board::BoardView;
     use crate::VERSION;
 
     #[test]
@@ -69,14 +67,10 @@ mod tests {
             let data = server.export();
             crate::debug!("data: {data:?}");
             let imported_server = Game::import_server(data.clone(), &config, version.clone()).unwrap();
-            server.with(|server| {
-                assert_eq!(server.get_fog(), imported_server.get_fog());
-                assert_eq!(server.environment(), imported_server.environment());
-                assert_eq!(*server, *imported_server);
-            });
-            client.with(|client| {
-                assert_eq!(*client, *Game::import_client(data.public.clone(), data.get_team(0), &config, version.clone()).unwrap());
-            });
+            assert_eq!(server.get_fog(), imported_server.get_fog());
+            assert_eq!(server.environment(), imported_server.environment());
+            assert_eq!(server, imported_server);
+            assert_eq!(client, Game::import_client(data.public.clone(), data.get_team(0), &config, version.clone()).unwrap());
         }
     }
 }

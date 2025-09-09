@@ -3,8 +3,8 @@ fn deal_damage_to_unit() {
     let arguments = [];
     let defender_ids = [];
     let lifesteal_hp = Fraction(0);
-    let lifesteal = attack_bonus("Lifesteal", Fraction(0));
-    let strength = attack_bonus("Strength", Fraction(0)) ** SPLASH_DISTANCE;
+    let lifesteal = ATTACK_CONTEXT.attack_bonus("Lifesteal", Fraction(0));
+    let strength = ATTACK_CONTEXT.attack_bonus("Strength", Fraction(0)) ** SPLASH_DISTANCE;
     if SPLASH_DISTANCE == 0 {
         let points = [];
         for target in TARGETS {
@@ -13,14 +13,14 @@ fn deal_damage_to_unit() {
                 points.push(p);
             }
         }
-        add_script(
+        ATTACK_CONTEXT.add_script(
             Script("do_weapon_effects", [ATTACK_DIRECTION, points])
         );
     }
     for target in TARGETS {
         // check if there's a unit at target position
         let p = target.point;
-        let defender_id = remember_unit(p);
+        let defender_id = ATTACK_CONTEXT.remember_unit(p);
         if defender_id == () || defender_ids.index_of(defender_id) >= 0 {
             // defender doesn't exist or has already been added
             continue;
@@ -32,8 +32,8 @@ fn deal_damage_to_unit() {
             continue;
         }
         // calculate damage dealt
-        let defense = defender_bonus(defender_id, "Defense", Fraction(1));
-        let attack = Fraction(base_attack) * strength * attacker_bonus(defender_id, "Attack", Fraction(1));
+        let defense = ATTACK_CONTEXT.defender_bonus(defender_id, "Defense", Fraction(1));
+        let attack = Fraction(base_attack) * strength * ATTACK_CONTEXT.attacker_bonus(defender_id, "Attack", Fraction(1));
         let damage = if defense > Fraction(1) {
             attack / defense
         } else {
@@ -47,20 +47,20 @@ fn deal_damage_to_unit() {
         // collect defender-id + damage pairs for later execution
         arguments.push([defender_id, damage]);
         defender_ids.push(defender_id);
-        on_defend(OnDefendScript("OnDefend", defender_id).with_arguments([ATTACKER_ID, defender_id, damage, target.direction]));
+        ATTACK_CONTEXT.on_defend(OnDefendScript("OnDefend", defender_id).with_arguments([ATTACKER_ID, defender_id, damage, target.direction]));
     }
     if arguments.len > 0 {
-        add_script(
+        ATTACK_CONTEXT.add_script(
             Script("do_deal_damage_to_units", [arguments])
         );
         for hero in HEROES.get(ATTACKER_POSITION, ATTACKER.owner_id) {
-            add_script(
+            ATTACK_CONTEXT.add_script(
                 Script("do_charge_hero", [ATTACKER_ID, hero.unit_id])
             );
         }
     }
     if lifesteal_hp > Fraction(0) {
-        add_script(
+        ATTACK_CONTEXT.add_script(
             Script("do_lifesteal", [ATTACKER_ID, lifesteal_hp.ceil()])
         );
     }
@@ -90,7 +90,7 @@ fn do_deal_damage_to_units(arguments) {
             let charge = min(hp, damage);
             EVENT_HANDLER.set(defender_id, TAG_Hp, hp - damage);
             if charge > 0 && ATTACKER.owner_id != defender.owner_id {
-                charge = defender.value(position) * charge / hp;
+                charge = defender.value(BOARD, position) * charge / hp;
                 EVENT_HANDLER.add_commander_charge(ATTACKER.owner_id, charge / 2);
                 EVENT_HANDLER.add_commander_charge(defender.owner_id, charge);
             }
@@ -120,8 +120,8 @@ fn do_weapon_effects(ATTACK_DIRECTION, DEFENDER_POSITIONS) {
         "Flame" => {
             // fire follows a path
             let path = Path(ATTACKER_POSITION);
-            path.add(ATTACK_DIRECTION);
-            path.add(path.distortion.update_straight_direction(ATTACK_DIRECTION));
+            path.add(BOARD, ATTACK_DIRECTION);
+            path.add(BOARD, path.distortion(BOARD).update_straight_direction(ATTACK_DIRECTION));
             EVENT_HANDLER.effect(path, FX_Flame());
         }
         "SurfaceMissiles" => {

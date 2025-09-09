@@ -44,6 +44,7 @@ fn hp_factor() {
         }), Urc::new(|| 0.)).unwrap();
     }
     let base_damage = 100. - game.get_unit(Point::new(0, 0)).unwrap().get_hp() as f32;
+    crate::debug!("base_damage is {base_damage}");
     assert!(base_damage > 0.);
     assert_eq!(100 - (base_damage * 0.75).ceil() as u8, game.get_unit(Point::new(1, 0)).unwrap().get_hp());
     assert_eq!(100 - (base_damage * 0.50).ceil() as u8, game.get_unit(Point::new(2, 0)).unwrap().get_hp());
@@ -187,7 +188,8 @@ fn cannot_attack_friendly() {
     let settings = map_settings.build_default();
     let (mut game, _) = Game::new_server(map,&map_settings, settings, Urc::new(|| 0.));
     let path = Path::new(Point::new(0, 1));
-    let options = game.get_unit(Point::new(0, 1)).unwrap().options_after_path(&*game, &path, None, &[]);
+    let board = Board::new(&game);
+    let options = game.get_unit(Point::new(0, 1)).unwrap().options_after_path(&board, &path, None, &[]);
     assert_eq!(options, vec![UnitAction::Wait]);
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,

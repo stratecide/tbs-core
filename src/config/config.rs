@@ -1,23 +1,21 @@
-use rustc_hash::FxHashMap as HashMap;
-use uniform_smart_pointer::Urc;
 use std::error::Error;
+use std::rc::Rc;
 
 use interfaces::*;
 use num_rational::Rational32;
 use rhai::*;
 use semver::Version;
+use rustc_hash::FxHashMap as HashMap;
+use uniform_smart_pointer::Urc;
 
 use crate::combat::*;
 use crate::game::event_fx::EffectType;
+use crate::map::board::{Board, BoardView};
 use crate::tokens::token_types::TokenType;
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
-use crate::game::game::Game;
-use crate::game::game_view::GameView;
-use crate::game::modified_view::UnitMovementView;
 use crate::game::{import_client, import_server};
 use crate::game::GameType;
-use crate::handle::Handle;
 use crate::map::direction::Direction;
 use crate::map::map::import_map;
 use crate::map::map::MapType;
@@ -100,13 +98,8 @@ pub struct Config {
     // global events, shared by terrain, units, commanders, ...
     pub(crate) global_events: Vec<GlobalEventConfig>,
     // rhai
-    //pub(super) global_ast: AST,
-    pub(super) my_package_4: MyPackage4,
-    pub(super) my_package_6: MyPackage6,
-    pub(super) global_module: Shared<Module>,
-    pub(super) effect_modules: Vec<Shared<Module>>,
-    pub(super) global_constants: Scope<'static>,
-    pub(super) asts: Vec<AST>,
+    pub(crate) engines: Vec<Engine>, // [D4, D6]
+    pub(super) asts: Vec<Rc<AST>>,
     pub(super) functions: Vec<(usize, String)>,
     pub(super) is_unit_dead_rhai: usize,
     pub(super) is_unit_movable_rhai: usize,
@@ -116,6 +109,9 @@ pub struct Config {
     pub(super) custom_tables: HashMap<String, CustomTable>,
 }
 
+unsafe impl Send for Config {}
+unsafe impl Sync for Config {}
+
 impl ConfigInterface for Config {
     fn get_name(&self) -> &str {
         &self.name
@@ -123,22 +119,22 @@ impl ConfigInterface for Config {
 
     fn parse_map(self: Urc<Self>, bytes: Vec<u8>) -> Result<Box<dyn MapInterface>, Box<dyn Error>> {
         match import_map(&self, bytes, Version::parse(VERSION)?)? {
-            MapType::Hex(map) => Ok(Box::new(Handle::new(map))),
-            MapType::Square(map) => Ok(Box::new(Handle::new(map))),
+            MapType::Hex(map) => Ok(Box::new(map)),
+            MapType::Square(map) => Ok(Box::new(map)),
         }
     }
 
     fn parse_server(self: Urc<Self>, data: ExportedGame) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
         match import_server(&self, data, Version::parse(VERSION)?)? {
-            GameType::Hex(game) => Ok(Box::new(Handle::new(game))),
-            GameType::Square(game) => Ok(Box::new(Handle::new(game))),
+            GameType::Hex(game) => Ok(Box::new(game)),
+            GameType::Square(game) => Ok(Box::new(game)),
         }
     }
 
     fn parse_client(self: Urc<Self>, public: Vec<u8>, secret: Option<(Team, Vec<u8>)>) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
         match import_client(&self, public, secret, Version::parse(VERSION)?)? {
-            GameType::Hex(game) => Ok(Box::new(Handle::new(game))),
-            GameType::Square(game) => Ok(Box::new(Handle::new(game))),
+            GameType::Hex(game) => Ok(Box::new(game)),
+            GameType::Square(game) => Ok(Box::new(game)),
         }
     }
 }
@@ -156,6 +152,14 @@ impl Config {
         &self.owner_colors
     }
 
+
+    pub(crate) fn engine<D: Direction>(&self) -> &Engine {
+        if D::is_hex() {
+            &self.engines[1]
+        } else {
+            &self.engines[0]
+        }
+    }
     // flags / tags
 
     pub fn flag_count(&self) -> usize {
@@ -358,20 +362,19 @@ impl Config {
 
     pub fn hero_price<D: Direction>(
         &self,
-        game: &Handle<Game<D>>,
+        game: &Board<D>,
         hero: HeroType,
         path: &Path<D>,
         // when moving out of a transporter
         transport_index: Option<usize>,
     ) -> Option<i32> {
-        let mut game = UnitMovementView::new(game);
-        let (unit_pos, unit) = game.unit_path_without_placing(transport_index, &path)?;
-        game.put_unit(unit_pos, unit.clone());
+        let (game, unit_pos, unit) = game.unit_path_without_placing(transport_index, &path)?;
+        let game = game.replace_unit(unit_pos, Some(unit.clone()));
         self.hero_price_after_moving(&game, hero, path, unit_pos, unit, transport_index)
     }
     pub fn hero_price_after_moving<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         hero: HeroType,
         path: &Path<D>,
         unit_pos: Point,
@@ -381,15 +384,14 @@ impl Config {
     ) -> Option<i32> {
         let unit_type = unit.typ();
         let mut scope = Scope::new();
-        scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u)).unwrap_or(().into()));
+        scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
         scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
         scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
         scope.push_constant(CONST_NAME_PATH, path.clone());
         scope.push_constant(CONST_NAME_UNIT, unit);
         scope.push_constant(CONST_NAME_POSITION, unit_pos);
-        let engine = game.environment().get_engine_board(game);
-        let executor = Executor::new(engine, scope, game.environment());
-        let cost = self.hero_config(hero).price.update_value(self.base_value(unit_type), &executor);
+        let executor = game.executor(scope);
+        let cost = self.hero_config(hero).price.update_value::<D>(self.base_value(unit_type), &executor);
         if cost < 0 {
             None
         } else {
@@ -419,7 +421,7 @@ impl Config {
 
     pub fn hero_aura_range<D: Direction>(
         &self,
-        map: &impl GameView<D>,
+        map: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
@@ -444,14 +446,14 @@ impl Config {
             |iter, executor| -> Option<i8> {
                 Some(if transporter.is_none() {
                     let aura_range = self.hero_powers(hero.typ())[hero.get_active_power()].aura_range;
-                    NumberMod::update_value_repeatedly(
+                    NumberMod::update_value_repeatedly::<D>(
                         aura_range,
                         iter.map(|c| c.aura_range),
                         executor,
                     )
                 } else {
                     let aura_range = self.hero_powers(hero.typ())[hero.get_active_power()].aura_range_transported;
-                    NumberMod::update_value_repeatedly(
+                    NumberMod::update_value_repeatedly::<D>(
                         aura_range,
                         iter.map(|c| c.aura_range_transported),
                         executor,
@@ -511,20 +513,19 @@ impl Config {
      */
     pub(super) fn terrain_power_configs<'a, D: Direction, R>(
         &'a self,
-        game: &'a impl GameView<D>,
+        game: &'a Board<D>,
         pos: Point,
         terrain: &'a Terrain<D>,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &'a [HeroInfluence<D>],
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a TerrainPoweredConfig> + 'a>, &Executor) -> R,
     ) -> R {
-        let engine = game.environment().get_engine_board(game);
         let mut scope = Scope::new();
         // build scope
         scope.push_constant(CONST_NAME_POSITION, pos);
         scope.push_constant(CONST_NAME_TERRAIN, terrain.clone());
         // TODO: heroes (put them into Urc<Vec<>> instead of &[])
-        let executor = Urc::new(Executor::new(engine, scope, game.environment()));
+        let executor = Urc::new(game.executor(scope));
         let executor_ = executor.clone();
         let max_len = self.terrain_overrides.len();
         let limit = game.get_terrain_config_limit();
@@ -567,7 +568,7 @@ impl Config {
 
     pub fn terrain_vision_range<D: Direction>(
         &self,
-        map: &impl GameView<D>,
+        map: &Board<D>,
         pos: Point,
         terrain: &Terrain<D>,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
@@ -579,7 +580,7 @@ impl Config {
             terrain,
             heroes,
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     self.terrain_config(terrain.typ()).vision_range,
                     iter.map(|c| c.vision),
                     executor,
@@ -599,7 +600,7 @@ impl Config {
 
     pub fn terrain_income_factor<D: Direction>(
         &self,
-        map: &impl GameView<D>,
+        map: &Board<D>,
         pos: Point,
         terrain: &Terrain<D>,
         heroes: &[HeroInfluence<D>],
@@ -610,7 +611,7 @@ impl Config {
             terrain,
             heroes,
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     self.terrain_config(terrain.typ()).income_factor,
                     iter.map(|c| c.income_factor),
                     executor,
@@ -621,7 +622,7 @@ impl Config {
 
     pub fn terrain_action_script<D: Direction>(
         &self,
-        map: &impl GameView<D>,
+        map: &Board<D>,
         pos: Point,
         terrain: &Terrain<D>,
         heroes: &[HeroInfluence<D>],
@@ -818,17 +819,15 @@ impl Config {
      */
     fn unit_power_configs<'a, D: Direction, R>(
         &'a self,
-        game: &'a impl GameView<D>,
+        game: &'a Board<D>,
         unit_data: UnitData<'a, D>,
         other_unit_data: Option<UnitData<'a, D>>,
         heroes: &'a HeroMap<D>,
         is_counter: bool,
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> + 'a>, &Executor) -> R,
     ) -> R {
-        // get engine...
-        let engine = game.environment().get_engine_board(game);
         let scope = unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter);
-        let executor = Executor::new(engine, scope, game.environment());
+        let executor = game.executor(scope);
         let max_len = self.unit_overrides.len();
         let limit = game.get_unit_config_limit();
         let it = self.unit_overrides.iter()
@@ -846,7 +845,7 @@ impl Config {
 
     pub fn unit_value<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         factory_unit: Option<&Unit<D>>, // if built by a unit
@@ -871,7 +870,7 @@ impl Config {
             heroes,
             false,
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     self.base_value(unit.typ()),
                     iter.map(|c| c.value),
                     executor,
@@ -882,7 +881,7 @@ impl Config {
 
     pub fn unit_visibility<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         //heroes: &HeroMap<D>,
@@ -914,7 +913,7 @@ impl Config {
 
     pub fn unit_vision<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         heroes: &HeroMap<D>,
@@ -932,7 +931,7 @@ impl Config {
             heroes,
             false,
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     self.base_vision_range(unit.typ()) as u8,
                     iter.map(|c| c.vision),
                     executor,
@@ -943,7 +942,7 @@ impl Config {
 
     pub fn unit_true_vision<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         heroes: &HeroMap<D>,
@@ -961,7 +960,7 @@ impl Config {
             heroes,
             false,
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     self.base_true_vision_range(unit.typ()) as u8,
                     iter.map(|c| c.true_vision),
                     executor,
@@ -972,7 +971,7 @@ impl Config {
 
     pub fn unit_death_effects<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
@@ -1004,7 +1003,7 @@ impl Config {
 
     pub fn unit_normal_action_effects<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         // the transporter the unit moved out of
@@ -1038,7 +1037,7 @@ impl Config {
 
     pub fn unit_movement_points<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
@@ -1057,7 +1056,7 @@ impl Config {
             heroes,
             false,
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     self.base_movement_points(unit.typ()),
                     iter.map(|c| c.movement_points),
                     executor,
@@ -1068,7 +1067,7 @@ impl Config {
 
     pub fn unit_can_pass_enemy_units<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         unit_pos: (Point, Option<usize>),
         transporter: Option<(&Unit<D>, Point)>,
@@ -1099,7 +1098,7 @@ impl Config {
 
     fn attack_power_configs<'a, D: Direction, R>(
         &'a self,
-        game: &'a impl GameView<D>,
+        game: &'a Board<D>,
         attack: ConfiguredAttack,
         splash: Option<AttackInstance>,
         unit_data: UnitData<'a, D>,
@@ -1109,10 +1108,8 @@ impl Config {
         is_counter: bool,
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a AttackPoweredConfig> + 'a>, &Executor) -> R,
     ) -> R {
-        // get engine...
-        let engine = game.environment().get_engine_board(game);
         let scope = attack_filter_scope(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter);
-        let executor = Executor::new(engine, scope, game.environment());
+        let executor = game.executor(scope);
         let max_len = self.attack_overrides.len();
         let limit = game.get_attack_config_limit();
         let it = self.attack_overrides.iter()
@@ -1132,7 +1129,7 @@ impl Config {
         &self,
         column_name: &String,
         base_value: Rational32,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         attack: &ConfiguredAttack,
         splash: &AttackInstance,
         attacker: &Unit<D>,
@@ -1157,7 +1154,7 @@ impl Config {
             heroes,
             counter.is_counter(),
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     base_value,
                     iter.map(|c| c.get_fraction(column_name)),
                     executor,
@@ -1170,7 +1167,7 @@ impl Config {
         &self,
         column_name: &String,
         argument_count: usize,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         attack: &ConfiguredAttack,
         splash: &AttackInstance,
         attacker: &Unit<D>,
@@ -1206,7 +1203,7 @@ impl Config {
 
     pub fn unit_is_target_valid<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         defender: UnitData<D>,
@@ -1242,7 +1239,7 @@ impl Config {
 
     pub fn unit_configured_attacks<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         transporter: Option<(&Unit<D>, Point)>,
@@ -1305,8 +1302,8 @@ impl Config {
                     counter.is_counter(),
                         |iter, executor| {
                         for conf in iter {
-                            atk.priority = conf.attack_priority.update_value(atk.priority, executor);
-                            atk.splash_range = conf.splash_range.update_value(atk.splash_range, executor);
+                            atk.priority = conf.attack_priority.update_value::<D>(atk.priority, executor);
+                            atk.splash_range = conf.splash_range.update_value::<D>(atk.splash_range, executor);
                             if let Some(focus) = conf.focus {
                                 atk.focus = focus;
                             }
@@ -1349,7 +1346,7 @@ impl Config {
                                 counter.is_counter(),
                                                 |iter, executor| {
                                     for conf in iter {
-                                        spl.priority = conf.splash_priority.update_value(spl.priority, executor);
+                                        spl.priority = conf.splash_priority.update_value::<D>(spl.priority, executor);
                                         if let Some(allows_counter_attack) = conf.allows_counter_attack {
                                             spl.allows_counter_attack = allows_counter_attack;
                                         }
@@ -1374,7 +1371,7 @@ impl Config {
 
     pub fn unit_attack_pattern<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         counter: &AttackCounterState<D>,
@@ -1413,7 +1410,7 @@ impl Config {
                 heroes,
                     is_counter,
                 |iter, executor| {
-                    NumberMod::update_value_repeatedly(
+                    NumberMod::update_value_repeatedly::<D>(
                         *value,
                         iter.map(|c| c.get_fraction(&name)),
                         executor,
@@ -1426,7 +1423,7 @@ impl Config {
 
     pub fn unit_attack_directions<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         counter: &AttackCounterState<D>,
@@ -1462,7 +1459,7 @@ impl Config {
         &self,
         column_name: &String,
         base_value: Rational32,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         attack: &ConfiguredAttack,
         splash: &AttackInstance,
         unit: &Unit<D>,
@@ -1487,7 +1484,7 @@ impl Config {
             heroes,
             is_counter,
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     base_value,
                     iter.map(|c| c.get_fraction(column_name)),
                     executor,
@@ -1500,7 +1497,7 @@ impl Config {
         &self,
         column_name: &String,
         base_value: Rational32,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         attack: &ConfiguredAttack,
         splash: &AttackInstance,
         unit: &Unit<D>,
@@ -1525,7 +1522,7 @@ impl Config {
             heroes,
             is_counter,
             |iter, executor| {
-                NumberMod::update_value_repeatedly(
+                NumberMod::update_value_repeatedly::<D>(
                     base_value,
                     iter.map(|c| c.get_fraction(column_name)),
                     executor,
@@ -1536,7 +1533,7 @@ impl Config {
 
     pub fn unit_can_be_displaced<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
         attacker: &Unit<D>,

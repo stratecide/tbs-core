@@ -1,19 +1,17 @@
 use std::fmt::Debug;
+use std::rc::Rc;
+
 use interfaces::ClientPerspective;
-use packages::Package;
 use rhai::*;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet};
+use uniform_smart_pointer::*;
 
 use crate::commander::commander_type::CommanderType;
-use crate::game::event_handler::EventHandler;
-use crate::game::game_view::GameView;
-use crate::game::rhai_board::SharedGameView;
 use crate::game::settings::GameSettings;
+use crate::map::board::Board;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
-use uniform_smart_pointer::*;
-use crate::script::*;
 use crate::tags::*;
 use crate::terrain::terrain::*;
 use crate::terrain::TerrainType;
@@ -32,8 +30,6 @@ pub struct Environment {
     pub map_size: MapSize,
     pub config: Urc<Config>,
     pub settings: Option<Urc<GameSettings>>,
-    // cache compilation
-    compiled_asts: Urc<Umutex<HashMap<usize, Urc<AST>>>>,
     unique_ids: Urc<Umutex<HashMap<String, FxHashSet<usize>>>>,
 }
 
@@ -42,7 +38,6 @@ impl Environment {
         Self {
             map_size,
             settings: None,
-            compiled_asts: Urc::default(),
             unique_ids: Self::setup_unique_ids(&config),
             config,
         }
@@ -52,7 +47,6 @@ impl Environment {
         Self {
             map_size,
             settings: Some(Urc::new(settings)),
-            compiled_asts: Urc::default(),
             unique_ids: Self::setup_unique_ids(&config),
             config,
         }
@@ -68,16 +62,11 @@ impl Environment {
         }).collect()))
     }
 
-    pub fn start_game(&mut self, settings: &Urc<GameSettings>) {
+    pub(crate) fn start_game(&mut self, settings: &Urc<GameSettings>) {
         if self.settings.is_some() {
             panic!("Attempted to start an already started game!")
         }
         self.settings = Some(settings.clone());
-    }
-
-    pub fn built_this_turn_cost_factor(&self) -> i32 {
-        // TODO
-        200
     }
 
     pub(crate) fn add_unique_id(&self, tag_key: usize, id: usize) {
@@ -114,74 +103,13 @@ impl Environment {
         crate::warn!("RHAI error in {location}, config '{config_name}', function '{function_name}':\n{error:?}");
     }
 
-    fn get_engine_base(&self, is_hex: bool) -> Engine {
-        let mut engine = create_base_engine();
-        if is_hex {
-            self.config.my_package_6.register_into_engine(&mut engine);
-            engine.register_global_module(self.config.effect_modules[1].clone());
-        } else {
-            self.config.my_package_4.register_into_engine(&mut engine);
-            engine.register_global_module(self.config.effect_modules[0].clone());
-        }
-        engine.register_global_module(self.config.global_module.clone());
-        engine
-    }
-
-    pub fn get_engine<D: Direction>(&self) -> Engine {
-        self._get_engine::<D>(None, None)
-    }
-
-    pub fn get_engine_board<D: Direction>(&self, game: &impl GameView<D>) -> Engine {
-        let game = game.as_shared();
-        self._get_engine(Some(game), None)
-    }
-
-    pub fn get_engine_handler<D: Direction>(&self, handler: &EventHandler<D>) -> Engine {
-        let game = handler.get_game().as_shared();
-        let handler = handler.clone();
-        self._get_engine(Some(game), Some(handler))
-    }
-
-    pub fn _get_engine<D: Direction>(&self, game: Option<SharedGameView<D>>, handler: Option<EventHandler<D>>) -> Engine {
-        let mut engine = self.get_engine_base(D::is_hex());
-        let this = self.clone();
-        #[allow(deprecated)]
-        engine.on_var(move |name, _index, _context| {
-            match name.split_once("_") {
-                Some(("TAG", name)) => return Ok(this.config.tag_by_name(name).map(|key| Dynamic::from(TagKey(key)))),
-                Some(("FLAG", name)) => return Ok(this.config.flag_by_name(name).map(|key| Dynamic::from(FlagKey(key)))),
-                Some(("MOVEMENT", name)) => return Ok(this.config.find_movement_by_name(name).map(Dynamic::from)),
-                Some(("TERRAIN", name)) => return Ok(this.config.find_terrain_by_name(name).map(Dynamic::from)),
-                Some(("TOKEN", name)) => return Ok(this.config.find_token_by_name(name).map(Dynamic::from)),
-                Some(("UNIT", name)) => return Ok(this.config.find_unit_by_name(name).map(Dynamic::from)),
-                _ => (),
-            }
-            match name {
-                CONST_NAME_CONFIG => Ok(Some(Dynamic::from(this.clone()))),
-                CONST_NAME_BOARD => Ok(game.clone().map(Dynamic::from)),
-                CONST_NAME_EVENT_HANDLER => Ok(handler.clone().map(Dynamic::from)),
-                _ => Ok(None)
-            }
-        });
-        engine
-    }
-
     pub fn get_rhai_function_name(&self, index: usize) -> &String {
         &self.config.functions[index].1
     }
 
-    pub fn get_rhai_function(&self, engine: &Engine, index: usize) -> (Urc<AST>, &String) {
+    pub fn get_rhai_function(&self, index: usize) -> (&Rc<AST>, &String) {
         let (ast_index, name) = &self.config.functions[index];
-        let mut asts = self.compiled_asts.lock();
-        let ast = if let Some(ast) = asts.get(ast_index) {
-            ast.clone()
-        } else {
-            let ast = self.config.asts[*ast_index].clone();
-            let ast = Urc::new(engine.optimize_ast(&self.config.global_constants, ast, OptimizationLevel::Simple));
-            asts.insert(*ast_index, ast.clone());
-            ast
-        };
-        (ast, name)
+        (&self.config.asts[*ast_index], name)
     }
 
     pub fn is_unit_dead_rhai(&self) -> usize {
@@ -284,12 +212,12 @@ impl Environment {
         + hero.map(|hero| hero.transport_capacity(self)).unwrap_or(0)
     }
 
-    pub fn unit_transport_visibility<D: Direction>(&self, _game: &impl GameView<D>, _unit: &Unit<D>, _p: Point, _heroes: &[HeroInfluence<D>]) -> UnitVisibility {
+    pub fn unit_transport_visibility<D: Direction>(&self, _game: &Board<D>, _unit: &Unit<D>, _p: Point, _heroes: &[HeroInfluence<D>]) -> UnitVisibility {
         // TODO
         UnitVisibility::Normal
     }
 
-    pub fn hero_visibility<D: Direction>(&self, _game: &impl GameView<D>, _unit: &Unit<D>, _p: Point, _hero: HeroType) -> UnitVisibility {
+    pub fn hero_visibility<D: Direction>(&self, _game: &Board<D>, _unit: &Unit<D>, _p: Point, _hero: HeroType) -> UnitVisibility {
         // TODO
         UnitVisibility::Normal
     }

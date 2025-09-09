@@ -8,9 +8,8 @@ use rhai::*;
 use crate::combat::*;
 use crate::config::parse::*;
 use crate::dyn_opt;
-use crate::game::game_view::GameView;
+use crate::map::board::Board;
 use crate::map::direction::Direction;
-use crate::script::executor::Executor;
 use crate::script::*;
 use crate::units::hero::HeroMap;
 use crate::units::UnitData;
@@ -195,7 +194,7 @@ impl FromConfig for AttackFilter {
 impl AttackFilter {
     pub fn check<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         attack: &ConfiguredAttack,
         splash: Option<&AttackInstance>,
         unit_data: UnitData<D>,
@@ -217,11 +216,9 @@ impl AttackFilter {
             }
             Self::UnitFilter(uf) => uf.check(game, unit_data, other_unit_data, heroes, is_counter),
             Self::Rhai(function_index) => {
-                let environment = game.environment();
-                let engine = environment.get_engine_board(game);
                 let scope = attack_filter_scope(game, attack, splash, unit_data, other_unit_data, heroes, is_counter);
-                let executor = Executor::new(engine, scope, environment);
-                match executor.run(*function_index, ()) {
+                let executor = game.executor(scope);
+                match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(_e) => {
                         // TODO: log error
@@ -248,7 +245,7 @@ fn count_from_both_ends(value: i32, count: usize) -> i32 {
 }
 
 pub(crate) fn attack_filter_scope<D: Direction>(
-    game: &impl GameView<D>,
+    game: &Board<D>,
     _attack: &ConfiguredAttack,
     splash: Option<&AttackInstance>,
     unit_data: UnitData<D>,

@@ -1,11 +1,12 @@
 use rhai::*;
 use rhai::plugin::*;
 
+use crate::config::environment::Environment;
+use crate::map::board::BoardPointer;
 use crate::map::direction::*;
 use crate::map::point::*;
 use crate::units::unit_types::UnitType;
 use crate::units::hero::Hero;
-use crate::script::{with_board, get_environment};
 use crate::units::movement::MovementType;
 use crate::units::UnitVisibility;
 use crate::tags::*;
@@ -18,6 +19,13 @@ mod unit_type_module {
     pub type UnitType = crate::units::unit_types::UnitType;
     pub type MovementType = crate::units::movement::MovementType;
     pub type UnitVisibility = crate::units::UnitVisibility;
+
+    #[rhai_fn(pure, name = "UnitType")]
+    pub fn new_unit_type(environment: &mut Environment, name: &str) -> Dynamic {
+        environment.config.find_unit_by_name(name)
+        .map(Dynamic::from)
+        .unwrap_or(().into())
+    }
 
     #[rhai_fn(pure, name = "==")]
     pub fn eq(u1: &mut UnitType, u2: UnitType) -> bool {
@@ -47,7 +55,7 @@ mod unit_type_module {
     }
 }
 
-macro_rules! board_module {
+macro_rules! unit_module {
     ($pack: ident, $name: ident, $d: ty) => {
         #[export_module]
         mod $name {
@@ -61,20 +69,10 @@ macro_rules! board_module {
             pub fn neq(u1: &mut Unit, u2: Unit) -> bool {
                 *u1 != u2
             }
-        
-            #[rhai_fn(name = "Unit")]
-            pub fn new_unit(context: NativeCallContext, typ: UnitType) -> Unit {
-                let environment = get_environment(context);
-                Unit::new(environment, typ)
-            }
-            #[rhai_fn(name = "Unit")]
-            pub fn new_unit_str(context: NativeCallContext, typ: &str) -> Dynamic {
-                let environment = get_environment(context);
-                if let Some(typ) = environment.config.find_unit_by_name(typ) {
-                    Dynamic::from(Unit::new(environment, typ))
-                } else {
-                    ().into()
-                }
+
+            #[rhai_fn(pure, name = "Unit")]
+            pub fn new_unit(environment: &mut Environment, typ: UnitType) -> Unit {
+                Unit::new(environment.clone(), typ)
             }
 
             #[rhai_fn(pure, get = "type")]
@@ -144,18 +142,16 @@ macro_rules! board_module {
             }
 
             #[rhai_fn(pure, name = "value")]
-            pub fn value1(context: NativeCallContext, unit: &mut Unit, position: Point) -> i32 {
-                with_board(context, |game| {
-                    let heroes = HeroMap::new(game, Some(unit.get_owner_id()));
-                    unit.value(game, position, None, &heroes)
-                })
+            pub fn value1(unit: &mut Unit, board: BoardPointer<$d>, position: Point) -> i32 {
+                let board = board.as_ref();
+                let heroes = HeroMap::new(board, Some(unit.get_owner_id()));
+                unit.value(board, position, None, &heroes)
             }
             #[rhai_fn(pure, name = "value")]
-            pub fn value2(context: NativeCallContext, unit: &mut Unit, position: Point, factory: Unit) -> i32 {
-                with_board(context, |game| {
-                    let heroes = HeroMap::new(game, Some(unit.get_owner_id()));
-                    unit.value(game, position, Some(&factory), &heroes)
-                })
+            pub fn value2(unit: &mut Unit, board: BoardPointer<$d>, position: Point, factory: Unit) -> i32 {
+                let board = board.as_ref();
+                let heroes = HeroMap::new(board, Some(unit.get_owner_id()));
+                unit.value(board, position, Some(&factory), &heroes)
             }
 
             #[rhai_fn(pure, get = "transported")]
@@ -208,8 +204,8 @@ macro_rules! board_module {
             }
 
             #[rhai_fn(pure, name = "visibility")]
-            pub fn get_visibility(context: NativeCallContext, unit: &mut Unit, position: Point) -> UnitVisibility {
-                with_board(context, |game| unit.visibility(game, position))
+            pub fn get_visibility(unit: &mut Unit, board: BoardPointer<$d>, position: Point) -> UnitVisibility {
+                unit.visibility(board.as_ref(), position)
             }
         }
 
@@ -224,5 +220,5 @@ macro_rules! board_module {
     };
 }
 
-board_module!(UnitPackage4, unit_module4, Direction4);
-board_module!(UnitPackage6, unit_module6, Direction6);
+unit_module!(UnitPackage4, unit_module4, Direction4);
+unit_module!(UnitPackage6, unit_module6, Direction6);

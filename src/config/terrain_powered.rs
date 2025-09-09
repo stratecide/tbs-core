@@ -5,7 +5,7 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
-use crate::game::game_view::GameView;
+use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::executor::Executor;
@@ -75,7 +75,7 @@ impl FromConfig for TerrainFilter {
 impl TerrainFilter {
     pub fn check<D: Direction>(
         &self,
-        game: &impl GameView<D>,
+        game: &Board<D>,
         pos: Point,
         terrain: &Terrain<D>,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
@@ -84,7 +84,7 @@ impl TerrainFilter {
     ) -> bool {
         match self {
             Self::Rhai(function_index) => {
-                match executor.run(*function_index, ()) {
+                match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(_e) => {
                         // TODO: log error
