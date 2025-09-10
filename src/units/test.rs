@@ -86,6 +86,25 @@ fn fog_replacement() {
 }
 
 #[test]
+fn transported_visibility() {
+    let config = Urc::new(Config::default());
+    let map = PointMap::new(8, 8, false);
+    let map = WMBuilder::<Direction4>::new(map);
+    let map = Map::new(map.build(), &config);
+    let environment = map.environment().clone();
+    let origin = Point::new(0, 0);
+    let board = Board::from(&map);
+    let transporter = UnitType::transport_heli().instance::<Direction4>(&environment).set_owner_id(0).set_transported(vec![
+        UnitType::bazooka().instance(&environment).set_owner_id(0).build(),
+    ]).build();
+    assert_eq!(1, transporter.get_transported().len());
+    assert_eq!(1, transporter.fog_replacement(&board, origin, FogIntensity::TrueSight).unwrap().get_transported().len());
+    assert_eq!(1, transporter.fog_replacement(&board, origin, FogIntensity::NormalVision).unwrap().get_transported().len());
+    assert_eq!(0, transporter.fog_replacement(&board, origin, FogIntensity::Light).unwrap().get_transported().len());
+    assert_eq!(None, transporter.fog_replacement(&board, origin, FogIntensity::Dark));
+}
+
+#[test]
 fn drone() {
     let config = Urc::new(Config::default());
     let map = PointMap::new(5, 7, false);
