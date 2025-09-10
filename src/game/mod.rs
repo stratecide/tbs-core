@@ -6,6 +6,8 @@ pub mod rhai_event_handler;
 pub mod commands;
 pub mod fog;
 pub mod event_fx;
+#[cfg(test)]
+mod test;
 
 use interfaces::ExportedGame;
 use semver::Version;
@@ -36,41 +38,5 @@ pub fn import_client(config: &Urc<Config>, public: Vec<u8>, team_view: Option<(u
         Ok(GameType::Hex(Game::import_client(public, team_view, config, version)?))
     } else {
         Ok(GameType::Square(Game::import_client(public, team_view, config, version)?))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use interfaces::game_interface::*;
-    use interfaces::Perspective;
-    use semver::Version;
-    use uniform_smart_pointer::Urc;
-    use crate::game::game::*;
-    use crate::game::fog::*;
-    use crate::map::board::BoardView;
-    use crate::VERSION;
-
-    #[test]
-    fn export_import_chess() {
-        let version = Version::parse(VERSION).unwrap();
-        let map = crate::map::test::chess_board();
-        let config = map.environment().config.clone();
-        let settings = map.settings().unwrap();
-
-        for fog_setting in [FogSetting::None, FogSetting::Sharp(0)] {
-            crate::debug!("fog setting: {fog_setting}");
-            let mut settings = settings.clone();
-            settings.fog_mode = FogMode::Constant(fog_setting);
-            let perspective = Perspective::Team(0);
-            let (server, events) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
-            let client = Game::new_client(map.clone(), &settings, settings.build_default(), events.get(&perspective).unwrap());
-            let data = server.export();
-            crate::debug!("data: {data:?}");
-            let imported_server = Game::import_server(data.clone(), &config, version.clone()).unwrap();
-            assert_eq!(server.get_fog(), imported_server.get_fog());
-            assert_eq!(server.environment(), imported_server.environment());
-            assert_eq!(server, imported_server);
-            assert_eq!(client, Game::import_client(data.public.clone(), data.get_team(0), &config, version.clone()).unwrap());
-        }
     }
 }

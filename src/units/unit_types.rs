@@ -82,6 +82,7 @@ mod helper {
         ut!(knight, 40);
         ut!(queen, 41);
         ut!(king, 42);
+        ut!(question_mark, 43);
     }
 }
 
@@ -118,5 +119,6 @@ mod tests {
         assert_eq!(config.unit_name(UnitType::knight()), "Knight");
         assert_eq!(config.unit_name(UnitType::queen()), "Queen");
         assert_eq!(config.unit_name(UnitType::king()), "King");
+        assert_eq!(config.unit_name(UnitType::question_mark()), "Unknown");
     }
 }
