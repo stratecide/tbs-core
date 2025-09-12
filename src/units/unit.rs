@@ -43,6 +43,7 @@ pub struct Unit<D: Direction> {
     hero: Option<Hero>,
     tags: TagBag<D>,
     transport: Vec<Self>,
+    pub(crate) cached_visibility: Option<UnitVisibility>,
 }
 
 impl<D: Direction> PartialEq for Unit<D> {
@@ -89,6 +90,7 @@ impl<D: Direction> Unit<D> {
             tags: TagBag::new(),
             transport: Vec::new(),
             environment,
+            cached_visibility: None,
         }
     }
 
@@ -503,6 +505,7 @@ impl<D: Direction> Unit<D> {
             hero,
             tags,
             transport: Vec::new(),
+            cached_visibility: None,
         };
         if !transported && result.transport_capacity() > 0 {
             let transport_len = unzipper.read_u32(bits_needed_for_max_value(result.transport_capacity() as u32))?;
@@ -514,15 +517,39 @@ impl<D: Direction> Unit<D> {
         Ok(result)
     }
 
-    pub fn visibility(&self, game: &Board<D>, pos: Point) -> UnitVisibility {
+    pub fn visibility(&self, game: &Board<D>, pos: Point, transporter: Option<(&Unit<D>, usize)>) -> UnitVisibility {
+        if let Some(cached_visibility) = self.cached_visibility {
+            return cached_visibility;
+        }
         // for now, heroes don't affect unit visibility.
         // when they do in the future, the heroes should be given to this method instead of calculating here
         // it could also be necessary to add this unit's hero to the heroes list here manually (if it isn't already in there)
-        self.environment.config.unit_visibility(game, self, pos)
+        self.environment.config.unit_visibility(game, self, pos, transporter)
+    }
+
+    pub(crate) fn visibilities(&self, board: &Board<D>, pos: Point) -> (UnitVisibility, Vec<UnitVisibility>) {
+        (
+            board.environment().config.unit_visibility(&board, self, pos, None),
+            self.get_transported().iter().enumerate()
+                .map(|(i, u)| board.environment().config.unit_visibility(&board, u, pos, Some((self, i))))
+                .collect(),
+        )
+    }
+
+    pub(crate) fn has_cached_visibilities(&self, visibility: UnitVisibility, transported: &[UnitVisibility]) -> bool {
+        self.cached_visibility == Some(visibility)
+        && self.transport.iter().zip(transported).all(|(u, v)| u.cached_visibility == Some(*v))
+    }
+
+    pub(crate) fn set_cached_visibilities(&mut self, visibility: UnitVisibility, transported: &[UnitVisibility]) {
+        self.cached_visibility = Some(visibility);
+        for (i, u) in self.get_transported_mut().iter_mut().enumerate() {
+            u.cached_visibility = Some(transported[i]);
+        }
     }
 
     pub fn fog_replacement(&self, game: &Board<D>, pos: Point, intensity: FogIntensity) -> Option<Self> {
-        let visibility = self.visibility(game, pos);
+        let visibility = self.visibility(game, pos, None);
         match intensity {
             FogIntensity::TrueSight => return Some(self.clone()),
             FogIntensity::NormalVision => {

@@ -56,6 +56,12 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let r = &raw const *game;
         let h = unsafe {&*r};
         let board = Board::from(h);
+        for p in valid_points(game) {
+            if let Some(unit) = game.get_map_mut().get_unit_mut(p) {
+                let (visibility, transported) = unit.visibilities(&board, p);
+                unit.set_cached_visibilities(visibility, &transported);
+            }
+        }
         Self {
             game,
             board,
@@ -129,15 +135,19 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         self.observed_units.insert(id, (p, unload_index, distortion));
     }
 
-    fn add_event(&mut self, event: Event<D>) {
-        event.apply(self.game);
+    fn add_client_events(&mut self, f: impl Fn(ClientPerspective, &Game<D>, &Board<D>, &mut Vec<Event<D>>)) {
         for (key, events) in self.events.iter_mut() {
             if let Ok(perspective) = key.try_into() {
-                for event in event.fog_replacement(&*self.game, perspective) {
-                    events.push(event);
-                }
+                f(perspective, &*self.game, &self.board, events);
             }
         }
+    }
+
+    fn add_event(&mut self, event: Event<D>) {
+        event.apply(self.game);
+        self.add_client_events(|perspective, game, _, events| {
+            events.extend(event.fog_replacement(game, perspective));
+        });
         self.events.get_mut(&IPerspective::Server).unwrap().push(event);
     }
 
@@ -203,7 +213,25 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         // hide / reveal player funds if fog started / ended
         let was_foggy = fog_before.is_some();
         if was_foggy != self.get_game().has_secrets() {
-            self.add_event(Event::PurePlayerFog);
+            // hide player flags / tags
+            self.add_client_events(|perspective, game, _, events| {
+                for player in game.players.iter()
+                .filter(|p| p.get_team() != perspective) {
+                    let foggy = player.fog_replacement();
+                    for flag in player.get_tag_bag().flags()
+                    .filter(|f| !foggy.has_flag(**f)) {
+                        events.push(Event::PlayerFlag(Owner(player.get_owner_id()), FlagKey(*flag)));
+                    }
+                    for (key, value) in player.get_tag_bag().tags()
+                    .filter(|(key, _)| foggy.get_tag(**key).is_none()) {
+                        if was_foggy {
+                            events.push(Event::PlayerSetTag(Owner(player.get_owner_id()), TagKeyValues(TagKey(*key), [value.clone()])));
+                        } else {
+                            events.push(Event::PlayerRemoveTag(Owner(player.get_owner_id()), TagKeyValues(TagKey(*key), [value.clone()])));
+                        }
+                    }
+                }
+            });
         }
 
         self.trigger_all_global_events(|conf| conf.on_start_turn);
@@ -262,6 +290,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         if let Some(player) = self.get_game().get_owning_player(owner).cloned() {
             if player.commander.get_active_power() != index {
                 self.add_event(Event::CommanderPowerIndex(owner.into(), player.commander.get_active_power().into(), index.into()));
+                for p in valid_points(&*self.game) {
+                    self.update_cached_visibility(p);
+                }
             }
         }
     }
@@ -275,12 +306,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         if tokens.len() < MAX_STACK_SIZE as usize {
             tokens.push(token);
             self.add_event(Event::ReplaceToken(position, old_tokens.try_into().unwrap(), Token::correct_stack(tokens).try_into().unwrap()));
+            self.update_cached_visibility(position);
         }
     }
 
     pub fn token_remove(&mut self, position: Point, index: usize) {
         if let Some(token) = self.get_game().get_tokens(position).get(index).cloned() {
             self.add_event(Event::RemoveToken(position, index.into(), token));
+            self.update_cached_visibility(position);
         } else {
             panic!("Missing Token at {position:?}");
         }
@@ -316,6 +349,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         if !unit.is_hero() {
             self.add_event(Event::HeroSet(position, hero));
+            self.update_cached_visibility(position);
         }
     }
 
@@ -331,6 +365,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             } else {
                 self.add_event(Event::HeroCharge(position, delta.into()));
             }
+            self.update_cached_visibility(position);
         }
     }
 
@@ -347,6 +382,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             } else {
                 self.add_event(Event::HeroCharge(position, delta.into()));
             }
+            self.update_cached_visibility(position);
         }
     }
 
@@ -357,6 +393,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         };
         if hero.get_active_power() != index {
             self.add_event(Event::HeroPower(position, hero.get_active_power().into(), index.into()));
+            self.update_cached_visibility(position);
         }
     }
 
@@ -407,6 +444,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn terrain_replace(&mut self, position: Point, terrain: Terrain<D>) {
         let old_terrain = self.get_game().get_terrain(position).expect(&format!("Missing terrain at {:?}", position)).clone();
         self.add_event(Event::TerrainChange(position, old_terrain.clone(), terrain));
+        self.update_cached_visibility(position);
     }
 
     pub fn set_terrain_flag(&mut self, position: Point, flag: usize) {
@@ -440,8 +478,46 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
+    fn update_cached_visibility(&mut self, position: Point) {
+        let Some(unit) = self.game.get_unit(position) else {
+            return;
+        };
+        let (visibility, transported) = unit.visibilities(&self.board, position);
+        if !self.game.has_secrets() {
+            let unit = self.game.get_map_mut().get_unit_mut(position).unwrap();
+            unit.set_cached_visibilities(visibility, &transported);
+            return;
+        }
+        if !unit.has_cached_visibilities(visibility, &transported) {
+            let old = unit.clone();
+            let unit = self.game.get_map_mut().get_unit_mut(position).unwrap();
+            unit.set_cached_visibilities(visibility, &transported);
+            let mut new = unit.clone();
+            new.set_cached_visibilities(visibility, &transported);
+            self.add_client_events(move |perspective, _, board, events| {
+                let intensity = board.get_fog_at(perspective, position);
+                let old = old.fog_replacement(board, position, intensity);
+                let new = new.fog_replacement(board, position, intensity);
+                if old != new {
+                    if let Some(old) = old {
+                        events.push(Event::UnitRemove(position, old));
+                    }
+                    if let Some(new) = new {
+                        events.push(Event::UnitAdd(position, new));
+                    }
+                }
+            });
+        }
+    }
+
+    fn place_unit(&mut self, position: Point, mut unit: Unit<D>) {
+        let (visibility, transported) = unit.visibilities(&self.board, position);
+        unit.set_cached_visibilities(visibility, &transported);
+        self.add_event(Event::UnitAdd(position, unit));
+    }
+
     pub fn unit_creation(&mut self, position: Point, unit: Unit<D>) {
-        self.add_event(Event::UnitAdd(position, unit.clone()));
+        self.place_unit(position, unit.clone());
         if let ClientPerspective::Team(team) = unit.get_team() {
             if self.get_game().has_secrets() && self.get_game().is_team_alive(team) {
                 let heroes = HeroMap::new(self.get_board(), Some(unit.get_owner_id()));
@@ -453,8 +529,11 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn unit_add_transported(&mut self, position: Point, unit: Unit<D>) {
-        self.add_event(Event::UnitAddBoarded(position, unit));
+    pub fn unit_add_transported(&mut self, position: Point, mut unit: Unit<D>) {
+        if let Some(transporter) = self.game.get_unit(position) {
+            unit.cached_visibility = Some(self.board.environment().config.unit_visibility(&self.board, &unit, position, Some((transporter, transporter.get_transported().len()))));
+            self.add_event(Event::UnitAddBoarded(position, unit));
+        }
     }
 
     pub fn unit_path(&mut self, unload_index: Option<usize>, path: &Path<D>, board_at_the_end: bool, involuntarily: bool) {
@@ -486,7 +565,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
                 self.unit_death(path_end);
             }
             self.move_observed_unit(unit_id, path_end, None, disto + distortion);
-            self.add_event(Event::UnitAdd(path_end, transformed_unit));
+            self.place_unit(path_end, transformed_unit);
         }
         if self.get_game().has_secrets() {
             // provide vision along the unit's path
@@ -620,12 +699,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         if !unit.has_flag(flag) {
             self.add_event(Event::UnitFlag(position, FlagKey(flag)));
+            self.update_cached_visibility(position);
         }
     }
     pub fn remove_unit_flag(&mut self, position: Point, flag: usize) {
         let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         if unit.has_flag(flag) {
             self.add_event(Event::UnitFlag(position, FlagKey(flag)));
+            self.update_cached_visibility(position);
         }
     }
 
@@ -639,11 +720,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         } else {
             self.add_event(Event::UnitSetTag(position, TagKeyValues(TagKey(key), [value])));
         }
+        self.update_cached_visibility(position);
     }
     pub fn remove_unit_tag(&mut self, position: Point, key: usize) {
         let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         if let Some(old) = unit.get_tag(key) {
             self.add_event(Event::UnitRemoveTag(position, TagKeyValues(TagKey(key), [old])));
+            self.update_cached_visibility(position);
         }
     }
 
@@ -651,12 +734,14 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         if !unit.get_transported()[unload_index].has_flag(flag) {
             self.add_event(Event::UnitFlagBoarded(position, unload_index.into(), FlagKey(flag)));
+            self.update_cached_visibility(position);
         }
     }
     pub fn remove_unit_flag_boarded(&mut self, position: Point, unload_index: usize, flag: usize) {
         let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         if unit.get_transported()[unload_index].has_flag(flag) {
             self.add_event(Event::UnitFlagBoarded(position, unload_index.into(), FlagKey(flag)));
+            self.update_cached_visibility(position);
         }
     }
 
@@ -670,11 +755,13 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         } else {
             self.add_event(Event::UnitSetTagBoarded(position, unload_index.into(), TagKeyValues(TagKey(key), [value])));
         }
+        self.update_cached_visibility(position);
     }
     pub fn remove_unit_tag_boarded(&mut self, position: Point, unload_index: usize, key: usize) {
         let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         if let Some(old) = unit.get_transported()[unload_index].get_tag(key) {
             self.add_event(Event::UnitRemoveTagBoarded(position, unload_index.into(), TagKeyValues(TagKey(key), [old])));
+            self.update_cached_visibility(position);
         }
     }
 
@@ -699,7 +786,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     pub fn unit_replace(&mut self, position: Point, new_unit: Unit<D>) {
         let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
         self.add_event(Event::UnitRemove(position, unit.clone()));
-        self.add_event(Event::UnitAdd(position, new_unit));
+        self.place_unit(position, new_unit);
     }
 
 
@@ -795,7 +882,25 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
+    fn clear_visibility_cache(&mut self) {
+        let points = valid_points(self.game);
+        if is_foggy(&self.board) {
+            for p in &points {
+                self.update_cached_visibility(*p);
+            }
+        }
+        for p in points {
+            if let Some(unit) = self.game.get_map_mut().get_unit_mut(p) {
+                unit.cached_visibility = None;
+                for unit in unit.get_transported_mut().iter_mut() {
+                    unit.cached_visibility = None;
+                }
+            }
+        }
+    }
+
     pub fn accept(mut self) -> EventsMap<D> {
+        self.clear_visibility_cache();
         if self.events.get(&IPerspective::Server) == self.events.get(&IPerspective::Neutral) {
             // if no info is hidden, there's no need to store multiple identical entries
             let events = self.events.remove(&IPerspective::Server).unwrap();
@@ -806,6 +911,7 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn cancel(mut self) {
+        self.clear_visibility_cache();
         while let Some(event) = self.events.get_mut(&IPerspective::Server).unwrap().pop() {
             event.undo(self.game);
         }

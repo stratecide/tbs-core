@@ -71,7 +71,6 @@ pub enum Event<D:Direction> {
     FogChange(Perspective, LVec<(Point, FogIntensity, FieldData<D>, FogIntensity, FieldData<D>), {point_map::MAX_AREA}>),
     // player events
     PlayerDies(Owner),
-    PurePlayerFog,
     PlayerFlag(Owner, FlagKey),
     PlayerSetTag(Owner, TagKeyValues<1, D>),
     PlayerRemoveTag(Owner, TagKeyValues<1, D>),
@@ -156,7 +155,6 @@ impl<D: Direction> Event<D> {
             Self::PlayerDies(owner) => {
                 game.get_owning_player_mut(owner.0).unwrap().dead = true;
             }
-            Self::PurePlayerFog => (), // server doesn't hide/reveal player flags/tags
             Self::PlayerFlag(owner, flag) => {
                 let environment = game.environment().clone();
                 game.get_owning_player_mut(owner.0).unwrap().flip_flag(&environment, flag.0);
@@ -311,7 +309,6 @@ impl<D: Direction> Event<D> {
             Self::PlayerDies(owner) => {
                 game.get_owning_player_mut(owner.0).unwrap().dead = false;
             }
-            Self::PurePlayerFog => (), // server doesn't hide/reveal player flags/tags
             Self::PlayerFlag(owner, flag) => {
                 let environment = game.environment().clone();
                 game.get_owning_player_mut(owner.0).unwrap().flip_flag(&environment, flag.0);
@@ -465,24 +462,6 @@ impl<D: Direction> Event<D> {
             }
             // player
             Self::PlayerDies(_) => result.push(self.clone()),
-            Self::PurePlayerFog => {
-                for player in game.players.iter()
-                .filter(|p| p.get_team() != team) {
-                    let foggy = player.fog_replacement();
-                    for flag in player.get_tag_bag().flags()
-                    .filter(|f| !foggy.has_flag(**f)) {
-                        result.push(Self::PlayerFlag(Owner(player.get_owner_id()), FlagKey(*flag)));
-                    }
-                    for (key, value) in player.get_tag_bag().tags()
-                    .filter(|(key, _)| foggy.get_tag(**key).is_none()) {
-                        if game.get_fog_setting().intensity() <= FogIntensity::NormalVision {
-                            result.push(Self::PlayerSetTag(Owner(player.get_owner_id()), TagKeyValues(TagKey(*key), [value.clone()])));
-                        } else {
-                            result.push(Self::PlayerRemoveTag(Owner(player.get_owner_id()), TagKeyValues(TagKey(*key), [value.clone()])));
-                        }
-                    }
-                }
-            }
             Self::PlayerFlag(owner, FlagKey(key)) => {
                 if team == game.get_team(owner.0)
                 || game.get_fog_setting().intensity() <= FogIntensity::NormalVision
@@ -525,7 +504,7 @@ impl<D: Direction> Event<D> {
                     return vec![self.clone()];
                 }
                 let transporter = game.get_unit(*p).unwrap();
-                let transporter_visibility = transporter.visibility(&board, *p);
+                let transporter_visibility = transporter.visibility(&board, *p, None);
                 let transport_visibility = transporter.environment().unit_transport_visibility(&board, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
                     return result;
@@ -556,7 +535,7 @@ impl<D: Direction> Event<D> {
                     return vec![self.clone()];
                 }
                 let transporter = game.get_unit(*p).unwrap();
-                let transporter_visibility = transporter.visibility(&board, *p);
+                let transporter_visibility = transporter.visibility(&board, *p, None);
                 let transport_visibility = transporter.environment().unit_transport_visibility(&board, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
                     return result;
@@ -571,7 +550,7 @@ impl<D: Direction> Event<D> {
                     return vec![self.clone()];
                 }
                 let transporter = game.get_unit(*p).unwrap();
-                let transporter_visibility = transporter.visibility(&board, *p);
+                let transporter_visibility = transporter.visibility(&board, *p, None);
                 let transport_visibility = transporter.environment().unit_transport_visibility(&board, &transporter, *p, &[]);
                 if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
                     return result;

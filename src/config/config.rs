@@ -884,6 +884,7 @@ impl Config {
         game: &Board<D>,
         unit: &Unit<D>,
         pos: Point,
+        transporter: Option<(&Unit<D>, usize)>,
         //heroes: &HeroMap<D>,
     ) -> UnitVisibility {
         let mut result = self.unit_config(unit.typ()).visibility;
@@ -892,9 +893,9 @@ impl Config {
             UnitData {
                 unit,
                 pos,
-                unload_index: None,
+                unload_index: transporter.map(|(_, i)| i),
                 ballast: &[],
-                original_transporter: None,
+                original_transporter: transporter.map(|(u, _)| (u, pos)),
             },
             None,
             &HeroMap::new_empty(), // TODO

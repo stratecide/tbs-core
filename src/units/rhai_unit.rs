@@ -205,7 +205,7 @@ macro_rules! unit_module {
 
             #[rhai_fn(pure, name = "visibility")]
             pub fn get_visibility(unit: &mut Unit, board: BoardPointer<$d>, position: Point) -> UnitVisibility {
-                unit.visibility(board.as_ref(), position)
+                unit.environment().config.unit_visibility(board.as_ref(), unit, position, None)
             }
         }
 

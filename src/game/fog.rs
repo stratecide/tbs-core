@@ -300,7 +300,7 @@ pub fn can_see_unit_at<D: Direction>(game: &Board<D>, team: ClientPerspective, p
 
 pub fn is_unit_visible<D: Direction>(board: &Board<D>, unit: &Unit<D>, p: Point, team: ClientPerspective) -> bool {
     let fog_intensity = board.get_fog_at(team, p);
-    let unit_visibility = unit.visibility(board, p);
+    let unit_visibility = unit.visibility(board, p, None);
     match fog_intensity {
         FogIntensity::TrueSight => true,
         FogIntensity::NormalVision => unit_visibility != UnitVisibility::Stealth,
@@ -332,14 +332,14 @@ pub fn is_unit_attribute_visible(fog_intensity: FogIntensity, unit_visibility: U
 pub fn visible_unit_with_attribute<D: Direction>(game: &Board<D>, team: ClientPerspective, pos: Point, attribute_visibility: UnitVisibility) -> bool {
     let unit = game.get_unit(pos).unwrap();
     let fog_intensity = game.get_fog_at(team, pos);
-    let unit_visibility = unit.visibility(game, pos);
+    let unit_visibility = unit.visibility(game, pos, None);
     is_unit_attribute_visible(fog_intensity, unit_visibility, attribute_visibility)
 }
 
 pub fn visible_unit_with_attribute_transported<D: Direction>(game: &Board<D>, team: ClientPerspective, pos: Point, unload_index: usize, attribute_visibility: UnitVisibility) -> Option<usize> {
     let transporter = game.get_unit(pos).unwrap();
     let fog_intensity = game.get_fog_at(team, pos);
-    let transporter_visibility = transporter.visibility(game, pos);
+    let transporter_visibility = transporter.visibility(game, pos, None);
     let transport_visibility = transporter.environment().unit_transport_visibility(game, &transporter, pos, &[]);
     if !is_unit_attribute_visible(fog_intensity, transporter_visibility, transport_visibility) {
         return None;
@@ -348,7 +348,7 @@ pub fn visible_unit_with_attribute_transported<D: Direction>(game: &Board<D>, te
     .take(unload_index + 1)
     .enumerate()
     .filter_map(|(i, unit)| {
-        let unit_visibility = unit.visibility(game, pos);
+        let unit_visibility = unit.visibility(game, pos, Some((transporter, i)));
         match fog_intensity {
             FogIntensity::TrueSight => (),
             FogIntensity::NormalVision |
