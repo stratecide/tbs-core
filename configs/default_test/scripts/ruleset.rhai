@@ -45,7 +45,7 @@ fn close_range_weapon_effects(BOARD, ATTACKER_POSITION, DEFENDER_POSITIONS, fx_w
 }
 
 fn weapon_effects() {
-    let weapon = ATTACKER.get_custom("Weapon");
+    let weapon = ATTACKER.config.get_custom_value(ATTACKER.type, "Weapon");
     switch weapon {
         "Flame" => {
             // fire follows a path

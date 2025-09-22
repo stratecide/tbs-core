@@ -14,7 +14,8 @@ fn ua_summon_obelisk_input() {
 fn ua_summon_obelisk(data) {
     let target = data[0];
     if BOARD.get_unit(target) != () {
-        // TODO: show alert and give charge cost back
+        // TODO: show alert
+        EVENT_HANDLER.set_hero_charge(POSITION, UNIT.get_max_charge())
     } else {
         let obelisk = Unit(CONFIG, UNIT_HeroCrystal);
         obelisk.owner_id = UNIT.owner_id;

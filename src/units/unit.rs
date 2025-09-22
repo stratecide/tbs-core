@@ -434,16 +434,6 @@ impl<D: Direction> Unit<D> {
 
     // influenced by unit_power_config
 
-    pub fn value(&self, game: &Board<D>, position: Point, factory: Option<&Unit<D>>, heroes: &HeroMap<D>) -> i32 {
-        self.environment.config.unit_value(
-            game,
-            self,
-            position,
-            factory,
-            heroes,
-        )
-    }
-
     pub fn movement_points(&self, game: &Board<D>, position: Point, transporter: Option<&Unit<D>>, heroes: &HeroMap<D>) -> Rational32 {
         self.environment.config.unit_movement_points(
             game,

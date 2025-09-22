@@ -9,6 +9,7 @@ use crate::map::board::BoardView;
 use crate::map::direction::Direction;
 use crate::map::map::Map;
 use crate::tags::{TagBag, TagValue};
+use crate::units::hero::HeroType;
 use crate::{player::*, VERSION};
 
 use super::fog::FogMode;
@@ -41,6 +42,7 @@ impl<D: Direction> GameConfig<D> {
     pub fn build_default(&self) -> GameSettings {
         let player_selections: Vec<_> = (0..self.players.len()).map(|_| PlayerSelectedOptions {
             commander: None,
+            hero: None,
         }).collect();
         let random: RandomFn = Urc::new(|| 0.);
         Self::build(&self, &player_selections, &random)
@@ -162,12 +164,16 @@ impl<D: Direction> GameSettingsInterface for GameConfig<D> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlayerOptions {
     commanders: Vec<CommanderType>,
+    heroes: Vec<HeroType>,
 }
 
 impl SupportedZippable<&Environment> for PlayerOptions {
     fn export(&self, zipper: &mut Zipper, environment: &Environment) {
         for option in environment.config.commander_types() {
             zipper.write_bool(self.commanders.contains(&option));
+        }
+        for option in environment.config.hero_types() {
+            zipper.write_bool(self.heroes.contains(&option));
         }
     }
     fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
@@ -177,8 +183,15 @@ impl SupportedZippable<&Environment> for PlayerOptions {
                 commanders.push(option);
             }
         }
+        let mut heroes = Vec::new();
+        for option in environment.config.hero_types() {
+            if unzipper.read_bool()? {
+                heroes.push(option);
+            }
+        }
         Ok(Self {
             commanders,
+            heroes,
         })
     }
 }
@@ -203,6 +216,7 @@ impl<D: Direction> PlayerConfig<D> {
         Self {
             options: PlayerOptions {
                 commanders: map.environment().config.commander_types().to_vec(),
+                heroes: map.environment().config.hero_types().to_vec(),
             },
             tags,
             team: Team(owner_id),
@@ -215,6 +229,13 @@ impl<D: Direction> PlayerConfig<D> {
     }
     pub fn set_commander_options(&mut self, commanders: Vec<CommanderType>) {
         self.options.commanders = commanders;
+    }
+
+    pub fn get_hero_options(&self) -> &[HeroType] {
+        &self.options.heroes
+    }
+    pub fn set_hero_options(&mut self, heroes: Vec<HeroType>) {
+        self.options.heroes = heroes;
     }
 
     pub fn get_owner_id(&self) -> i8 {
@@ -244,8 +265,17 @@ impl<D: Direction> PlayerConfig<D> {
                 self.options.commanders[index]
             }
         });
+        let hero = player_selection.hero.unwrap_or_else(|| {
+            if self.options.heroes.len() == 0 {
+                HeroType(0)
+            } else {
+                let index = (self.options.heroes.len() as f32 * random()).floor() as usize;
+                self.options.heroes[index]
+            }
+        });
         PlayerSettings {
             commander,
+            hero,
             team: self.team,
             owner_id: self.owner_id,
         }
@@ -260,12 +290,14 @@ impl<D: Direction> PlayerConfig<D> {
 #[zippable(support_ref = Config)]
 pub struct PlayerSelectedOptions {
     pub commander: Option<CommanderType>,
+    pub hero: Option<HeroType>,
 }
 
 impl PlayerSelectedOptions {
     pub fn default(_options: &PlayerOptions) -> Self {
         Self {
             commander: None,
+            hero: None,
         }
     }
 
@@ -287,14 +319,16 @@ impl PlayerSelectedOptions {
 #[zippable(support_ref = Config)]
 pub struct PlayerSettings {
     commander: CommanderType,
+    hero: HeroType,
     team: Team,
     owner_id: Owner,
 }
 
 impl PlayerSettings {
-    pub fn new(owner_id: u8, commander: CommanderType) -> Self {
+    pub fn new(owner_id: u8, commander: CommanderType, hero: HeroType) -> Self {
         Self {
             commander,
+            hero,
             team: Team(owner_id),
             owner_id: Owner(owner_id as i8),
         }
@@ -305,6 +339,13 @@ impl PlayerSettings {
     }
     pub fn set_commander(&mut self, commander: CommanderType) {
         self.commander = commander
+    }
+
+    pub fn get_hero(&self) -> HeroType {
+        self.hero
+    }
+    pub fn set_hero(&mut self, hero: HeroType) {
+        self.hero = hero
     }
 
     pub fn get_owner_id(&self) -> i8 {
@@ -333,6 +374,7 @@ mod tests {
     use crate::map::point_map::{MapSize, PointMap};
     use crate::map::wrapping_map::WMBuilder;
     use crate::tags::{TagBag, TagValue};
+    use crate::units::hero::HeroType;
     use crate::VERSION;
 
     use super::{GameConfig, GameSettings, PlayerOptions, PlayerSettings, PlayerConfig};
@@ -342,7 +384,8 @@ mod tests {
         let config = Urc::new(Config::default());
         let environment = Environment::new_map(config.clone(), MapSize::new(4, 5));
         let options = PlayerOptions{
-            commanders: vec![CommanderType(0)]
+            commanders: vec![CommanderType(0)],
+            heroes: vec![HeroType(0)],
         };
         let co = CommanderType(0);
         let mut zipper = Zipper::new();
@@ -375,6 +418,7 @@ mod tests {
                 PlayerConfig {
                     options: PlayerOptions {
                         commanders: Vec::new(),
+                        heroes: Vec::new(),
                     },
                     team: 1.into(),
                     owner_id: 3.into(),
@@ -392,8 +436,8 @@ mod tests {
         let setting = GameSettings {
             fog_mode: FogMode::Constant(FogSetting::Sharp(2)),
             players: vec![
-                PlayerSettings::new(0, CommanderType::Celerity),
-                PlayerSettings::new(3, CommanderType(0)),
+                PlayerSettings::new(0, CommanderType::Celerity, HeroType::CRYSTAL),
+                PlayerSettings::new(3, CommanderType(0), HeroType(0)),
             ],
         };
         let mut zipper = Zipper::new();

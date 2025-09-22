@@ -28,12 +28,10 @@ pub(super) struct CommanderPowerUnitConfig {
     pub(super) attack_type: Option<AttackType>,
     pub(super) attack_targets: Option<ValidAttackTargets>,
     pub(super) attack_direction: Option<AllowedAttackInputDirectionSource>,
-    pub(super) value: NumberMod<i32>,
     pub(super) can_be_displaced: Option<bool>,
     pub(super) on_death: Option<usize>,
     pub(super) on_normal_action: Option<usize>,
-    pub(super) aura_range: NumberMod<i8>,
-    pub(super) aura_range_transported: NumberMod<i8>,
+    pub(super) aura_range: NumberMod<i32>,
     custom_columns: HashMap<String, NumberMod<Rational32>>,
 }
 
@@ -82,7 +80,6 @@ impl TableLine for CommanderPowerUnitConfig {
                 Some(s) if s.len() > 0 => Some(AllowedAttackInputDirectionSource::from_conf(s, loader)?.0),
                 _ => None,
             },
-            value: parse_def(data, H::Value, NumberMod::Keep, loader)?,
             can_be_displaced: match data.get(&H::CanBeDisplaced) {
                 Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
                 _ => None,
@@ -96,7 +93,6 @@ impl TableLine for CommanderPowerUnitConfig {
                 _ => None,
             },
             aura_range: parse_def(data, H::AuraRange, NumberMod::Keep, loader)?,
-            aura_range_transported: parse_def(data, H::AuraRangeTransported, NumberMod::Keep, loader)?,
             custom_columns,
         })
     }
@@ -134,12 +130,10 @@ crate::enum_with_custom! {
         Targeting,
         AttackDirection,
         CanBuildUnits,
-        Value,
         CanBeDisplaced,
         TransportCapacity,
         OnDeath,
         OnNormalAction,
         AuraRange,
-        AuraRangeTransported,
     }
 }

@@ -20,6 +20,14 @@ mod fraction_module {
         }
     }
 
+    // printing
+    //==========
+
+    #[rhai_fn(pure)]
+    pub fn to_string(a: &mut Fraction) -> String {
+        format!("{a}")
+    }
+
     // rounding
     //============
 
@@ -170,7 +178,7 @@ mod fraction_module {
             "i32" => {
                 *a = Dynamic::from(sub_if(a.clone().cast(), b));
             }
-            "Fraction" => {
+            "Fraction" | "Ratio<i32>" => {
                 *a = Dynamic::from(sub_ff(a.clone().cast(), b));
             }
             typename => return Err(format!("Attempted to subtract Fraction from a value of type '{typename}'").into())
@@ -217,7 +225,7 @@ mod fraction_module {
             "i32" => {
                 *a = Dynamic::from(mul_if(a.clone().cast(), b));
             }
-            "Fraction" => {
+            "Fraction" | "Ratio<i32>" => {
                 *a = Dynamic::from(mul_ff(a.clone().cast(), b));
             }
             typename => return Err(format!("Attempted to multiply a value of type '{typename}' with a Fraction").into())
@@ -235,7 +243,7 @@ mod fraction_module {
             "i32" => {
                 *a = Dynamic::from(div_if(a.clone().cast(), b));
             }
-            "Fraction" => {
+            "Fraction" | "Ratio<i32>" => {
                 *a = Dynamic::from(div_ff(a.clone().cast(), b));
             }
             typename => return Err(format!("Attempted to divide a value of type '{typename}' by a Fraction").into())

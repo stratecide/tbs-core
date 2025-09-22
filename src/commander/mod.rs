@@ -1,4 +1,5 @@
 pub mod commander_type;
+pub(crate) mod rhai_commander;
 #[cfg(test)]
 mod test;
 

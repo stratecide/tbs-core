@@ -76,8 +76,8 @@ fn capture_city() {
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build());
     map.set_terrain(Point::new(0, 0), TerrainType::City.instance(&environment).set_owner_id(0).build());
-    map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).set_hp(55).build()));
-    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::SNIPER.instance(&environment).set_owner_id(0).set_hp(55).build()));
+    map.set_unit(Point::new(3, 3), Some(UnitType::SNIPER.instance(&environment).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     // can't capture your own properties
@@ -119,8 +119,8 @@ fn capture_hq() {
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Hq.instance(&environment).set_owner_id(1).build());
-    map.set_unit(Point::new(0, 0), Some(UnitType::sniper().instance(&environment).set_owner_id(0).build()));
-    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::SNIPER.instance(&environment).set_owner_id(0).build()));
+    map.set_unit(Point::new(3, 3), Some(UnitType::SNIPER.instance(&environment).set_owner_id(1).build()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     game.handle_command(Command::UnitCommand(UnitCommand {
@@ -144,7 +144,7 @@ fn build_unit() {
     let mut map = Map::new2(wmap, &environment);
     map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());
     map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build());
-    map.set_unit(Point::new(3, 3), Some(UnitType::sniper().instance(&environment).set_owner_id(1).build()));
+    map.set_unit(Point::new(3, 3), Some(UnitType::SNIPER.instance(&environment).set_owner_id(1).build()));
     let mut settings = map.settings().unwrap();
     settings.players[0].get_tag_bag_mut().set_tag(&environment, TAG_INCOME, 1000.into());
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
@@ -175,13 +175,13 @@ fn kraken() {
     }
     map.set_terrain(Point::new(2, 2), TerrainType::Kraken.instance(&map_env).set_tag(TAG_ANGER, 7.into()).build());
     map.set_terrain(Point::new(0, 0), TerrainType::Kraken.instance(&map_env).build());
-    map.set_unit(Point::new(2, 1), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build()));
-    map.set_unit(Point::new(1, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build()));
-    map.set_unit(Point::new(3, 2), Some(UnitType::war_ship().instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(2, 1), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(1, 2), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_unit(Point::new(3, 2), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(0).set_hp(100).build()));
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     let environment = game.environment();
-    assert_eq!(game.get_unit(Point::new(1, 0)), Some(&UnitType::tentacle().instance(&environment).set_hp(100).build()));
+    assert_eq!(game.get_unit(Point::new(1, 0)), Some(&UnitType::TENTACLE.instance(&environment).set_hp(100).build()));
     assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(7.into()));
     game.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,

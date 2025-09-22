@@ -1,13 +1,22 @@
 use rhai::*;
 use rhai::plugin::*;
 
+use crate::dyn_opt;
 use crate::config::environment::Environment;
-use crate::config::table_config::TableAxisKey;
-use crate::config::table_config::TableValue;
+use crate::config::table_config::*;
+use crate::units::unit_types::UnitType;
 
 #[export_module]
 mod environment_module {
+
     pub type Config = Environment;
+
+    pub fn parse_int(s: ImmutableString) -> Dynamic {
+        match s.parse::<i32>() {
+            Ok(result) => Dynamic::from(result),
+            _ => ().into()
+        }
+    }
 
     #[rhai_fn(pure)]
     pub fn table_entry(environment: &mut Config, name: &str, x: Dynamic, y: Dynamic) -> Dynamic {
@@ -47,6 +56,20 @@ mod environment_module {
             .collect::<Vec<_>>()
     }
 
+    #[rhai_fn(pure)]
+    pub fn get_custom_value(environment: &mut Config, unit_type: UnitType, column_name: ImmutableString) -> Dynamic {
+        environment.unit_custom_attribute(unit_type, column_name)
+            .map(|result| result.into())
+            .unwrap_or(().into())
+    }
+
+    #[rhai_fn(pure)]
+    pub fn get_hero_type(environment: &mut Config, owner_id: i32) -> Dynamic {
+        if owner_id < 0 || owner_id > i8::MAX as i32 {
+            return ().into();
+        }
+        dyn_opt(environment.get_hero(owner_id as i8))
+    }
 }
 
 def_package! {

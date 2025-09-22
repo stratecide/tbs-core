@@ -1,9 +1,9 @@
+use interfaces::ClientPerspective;
 use interfaces::GameInterface;
 use rhai::Scope;
 use rustc_hash::FxHashSet as HashSet;
 use std::fmt;
 
-use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
 
@@ -17,10 +17,8 @@ use crate::map::board::BoardView;
 use crate::map::direction::Direction;
 use crate::map::map::valid_points;
 use crate::map::point::Point;
-use crate::game::game::Game;
 use crate::script::custom_action::*;
 use crate::script::*;
-use crate::VERSION;
 
 use super::hero::*;
 use super::movement::*;
@@ -229,13 +227,7 @@ impl<D: Direction> UnitCommand<D> {
         let borrowed_game = handler.get_game();
         let client_game;
         let client = if borrowed_game.has_secrets() {
-            let player = borrowed_game.current_player().get_team().to_i16() as u8;
-            let data = borrowed_game.export();
-            let secret = data.hidden
-            .and_then(|mut h| h.teams.remove(&player))
-            .map(|h| (player, h));
-            let version = Version::parse(VERSION).unwrap();
-            client_game = Game::import_client(data.public, secret, &handler.environment().config, version).unwrap();
+            client_game = borrowed_game.reimport_as_client(ClientPerspective::Team(borrowed_game.current_owner() as u8));
             &client_game
         } else {
             &*borrowed_game

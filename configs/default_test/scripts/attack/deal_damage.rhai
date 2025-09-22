@@ -1,10 +1,5 @@
 
 fn deal_damage_to_unit() {
-    let arguments = [];
-    let defender_ids = [];
-    let lifesteal_hp = Fraction(0);
-    let lifesteal = ATTACK_CONTEXT.attack_bonus("Lifesteal", Fraction(0));
-    let strength = ATTACK_CONTEXT.attack_bonus("Strength", Fraction(0)) ** SPLASH_DISTANCE;
     if SPLASH_DISTANCE == 0 {
         let points = [];
         for target in TARGETS {
@@ -17,6 +12,14 @@ fn deal_damage_to_unit() {
             Script("do_weapon_effects", [ATTACK_DIRECTION, points])
         );
     }
+    let arguments = [];
+    let defender_ids = [];
+    let lifesteal_hp = Fraction(0);
+    let lifesteal = ATTACK_CONTEXT.attack_bonus("Lifesteal", Fraction(0));
+    let strength = ATTACK_CONTEXT.attack_bonus("Strength", Fraction(0)) ** SPLASH_DISTANCE;
+    let hero_charge_gain = 10;
+    let theft_rate = ATTACK_CONTEXT.attack_bonus("DamageTheft", Fraction(0));
+    let stolen = 0;
     for target in TARGETS {
         // check if there's a unit at target position
         let p = target.point;
@@ -44,10 +47,19 @@ fn deal_damage_to_unit() {
         } else if damage > Fraction(0) {
             lifesteal_hp += damage * lifesteal;
         }
+        damage = damage.ceil();
+        let hp = defender.get(TAG_Hp);
+        if damage > 0 && hp != () {
+            hero_charge_gain += min(damage, hp);
+            if damage >= hp {
+                hero_charge_gain += 40;
+            }
+            stolen += unit_value(defender, min(damage, hp));
+        }
         // collect defender-id + damage pairs for later execution
         arguments.push([defender_id, damage]);
         defender_ids.push(defender_id);
-        ATTACK_CONTEXT.on_defend(OnDefendScript("OnDefend", defender_id).with_arguments([ATTACKER_ID, defender_id, damage, target.direction]));
+        ATTACK_CONTEXT.on_defend(OnDefendScript("OnDefend", defender_id).with_arguments([defender, defender_id, damage, target.direction]));
     }
     if arguments.len > 0 {
         ATTACK_CONTEXT.add_script(
@@ -55,7 +67,7 @@ fn deal_damage_to_unit() {
         );
         for hero in HEROES.get(ATTACKER_POSITION, ATTACKER.owner_id) {
             ATTACK_CONTEXT.add_script(
-                Script("do_charge_hero", [ATTACKER_ID, hero.unit_id])
+                Script("do_charge_hero", [hero.unit_id, hero_charge_gain])
             );
         }
     }
@@ -64,21 +76,23 @@ fn deal_damage_to_unit() {
             Script("do_lifesteal", [ATTACKER_ID, lifesteal_hp.ceil()])
         );
     }
+    stolen = (Fraction(stolen) * theft_rate).floor();
+    if stolen > 0 {
+        ATTACK_CONTEXT.add_script(
+            Script("do_theft", [ATTACKER.owner_id, stolen])
+        );
+    }
 }
 
-fn do_charge_hero(attacker_id, hero_id) {
-    let delta = 1;
-    if attacker_id == hero_id {
-        delta = 3;
-    }
-    EVENT_HANDLER.add_hero_charge(hero_id, delta);
+fn do_charge_hero(hero_id, gain) {
+    EVENT_HANDLER.add_hero_charge(hero_id, gain);
 }
 
 fn do_deal_damage_to_units(arguments) {
     let effects = [];
     for argument in arguments {
         let defender_id = argument[0];
-        let damage = argument[1].ceil();
+        let damage = argument[1];
         let defender = EVENT_HANDLER.get_unit(defender_id);
         if defender == () {
             // unit has been removed in the mean time
@@ -87,10 +101,10 @@ fn do_deal_damage_to_units(arguments) {
         let hp = defender.get(TAG_Hp);
         let position = EVENT_HANDLER.get_unit_position(defender_id);
         if hp != () {
-            let charge = min(hp, damage);
             EVENT_HANDLER.set(defender_id, TAG_Hp, hp - damage);
-            if charge > 0 && ATTACKER.owner_id != defender.owner_id {
-                charge = defender.value(BOARD, position) * charge / hp;
+            damage = min(hp, damage);
+            if damage > 0 && ATTACKER.owner_id != defender.owner_id {
+                let charge = unit_value(defender, damage);
                 EVENT_HANDLER.add_commander_charge(ATTACKER.owner_id, charge / 2);
                 EVENT_HANDLER.add_commander_charge(defender.owner_id, charge);
             }
@@ -113,9 +127,14 @@ fn do_lifesteal(attacker_id, hp_gain) {
     EVENT_HANDLER.effect(FX_HpChange(hp_gain).at(position));
 }
 
+fn do_theft(owner_id, money_gain) {
+    let funds = BOARD.get(owner_id, TAG_Funds) ?? 0;
+    EVENT_HANDLER.set(owner_id, TAG_Funds, funds + money_gain);
+}
+
 // send animation events for weapon use
 fn do_weapon_effects(ATTACK_DIRECTION, DEFENDER_POSITIONS) {
-    let weapon = ATTACKER.get_custom("Weapon");
+    let weapon = ATTACKER.config.get_custom_value(ATTACKER.type, "Weapon");
     switch weapon {
         "Flame" => {
             // fire follows a path

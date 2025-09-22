@@ -4,7 +4,7 @@ fn ua_power_input() {
 }
 
 fn ua_power(data) {
-    build_unit(EVENT_HANDLER, UNIT, POSITION, false, data);
     exhaust_all_on_chess_board(EVENT_HANDLER, PATH.start, UNIT.owner_id);
     EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
+    build_unit(EVENT_HANDLER, UNIT, POSITION, false, data);
 }

@@ -2,6 +2,20 @@ const KRAKEN_MAX_ANGER = 8;
 const KRAKEN_ATTACK_RANGE = 3;
 const KRAKEN_DAMAGE = 40;
 
+fn unit_value(unit, hp) {
+    let result = Fraction(parse_int(unit.config.get_custom_value(unit.type, "Value")) ?? 0);
+    if unit.commander_type == COMMANDER_Celerity {
+        result *= Fraction(90, 100);
+    }
+    if hp != () {
+        result *= Fraction(hp, 100);
+    }
+    result.round()
+}
+fn unit_value(unit) {
+    unit_value(unit, ())
+}
+
 fn unit_can_build(BOARD, UNIT, POSITION) {
     let capacity = UNIT.transport_capacity;
     if capacity > 0 {
@@ -36,7 +50,7 @@ fn build_unit_input(BOARD, PLAYER, UNIT, POSITION) {
         if UNIT.get(TAG_DroneStationId) != () {
             unit.set(TAG_DroneId, UNIT.get(TAG_DroneStationId));
         }
-        let price = unit.value(BOARD, POSITION);
+        let price = unit_value(unit);
         let item = ShopItem(unit);
         item.costs.push(price);
         if price > funds {
@@ -87,7 +101,7 @@ fn build_unit(EVENT_HANDLER, UNIT, POSITION, exhaust, data) {
     EVENT_HANDLER.set(UNIT.owner_id, TAG_Funds, (EVENT_HANDLER.board.get(UNIT.owner_id, TAG_Funds) ?? 0) - cost);
 }
 
-fn terrain_buy_unit_input(BOARD, PLAYER, position, terrain_type, owner_id, direction) {
+fn terrain_buy_unit_input(BOARD, PLAYER, terrain_type, owner_id, direction) {
     let options = new_shop("Build Unit");
     let funds = BOARD.get(owner_id, TAG_Funds) ?? 0;
     for unit_type in BOARD.config.table_row("TERRAIN_BUILD", terrain_type, true) {
@@ -100,7 +114,7 @@ fn terrain_buy_unit_input(BOARD, PLAYER, position, terrain_type, owner_id, direc
         if unit.movement_types.len > 1 && terrain_type == TERRAIN_Port {
             unit.movement_type = MOVEMENT_Amphibious;
         }
-        let price = unit.value(BOARD, position);
+        let price = unit_value(unit);
         let item = ShopItem(unit);
         item.costs.push(price);
         if price > funds {
@@ -138,4 +152,17 @@ fn change_unit_hp(EVENT_HANDLER, position, change) {
     let unit = EVENT_HANDLER.board.get_unit(position);
     EVENT_HANDLER.set_unit_tag(position, TAG_Hp, unit.get(TAG_Hp) + change);
     FX_HpChange(change).at(position)
+}
+
+fn finish_capturing(EVENT_HANDLER, position, owner_id) {
+    let old_terrain = EVENT_HANDLER.board.get_terrain(position);
+    let terrain = Terrain(EVENT_HANDLER.config, old_terrain.type);
+    terrain.copy_from(old_terrain);
+    terrain.remove(TAG_CaptureOwner);
+    terrain.remove(TAG_CaptureProgress);
+    terrain.owner_id = owner_id;
+    EVENT_HANDLER.replace_terrain(position, terrain);
+    if terrain.type == TERRAIN_Hq {
+        EVENT_HANDLER.make_player_lose(old_terrain.owner_id);
+    }
 }

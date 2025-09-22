@@ -6,7 +6,6 @@ Zombified;;Flag;;;;;;
 Unmoved;;Flag;;;;;;
 Level;;Int;;1;3;2;;
 EnPassant;;Point;;;;;;
-HeroOrigin;;Point;;;;;;
 Exhausted;;Flag;;;;;;
 Repairing;;Flag;;;;;;
 Capturing;;Flag;;;;;;

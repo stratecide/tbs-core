@@ -370,7 +370,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
     }
 
     pub fn set_hero_charge(&mut self, position: Point, unload_index: Option<usize>, charge: i32) {
-        let unit = self.get_game().get_unit(position).expect(&format!("Missing unit at {:?}", position)).clone();
+        let Some(unit) = self.get_game().get_unit(position) else {
+            return;
+        };
         let Some(hero) = unit.get_hero() else {
             return;
         };

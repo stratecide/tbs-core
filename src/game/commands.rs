@@ -1,9 +1,8 @@
 use std::error::Error;
 use std::fmt::Display;
 
-use interfaces::GameInterface;
+use interfaces::{ClientPerspective, GameInterface};
 use rustc_hash::FxHashSet;
-use semver::Version;
 use zipper_derive::Zippable;
 use zipper::*;
 use rhai::*;
@@ -18,10 +17,8 @@ use crate::map::direction::Direction;
 use crate::script::executor::Executor;
 use crate::units::commands::{UnitCommand, MAX_CUSTOM_ACTION_STEPS};
 use crate::units::hero::Hero;
-use crate::VERSION;
 use super::event_handler::EventHandler;
 use super::fog::FogIntensity;
-use super::game::Game;
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
@@ -64,13 +61,7 @@ impl<D: Direction> Command<D> {
                 let borrowed_game = handler.get_game();
                 let client_game;
                 let client = if handler.get_game().has_secrets() {
-                    let player = handler.get_game().current_owner() as u8;
-                    let data = handler.get_game().export();
-                    let secret = data.hidden
-                    .and_then(|mut h| h.teams.remove(&player))
-                    .map(|h| (player, h));
-                    let version = Version::parse(VERSION).unwrap();
-                    client_game = Game::import_client(data.public, secret, &handler.environment().config, version).unwrap();
+                    client_game = handler.get_game().reimport_as_client(ClientPerspective::Team(handler.get_game().current_owner() as u8));
                     &client_game
                 } else {
                     &*borrowed_game
@@ -114,13 +105,7 @@ impl<D: Direction> Command<D> {
                 let borrowed_game = handler.get_game();
                 let client_game;
                 let client = if handler.get_game().has_secrets() {
-                    let player = handler.get_game().current_owner() as u8;
-                    let data = handler.get_game().export();
-                    let secret = data.hidden
-                    .and_then(|mut h| h.teams.remove(&player))
-                    .map(|h| (player, h));
-                    let version = Version::parse(VERSION).unwrap();
-                    client_game = Game::import_client(data.public, secret, &handler.environment().config, version).unwrap();
+                    client_game = handler.get_game().reimport_as_client(ClientPerspective::Team(handler.get_game().current_owner() as u8));
                     &client_game
                 } else {
                     &*borrowed_game

@@ -1,6 +1,6 @@
 
-fn flee(attacker_id, defender_id, damage, direction) {
-    let distance = (damage / Fraction(10)).floor();
+fn flee(defender, defender_id, damage, direction) {
+    let distance = damage / 10;
     let position = EVENT_HANDLER.get_unit_position(defender_id);
     if distance > 0 && position != () {
         let unit = EVENT_HANDLER.get_unit(defender_id);
@@ -18,7 +18,7 @@ fn flee(attacker_id, defender_id, damage, direction) {
     }
 }
 
-fn attack_self(attacker_id, defender_id, damage, direction) {
+fn attack_self(defender, defender_id, damage, direction) {
     let position = EVENT_HANDLER.get_unit_position(defender_id);
     if position != () {
         [

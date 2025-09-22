@@ -52,8 +52,8 @@ fn collect_coin_tokens() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build()));
-    map.set_unit(Point::new(4, 4), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(50).build()));
+    map.set_unit(Point::new(4, 4), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(1).set_hp(100).build()));
     let coins = [1, 2].map(|factor| {
         let mut coins = Token::new(map_env.clone(), TokenType::COINS);
         coins.set_tag(TAG_COINS, factor.into());
@@ -88,8 +88,8 @@ fn bubble_token() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::small_tank().instance(&map_env).set_owner_id(0).set_hp(50).build()));
-    map.set_unit(Point::new(4, 4), Some(UnitType::war_ship().instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(Point::new(0, 0), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(50).build()));
+    map.set_unit(Point::new(4, 4), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(1).set_hp(100).build()));
     let mut bubble = Token::new(map_env.clone(), TokenType::BUBBLE_FACTORY);
     bubble.set_owner_id(0);
     map.set_tokens(Point::new(1, 0), vec![bubble.clone()]);
@@ -122,20 +122,20 @@ fn bubble_token() {
     assert_eq!(server.get_tokens(Point::new(2, 0)), &[]);
     // factory bubble
     server.handle_command(Command::TokenAction(Point::new(1, 0), vec![
-        CustomActionInput::ShopItem(UnitType::small_tank().0.into()),
+        CustomActionInput::ShopItem(UnitType::SMALL_TANK.0.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(1, 0)), &[]);
-    assert_eq!(*server.get_unit(Point::new(1, 0)).unwrap(), UnitType::small_tank().instance(&server.environment()).set_owner_id(0).set_hp(100).build());
+    assert_eq!(*server.get_unit(Point::new(1, 0)).unwrap(), UnitType::SMALL_TANK.instance(&server.environment()).set_owner_id(0).set_hp(100).build());
     // airport bubble
     server.handle_command(Command::TokenAction(Point::new(3, 0), vec![
         CustomActionInput::ShopItem(1.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(3, 0)), &[]);
-    assert_eq!(*server.get_unit(Point::new(3, 0)).unwrap(), UnitType::attack_heli().instance(&server.environment()).set_owner_id(0).set_hp(100).build());
+    assert_eq!(*server.get_unit(Point::new(3, 0)).unwrap(), UnitType::ATTACK_HELI.instance(&server.environment()).set_owner_id(0).set_hp(100).build());
     // port bubble
     server.handle_command(Command::TokenAction(Point::new(4, 0), vec![
         CustomActionInput::ShopItem(7.into()),
     ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
     assert_eq!(server.get_tokens(Point::new(4, 0)), &[]);
-    assert_eq!(*server.get_unit(Point::new(4, 0)).unwrap(), UnitType::destroyer().instance(&server.environment()).set_owner_id(0).set_hp(100).build());
+    assert_eq!(*server.get_unit(Point::new(4, 0)).unwrap(), UnitType::DESTROYER.instance(&server.environment()).set_owner_id(0).set_hp(100).build());
 }

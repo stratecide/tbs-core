@@ -12,17 +12,11 @@ fn get_captured() {
         EVENT_HANDLER.remove_terrain_tag(POSITION, TAG_CaptureProgress);
     }
     if unit?.owner_id == OWNER_ID && unit.team != TERRAIN.team && unit.has(FLAG_Capturing) && CONFIG.table_entry("TERRAIN_CAPTURE", unit.type, TERRAIN.type) {
-        let progress = (TERRAIN.get(TAG_CaptureProgress) ?? 0) + Fraction(unit.get(TAG_Hp) ?? 100, 10).ceil();
+        let gain = Fraction(unit.get(TAG_Hp) ?? 100, 10);
+        gain *= unit.update_custom_value(BOARD, POSITION, "CaptureStrength", Fraction(1));
+        let progress = (TERRAIN.get(TAG_CaptureProgress) ?? 0) + gain.ceil();
         if progress >= 10 {
-            let terrain = Terrain(CONFIG, TERRAIN.type);
-            terrain.copy_from(TERRAIN);
-            terrain.remove(TAG_CaptureOwner);
-            terrain.remove(TAG_CaptureProgress);
-            terrain.owner_id = unit.owner_id;
-            EVENT_HANDLER.replace_terrain(POSITION, terrain);
-            if terrain.type == TerrainType(CONFIG, "Hq") {
-                EVENT_HANDLER.make_player_lose(TERRAIN.owner_id);
-            }
+            finish_capturing(EVENT_HANDLER, POSITION, unit.owner_id);
         } else {
             EVENT_HANDLER.set_terrain_tag(POSITION, TAG_CaptureOwner, unit.owner_id);
             EVENT_HANDLER.set_terrain_tag(POSITION, TAG_CaptureProgress, progress);

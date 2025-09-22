@@ -21,6 +21,16 @@ macro_rules! direction_module {
             }
 
             #[rhai_fn(pure)]
+            pub fn rotate_counter_clockwise(d: &mut Direction) -> Direction {
+                d.rotate(false)
+            }
+
+            #[rhai_fn(pure)]
+            pub fn rotate_clockwise(d: &mut Direction) -> Direction {
+                d.rotate(true)
+            }
+
+            #[rhai_fn(pure)]
             pub fn opposite(d: &mut Direction) -> Direction {
                 d.opposite_direction()
             }

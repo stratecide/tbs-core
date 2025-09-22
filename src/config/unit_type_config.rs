@@ -34,7 +34,6 @@ pub struct UnitTypeConfig {
     pub(super) attack_type: AttackType,
     pub(super) attack_targets: ValidAttackTargets,
     pub(super) attack_direction: AllowedAttackInputDirectionSource,
-    pub(super) value: i32,
     pub(super) can_be_displaced: bool,
     pub(super) transport_capacity: usize,
     pub(super) custom_columns: HashMap<ImmutableString, ImmutableString>,
@@ -82,7 +81,6 @@ impl TableLine for UnitTypeConfig {
                 Some(s) if s.len() > 0 => AttackType::from_conf(s, loader)?.0,
                 _ => AttackType(None),
             },
-            value: parse(data, H::Value, loader)?,
             can_be_displaced: parse_def(data, H::CanBeDisplaced, false, loader)?,
             transport_capacity: parse_def(data, H::TransportCapacity, 0 as u8, loader)? as usize,
             custom_columns,
@@ -121,7 +119,6 @@ crate::enum_with_custom! {
         AttackDirection,
         AttackTargets,
         AttackType,
-        Value,
         CanBeDisplaced,
         TransportCapacity,
     }

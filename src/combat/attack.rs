@@ -252,7 +252,7 @@ impl AttackInstance {
                 AttackExecutable {
                     priority: priority.unwrap_or(self.priority),
                     attacker: attacker.clone(),
-                    attacker_id: attacker_id.map(|id| id.0),
+                    attacker_id,
                     attacker_pos,
                     is_counter,
                     arguments,
@@ -287,7 +287,7 @@ pub(crate) struct ScriptedAttack<D: Direction> {
 pub struct AttackExecutable<D: Direction> {
     priority: Rational32,
     attacker: Unit<D>,
-    attacker_id: Option<usize>,
+    attacker_id: Option<UnitId<D>>,
     attacker_pos: Point,
     is_counter: bool,
     arguments: Vec<Dynamic>,

@@ -1,13 +1,24 @@
-Hero;Name;UsableFromPowers;NextPower;RequiredCharge;AuraRange;PreventsCharging;Script
-Crystal;;;;;2;;
-Crystal;Summon Obelisk;0;0;12;3;true;hero_powers/crystal > ua_summon_obelisk
-CrystalObelisk;;;;;2;;
-EarlGrey;;;;;1;;
-EarlGrey;;0;0;8;2;true;hero_powers/earl_grey > ua_power
-BlueBerry;;;;;2;;
-BlueBerry;;0;0;15;3;true;hero_powers/blue_berry > ua_power
-Tess;;;;;1;;
-Tess;;0;0;10;2;true;hero_powers/tess > ua_power
-Edwin;;;;;1;;
-Edwin;;0;0;8;1;true;hero_powers/edwin > ua_power
-Jax;;;;;0;;
+Hero;Name;UsableFromPowers;NextPower;RequiredCharge;PreventsCharging;Script
+Crystal;;;;;;
+Crystal;Summon Obelisk;0;0;1200;true;hero_powers/crystal > ua_summon_obelisk
+CrystalObelisk;;;;;;
+EarlGrey;;;;;;
+EarlGrey;;0;0;300;true;hero_powers/earl_grey > ua_power
+BlueBerry;;;;;;
+BlueBerry;;0;0;2400;true;hero_powers/blue_berry > ua_power
+Tess;;;;;;
+Tess;;0;0;600;true;hero_powers/tess > ua_power
+Edwin;;;;;;
+Edwin;;0;0;400;true;hero_powers/edwin > ua_power
+Jax;;;;;;
+Jax;;0;0;900;true;hero_powers/jax > ua_power
+Kane;;;;;;
+Kane;;0;0;200;true;hero_powers/kane > ua_power
+Julia;;;;;;
+Julia;;0;0;900;true;hero_powers/julia > ua_power
+Castor;;;;;;
+Castor;;0;0;900;true;hero_powers/castor > ua_power
+Pollux;;;;;;
+Pollux;;0;0;600;true;hero_powers/pollux > ua_power
+Reed;;;;;;
+Reed;;0;0;1200;true;hero_powers/reed > ua_power

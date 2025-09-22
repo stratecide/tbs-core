@@ -10,7 +10,7 @@ use uniform_smart_pointer::Urc;
 
 use crate::combat::*;
 use crate::game::event_fx::EffectType;
-use crate::map::board::{Board, BoardView};
+use crate::map::board::Board;
 use crate::tokens::token_types::TokenType;
 use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
@@ -305,10 +305,6 @@ impl Config {
         self.unit_config(typ).attack_direction
     }
 
-    pub fn base_value(&self, typ: UnitType) -> i32 {
-        self.unit_config(typ).value as i32
-    }
-
     pub fn vision_mode(&self, typ: UnitType) -> VisionMode {
         self.unit_config(typ).vision_mode
     }
@@ -360,45 +356,6 @@ impl Config {
         None
     }
 
-    pub fn hero_price<D: Direction>(
-        &self,
-        game: &Board<D>,
-        hero: HeroType,
-        path: &Path<D>,
-        // when moving out of a transporter
-        transport_index: Option<usize>,
-    ) -> Option<i32> {
-        let (game, unit_pos, unit) = game.unit_path_without_placing(transport_index, &path)?;
-        let game = game.replace_unit(unit_pos, Some(unit.clone()));
-        self.hero_price_after_moving(&game, hero, path, unit_pos, unit, transport_index)
-    }
-    pub fn hero_price_after_moving<D: Direction>(
-        &self,
-        game: &Board<D>,
-        hero: HeroType,
-        path: &Path<D>,
-        unit_pos: Point,
-        unit: Unit<D>,
-        // when moving out of a transporter
-        transport_index: Option<usize>,
-    ) -> Option<i32> {
-        let unit_type = unit.typ();
-        let mut scope = Scope::new();
-        scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
-        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_PATH, path.clone());
-        scope.push_constant(CONST_NAME_UNIT, unit);
-        scope.push_constant(CONST_NAME_POSITION, unit_pos);
-        let executor = game.executor(scope);
-        let cost = self.hero_config(hero).price.update_value::<D>(self.base_value(unit_type), &executor);
-        if cost < 0 {
-            None
-        } else {
-            Some(cost)
-        }
-    }
-
     pub fn max_hero_charge(&self) -> u32 {
         self.max_hero_charge
     }
@@ -443,24 +400,19 @@ impl Config {
             None,
             &heroes,
             false,
-            |iter, executor| -> Option<i8> {
-                Some(if transporter.is_none() {
-                    let aura_range = self.hero_powers(hero.typ())[hero.get_active_power()].aura_range;
-                    NumberMod::update_value_repeatedly::<D>(
-                        aura_range,
-                        iter.map(|c| c.aura_range),
-                        executor,
-                    )
+            |iter, executor| -> i32 {
+                let aura_range = if transporter.is_none() {
+                    self.hero_config(hero.typ()).aura_range
                 } else {
-                    let aura_range = self.hero_powers(hero.typ())[hero.get_active_power()].aura_range_transported;
-                    NumberMod::update_value_repeatedly::<D>(
-                        aura_range,
-                        iter.map(|c| c.aura_range_transported),
-                        executor,
-                    )
-                })
+                    self.hero_config(hero.typ()).aura_range_transported
+                };
+                NumberMod::update_value_repeatedly::<D>(
+                    aura_range as i32,
+                    iter.map(|c| c.aura_range),
+                    executor,
+                )
             }
-        )?;
+        );
         if result < 0 {
             None
         } else {
@@ -841,42 +793,6 @@ impl Config {
         let r = f(Box::new(it), &executor);
         game.set_unit_config_limit(limit);
         r
-    }
-
-    pub fn unit_value<D: Direction>(
-        &self,
-        game: &Board<D>,
-        unit: &Unit<D>,
-        pos: Point,
-        factory_unit: Option<&Unit<D>>, // if built by a unit
-        heroes: &HeroMap<D>,
-    ) -> i32 {
-        self.unit_power_configs(
-            game,
-            UnitData {
-                unit,
-                pos,
-                unload_index: None,
-                ballast: &[],
-                original_transporter: None,
-            },
-            factory_unit.map(|unit| UnitData {
-                unit,
-                pos,
-                unload_index: None,
-                ballast: &[],
-                original_transporter: None,
-            }),
-            heroes,
-            false,
-            |iter, executor| {
-                NumberMod::update_value_repeatedly::<D>(
-                    self.base_value(unit.typ()),
-                    iter.map(|c| c.value),
-                    executor,
-                )
-            }
-        )
     }
 
     pub fn unit_visibility<D: Direction>(
@@ -1567,6 +1483,37 @@ impl Config {
                     }
                 }
                 self.unit_config(unit.typ()).can_be_displaced
+            }
+        )
+    }
+
+    pub fn custom_column_value<D: Direction>(
+        &self,
+        column_name: &String,
+        base_value: Rational32,
+        board: &Board<D>,
+        unit: &Unit<D>,
+        unit_pos: Point,
+        heroes: &HeroMap<D>,
+    ) -> Rational32 {
+        self.unit_power_configs(
+            board,
+            UnitData {
+                unit: unit,
+                pos: unit_pos,
+                unload_index: None,
+                ballast: &[],
+                original_transporter: None,
+            },
+            None,
+            &heroes,
+            false,
+            |iter, executor| {
+                NumberMod::update_value_repeatedly::<D>(
+                    base_value,
+                    iter.map(|c| c.get_fraction(column_name)),
+                    executor,
+                )
             }
         )
     }

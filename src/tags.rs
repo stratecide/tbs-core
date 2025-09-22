@@ -510,18 +510,17 @@ pub mod tests {
     pub const TAG_DRONE_ID: usize = 2;
     pub const TAG_LEVEL: usize = 3;
     pub const TAG_EN_PASSANT: usize = 4;
-    pub const TAG_HERO_ORIGIN: usize = 5;
-    pub const TAG_PAWN_DIRECTION: usize = 6;
-    pub const TAG_ANGER: usize = 8;
-    pub const TAG_BUILT_THIS_TURN: usize = 9;
-    pub const TAG_CAPTURE_OWNER: usize = 10;
-    pub const TAG_CAPTURE_PROGRESS: usize = 11;
-    pub const TAG_UNIT_TYPE: usize = 12;
-    pub const TAG_MOVEMENT_TYPE: usize = 13;
-    pub const TAG_SLUDGE_COUNTER: usize = 14;
-    pub const TAG_COINS: usize = 15;
-    pub const TAG_FUNDS: usize = 16;
-    pub const TAG_INCOME: usize = 17;
+    pub const TAG_PAWN_DIRECTION: usize = 5;
+    pub const TAG_ANGER: usize = 7;
+    pub const TAG_BUILT_THIS_TURN: usize = 8;
+    pub const TAG_CAPTURE_OWNER: usize = 9;
+    pub const TAG_CAPTURE_PROGRESS: usize = 10;
+    pub const TAG_UNIT_TYPE: usize = 11;
+    pub const TAG_MOVEMENT_TYPE: usize = 12;
+    pub const TAG_SLUDGE_COUNTER: usize = 13;
+    pub const TAG_COINS: usize = 14;
+    pub const TAG_FUNDS: usize = 15;
+    pub const TAG_INCOME: usize = 16;
     #[test]
     fn verify_tag_test_constants() {
         let config = Urc::new(Config::default());
@@ -537,7 +536,6 @@ pub mod tests {
         assert_eq!(environment.config.tag_name(TAG_DRONE_ID), "DroneId");
         assert_eq!(environment.config.tag_name(TAG_LEVEL), "Level");
         assert_eq!(environment.config.tag_name(TAG_EN_PASSANT), "EnPassant");
-        assert_eq!(environment.config.tag_name(TAG_HERO_ORIGIN), "HeroOrigin");
         assert_eq!(environment.config.tag_name(TAG_PAWN_DIRECTION), "PawnDirection");
         assert_eq!(environment.config.tag_name(TAG_ANGER), "Anger");
         assert_eq!(environment.config.tag_name(TAG_BUILT_THIS_TURN), "BuiltThisTurn");

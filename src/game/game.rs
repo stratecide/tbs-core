@@ -73,6 +73,19 @@ impl<D: Direction> Game<D> {
         this
     }
 
+    pub fn reimport_as_client(&self, perspective: ClientPerspective) -> Self {
+        let exported = self.export();
+        let secret = match perspective {
+            ClientPerspective::Neutral => None,
+            ClientPerspective::Team(team) => {
+                exported.hidden.and_then(|mut h| h.teams.remove(&team))
+                    .map(|h| (team, h))
+            }
+        };
+        let version = Version::parse(VERSION).unwrap();
+        Self::import_client(exported.public, secret, &self.environment().config, version).unwrap()
+    }
+
     fn start_server(&mut self, random: RandomFn) -> EventsMap<D> {
         let mut handler = event_handler::EventHandler::new(self, random);
         handler.start_turn(None);

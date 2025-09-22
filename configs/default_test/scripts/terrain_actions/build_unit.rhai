@@ -1,6 +1,6 @@
 
 fn build_unit_input() {
-    _build_unit_input(BOARD, PLAYER, TERRAIN, POSITION)
+    _build_unit_input(BOARD, PLAYER, TERRAIN)
 }
 
 fn build_unit(data) {
@@ -9,7 +9,7 @@ fn build_unit(data) {
 }
 
 fn and_turn_into_grass_input() {
-    _build_unit_input(BOARD, PLAYER, TERRAIN, POSITION)
+    _build_unit_input(BOARD, PLAYER, TERRAIN)
 }
 
 fn and_turn_into_grass(data) {
@@ -17,8 +17,8 @@ fn and_turn_into_grass(data) {
     _build_unit(EVENT_HANDLER, TERRAIN, POSITION, data, true);
 }
 
-fn _build_unit_input(BOARD, PLAYER, TERRAIN, POSITION) {
-    terrain_buy_unit_input(BOARD, PLAYER, POSITION, TERRAIN.type, TERRAIN.owner_id, TERRAIN.get(TAG_Direction))
+fn _build_unit_input(BOARD, PLAYER, TERRAIN) {
+    terrain_buy_unit_input(BOARD, PLAYER, TERRAIN.type, TERRAIN.owner_id, TERRAIN.get(TAG_Direction))
 }
 
 fn _build_unit(EVENT_HANDLER, TERRAIN, POSITION, data, exhaust_unit) {

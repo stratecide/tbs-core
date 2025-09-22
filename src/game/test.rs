@@ -1,4 +1,5 @@
 use interfaces::game_interface::*;
+use interfaces::ClientPerspective;
 use interfaces::Perspective;
 use semver::Version;
 use uniform_smart_pointer::Urc;
@@ -43,15 +44,14 @@ fn export_import_chess() {
 
 #[test]
 fn changing_visibility() {
-    let version = Version::parse(VERSION).unwrap();
     let config = Urc::new(Config::default());
     let map = PointMap::new(8, 8, false);
     let map = WMBuilder::<Direction6>::new(map);
     let mut map = Map::new(map.build(), &config);
     let environment = map.environment().clone();
     let origin = Point::new(0, 0);
-    map.set_unit(origin, Some(UnitType::bazooka().instance(&environment).set_owner_id(0).build()));
-    map.set_unit(Point::new(7, 7), Some(UnitType::small_tank().instance(&environment).set_owner_id(1).build()));
+    map.set_unit(origin, Some(UnitType::BAZOOKA.instance(&environment).set_owner_id(0).build()));
+    map.set_unit(Point::new(7, 7), Some(UnitType::SMALL_TANK.instance(&environment).set_owner_id(1).build()));
     let mut game_config = map.settings().unwrap();
     game_config.fog_mode = FogMode::Constant(FogSetting::Light(0));
     let mut settings = game_config.build_default();
@@ -60,11 +60,10 @@ fn changing_visibility() {
     let (mut server, _) = Game::new_server(map.clone(), &game_config, settings, Urc::new(|| 0.));
     let commander = &mut server.players.get_mut(0).unwrap().commander;
     commander.add_charge(commander.get_max_charge() as i32);
-    let exported = server.export();
-    let mut client: Game<Direction6> = Game::import_client(exported.public, Some((1, exported.hidden.unwrap().teams.remove(&1).unwrap())), &config, version.clone()).unwrap();
+    let mut client: Game<Direction6> = server.reimport_as_client(ClientPerspective::Team(1));
 
     // unit presence should be visible in light fog
-    assert_eq!(client.get_unit(origin).unwrap().typ(), UnitType::question_mark());
+    assert_eq!(client.get_unit(origin).unwrap().typ(), UnitType::UNKNOWN);
 
     // now create a forest at origin, which changes the unit's visibility
     let events = server.handle_command(Command::commander_power(1, vec![
@@ -75,7 +74,6 @@ fn changing_visibility() {
     }
     assert_eq!(client.get_unit(origin), None);
     // client should look the same whether by applying events or re-importing from the server
-    let exported = server.export();
-    let client2: Game<Direction6> = Game::import_client(exported.public, Some((1, exported.hidden.unwrap().teams.remove(&1).unwrap())), &config, version).unwrap();
+    let client2: Game<Direction6> = server.reimport_as_client(ClientPerspective::Team(1));
     assert_eq!(client, client2);
 }

@@ -14,7 +14,9 @@ use uniform_smart_pointer::Urc;
 use num_rational::Rational32;
 use rhai::*;
 
+use crate::commander::commander_type::CommanderType;
 use crate::game::event_fx::effect_constructor_module;
+use crate::game::fog::FogIntensity;
 use crate::map::direction::{Direction, Direction4, Direction6};
 use crate::script::{create_base_engine, MyPackage4, MyPackage6};
 use crate::tags::{FlagKey, TagKey};
@@ -81,6 +83,10 @@ impl Config {
     ) -> Result<Self, Box<dyn Error>> {
         let mut file_loader = FileLoader::new(load_config);
         let mut constants = HashMap::default();
+        constants.insert("FOG_TrueSight".to_string(), Dynamic::from(FogIntensity::TrueSight));
+        constants.insert("FOG_Visible".to_string(), Dynamic::from(FogIntensity::NormalVision));
+        constants.insert("FOG_Light".to_string(), Dynamic::from(FogIntensity::Light));
+        constants.insert("FOG_Dark".to_string(), Dynamic::from(FogIntensity::Dark));
 
         // tags
         let mut flags: Vec<TagConfig> = Vec::new();
@@ -347,8 +353,9 @@ impl Config {
             Ok(())
         })?;
         result.max_transported += bonus_transported;
-        for commander in &result.commanders {
+        for (i, commander) in result.commanders.iter().enumerate() {
             file_loader.commander_types.push(commander.name.clone());
+            constants.insert(format!("COMMANDER_{}", commander.name), Dynamic::from(CommanderType(i)));
         }
         if result.commanders.len() == 0 {
             // TODO: error

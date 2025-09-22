@@ -1,12 +1,17 @@
 use rhai::*;
 use rhai::plugin::*;
 use rustc_hash::FxHashMap;
+use interfaces::ClientPerspective;
 
+use crate::combat::*;
 use crate::config::environment::Environment;
 use crate::dyn_opt;
+use crate::map::wrapping_map::OrientedPoint;
+use crate::units::UnitData;
 use super::event_handler::*;
 use crate::map::board::*;
 use crate::map::direction::*;
+use crate::map::map::get_neighbor;
 use crate::map::point::*;
 use crate::units::unit::Unit;
 use crate::units::movement::*;
@@ -15,6 +20,7 @@ use crate::terrain::terrain::Terrain;
 use crate::tags::*;
 use crate::tokens::token::Token;
 use crate::game::event_fx::*;
+use crate::game::fog::*;
 
 macro_rules! event_handler_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -247,6 +253,11 @@ macro_rules! event_handler_module {
                 }
             }
 
+            #[rhai_fn(name = "set_hero_charge")]
+            pub fn set_hero_charge2(mut handler: Handler, position: Point, new_charge: i32) {
+                handler.as_mut().set_hero_charge(position, None, new_charge);
+            }
+
             pub fn add_commander_charge(mut handler: Handler, owner_id: i32, delta: i32) {
                 if owner_id >= 0 && owner_id < i8::MAX as i32 {
                     handler.as_mut().add_commander_charge(owner_id as i8, delta);
@@ -386,13 +397,45 @@ macro_rules! event_handler_module {
                 }
                 handler.as_mut().effects(list);
             }
+
+            #[rhai_fn(name = "attack")]
+            pub fn attack_as_ghost(mut handler: Handler, attacker: Unit<$d>, attacker_pos: Point, attack_direction: $d) -> bool {
+                let handler = handler.as_mut();
+                let Some((target, distortion)) = get_neighbor(handler.get_board(), attacker_pos, attack_direction) else {
+                    return false;
+                };
+                eh_attack_as_ghost(handler, attacker_pos, attacker, target, distortion.update_direction(attack_direction), distortion.is_mirrored())
+            }
+
+            pub fn grant_vision(mut handler: Handler, team: i32, map: FxHashMap<Point, FogIntensity>) {
+                if team > i8::MAX as i32 {
+                    return;
+                }
+                let handler = handler.as_mut();
+                if !is_foggy(handler.get_board()) {
+                    return;
+                }
+                let team = if team < 0 {
+                    ClientPerspective::Neutral
+                } else {
+                    if !handler.get_game().is_team_alive(team as u8) {
+                        return;
+                    }
+                    ClientPerspective::Team(team as u8)
+                };
+                let map = map.into_iter()
+                    .filter(|(p, intensity)| *intensity < handler.get_game().get_fog_at(team, *p))
+                    .collect();
+                handler.change_fog(team, map);
+            }
         }
 
         def_package! {
             pub $pack(module)
             {
                 combine_with_exported_module!(module, stringify!($name), $name);
-                combine_with_exported_module!(module, "mass_damage", mass_damage);
+                combine_with_exported_module!(module, "event_handler_module", event_handler_module);
+                combine_with_exported_module!(module, "event_handler_module_vision", event_handler_module_vision);
             } |> |_engine| {
             }
         }
@@ -403,7 +446,7 @@ event_handler_module!(EventHandlerPackage4, event_handler_module4, Direction4);
 event_handler_module!(EventHandlerPackage6, event_handler_module6, Direction6);
 
 #[export_module]
-mod mass_damage{
+mod event_handler_module{
 
     #[rhai_fn()]
     pub fn new_mass_damage() -> FxHashMap<Point, i32> {
@@ -437,5 +480,74 @@ mod mass_damage{
         } else {
             ().into()
         }
+    }
+}
+
+#[export_module]
+mod event_handler_module_vision{
+    #[rhai_fn()]
+    pub fn new_vision_map() -> FxHashMap<Point, FogIntensity> {
+        FxHashMap::default()
+    }
+
+    #[rhai_fn(pure)]
+    pub fn len(map: &mut FxHashMap<Point, FogIntensity>) -> i32 {
+        map.len() as i32
+    }
+
+    #[rhai_fn(pure)]
+    pub fn contains(map: &mut FxHashMap<Point, FogIntensity>, p: Point) -> bool {
+        map.contains_key(&p)
+    }
+
+    #[rhai_fn(name = "add")]
+    pub fn add(map: &mut FxHashMap<Point, FogIntensity>, p: Point, intensity: FogIntensity) {
+        let old = map.remove(&p).unwrap_or(intensity);
+        map.insert(p, old.min(intensity));
+    }
+
+    #[rhai_fn(name = "remove")]
+    pub fn remove(map: &mut FxHashMap<Point, FogIntensity>, p: Point) -> Dynamic {
+        if let Some(intensity) = map.remove(&p) {
+            Dynamic::from(intensity)
+        } else {
+            ().into()
+        }
+    }
+}
+
+
+fn eh_attack_as_ghost<D: Direction>(
+    handler: &mut EventHandler<D>,
+    attacker_pos: Point,
+    attacker: Unit<D>,
+    target: Point,
+    target_direction: D,
+    target_mirrored: bool,
+) -> bool {
+    let Some(defender) = handler.get_board().get_unit(target) else {
+        return false;
+    };
+    let heroes = HeroMap::new(handler.get_board(), None);
+    let Some(attack) = attacker.environment().config.unit_configured_attacks(handler.get_board(), &attacker, attacker_pos, None, &AttackCounterState::NoCounter, &heroes, &[]).into_iter().next() else {
+        return false;
+    };
+    let input = match attack.splash_pattern.points {
+        SplashDamagePointSource::AttackPattern => AttackInput::AttackPattern(target, target_direction),
+        _ => AttackInput::SplashPattern(OrientedPoint::new(target, target_mirrored, target_direction))
+    };
+    let target = UnitData {
+        unit: &defender,
+        pos: target,
+        unload_index: None,
+        ballast: &[],
+        original_transporter: None,
+    };
+    if attacker.can_target(handler.get_board(), attacker_pos, None, target, false, &heroes) {
+        let attacker_position = AttackerPosition::Ghost(attacker_pos, attacker);
+        execute_attack(handler, attacker_position, input, None, &[], AttackCounterState::AllowCounter, true);
+        true
+    } else {
+        false
     }
 }

@@ -18,9 +18,7 @@ fn ua_self_30() {
 fn repair_unit(EVENT_HANDLER, unit, position, amount) {
     let hp = unit.get(TAG_Hp) ?? 100;
     amount = min(amount, 100 - hp);
-    let unit2 = unit;
-    unit2.set(TAG_Hp, 100);
-    let full_price = unit2.value(EVENT_HANDLER.board, position);
+    let full_price = unit_value(unit);
     if full_price > 0 {
         let funds = EVENT_HANDLER.board.get(unit.owner_id, TAG_Funds) ?? 0;
         amount = min(amount, funds * 100 / full_price);

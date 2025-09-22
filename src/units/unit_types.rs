@@ -34,10 +34,6 @@ impl SupportedZippable<&Environment> for UnitType {
 }
 
 impl UnitType {
-    pub fn base_cost(&self, environment: &Environment) -> i32 {
-        environment.config.base_value(*self)
-    }
-
     pub fn instance<D: Direction>(&self, environment: &Environment) -> UnitBuilder<D> {
         UnitBuilder::new(environment, *self)
     }
@@ -47,42 +43,35 @@ impl UnitType {
 mod helper {
     use super::UnitType;
 
-    macro_rules! ut {
-        ($fun: ident, $id: expr) => {
-            pub fn $fun() -> Self {
-                Self($id)
-            }
-        };
-    }
-
     impl UnitType {
-        ut!(marine, 0);
-        ut!(sniper, 1);
-        ut!(bazooka, 2);
-        ut!(magnet, 3);
-        ut!(dragon_head, 4);
-        ut!(convoy, 5);
-        ut!(artillery, 6);
-        ut!(small_tank, 7);
-        ut!(drone_boat, 13);
-        ut!(destroyer, 17);
-        ut!(war_ship, 18);
-        ut!(transport_heli, 21);
-        ut!(attack_heli, 22);
-        ut!(light_drone, 26);
-        ut!(factory, 27);
-        ut!(hero_crystal, 28);
-        ut!(pyramid, 29);
-        ut!(life_crystal, 34);
-        ut!(tentacle, 35);
-        ut!(puffer_fish, 36);
-        ut!(pawn, 37);
-        ut!(rook, 38);
-        ut!(bishop, 39);
-        ut!(knight, 40);
-        ut!(queen, 41);
-        ut!(king, 42);
-        ut!(question_mark, 43);
+        pub const MARINE: Self = Self(0);
+        pub const SNIPER: Self = Self(1);
+        pub const BAZOOKA: Self = Self(2);
+        pub const MAGNET: Self = Self(3);
+        pub const DRAGON_HEAD: Self = Self(4);
+        pub const CONVOY: Self = Self(5);
+        pub const ARTILLERY: Self = Self(6);
+        pub const SMALL_TANK: Self = Self(7);
+        pub const DRONE_BOAT: Self = Self(13);
+        pub const WAVE_BREAKER: Self = Self(14);
+        pub const DESTROYER: Self = Self(17);
+        pub const WAR_SHIP: Self = Self(18);
+        pub const TRANSPORT_HELI: Self = Self(21);
+        pub const ATTACK_HELI: Self = Self(22);
+        pub const LIGHT_DRONE: Self = Self(26);
+        pub const FACTORY: Self = Self(27);
+        pub const HERO_CRYSTAL: Self = Self(28);
+        pub const PYRAMID: Self = Self(29);
+        pub const LIFE_CRYSTAL: Self = Self(34);
+        pub const TENTACLE: Self = Self(35);
+        pub const PUFFER_FISH: Self = Self(36);
+        pub const PAWN: Self = Self(37);
+        pub const ROOK: Self = Self(38);
+        pub const BISHOP: Self = Self(39);
+        pub const KNIGHT: Self = Self(40);
+        pub const QUEEN: Self = Self(41);
+        pub const KING: Self = Self(42);
+        pub const UNKNOWN: Self = Self(43);
     }
 }
 
@@ -94,31 +83,33 @@ mod tests {
     #[test]
     fn helpers_are_correct() {
         let config = Config::default();
-        assert_eq!(config.unit_name(UnitType::marine()), "Marine");
-        assert_eq!(config.unit_name(UnitType::sniper()), "Sniper");
-        assert_eq!(config.unit_name(UnitType::bazooka()), "Bazooka");
-        assert_eq!(config.unit_name(UnitType::magnet()), "Magnet");
-        assert_eq!(config.unit_name(UnitType::dragon_head()), "DragonHead");
-        assert_eq!(config.unit_name(UnitType::convoy()), "Convoy");
-        assert_eq!(config.unit_name(UnitType::small_tank()), "SmallTank");
-        assert_eq!(config.unit_name(UnitType::drone_boat()), "DroneBoat");
-        assert_eq!(config.unit_name(UnitType::destroyer()), "Destroyer");
-        assert_eq!(config.unit_name(UnitType::war_ship()), "WarShip");
-        assert_eq!(config.unit_name(UnitType::transport_heli()), "TransportHeli");
-        assert_eq!(config.unit_name(UnitType::attack_heli()), "AttackHeli");
-        assert_eq!(config.unit_name(UnitType::light_drone()), "LightDrone");
-        assert_eq!(config.unit_name(UnitType::factory()), "Factory");
-        assert_eq!(config.unit_name(UnitType::hero_crystal()), "HeroCrystal");
-        assert_eq!(config.unit_name(UnitType::pyramid()), "Pyramid");
-        assert_eq!(config.unit_name(UnitType::life_crystal()), "LifeCrystal");
-        assert_eq!(config.unit_name(UnitType::tentacle()), "Tentacle");
-        assert_eq!(config.unit_name(UnitType::puffer_fish()), "PufferFish");
-        assert_eq!(config.unit_name(UnitType::pawn()), "Pawn");
-        assert_eq!(config.unit_name(UnitType::rook()), "Rook");
-        assert_eq!(config.unit_name(UnitType::bishop()), "Bishop");
-        assert_eq!(config.unit_name(UnitType::knight()), "Knight");
-        assert_eq!(config.unit_name(UnitType::queen()), "Queen");
-        assert_eq!(config.unit_name(UnitType::king()), "King");
-        assert_eq!(config.unit_name(UnitType::question_mark()), "Unknown");
+        assert_eq!(config.unit_name(UnitType::MARINE), "Marine");
+        assert_eq!(config.unit_name(UnitType::SNIPER), "Sniper");
+        assert_eq!(config.unit_name(UnitType::BAZOOKA), "Bazooka");
+        assert_eq!(config.unit_name(UnitType::MAGNET), "Magnet");
+        assert_eq!(config.unit_name(UnitType::DRAGON_HEAD), "DragonHead");
+        assert_eq!(config.unit_name(UnitType::CONVOY), "Convoy");
+        assert_eq!(config.unit_name(UnitType::ARTILLERY), "Artillery");
+        assert_eq!(config.unit_name(UnitType::SMALL_TANK), "SmallTank");
+        assert_eq!(config.unit_name(UnitType::DRONE_BOAT), "DroneBoat");
+        assert_eq!(config.unit_name(UnitType::WAVE_BREAKER), "WaveBreaker");
+        assert_eq!(config.unit_name(UnitType::DESTROYER), "Destroyer");
+        assert_eq!(config.unit_name(UnitType::WAR_SHIP), "WarShip");
+        assert_eq!(config.unit_name(UnitType::TRANSPORT_HELI), "TransportHeli");
+        assert_eq!(config.unit_name(UnitType::ATTACK_HELI), "AttackHeli");
+        assert_eq!(config.unit_name(UnitType::LIGHT_DRONE), "LightDrone");
+        assert_eq!(config.unit_name(UnitType::FACTORY), "Factory");
+        assert_eq!(config.unit_name(UnitType::HERO_CRYSTAL), "HeroCrystal");
+        assert_eq!(config.unit_name(UnitType::PYRAMID), "Pyramid");
+        assert_eq!(config.unit_name(UnitType::LIFE_CRYSTAL), "LifeCrystal");
+        assert_eq!(config.unit_name(UnitType::TENTACLE), "Tentacle");
+        assert_eq!(config.unit_name(UnitType::PUFFER_FISH), "PufferFish");
+        assert_eq!(config.unit_name(UnitType::PAWN), "Pawn");
+        assert_eq!(config.unit_name(UnitType::ROOK), "Rook");
+        assert_eq!(config.unit_name(UnitType::BISHOP), "Bishop");
+        assert_eq!(config.unit_name(UnitType::KNIGHT), "Knight");
+        assert_eq!(config.unit_name(UnitType::QUEEN), "Queen");
+        assert_eq!(config.unit_name(UnitType::KING), "King");
+        assert_eq!(config.unit_name(UnitType::UNKNOWN), "Unknown");
     }
 }

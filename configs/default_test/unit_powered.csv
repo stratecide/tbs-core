@@ -1,5 +1,5 @@
-Power;Affects;MinRange;MaxRange;Visibility;MovementPoints;Vision;TrueVision;PassEnemyUnits;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;Targeting;CanBuildUnits;Value;CanBeDisplaced;TransportCapacity;AuraRange;OnDeath;OnNormalAction
-;;;;;;;;;;;;;;;;;Rhai(unit_powered > multiply_hp);;;;on_unit/death > show_explosion;on_unit/after_normal_action > exhaust
+Power;Affects;MinRange;MaxRange;Visibility;MovementPoints;Vision;TrueVision;PassEnemyUnits;CanBeMovedThrough;CanTake;CanBeTaken;Weapon;CanAttackAfterMoving;AttackPattern;Targeting;CanBuildUnits;CanBeDisplaced;TransportCapacity;AuraRange;CaptureStrength;OnDeath;OnNormalAction
+;;;;;;;;;;;;;;;;;;;;;on_unit/death > show_explosion;on_unit/after_normal_action > exhaust
 ;U(Pawn),T(ChessPawnTile);;;;+1;;;;;;;;;;;;;;;;;
 ;U(Pawn);;;;;;;;;;;;;;;;;;;;;on_unit/after_normal_action > setup_en_passant
 ;Movement(Foot, Bike, Wheel, Treads),T(Hill);;;;;+1;;;;;;;;;;;;;;;;
@@ -13,10 +13,11 @@ Co(Simo,4);AttackPattern(TriangleDiagonal);;+1;;;;;;;;;;;;;;;;;;;
 Co(Simo,5);AttackPattern(TriangleDiagonal);;+2;;;;;;;;;;;;;;;;;;;
 Co(Lageos);;;;;;+1;;;;;;;;;;;;;;;;
 Co(SludgeMonster);MovementPattern(Standard);;;;;;;;;;;;;;;;;;;;on_unit/death > sludge_1;
-Co(Celerity);MovementPattern(Standard);;;;;;;;;;;;;;;;*9/10;;;;;
 Co(Celerity, 1);MovementPattern(Standard), AttackPattern(Adjacent), Not(U(Marine, Sniper, Bazooka, LaserShark));;;;+1;;;;;;;;;;;;;;;;;
 Co(Celerity, 2);MovementPattern(Standard), AttackPattern(Adjacent), Not(U(Marine, Sniper, Bazooka, LaserShark));;;;+2;;;;;;;;;;;;;;;;;
-;IH(CrystalObelisk), HG((Crystal, 1));;;;;;;;;;;;;;;;;;;+1;;
+;IH(EarlGrey, 1);;;;;;;;;;;;;;;;;;+1;;;
 ;H(EarlGrey, 1);;;;+1;;;;;;;;;;;;;;;;;
-;H(Edwin, 1);;;;;+1;;;;;;;;;;;;;;;;
-;IH(Jax), HC(1);;;;;;;;;;;;;;;;;;;+1;;
+;H(Edwin, 1);;;;;;;;;;;;;;;;;;;;;
+;IH(Kane);;;Stealth;;;;;;;;;;;;;;;;;;
+;H(Julia), Rhai(unit_actions/capture > uf_can_capture);;;;+1;;;;;;;;;;;;;;;*3/2;;
+;H(Julia, 1), Rhai(unit_actions/capture > uf_can_capture);;;;;;;;;;;;;;;;;;;=0;;

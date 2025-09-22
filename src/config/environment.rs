@@ -8,6 +8,7 @@ use uniform_smart_pointer::*;
 
 use crate::commander::commander_type::CommanderType;
 use crate::game::settings::GameSettings;
+use crate::game::settings::PlayerSettings;
 use crate::map::board::Board;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
@@ -178,26 +179,32 @@ impl Environment {
         .unwrap_or(sub)
     }
 
-    pub fn get_team(&self, owner_id: i8) -> ClientPerspective {
+    fn get_player_setting(&self, owner_id: i8) -> Option<&PlayerSettings> {
         if let Some(settings) = &self.settings {
             for player in &settings.players {
                 if player.get_owner_id() == owner_id {
-                    return ClientPerspective::Team(player.get_team())
+                    return Some(player);
                 }
             }
         }
-        ClientPerspective::Neutral
+        None
+    }
+
+    pub fn get_team(&self, owner_id: i8) -> ClientPerspective {
+        self.get_player_setting(owner_id)
+            .map(|player| ClientPerspective::Team(player.get_team()))
+            .unwrap_or(ClientPerspective::Neutral)
     }
 
     pub fn get_commander(&self, owner_id: i8) -> CommanderType {
-        if let Some(settings) = &self.settings {
-            for player in &settings.players {
-                if player.get_owner_id() == owner_id {
-                    return player.get_commander();
-                }
-            }
-        }
-        CommanderType(0)
+        self.get_player_setting(owner_id)
+            .map(|player| player.get_commander())
+            .unwrap_or(CommanderType(0))
+    }
+
+    pub fn get_hero(&self, owner_id: i8) -> Option<HeroType> {
+        self.get_player_setting(owner_id)
+            .map(|player| player.get_hero())
     }
 
     pub fn unit_custom_attribute(&self, typ: UnitType, column_name: ImmutableString) -> Option<ImmutableString> {

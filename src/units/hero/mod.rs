@@ -6,6 +6,7 @@ pub mod rhai_hero;
 #[cfg(test)]
 mod test;
 
+use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
 use crate::game::event_handler::EventHandler;
@@ -30,17 +31,17 @@ impl FromConfig for HeroType {
     }
 }
 
-impl SupportedZippable<&Environment> for HeroType {
-    fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        let index = support.config.hero_types().iter().position(|t| t == self).unwrap();
-        let bits = bits_needed_for_max_value(support.config.hero_count() as u32 - 1);
+impl SupportedZippable<&Config> for HeroType {
+    fn export(&self, zipper: &mut Zipper, support: &Config) {
+        let index = support.hero_types().iter().position(|t| t == self).unwrap();
+        let bits = bits_needed_for_max_value(support.hero_count() as u32 - 1);
         zipper.write_u32(index as u32, bits);
     }
-    fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        let bits = bits_needed_for_max_value(support.config.hero_count() as u32 - 1);
+    fn import(unzipper: &mut Unzipper, support: &Config) -> Result<Self, ZipperError> {
+        let bits = bits_needed_for_max_value(support.hero_count() as u32 - 1);
         let index = unzipper.read_u32(bits)? as usize;
-        if index < support.config.hero_count() {
-            Ok(support.config.hero_types()[index])
+        if index < support.hero_count() {
+            Ok(support.hero_types()[index])
         } else {
             Err(ZipperError::EnumOutOfBounds(format!("HeroType index {}", index)))
         }
@@ -221,7 +222,7 @@ impl Hero {
 
 impl SupportedZippable<&Environment> for Hero {
     fn export(&self, zipper: &mut Zipper, environment: &Environment) {
-        self.typ.export(zipper, environment);
+        self.typ.export(zipper, &environment.config);
         zipper.write_u8(self.power as u8, bits_needed_for_max_value(environment.config.hero_powers(self.typ).len() as u32 - 1));
         if self.typ.max_charge(&environment) > 0 {
             let bits = bits_needed_for_max_value(self.typ.max_charge(&environment) as u32);
@@ -230,7 +231,7 @@ impl SupportedZippable<&Environment> for Hero {
     }
 
     fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
-        let typ = HeroType::import(unzipper, environment)?;
+        let typ = HeroType::import(unzipper, &environment.config)?;
         let mut result = Self::new(typ);
         result.power = unzipper.read_u8(bits_needed_for_max_value(environment.config.hero_powers(typ).len() as u32 - 1))? as usize;
         if typ.max_charge(environment) > 0 {

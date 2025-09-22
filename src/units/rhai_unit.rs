@@ -1,7 +1,9 @@
 use rhai::*;
 use rhai::plugin::*;
+use num_rational::Rational32;
 
 use crate::config::environment::Environment;
+use crate::commander::commander_type::CommanderType;
 use crate::map::board::BoardPointer;
 use crate::map::direction::*;
 use crate::map::point::*;
@@ -75,6 +77,11 @@ macro_rules! unit_module {
                 Unit::new(environment.clone(), typ)
             }
 
+            #[rhai_fn(pure, get = "config")]
+            pub fn config(unit: &mut Unit) -> Environment {
+                unit.environment().clone()
+            }
+
             #[rhai_fn(pure, get = "type")]
             pub fn get_type(unit: &mut Unit) -> UnitType {
                 unit.typ()
@@ -102,11 +109,11 @@ macro_rules! unit_module {
                 unit.copy_from(&other.get_tag_bag());
             }
 
-            #[rhai_fn(pure, name = "get_custom")]
-            pub fn get_custom(unit: &mut Unit, column_name: ImmutableString) -> Dynamic {
-                unit.environment().unit_custom_attribute(unit.typ(), column_name)
-                    .map(|result| result.into())
-                    .unwrap_or(().into())
+            #[rhai_fn(pure)]
+            pub fn update_custom_value(unit: &mut Unit, board: BoardPointer<$d>, position: Point, column_id: &str, base_value: Rational32) -> Rational32 {
+                let board = board.as_ref();
+                let heroes = HeroMap::new(board, Some(unit.get_owner_id()));
+                unit.environment().config.custom_column_value(&column_id.to_string(), base_value, board, unit, position, &heroes)
             }
 
             #[rhai_fn(pure, name = "has")]
@@ -141,19 +148,6 @@ macro_rules! unit_module {
                 terrain.remove_tag(tag.0)
             }
 
-            #[rhai_fn(pure, name = "value")]
-            pub fn value1(unit: &mut Unit, board: BoardPointer<$d>, position: Point) -> i32 {
-                let board = board.as_ref();
-                let heroes = HeroMap::new(board, Some(unit.get_owner_id()));
-                unit.value(board, position, None, &heroes)
-            }
-            #[rhai_fn(pure, name = "value")]
-            pub fn value2(unit: &mut Unit, board: BoardPointer<$d>, position: Point, factory: Unit) -> i32 {
-                let board = board.as_ref();
-                let heroes = HeroMap::new(board, Some(unit.get_owner_id()));
-                unit.value(board, position, Some(&factory), &heroes)
-            }
-
             #[rhai_fn(pure, get = "transported")]
             pub fn get_transported(unit: &mut Unit) -> Array {
                 unit.get_transported().iter()
@@ -184,6 +178,11 @@ macro_rules! unit_module {
                 unit.set_sub_movement_type(movement_type)
             }
 
+            #[rhai_fn(pure, get = "commander_type")]
+            pub fn get_commander_type(unit: &mut Unit) -> CommanderType {
+                unit.environment().get_commander(unit.get_owner_id())
+            }
+
             #[rhai_fn(pure, get = "hero")]
             pub fn get_hero(unit: &mut Unit) -> Dynamic {
                 unit.get_hero()
@@ -201,6 +200,12 @@ macro_rules! unit_module {
             #[rhai_fn(name = "remove_hero")]
             pub fn remove_hero2(unit: &mut Unit) {
                 unit.remove_hero()
+            }
+            #[rhai_fn(pure)]
+            pub fn get_max_charge(unit: &mut Unit) -> i32 {
+                unit.get_hero()
+                .map(|hero| hero.typ().max_charge(unit.environment()) as i32)
+                .unwrap_or(0)
             }
 
             #[rhai_fn(pure, name = "visibility")]

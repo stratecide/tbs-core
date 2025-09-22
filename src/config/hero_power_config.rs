@@ -16,8 +16,6 @@ pub struct HeroPowerConfig {
     pub(crate) usable_from_power: Vec<u8>,
     pub(crate) next_power: u8, // at the start of the player's turn, this index is automatically switched to if possible (e.g. hero has enough charge)
     pub(crate) required_charge: u32,
-    pub(super) aura_range: i8,
-    pub(super) aura_range_transported: i8,
     pub(crate) script: Option<CustomAction>,
     pub(super) prevents_charging: bool,
 }
@@ -48,8 +46,6 @@ impl TableLine for HeroPowerConfig {
             usable_from_power: parse_vec_def(data, H::UsableFromPowers, Vec::new(), loader)?,
             next_power: parse_def(data, H::NextPower, 0, loader)?,
             required_charge: parse_def(data, H::RequiredCharge, 0, loader)?,
-            aura_range: parse_def(data, H::AuraRange, 0, loader)?,
-            aura_range_transported: parse_def(data, H::AuraRange, -9, loader)?,
             script,
             prevents_charging: parse_def(data, H::PreventsCharging, false, loader)?,
         };
@@ -82,8 +78,6 @@ crate::listable_enum! {
         UsableFromPowers,
         NextPower,
         RequiredCharge,
-        AuraRange,
-        AuraRangeTransported,
         Script,
         PreventsCharging,
     }
