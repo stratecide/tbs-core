@@ -8,10 +8,12 @@ use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::map::board::Board;
 use crate::map::board::BoardView;
+use crate::map::map::get_neighbors;
 use crate::map::map::valid_points;
 use crate::map::point_map::MapSize;
 use crate::map::wrapping_map::OrientedPoint;
 use crate::script::custom_action::CustomActionInput;
+use crate::script::custom_action::test::CA_UNIT_CLEAN_SLUDGE;
 use crate::tokens::token::*;
 use crate::game::commands::*;
 use crate::game::fog::*;
@@ -28,6 +30,7 @@ use crate::units::commands::*;
 use crate::units::movement::MovementType;
 use crate::units::movement::Path;
 use crate::tags::tests::*;
+use crate::units::movement::PathStep;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
 use crate::VERSION;
@@ -450,21 +453,32 @@ fn tapio() {
 #[test]
 fn sludge_monster() {
     let config = Urc::new(Config::default());
-    let map = PointMap::new(5, 5, false);
+    let map = PointMap::new(7, 7, false);
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_terrain(Point::new(1, 0), TerrainType::City.instance(&map_env).set_owner_id(0).build());
-    map.set_unit(Point::new(1, 0), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(1).build()));
-    map.set_unit(Point::new(0, 1), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(50).build()));
-    let mut sludge = Token::new(map_env.clone(), TokenType::SLUDGE);
-    sludge.set_owner_id(1);
-    sludge.set_tag(TAG_SLUDGE_COUNTER, 0.into());
-    map.set_tokens(Point::new(2, 1), vec![sludge]);
-    map.set_unit(Point::new(2, 1), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(60).build()));
-    map.set_terrain(Point::new(1, 2), TerrainType::OilPlatform.instance(&map_env).build());
-    map.set_unit(Point::new(1, 2), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(50).build()));
-    map.set_unit(Point::new(1, 1), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    let sludge_token = Token::new(map_env.clone(), TokenType::SLUDGE);
+
+    // 1. for testing damage from token after turn-start
+    let p_sludge_owned = Point::new(1, 0);
+    map.set_tokens(p_sludge_owned, vec![sludge_token.clone()]);
+    map.set_unit(p_sludge_owned, Some(UnitType::SNIPER.instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    let p_sludge_enemy = Point::new(0, 1);
+    map.set_tokens(p_sludge_enemy, vec![sludge_token.clone()]);
+    map.set_unit(p_sludge_enemy, Some(UnitType::SNIPER.instance(&map_env).set_owner_id(1).set_hp(100).build()));
+
+    // 2. for testing bonus-attack from standing on token
+    map.set_tokens(Point::new(6, 0), vec![sludge_token.clone()]);
+    let p_attack_owned = Point::new(5, 0);
+    map.set_unit(p_attack_owned, Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    let p_attack_enemy = Point::new(6, 1);
+    map.set_unit(p_attack_enemy, Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(1).set_hp(100).build()));
+
+    // 3. for testing if dying units leave behind a sludge token
+    let p_die_owned = Point::new(1, 5);
+    map.set_unit(p_die_owned, Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(1).build()));
+    let p_die_enemy = Point::new(1, 6);
+    map.set_unit(p_die_enemy, Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(1).set_hp(1).build()));
 
     let mut map_settings = map.settings().unwrap();
     for player in &map_settings.players {
@@ -474,88 +488,105 @@ fn sludge_monster() {
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::SludgeMonster);
     let (mut server, _) = Game::new_server(map.clone(), &map_settings, settings, Urc::new(|| 0.));
-    let environment = server.environment().clone();
-    let sludge_token = move |owner_id: i8, counter: i32| {
-        let mut sludge = Token::new(environment.clone(), TokenType::SLUDGE);
-        sludge.set_owner_id(owner_id);
-        sludge.set_tag(TAG_SLUDGE_COUNTER, counter.into());
-        sludge
-    };
     server.players.get_mut(0).unwrap().commander.charge = server.players.get_mut(0).unwrap().commander.get_max_charge();
     let unchanged = server.clone();
+    let sludge_token = Token::new(unchanged.environment().clone(), TokenType::SLUDGE);
 
-    // no power attack bonuses
-    assert_eq!(server.get_unit(Point::new(0, 1)).unwrap().get_hp(), server.get_unit(Point::new(2, 1)).unwrap().get_hp(), "Sludge token should deal 10 damage");
-    server.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::new(Point::new(0, 1)),
-        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D0))),
-    }), Urc::new(|| 0.)).unwrap();
-    let default_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
-    let mut server = unchanged.clone();
-    server.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::new(Point::new(2, 1)),
-        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D180))),
-    }), Urc::new(|| 0.)).unwrap();
-    let sludge_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
-    let mut server = unchanged.clone();
-    server.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::new(Point::new(1, 2)),
-        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D90))),
-    }), Urc::new(|| 0.)).unwrap();
-    let oil_platform_attack = 100 - server.get_unit(Point::new(1, 1)).unwrap().get_hp();
-    assert!(default_attack < oil_platform_attack, "{default_attack} < {oil_platform_attack}");
-    assert!(sludge_attack > oil_platform_attack, "{sludge_attack} > {oil_platform_attack} but sludge token should give +25% and oil platform only +20%");
+    // 1. SludgeMonster's units don't get damaged by sludge, but other players' units do
+    assert_eq!(server.get_unit(p_sludge_owned).unwrap().get_hp(), 100);
+    assert_eq!(server.get_unit(p_sludge_enemy).unwrap().get_hp(), 100);
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_unit(p_sludge_owned).unwrap().get_hp(), 100);
+    assert!(server.get_unit(p_sludge_enemy).unwrap().get_hp() < 100);
 
-    // leave token after unit death
+    // 2. SludgeMonster gets attack bonus when attacking from sludge token, other players don't
     let mut server = unchanged.clone();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
-        path: Path::new(Point::new(1, 0)),
-        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(1, 1), Direction4::D270))),
+        path: Path::with_steps(p_attack_owned, vec![PathStep::Dir(Direction4::D270)]),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(p_attack_enemy, Direction4::D0))),
     }), Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(1, 0)), &[sludge_token(0, 0)]);
-
-    // small power
+    let base_dmg_owned = 100 - server.get_unit(p_attack_enemy).unwrap().get_hp();
     let mut server = unchanged.clone();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
-    assert_eq!(server.get_tokens(Point::new(1, 1)), &[]);
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(p_attack_owned, vec![PathStep::Dir(Direction4::D0)]),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(p_attack_enemy, Direction4::D270))),
+    }), Urc::new(|| 0.)).unwrap();
+    assert!(server.get_unit(p_attack_enemy).unwrap().get_hp() < 100 - base_dmg_owned);
+    // now check that enemies don't get the same bonus
+    let mut server = unchanged.clone();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(p_attack_enemy, vec![PathStep::Dir(Direction4::D90)]),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(p_attack_owned, Direction4::D180))),
+    }), Urc::new(|| 0.)).unwrap();
+    let base_dmg_owned = 100 - server.get_unit(p_attack_owned).unwrap().get_hp();
+    let mut server = unchanged.clone();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::with_steps(p_attack_enemy, vec![PathStep::Dir(Direction4::D180)]),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(p_attack_owned, Direction4::D90))),
+    }), Urc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_unit(p_attack_owned).unwrap().get_hp(), 100 - base_dmg_owned);
+
+    // 3. SludgeMonster's units leave a sludge token behind when dying, other players don't
+    let mut server = unchanged.clone();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(p_die_owned),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(p_die_enemy, Direction4::D270))),
+    }), Urc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_tokens(p_die_owned).len(), 0);
+    assert_eq!(server.get_tokens(p_die_enemy).len(), 0);
+    let mut server = unchanged.clone();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path: Path::new(p_die_enemy),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(p_die_owned, Direction4::D90))),
+    }), Urc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_tokens(p_die_owned).len(), 1);
+    assert_eq!(server.get_tokens(p_die_enemy).len(), 0);
+
+    // 4. SludgeMonster's power spreads sludge (at its unit positions, around its units if there's already sludge under the unit)
+    let mut server = unchanged.clone();
     server.handle_command(Command::commander_power(1, Vec::new()), Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
-    assert_eq!(server.get_tokens(Point::new(1, 1)), &[sludge_token(0, 0)]);
+    for p in get_neighbors(&server, p_sludge_owned, crate::map::map::NeighborMode::Direct) {
+        assert_eq!(server.get_tokens(p.point), vec![sludge_token.clone()]);
+    }
+    assert_eq!(server.get_tokens(p_die_owned), vec![sludge_token.clone()]);
+    assert_eq!(server.get_tokens(p_die_enemy), Vec::new()); // enemy doesn't spread sludge
 
-    // big power
-    let mut server = unchanged.clone();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
-    assert_eq!(server.get_tokens(Point::new(1, 1)), &[]);
-    assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(1, 0)]);
-    server.handle_command(Command::commander_power(2, Vec::new()), Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 1)]);
-    assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(0, 1)]);
-    // tokens vanish over time
+    // 5. While SludgeMonster's power is active, more sludge is spread when its units die
     server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 1)]);
-    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
-    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[sludge_token(0, 0)]);
-    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(0, 1)), &[]);
-    let mut server = unchanged.clone();
-    assert_eq!(server.get_tokens(Point::new(2, 1)), &[sludge_token(1, 0)]);
-    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(server.get_tokens(Point::new(2, 1)), &[]);
-
-    // can't repair
-    let mut server = unchanged.clone();
-    assert_eq!(server.handle_command(Command::UnitCommand(UnitCommand {
+    server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
-        path: Path::new(Point::new(1, 0)),
-        action: UnitAction::custom(1, Vec::new()),
-    }), Urc::new(|| 0.)), Err(CommandError::InvalidAction));
+        path: Path::new(p_die_enemy),
+        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(p_die_owned, Direction4::D90))),
+    }), Urc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_tokens(p_die_owned).len(), 1);
+    for p in get_neighbors(&server, p_die_owned, crate::map::map::NeighborMode::Direct) {
+        assert_eq!(server.get_tokens(p.point), vec![sludge_token.clone()]);
+    }
+
+    // 6. sludge token can be removed by Infantry
+    let mut server = unchanged.clone();
+    server.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    let board = Board::new(&server);
+    let path = Path::new(p_die_enemy);
+    assert!(!server.get_unit(p_die_enemy).unwrap().options_after_path(&board, &path, None, &[]).contains(&UnitAction::custom(CA_UNIT_CLEAN_SLUDGE, Vec::new())));
+    let path = Path::new(p_sludge_enemy);
+    let options = server.get_unit(p_sludge_enemy).unwrap().options_after_path(&board, &path, None, &[]);
+    assert!(options.contains(&UnitAction::custom(CA_UNIT_CLEAN_SLUDGE, Vec::new())), "{options:?}");
+    server.handle_command(Command::UnitCommand(UnitCommand {
+        unload_index: None,
+        path,
+        action: UnitAction::custom(CA_UNIT_CLEAN_SLUDGE, Vec::new()),
+    }), Urc::new(|| 0.)).unwrap();
+    assert_eq!(server.get_tokens(p_sludge_enemy).len(), 0);
 }
 
 #[test]

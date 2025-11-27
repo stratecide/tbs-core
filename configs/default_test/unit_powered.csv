@@ -12,7 +12,8 @@ Power;Affects;MinRange;MaxRange;Visibility;MovementPoints;Vision;TrueVision;Pass
 Co(Simo,4);AttackPattern(TriangleDiagonal);;+1;;;;;;;;;;;;;;;;;;;
 Co(Simo,5);AttackPattern(TriangleDiagonal);;+2;;;;;;;;;;;;;;;;;;;
 Co(Lageos);;;;;;+1;;;;;;;;;;;;;;;;
-Co(SludgeMonster);MovementPattern(Standard);;;;;;;;;;;;;;;;;;;;on_unit/death > sludge_1;
+Co(SludgeMonster);MovementPattern(Standard);;;;;;;;;;;;;;;;;;;;commanders/sludge_monster > put_sludge;
+Co(SludgeMonster, 1);MovementPattern(Standard);;;;;;;;;;;;;;;;;;;;commanders/sludge_monster > spread_sludge;
 Co(Celerity, 1);MovementPattern(Standard), AttackPattern(Adjacent), Not(U(Marine, Sniper, Bazooka, LaserShark));;;;+1;;;;;;;;;;;;;;;;;
 Co(Celerity, 2);MovementPattern(Standard), AttackPattern(Adjacent), Not(U(Marine, Sniper, Bazooka, LaserShark));;;;+2;;;;;;;;;;;;;;;;;
 ;IH(EarlGrey, 1);;;;;;;;;;;;;;;;;;+1;;;

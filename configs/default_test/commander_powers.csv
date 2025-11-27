@@ -20,8 +20,7 @@ Lageos;;;;;;
 Lageos;Solar Storm;0;0;6000;true;commanders/lageos > co_rockets
 Lageos;Satellite Strike;0;0;9000;true;commanders/lageos > co_stun_rockets
 SludgeMonster;;;;;;
-SludgeMonster;Rot;0;0;3000;true;commanders/sludge_monster > co_rot
-SludgeMonster;Decay;0;0;7000;true;commanders/sludge_monster > co_decay
+SludgeMonster;Noxious Spread;0;0;7000;true;commanders/sludge_monster > co_noxious_spread
 Celerity;;;;;;
 Celerity;Quick Recovery;0;0;4000;true;commanders/celerity > co_recovery
 Celerity;Momentum;0;0;6000;true;

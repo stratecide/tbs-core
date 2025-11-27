@@ -19,6 +19,7 @@ use crate::units::hero::*;
 use crate::terrain::terrain::Terrain;
 use crate::tags::*;
 use crate::tokens::token::Token;
+use crate::tokens::token_types::TokenType;
 use crate::game::event_fx::*;
 use crate::game::fog::*;
 
@@ -336,13 +337,13 @@ macro_rules! event_handler_module {
             pub fn place_token(mut handler: Handler, position: Point, token: Token<$d>) {
                 handler.as_mut().token_add(position, token);
             }
-            pub fn remove_token(mut handler: Handler, position: Point, name: &str, owner_id: i32) -> Dynamic {
+            pub fn remove_token(mut handler: Handler, position: Point, typ: TokenType, owner_id: i32) -> Dynamic {
                 let handler = handler.as_mut();
                 if let Some((i, token)) = {
                     handler.get_game().get_tokens(position).iter()
                     .enumerate()
                     .find(|(_, token)| {
-                        token.name() == name && token.get_owner_id() as i32 == owner_id
+                        token.typ() == typ && token.get_owner_id() as i32 == owner_id
                     }).map(|(i, token)| (i, token.clone()))
                 } {
                     handler.token_remove(position, i);
@@ -353,7 +354,7 @@ macro_rules! event_handler_module {
             }
             #[rhai_fn(name = "remove_token")]
             pub fn remove_token2(handler: Handler, position: Point, token: Token<$d>) -> Dynamic {
-                remove_token(handler, position, token.name(), token.get_owner_id() as i32)
+                remove_token(handler, position, token.typ(), token.get_owner_id() as i32)
             }
 
             #[rhai_fn(name = "effect")]

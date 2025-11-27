@@ -36,23 +36,3 @@ fn kraken() {
 fn lose_game() {
     EVENT_HANDLER.make_player_lose(UNIT.owner_id)
 }
-
-fn sludge_1() {
-    let counter = 0;
-    let token = Token(CONFIG, TOKEN_Sludge);
-    let old_token = for t in BOARD.get_tokens(POSITION) {
-        if t.type == token.type {
-            break t;
-        }
-    };
-    if old_token != () {
-        if old_token.get(TAG_SludgeCounter) > counter {
-            return;
-        } else {
-            EVENT_HANDLER.remove_token(POSITION, old_token);
-        }
-    }
-    token.owner_id = UNIT.owner_id;
-    token.set(TAG_SludgeCounter, counter);
-    EVENT_HANDLER.place_token(POSITION, token);
-}

@@ -517,10 +517,9 @@ pub mod tests {
     pub const TAG_CAPTURE_PROGRESS: usize = 10;
     pub const TAG_UNIT_TYPE: usize = 11;
     pub const TAG_MOVEMENT_TYPE: usize = 12;
-    pub const TAG_SLUDGE_COUNTER: usize = 13;
-    pub const TAG_COINS: usize = 14;
-    pub const TAG_FUNDS: usize = 15;
-    pub const TAG_INCOME: usize = 16;
+    pub const TAG_COINS: usize = 13;
+    pub const TAG_FUNDS: usize = 14;
+    pub const TAG_INCOME: usize = 15;
     #[test]
     fn verify_tag_test_constants() {
         let config = Urc::new(Config::default());
@@ -543,7 +542,6 @@ pub mod tests {
         assert_eq!(environment.config.tag_name(TAG_CAPTURE_PROGRESS), "CaptureProgress");
         assert_eq!(environment.config.tag_name(TAG_UNIT_TYPE), "UnitType");
         assert_eq!(environment.config.tag_name(TAG_MOVEMENT_TYPE), "MovementType");
-        assert_eq!(environment.config.tag_name(TAG_SLUDGE_COUNTER), "SludgeCounter");
         assert_eq!(environment.config.tag_name(TAG_COINS), "Coins");
         assert_eq!(environment.config.tag_name(TAG_FUNDS), "Funds");
         assert_eq!(environment.config.tag_name(TAG_INCOME), "Income");

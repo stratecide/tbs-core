@@ -466,5 +466,6 @@ pub(crate) mod test {
     pub const CA_UNIT_BUY_HERO: usize = 0;
     pub const CA_UNIT_BUILD_UNIT: usize = 1;
     pub const CA_UNIT_CAPTURE: usize = 2;
-    pub const CA_UNIT_REPAIR: usize = 3;
+    pub const CA_UNIT_CLEAN_SLUDGE: usize = 3;
+    pub const CA_UNIT_REPAIR: usize = 4;
 }
