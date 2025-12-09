@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use interfaces::*;
@@ -111,6 +112,14 @@ pub struct Config {
 
 unsafe impl Send for Config {}
 unsafe impl Sync for Config {}
+
+impl Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("name", &self.name)
+            .finish_non_exhaustive()
+    }
+}
 
 impl ConfigInterface for Config {
     fn get_name(&self) -> &str {
@@ -339,6 +348,13 @@ impl Config {
         (0..self.hero_count()).map(|i| HeroType(i)).collect()
     }
 
+    pub fn playable_heroes(&self) -> Vec<HeroType> {
+        (0..self.hero_count())
+            .map(|i| HeroType(i))
+            .filter(|hero| self.is_hero_playable(*hero))
+            .collect()
+    }
+
     pub(super) fn hero_config(&self, typ: HeroType) -> &HeroTypeConfig {
         &self.heroes[typ.0]
     }
@@ -358,6 +374,10 @@ impl Config {
 
     pub fn max_hero_charge(&self) -> u32 {
         self.max_hero_charge
+    }
+
+    pub fn is_hero_playable(&self, typ: HeroType) -> bool {
+        self.hero_config(typ).playable
     }
 
     pub fn hero_charge(&self, typ: HeroType) -> u32 {

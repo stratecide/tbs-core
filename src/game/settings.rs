@@ -15,6 +15,7 @@ use crate::{player::*, VERSION};
 use super::fog::FogMode;
 use interfaces::map_interface::GameSettingsInterface;
 use interfaces::{PlayerMeta, RandomFn};
+use rustc_hash::FxHashSet;
 use semver::Version;
 use uniform_smart_pointer::Urc;
 use zipper::*;
@@ -172,7 +173,7 @@ impl SupportedZippable<&Environment> for PlayerOptions {
         for option in environment.config.commander_types() {
             zipper.write_bool(self.commanders.contains(&option));
         }
-        for option in environment.config.hero_types() {
+        for option in environment.config.playable_heroes() {
             zipper.write_bool(self.heroes.contains(&option));
         }
     }
@@ -184,7 +185,7 @@ impl SupportedZippable<&Environment> for PlayerOptions {
             }
         }
         let mut heroes = Vec::new();
-        for option in environment.config.hero_types() {
+        for option in environment.config.playable_heroes() {
             if unzipper.read_bool()? {
                 heroes.push(option);
             }
@@ -208,15 +209,16 @@ pub struct PlayerConfig<D: Direction> {
 impl<D: Direction> PlayerConfig<D> {
     pub fn new(owner_id: u8, map: &Map<D>, random: &RandomFn) -> Self {
         let mut tags = TagBag::new();
-        for tag in 0..map.environment().config.tag_count() {
-            if map.environment().config.tag_config(tag).player >= TagEditorVisibility::Normal {
+        let config = map.environment().config.clone();
+        for tag in 0..config.tag_count() {
+            if config.tag_config(tag).player >= TagEditorVisibility::Normal {
                 tags.set_tag(map.environment(), tag, TagValue::default_value(map, tag, random()));
             }
         }
         Self {
             options: PlayerOptions {
-                commanders: map.environment().config.commander_types().to_vec(),
-                heroes: map.environment().config.hero_types().to_vec(),
+                commanders: config.commander_types().to_vec(),
+                heroes: config.playable_heroes().to_vec(),
             },
             tags,
             team: Team(owner_id),
@@ -228,14 +230,22 @@ impl<D: Direction> PlayerConfig<D> {
         &self.options.commanders
     }
     pub fn set_commander_options(&mut self, commanders: Vec<CommanderType>) {
-        self.options.commanders = commanders;
+        // remove duplicates
+        let commanders: FxHashSet<CommanderType> = commanders.into_iter().collect();
+        self.options.commanders = commanders.into_iter().collect();
+        self.options.commanders.sort();
     }
 
     pub fn get_hero_options(&self) -> &[HeroType] {
         &self.options.heroes
     }
-    pub fn set_hero_options(&mut self, heroes: Vec<HeroType>) {
-        self.options.heroes = heroes;
+    pub fn set_hero_options(&mut self, config: &Config, heroes: Vec<HeroType>) {
+        // remove duplicates and unplayable heroes
+        let heroes: FxHashSet<HeroType> = heroes.into_iter()
+            .filter(|hero| config.is_hero_playable(*hero))
+            .collect();
+        self.options.heroes = heroes.into_iter().collect();
+        self.options.heroes.sort();
     }
 
     pub fn get_owner_id(&self) -> i8 {

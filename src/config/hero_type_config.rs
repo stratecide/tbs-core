@@ -11,6 +11,7 @@ use super::ConfigParseError;
 #[derive(Debug)]
 pub struct HeroTypeConfig {
     pub(super) name: String,
+    pub(super) playable: bool,
     pub(super) max_charge: u32,
     pub(super) aura_range: i8,
     pub(super) aura_range_transported: i8,
@@ -31,6 +32,7 @@ impl TableLine for HeroTypeConfig {
         };
         let result = Self {
             name: get(H::Id)?.to_string(),
+            playable: parse_def(data, H::Playable, true, loader)?,
             max_charge: parse_def(data, H::Charge, 0, loader)?,
             aura_range: parse_def(data, H::AuraRange, 0, loader)?,
             aura_range_transported: parse_def(data, H::AuraRangeTransported, i8::MIN, loader)?,
@@ -50,7 +52,7 @@ crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum HeroTypeConfigHeader {
         Id,
-        Price,
+        Playable,
         Charge,
         AuraRange,
         AuraRangeTransported,
