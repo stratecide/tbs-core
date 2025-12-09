@@ -476,7 +476,7 @@ impl<D: Direction> Map<D> {
             .map(|owner| PlayerConfig::new(owner, self, &random))
             .collect();
         Ok(settings::GameConfig {
-            fog_mode: FogMode::Constant(FogSetting::Light(0)),
+            fog_mode: FogMode::Constant(FogSetting::None),
             tags: self.tags.clone(),
             players: players.try_into().unwrap(),
         })
@@ -636,19 +636,10 @@ impl<D: Direction> MapInterface for Map<D> {
     }
 
     fn default_settings(&self) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
-        let owners = self.get_viable_player_ids();
-        if owners.len() < 2 {
-            return Err(Box::new(NotPlayable::TooFewPlayers));
+        match self.settings() {
+            Ok(r) => Ok(Box::new(r)),
+            Err(e) => Err(Box::new(e)),
         }
-        let random: RandomFn = Urc::new(|| 0.);
-        let players:Vec<PlayerConfig<D>> = owners.into_iter()
-            .map(|owner| PlayerConfig::new(owner, self, &random))
-            .collect();
-        Ok(Box::new(settings::GameConfig {
-            fog_mode: FogMode::Constant(FogSetting::Light(0)),
-            tags: self.tags.clone(),
-            players: players.try_into().unwrap(),
-        }))
     }
 
     fn parse_settings(&self, bytes: Vec<u8>) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
