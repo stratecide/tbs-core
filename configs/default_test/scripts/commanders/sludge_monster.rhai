@@ -53,5 +53,5 @@ fn uf_can_clean_sludge() {
 
 fn ua_clean_sludge() {
     EVENT_HANDLER.remove_token(POSITION, TOKEN_Sludge, -1);
-    ()
+    EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
 }
