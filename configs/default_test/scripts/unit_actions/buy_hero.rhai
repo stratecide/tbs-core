@@ -73,6 +73,7 @@ fn ua_buy_hero(data) {
             unit.set(TAG_DroneStationId, EVENT_HANDLER.generate_unique_id(TAG_DroneStationId));
         }
         EVENT_HANDLER.place_unit(target, unit);
+        EVENT_HANDLER.set_hero(target, Hero(HERO_Pollux));
     }
     EVENT_HANDLER.set_hero(POSITION, Hero(hero_type));
     EVENT_HANDLER.set(UNIT.owner_id, TAG_Funds, (BOARD.get(UNIT.owner_id, TAG_Funds) ?? 0) - cost);

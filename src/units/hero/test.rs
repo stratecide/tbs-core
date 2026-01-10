@@ -83,16 +83,16 @@ fn buy_hero() {
         path,
         action: UnitAction::custom(CA_UNIT_BUY_HERO, vec![CustomActionInput::ShopItem(0.into())]),
     }), Urc::new(|| 0.)).unwrap();
+    let board = Board::new(&server);
+    assert_eq!(server.get_unit(Point::new(1, 1)).unwrap().get_hero(), Some(&Hero::new(HeroType::JAX)));
+    assert!(server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
+    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
     // can't summon another Jax
     server.handle_command(Command::UnitCommand(UnitCommand {
         unload_index: None,
         path: Path::new(Point::new(0, 0)),
         action: UnitAction::custom(CA_UNIT_BUY_HERO, vec![CustomActionInput::ShopItem(0.into())]),
     }), Urc::new(|| 0.)).unwrap_err();
-    let board = Board::new(&server);
-    assert_eq!(server.get_unit(Point::new(1, 1)).unwrap().get_hero(), Some(&Hero::new(HeroType::JAX)));
-    assert!(server.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
-    assert_eq!(Hero::aura_range(&board, &server.get_unit(Point::new(1, 1)).unwrap(), Point::new(1, 1), None), Some(2));
 }
 
 #[test]
