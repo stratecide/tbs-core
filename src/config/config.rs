@@ -105,7 +105,6 @@ pub struct Config {
     pub(super) is_unit_dead_rhai: usize,
     pub(super) is_unit_movable_rhai: usize,
     pub(super) calculate_damage_rhai: usize,
-    pub(super) deal_damage_rhai: usize,
     pub(super) weapon_effects_rhai: Option<usize>,
     pub(super) custom_tables: HashMap<String, CustomTable>,
 }

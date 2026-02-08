@@ -121,10 +121,6 @@ impl Environment {
         self.config.is_unit_movable_rhai
     }
 
-    pub fn deal_damage_rhai(&self) -> usize {
-        self.config.deal_damage_rhai
-    }
-
     pub fn calculate_attack_damage_rhai(&self) -> usize {
         self.config.calculate_damage_rhai
     }

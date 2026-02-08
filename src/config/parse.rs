@@ -184,7 +184,6 @@ impl Config {
             is_unit_dead_rhai: usize::MAX,
             is_unit_movable_rhai: usize::MAX,
             calculate_damage_rhai: usize::MAX,
-            deal_damage_rhai: usize::MAX,
             weapon_effects_rhai: None,
             custom_tables: HashMap::default(),
         };
@@ -207,7 +206,6 @@ impl Config {
                 "UnitDeathTest" => result.is_unit_dead_rhai = file_loader.rhai_function(value, 1..=1)?.index,
                 "UnitMovableTest" => result.is_unit_movable_rhai = file_loader.rhai_function(value, 0..=0)?.index,
                 "CalculateAttackDamage" => result.calculate_damage_rhai = file_loader.rhai_function(value, 1..=1)?.index,
-                "DealDamageToUnit" => result.deal_damage_rhai = file_loader.rhai_function(value, 2..=2)?.index,
                 "WeaponEffects" => result.weapon_effects_rhai = Some(file_loader.rhai_function(value, 0..=0)?.index),
                 _ => ()
             }
@@ -225,9 +223,6 @@ impl Config {
         }
         if result.is_unit_movable_rhai == usize::MAX {
             return Err(format!("missing entry in {RULESET_CONFIG}: 'UnitMovableTest'").into());
-        }
-        if result.deal_damage_rhai == usize::MAX {
-            return Err(format!("missing entry in {RULESET_CONFIG}: 'DealDamageToUnit'").into());
         }
 
         // movement types
