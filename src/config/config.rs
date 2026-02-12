@@ -33,7 +33,7 @@ use crate::units::hero::*;
 use crate::VERSION;
 
 use super::attack_config::{AttackConfig, AttackSplashConfig};
-use super::attack_powered::{attack_filter_scope, AttackPoweredConfig};
+use super::attack_powered::{attack_filter_input, AttackPoweredConfig};
 use super::custom_action_config::CustomActionConfig;
 use super::editor_tag_config::TagEditorVisibility;
 use super::effect_config::{EffectConfig, EffectDataType, EffectVisibility};
@@ -50,7 +50,7 @@ use super::tag_config::{TagConfig, TagType};
 use super::terrain_powered::TerrainPoweredConfig;
 use super::terrain_type_config::TerrainTypeConfig;
 use super::token_typ_config::TokenTypeConfig;
-use super::unit_filter::unit_filter_scope;
+use super::unit_filter::unit_filter_input;
 use super::unit_type_config::UnitTypeConfig;
 use super::OwnershipPredicate;
 
@@ -104,8 +104,6 @@ pub struct Config {
     pub(super) functions: Vec<(usize, String)>,
     pub(super) is_unit_dead_rhai: usize,
     pub(super) is_unit_movable_rhai: usize,
-    pub(super) calculate_damage_rhai: usize,
-    pub(super) weapon_effects_rhai: Option<usize>,
     pub(super) custom_tables: HashMap<String, CustomTable>,
 }
 
@@ -491,12 +489,11 @@ impl Config {
         heroes: &'a [HeroInfluence<D>],
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a TerrainPoweredConfig> + 'a>, &Executor) -> R,
     ) -> R {
-        let mut scope = Scope::new();
-        // build scope
-        scope.push_constant(CONST_NAME_POSITION, pos);
-        scope.push_constant(CONST_NAME_TERRAIN, terrain.clone());
+        let mut first_argument = Map::new();
+        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+        first_argument.insert(CONST_NAME_TERRAIN.into(), Dynamic::from(terrain.clone()));
         // TODO: heroes (put them into Urc<Vec<>> instead of &[])
-        let executor = Urc::new(game.executor(scope));
+        let executor = Urc::new(game.executor(first_argument));
         let executor_ = executor.clone();
         let max_len = self.terrain_overrides.len();
         let limit = game.get_terrain_config_limit();
@@ -797,7 +794,7 @@ impl Config {
         is_counter: bool,
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> + 'a>, &Executor) -> R,
     ) -> R {
-        let scope = unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter);
+        let scope = unit_filter_input(game, unit_data, other_unit_data, heroes, is_counter);
         let executor = game.executor(scope);
         let max_len = self.unit_overrides.len();
         let limit = game.get_unit_config_limit();
@@ -1044,8 +1041,8 @@ impl Config {
         is_counter: bool,
         f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a AttackPoweredConfig> + 'a>, &Executor) -> R,
     ) -> R {
-        let scope = attack_filter_scope(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter);
-        let executor = game.executor(scope);
+        let first_argument = attack_filter_input(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter);
+        let executor = game.executor(first_argument);
         let max_len = self.attack_overrides.len();
         let limit = game.get_attack_config_limit();
         let it = self.attack_overrides.iter()

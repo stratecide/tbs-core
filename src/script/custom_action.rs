@@ -7,6 +7,7 @@ use zipper_derive::Zippable;
 use zipper::*;
 
 use crate::config::environment::Environment;
+use crate::dyn_opt;
 use crate::game::event_handler::EventHandler;
 use crate::map::board::{current_team, Board, BoardView};
 use crate::map::direction::Direction;
@@ -167,14 +168,14 @@ pub fn run_unit_input_script<D: Direction>(
 ) -> CustomActionTestResult<D> {
     if let Some((board, unit_pos, unit)) = board.unit_path_without_placing(transport_index, path) {
         let board = board.replace_unit(unit_pos, Some(unit.clone()));
-        let mut scope = Scope::new();
-        scope.push_constant(CONST_NAME_TRANSPORTER, board.get_unit(path.start).map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
-        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_PATH, path.clone());
-        scope.push_constant(CONST_NAME_UNIT, unit);
-        scope.push_constant(CONST_NAME_POSITION, unit_pos);
-        run_input_script(script, &board, scope, data)
+        let mut first_argument = Map::new();
+        first_argument.insert(CONST_NAME_TRANSPORTER.into(), board.get_unit(path.start).map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
+        first_argument.insert(CONST_NAME_TRANSPORTER_POSITION.into(), Dynamic::from(path.start));
+        first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(transport_index));
+        first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
+        first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit));
+        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
+        run_input_script(script, &board, first_argument, data)
     } else {
         CustomActionTestResult::Failure
     }
@@ -187,10 +188,10 @@ pub fn run_token_input_script<D: Direction>(
     token: Token<D>,
     data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_POSITION, pos);
-    scope.push_constant(CONST_NAME_TOKEN, token);
-    run_input_script(script, game, scope, data)
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+    first_argument.insert(CONST_NAME_TOKEN.into(), Dynamic::from(token));
+    run_input_script(script, game, first_argument, data)
 }
 
 pub fn run_terrain_input_script<D: Direction>(
@@ -200,10 +201,10 @@ pub fn run_terrain_input_script<D: Direction>(
     terrain: Terrain<D>,
     data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_POSITION, pos);
-    scope.push_constant(CONST_NAME_TERRAIN, terrain);
-    run_input_script(script, game, scope, data)
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+    first_argument.insert(CONST_NAME_TERRAIN.into(), Dynamic::from(terrain));
+    run_input_script(script, game, first_argument, data)
 }
 
 pub fn run_commander_input_script<D: Direction>(
@@ -211,21 +212,21 @@ pub fn run_commander_input_script<D: Direction>(
     game: &Board<D>,
     data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner() as i32);
-    scope.push_constant(CONST_NAME_TEAM, current_team(game).to_i16() as i32);
-    run_input_script(script, game, scope, data)
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(game.current_owner() as i32));
+    first_argument.insert(CONST_NAME_TEAM.into(), Dynamic::from(current_team(game).to_i16() as i32));
+    run_input_script(script, game, first_argument, data)
 }
 
 fn run_input_script<D: Direction>(
     script: usize,
     game: &Board<D>,
-    mut scope: Scope<'static>,
+    mut first_argument: Map,
     data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
     let controller = Rc::new(RefCell::new(InputScriptController::new(script, data.to_vec())));
-    scope.push_constant(CONST_NAME_PLAYER, controller.clone());
-    let executor = game.executor(scope);
+    first_argument.insert(CONST_NAME_PLAYER.into(), Dynamic::from(controller.clone()));
+    let executor = game.executor(first_argument);
     match executor.run::<D, bool>(script, ()) {
         Ok(true) => CustomActionTestResult::Success,
         Ok(false) => CustomActionTestResult::Failure,
@@ -288,14 +289,14 @@ pub fn is_unit_script_input_valid<D: Direction>(
 ) -> Option<Vec<CustomActionData<D>>> {
     if let Some((game, unit_pos, unit)) = game.unit_path_without_placing(transport_index, path) {
         let game = game.replace_unit(unit_pos, Some(unit.clone()));
-        let mut scope = Scope::new();
-        scope.push_constant(CONST_NAME_TRANSPORTER, game.get_unit(path.start).map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
-        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_PATH, path.clone());
-        scope.push_constant(CONST_NAME_UNIT, unit);
-        scope.push_constant(CONST_NAME_POSITION, unit_pos);
-        is_script_input_valid(script, &game, scope, data)
+        let mut first_argument = Map::new();
+        first_argument.insert(CONST_NAME_TRANSPORTER.into(), game.get_unit(path.start).map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
+        first_argument.insert(CONST_NAME_TRANSPORTER_POSITION.into(), Dynamic::from(path.start));
+        first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(transport_index));
+        first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
+        first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit));
+        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
+        is_script_input_valid(script, &game, first_argument, data)
     } else {
         None
     }
@@ -308,10 +309,10 @@ pub fn is_token_script_input_valid<D: Direction>(
     token: Token<D>,
     data: &[CustomActionInput<D>],
 ) -> Option<Vec<CustomActionData<D>>> {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_POSITION, pos);
-    scope.push_constant(CONST_NAME_TOKEN, token);
-    is_script_input_valid(script, game, scope, data)
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+    first_argument.insert(CONST_NAME_TOKEN.into(), Dynamic::from(token));
+    is_script_input_valid(script, game, first_argument, data)
 }
 
 pub fn is_terrain_script_input_valid<D: Direction>(
@@ -321,10 +322,10 @@ pub fn is_terrain_script_input_valid<D: Direction>(
     terrain: Terrain<D>,
     data: &[CustomActionInput<D>],
 ) -> Option<Vec<CustomActionData<D>>> {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_POSITION, pos);
-    scope.push_constant(CONST_NAME_TERRAIN, terrain);
-    is_script_input_valid(script, game, scope, data)
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+    first_argument.insert(CONST_NAME_TERRAIN.into(), Dynamic::from(terrain));
+    is_script_input_valid(script, game, first_argument, data)
 }
 
 pub fn is_commander_script_input_valid<D: Direction>(
@@ -332,21 +333,21 @@ pub fn is_commander_script_input_valid<D: Direction>(
     game: &Board<D>,
     data: &[CustomActionInput<D>],
 ) -> Option<Vec<CustomActionData<D>>> {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner() as i32);
-    scope.push_constant(CONST_NAME_TEAM, current_team(game).to_i16() as i32);
-    is_script_input_valid(script, game, scope, data)
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(game.current_owner() as i32));
+    first_argument.insert(CONST_NAME_TEAM.into(), Dynamic::from(current_team(game).to_i16() as i32));
+    is_script_input_valid(script, game, first_argument, data)
 }
 
 fn is_script_input_valid<D: Direction>(
     script: usize,
     game: &Board<D>,
-    mut scope: Scope<'static>,
+    mut first_argument: Map,
     data: &[CustomActionInput<D>],
 ) -> Option<Vec<CustomActionData<D>>> {
     let controller = Rc::new(RefCell::new(InputScriptController::new(script, data.to_vec())));
-    scope.push_constant(CONST_NAME_PLAYER, controller.clone());
-    let executor = game.executor(scope);
+    first_argument.insert(CONST_NAME_PLAYER.into(), Dynamic::from(controller.clone()));
+    let executor = game.executor(first_argument);
     match executor.run::<D, bool>(script, ()) {
         Ok(b) => {
             let mut controller = controller.borrow_mut();
@@ -389,14 +390,14 @@ pub fn execute_unit_script<D: Direction>(
     _ballast: &[TBallast<D>],
     data: Option<Vec<CustomActionData<D>>>,
 ) {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|(t, _)| t.clone()));
-    scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, path.start);
-    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transporter.map(|(_, i)| i));
-    scope.push_constant(CONST_NAME_PATH, path.clone());
-    scope.push_constant(CONST_NAME_UNIT, unit.clone());
-    scope.push_constant(CONST_NAME_POSITION, unit_pos);
-    execute_script(script, handler, scope, data)
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_TRANSPORTER.into(), dyn_opt(transporter.map(|(t, _)| t.clone())));
+    first_argument.insert(CONST_NAME_TRANSPORTER_POSITION.into(), Dynamic::from(path.start));
+    first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(transporter.map(|(_, i)| i)));
+    first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
+    first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit.clone()));
+    first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
+    execute_script(script, handler, first_argument, data)
 }
 
 pub fn execute_token_script<D: Direction>(
@@ -406,10 +407,10 @@ pub fn execute_token_script<D: Direction>(
     token: Token<D>,
     data: Vec<CustomActionData<D>>,
 ) {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_POSITION, pos);
-    scope.push_constant(CONST_NAME_TOKEN, token);
-    execute_script(script, handler, scope, Some(data))
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+    first_argument.insert(CONST_NAME_TOKEN.into(), Dynamic::from(token));
+    execute_script(script, handler, first_argument, Some(data))
 }
 
 pub fn execute_terrain_script<D: Direction>(
@@ -419,10 +420,10 @@ pub fn execute_terrain_script<D: Direction>(
     terrain: Terrain<D>,
     data: Vec<CustomActionData<D>>,
 ) {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_POSITION, pos);
-    scope.push_constant(CONST_NAME_TERRAIN, terrain);
-    execute_script(script, handler, scope, Some(data))
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+    first_argument.insert(CONST_NAME_TERRAIN.into(), Dynamic::from(terrain));
+    execute_script(script, handler, first_argument, Some(data))
 }
 
 pub fn execute_commander_script<D: Direction>(
@@ -430,19 +431,19 @@ pub fn execute_commander_script<D: Direction>(
     handler: &mut EventHandler<D>,
     data: Option<Vec<CustomActionData<D>>>,
 ) {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_OWNER_ID, handler.get_game().current_owner() as i32);
-    scope.push_constant(CONST_NAME_TEAM, handler.get_game().current_team().to_i16() as i32);
-    execute_script(script, handler, scope, data)
+    let mut first_argument = Map::new();
+    first_argument.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(handler.get_game().current_owner() as i32));
+    first_argument.insert(CONST_NAME_TEAM.into(), Dynamic::from(handler.get_game().current_team().to_i16() as i32));
+    execute_script(script, handler, first_argument, data)
 }
 
 fn execute_script<D: Direction>(
     script: usize,
     handler: &mut EventHandler<D>,
-    scope: Scope<'static>,
+    first_argument: Map,
     data: Option<Vec<CustomActionData<D>>>,
 ) {
-    let executor = handler.executor(scope);
+    let executor = handler.executor(first_argument);
     let result: Result<(), Box<EvalAltResult>> = if let Some(data) = data {
         let data = data.iter()
         .map(CustomActionData::into_dynamic)

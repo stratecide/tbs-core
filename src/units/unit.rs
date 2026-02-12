@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 
 use interfaces::ClientPerspective;
 use num_rational::Rational32;
-use rhai::Scope;
+use rhai::{Dynamic, Map};
 use uniform_smart_pointer::Urc;
 use zipper::*;
 
@@ -380,10 +380,10 @@ impl<D: Direction> Unit<D> {
         // can the unit be moved?
         let environment = self.environment().clone();
         let is_unit_movable_rhai = environment.is_unit_movable_rhai();
-        let mut scope = Scope::new();
-        scope.push_constant(CONST_NAME_POSITION, pos);
-        scope.push_constant(CONST_NAME_UNIT, self.clone());
-        let executor = board.executor(scope);
+        let mut first_argument = Map::new();
+        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+        first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(self.clone()));
+        let executor = board.executor(first_argument);
         match executor.run::<D, bool>(is_unit_movable_rhai, ()) {
             Ok(movable) => movable,
             Err(e) => {

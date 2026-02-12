@@ -115,11 +115,11 @@ impl SplashDamagePointSource {
                 }
             }
             Self::Rhai(function_index) => {
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_POSITION, main_target.point);
-                scope.push_constant(CONST_NAME_ATTACK_DIRECTION, main_target.direction);
-                scope.push_constant(CONST_NAME_MIRRORED, main_target.mirrored);
-                let executor = game.executor(scope);
+                let mut first_argument = rhai::Map::new();
+                first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(main_target.point));
+                first_argument.insert(CONST_NAME_ATTACK_DIRECTION.into(), Dynamic::from(main_target.direction));
+                first_argument.insert(CONST_NAME_MIRRORED.into(), Dynamic::from(main_target.mirrored));
+                let executor = game.executor(first_argument);
                 match executor.run::<D, Array>(*function_index, ()) {
                     Ok(lists) => {
                         // Array -> Vec<Vec<PointWithDistortion>>
@@ -150,7 +150,7 @@ impl FromConfig for SplashDamagePointSource {
             "Straight" => Self::Straight,
             "TriangleDiagonal" => Self::TriangleDiagonal,
             "TriangleStraight" => Self::TriangleStraight,
-            s => Self::Rhai(loader.rhai_function(&format!("{s}"), 0..=0)?.index)
+            s => Self::Rhai(loader.rhai_function(&format!("{s}"), 1..=1)?.index)
         }, ""))
     }
 }

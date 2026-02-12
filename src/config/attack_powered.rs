@@ -17,7 +17,7 @@ use crate::units::UnitData;
 use super::file_loader::FileLoader;
 use super::file_loader::TableLine;
 use super::number_modification::NumberMod;
-use super::unit_filter::unit_filter_scope;
+use super::unit_filter::unit_filter_input;
 use super::ConfigParseError;
 use super::unit_filter::UnitFilter;
 
@@ -56,9 +56,9 @@ impl TableLine for AttackPoweredConfig {
                                 let (priority, name, _) = parse_tuple2(s, loader)?;
                                 (Some(priority), name)
                             }
-                            _ => return Err(ConfigParseError::UnknownEnumMember(format!("OnDefend::{base}")).into())
+                            _ => return Err(ConfigParseError::UnknownEnumMember(format!("{name}::{base}")).into())
                         };
-                        let f = loader.rhai_function(&f, 0..=10)?;
+                        let f = loader.rhai_function(&f, 1..=10)?;
                         scripts.insert(name.clone(), (f.index, f.parameters.len(), priority));
                     } else {
                         let nm =NumberMod::from_conf(s, loader)?.0;
@@ -103,7 +103,7 @@ impl AttackPoweredConfig {
 
     pub(super) fn get_script(&self, column_name: &String, parameter_count: usize) -> Option<(usize, Option<Rational32>)> {
         self.scripts.get(column_name)
-        .filter(|(_, p, _)| *p == parameter_count)
+        .filter(|(_, p, _)| *p == 1 + parameter_count)
         .map(|(f, _, priority)| (*f, *priority))
     }
 }
@@ -170,7 +170,7 @@ impl FromConfig for AttackFilter {
             "Rhai" | "Script" => {
                 let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                 remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
             }
             "Not" => {
                 let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
@@ -216,7 +216,7 @@ impl AttackFilter {
             }
             Self::UnitFilter(uf) => uf.check(game, unit_data, other_unit_data, heroes, is_counter),
             Self::Rhai(function_index) => {
-                let scope = attack_filter_scope(game, attack, splash, unit_data, other_unit_data, heroes, is_counter);
+                let scope = attack_filter_input(game, attack, splash, unit_data, other_unit_data, heroes, is_counter);
                 let executor = game.executor(scope);
                 match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
@@ -244,7 +244,7 @@ fn count_from_both_ends(value: i32, count: usize) -> i32 {
     }
 }
 
-pub(crate) fn attack_filter_scope<D: Direction>(
+pub(crate) fn attack_filter_input<D: Direction>(
     game: &Board<D>,
     _attack: &ConfiguredAttack,
     splash: Option<&AttackInstance>,
@@ -253,9 +253,8 @@ pub(crate) fn attack_filter_scope<D: Direction>(
     heroes: &HeroMap<D>,
     // true only during counter-attacks
     is_counter: bool,
-) -> Scope<'static> {
-    let mut scope = unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter);
-    scope.push_constant(CONST_NAME_SPLASH_DISTANCE, dyn_opt(splash.map(|s| s.splash_distance as i32)));
-    scope
-
+) -> Map {
+    let mut result = unit_filter_input(game, unit_data, other_unit_data, heroes, is_counter);
+    result.insert(CONST_NAME_SPLASH_DISTANCE.into(), dyn_opt(splash.map(|s| s.splash_distance as i32)));
+    result
 }

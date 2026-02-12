@@ -33,7 +33,7 @@ impl FromConfig for TokenFilter {
             "Rhai" | "Script" => {
                 let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                 remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
             }
             "Commander" | "Co" => {
                 if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {

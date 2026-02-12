@@ -38,14 +38,14 @@ impl TableLine for TokenTypeConfig {
             vision_range: parse_def(data, H::VisionRange, -1, loader)?,
             action_script: match data.get(&H::ActionScript) {
                 Some(s) if s.len() > 0 => {
-                    let exe = loader.rhai_function(s, 1..=1)?;
-                    let input = loader.rhai_function(&format!("{s}_input"), 0..=0)?.index;
+                    let exe = loader.rhai_function(s, 2..=2)?;
+                    let input = loader.rhai_function(&format!("{s}_input"), 1..=1)?.index;
                     Some((input, exe.index))
                 }
                 _ => None,
             },
             on_unit_path: match data.get(&H::OnUnitPath) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 2..=2)?.index),
+                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 1..=1)?.index),
                 _ => None,
             },
         };

@@ -183,8 +183,6 @@ impl Config {
             functions: Vec::new(),
             is_unit_dead_rhai: usize::MAX,
             is_unit_movable_rhai: usize::MAX,
-            calculate_damage_rhai: usize::MAX,
-            weapon_effects_rhai: None,
             custom_tables: HashMap::default(),
         };
 
@@ -204,9 +202,7 @@ impl Config {
                 "UnknownUnit" => unknown_unit = value.to_string(),
                 "DefaultTerrain" => default_terrain = value.to_string(),
                 "UnitDeathTest" => result.is_unit_dead_rhai = file_loader.rhai_function(value, 1..=1)?.index,
-                "UnitMovableTest" => result.is_unit_movable_rhai = file_loader.rhai_function(value, 0..=0)?.index,
-                "CalculateAttackDamage" => result.calculate_damage_rhai = file_loader.rhai_function(value, 1..=1)?.index,
-                "WeaponEffects" => result.weapon_effects_rhai = Some(file_loader.rhai_function(value, 0..=0)?.index),
+                "UnitMovableTest" => result.is_unit_movable_rhai = file_loader.rhai_function(value, 1..=1)?.index,
                 _ => ()
             }
             Ok(())

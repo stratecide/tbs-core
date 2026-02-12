@@ -74,9 +74,9 @@ impl<'a, D: Direction> Board<'a, D> {
         }
     }
 
-    pub fn executor<'b>(&'b self, mut scope: Scope<'b>) -> Executor<'b> {
-        scope.push_constant(CONST_NAME_BOARD, BoardPointer::from(self));
-        Executor::new(scope, self.environment().clone())
+    pub fn executor<'b>(&'b self, mut first_argument: rhai::Map) -> Executor<'b> {
+        first_argument.insert(CONST_NAME_BOARD.into(), Dynamic::from(BoardPointer::from(self)));
+        Executor::new(first_argument, self.environment().clone())
     }
 
     pub fn unit_path_without_placing(&'a self, unload_index: Option<usize>, path: &Path<D>) -> Option<(Self, Point, Unit<D>)> {

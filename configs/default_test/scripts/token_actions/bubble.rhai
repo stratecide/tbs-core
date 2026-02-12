@@ -1,27 +1,27 @@
 
-fn buy_airport_input() {
-    terrain_buy_unit_input(BOARD, PLAYER, TERRAIN_Airport, TOKEN.owner_id, ())
+fn buy_airport_input(CONTEXT) {
+    terrain_buy_unit_input(CONTEXT.board, CONTEXT.player, TERRAIN_Airport, CONTEXT.token.owner_id, ())
 }
 
-fn buy_airport(data) {
-    EVENT_HANDLER.remove_token(POSITION, TOKEN);
-    terrain_buy_unit(EVENT_HANDLER, POSITION, TOKEN.owner_id, data, false);
+fn buy_airport(CONTEXT, data) {
+    CONTEXT.event_handler.remove_token(CONTEXT.position, CONTEXT.token);
+    terrain_buy_unit(CONTEXT.event_handler, CONTEXT.position, CONTEXT.token.owner_id, data, false);
 }
 
-fn buy_factory_input() {
-    terrain_buy_unit_input(BOARD, PLAYER, TERRAIN_Factory, TOKEN.owner_id, ())
+fn buy_factory_input(CONTEXT) {
+    terrain_buy_unit_input(CONTEXT.board, CONTEXT.player, TERRAIN_Factory, CONTEXT.token.owner_id, ())
 }
 
-fn buy_factory(data) {
-    EVENT_HANDLER.remove_token(POSITION, TOKEN);
-    terrain_buy_unit(EVENT_HANDLER, POSITION, TOKEN.owner_id, data, false);
+fn buy_factory(CONTEXT, data) {
+    CONTEXT.event_handler.remove_token(CONTEXT.position, CONTEXT.token);
+    terrain_buy_unit(CONTEXT.event_handler, CONTEXT.position, CONTEXT.token.owner_id, data, false);
 }
 
-fn buy_port_input() {
-    terrain_buy_unit_input(BOARD, PLAYER, TERRAIN_Port, TOKEN.owner_id, ())
+fn buy_port_input(CONTEXT) {
+    terrain_buy_unit_input(CONTEXT.board, CONTEXT.player, TERRAIN_Port, CONTEXT.token.owner_id, ())
 }
 
-fn buy_port(data) {
-    EVENT_HANDLER.remove_token(POSITION, TOKEN);
-    terrain_buy_unit(EVENT_HANDLER, POSITION, TOKEN.owner_id, data, false);
+fn buy_port(CONTEXT, data) {
+    CONTEXT.event_handler.remove_token(CONTEXT.position, CONTEXT.token);
+    terrain_buy_unit(CONTEXT.event_handler, CONTEXT.position, CONTEXT.token.owner_id, data, false);
 }

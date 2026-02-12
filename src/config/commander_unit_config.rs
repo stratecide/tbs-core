@@ -85,11 +85,11 @@ impl TableLine for CommanderPowerUnitConfig {
                 _ => None,
             },
             on_death: match data.get(&H::OnDeath) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
+                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 1..=1)?.index),
                 _ => None,
             },
             on_normal_action: match data.get(&H::OnNormalAction) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
+                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 1..=1)?.index),
                 _ => None,
             },
             aura_range: parse_def(data, H::AuraRange, NumberMod::Keep, loader)?,

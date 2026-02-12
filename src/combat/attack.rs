@@ -16,7 +16,7 @@ use crate::map::direction::Direction;
 use crate::map::map::{get_line, NeighborMode};
 use crate::map::point::*;
 use crate::map::wrapping_map::OrientedPoint;
-use crate::script::*;
+use crate::{dyn_opt, script::*};
 use crate::units::hero::{HeroMap, HeroMapWithId};
 use crate::units::movement::{Path, PathStep, TBallast};
 use crate::units::{unit::*, UnitData, UnitId};
@@ -140,7 +140,6 @@ pub enum AttackInstanceScript {
 
 #[derive(Debug, Clone, Copy)]
 struct PushArguments<D: Direction> {
-    id: usize,
     direction: D,
     distance: usize,
     push_limit: usize,
@@ -172,13 +171,13 @@ impl AttackInstance {
         };
         let is_counter = counter_state.is_counter();
         let environment = handler.environment().clone();
-        let result: Vec<(Array, Option<Rational32>, AttackExecutableScript)>;
+        let result: Vec<AttackContextScript<D>>;
         match &self.script {
             AttackInstanceScript::Displace { distance, push_limit, throw, neighbor_mode } => {
                 result = targets.into_iter()
                 .filter_map(|dp| {
                     let defender = handler.get_game().get_unit(dp.point)?.clone();
-                    let UnitId(id, distortion) = handler.observe_unit(dp.point, None);
+                    let defender_id = handler.observe_unit(dp.point, None);
                     let defender_data = UnitData {
                         unit: &defender,
                         pos: dp.point,
@@ -191,19 +190,20 @@ impl AttackInstance {
                     if distance <= 0 || push_limit < 0 {
                         return None;
                     }
-                    Some((
-                        vec![Dynamic::from(PushArguments {
-                            id,
-                            direction: (-distortion).update_direction(self.direction_modifier.modify(dp).direction),
+                    Some(AttackContextScript {
+                        defender_id: Some(defender_id),
+                        priority: None,
+                        script: AttackExecutableScript::Displace { throw: *throw, neighbor_mode: *neighbor_mode },
+                        arguments: vec![Dynamic::from(PushArguments {
+                            direction: (-defender_id.1).update_direction(self.direction_modifier.modify(dp).direction),
                             distance: distance as usize,
                             push_limit: push_limit as usize,
                         })],
-                        None,
-                        AttackExecutableScript::Displace { throw: *throw, neighbor_mode: *neighbor_mode },
-                    ))
+                    })
                 }).collect();
             }
             AttackInstanceScript::Rhai { build_script } => {
+                let (default_ast, _) = environment.get_rhai_function(*build_script);
                 let mut attack_context = AttackContext::new(
                     handler,
                     attack,
@@ -213,30 +213,22 @@ impl AttackInstance {
                     temporary_ballast,
                     heroes,
                     counter_state,
+                    default_ast.clone(),
                 );
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_SPLASH_DISTANCE, splash.splash_distance as i32);
-                scope.push_constant(CONST_NAME_ATTACKER_ID, attacker_id.map(|id| Dynamic::from(id)).unwrap_or(().into()));
-                scope.push_constant(CONST_NAME_ATTACKER, attacker.clone());
-                scope.push_constant(CONST_NAME_ATTACKER_POSITION, attacker_pos);
-                scope.push_constant(CONST_NAME_ATTACK_DIRECTION, attack_direction);
-                scope.push_constant(CONST_NAME_HEROES, heroes_with_ids.clone());
-                scope.push_constant(CONST_NAME_TARGETS, targets.into_iter()
+                let mut first_argument = Map::new();
+                first_argument.insert(CONST_NAME_SPLASH_DISTANCE.into(), Dynamic::from(splash.splash_distance as i32));
+                first_argument.insert(CONST_NAME_ATTACKER_ID.into(), attacker_id.map(|id| Dynamic::from(id)).unwrap_or(().into()));
+                first_argument.insert(CONST_NAME_ATTACKER.into(), Dynamic::from(attacker.clone()));
+                first_argument.insert(CONST_NAME_ATTACKER_POSITION.into(), Dynamic::from(attacker_pos));
+                first_argument.insert(CONST_NAME_ATTACK_DIRECTION.into(), Dynamic::from(attack_direction));
+                first_argument.insert(CONST_NAME_HEROES.into(), Dynamic::from(heroes_with_ids.clone()));
+                first_argument.insert(CONST_NAME_TARGETS.into(), Dynamic::from(targets.into_iter()
                     .map(|dp| Dynamic::from(self.direction_modifier.modify(dp)))
-                    .collect::<Array>());
-                let executor = attack_context.executor(scope);
+                    .collect::<Array>()));
+                let executor = attack_context.executor(first_argument);
                 match executor.run::<D, ()>(*build_script, ()) {
                     Ok(()) => {
-                        let (default_ast, _) = environment.get_rhai_function(*build_script);
-                        result = attack_context.scripts.drain(..)
-                        .map(|(arguments, priority, ast, script)| (
-                            arguments,
-                            priority,
-                            AttackExecutableScript::Rhai {
-                                ast: ast.unwrap_or_else(|| default_ast.clone()),
-                                script,
-                            },
-                        )).collect();
+                        result = attack_context.scripts.drain(..).collect();
                     }
                     Err(e) => {
                         environment.log_rhai_error("AttackSplash preparation", environment.get_rhai_function_name(*build_script), &e);
@@ -244,19 +236,28 @@ impl AttackInstance {
                         return Vec::new();
                     }
                 }
-                drop(attack_context);
             }
         }
         result.into_iter()
-            .map(|(arguments, priority, script)| {
+            .map(|scr| {
+                let (defender, defender_pos) = if let Some(id) = scr.defender_id {
+                    let defender_pos = handler.get_observed_unit_pos(id.0).unwrap().0;
+                    let defender = handler.get_board().get_unit(defender_pos).cloned();
+                    (defender, Some(defender_pos))
+                } else {
+                    (None, None)
+                };
                 AttackExecutable {
-                    priority: priority.unwrap_or(self.priority),
+                    priority: scr.priority.unwrap_or(self.priority),
                     attacker: attacker.clone(),
                     attacker_id,
                     attacker_pos,
+                    defender_id: scr.defender_id,
+                    defender,
+                    defender_pos,
                     is_counter,
-                    arguments,
-                    script,
+                    arguments: scr.arguments,
+                    script: scr.script,
                 }
             }).collect()
     }
@@ -283,12 +284,22 @@ pub(crate) struct ScriptedAttack<D: Direction> {
     pub priority: i32,
 }
 
+pub(super) struct AttackContextScript<D: Direction> {
+    pub(super) defender_id: Option<UnitId<D>>,
+    pub(super) priority: Option<Rational32>,
+    pub(super) script: AttackExecutableScript,
+    pub(super) arguments: Vec<Dynamic>,
+}
+
 #[derive(Debug, Clone)]
 pub struct AttackExecutable<D: Direction> {
     priority: Rational32,
     attacker: Unit<D>,
     attacker_id: Option<UnitId<D>>,
     attacker_pos: Point,
+    defender: Option<Unit<D>>,
+    defender_id: Option<UnitId<D>>,
+    defender_pos: Option<Point>,
     is_counter: bool,
     arguments: Vec<Dynamic>,
     script: AttackExecutableScript,
@@ -303,11 +314,11 @@ impl<D: Direction> AttackExecutable<D> {
         match self.script {
             AttackExecutableScript::Displace { throw, neighbor_mode } => {
                 let PushArguments {
-                    id,
                     direction,
                     distance,
                     push_limit,
                 } = self.arguments.pop().unwrap().cast();
+                let id = self.defender_id.unwrap().0;
                 let Some((point, None, distortion)) = handler.get_observed_unit(id) else {
                     return Vec::new();
                 };
@@ -392,13 +403,16 @@ impl<D: Direction> AttackExecutable<D> {
             }
             AttackExecutableScript::Rhai { ast, script } => {
                 let mut scripted_attacks = Vec::new();
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_ATTACKER, self.attacker);
-                scope.push_constant(CONST_NAME_ATTACKER_POSITION, self.attacker_pos);
-                scope.push_constant(CONST_NAME_ATTACKER_ID, self.attacker_id.map(Dynamic::from).unwrap_or(().into()));
-                scope.push_constant(CONST_NAME_IS_COUNTER, self.is_counter);
-                scope.push_constant(CONST_NAME_ATTACK_PRIORITY, attack_priority);
-                let executor = handler.executor(scope);
+                let mut first_argument = Map::new();
+                first_argument.insert(CONST_NAME_ATTACKER.into(), Dynamic::from(self.attacker));
+                first_argument.insert(CONST_NAME_ATTACKER_POSITION.into(), Dynamic::from(self.attacker_pos));
+                first_argument.insert(CONST_NAME_ATTACKER_ID.into(), dyn_opt(self.attacker_id));
+                first_argument.insert(CONST_NAME_DEFENDER.into(), dyn_opt(self.defender));
+                first_argument.insert(CONST_NAME_DEFENDER_POSITION.into(), dyn_opt(self.defender_pos));
+                first_argument.insert(CONST_NAME_DEFENDER_ID.into(), dyn_opt(self.defender_id));
+                first_argument.insert(CONST_NAME_IS_COUNTER.into(), Dynamic::from(self.is_counter));
+                first_argument.insert(CONST_NAME_ATTACK_PRIORITY.into(), Dynamic::from(attack_priority));
+                let executor = handler.executor(first_argument);
                 match executor.run_ast::<D, Dynamic>(&ast, &script, self.arguments) {
                     Ok(result) => {
                         // script had no errors

@@ -37,7 +37,7 @@ impl FromConfig for TerrainFilter {
             "Rhai" | "Script" => {
                 let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                 remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
             }
             "Commander" | "Co" => {
                 if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
@@ -132,8 +132,8 @@ impl TableLine for TerrainPoweredConfig {
             income_factor: parse_def(data, H::IncomeFactor, NumberMod::Keep, loader)?,
             action_script: match data.get(&H::ActionScript) {
                 Some(s) if s.len() > 0 => {
-                    let exe = loader.rhai_function(s, 1..=1)?;
-                    let input = loader.rhai_function(&format!("{s}_input"), 0..=0)?.index;
+                    let exe = loader.rhai_function(s, 2..=2)?;
+                    let input = loader.rhai_function(&format!("{s}_input"), 1..=1)?.index;
                     Some((input, exe.index))
                 }
                 _ => None,

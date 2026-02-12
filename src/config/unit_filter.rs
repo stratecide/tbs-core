@@ -65,7 +65,7 @@ impl FromConfig for UnitFilter {
             "Rhai" | "Script" => {
                 let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                 remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
             }
             "Unit" | "U" => {
                 let (list, r) = parse_inner_vec::<UnitType>(remainder, true, loader)?;
@@ -184,7 +184,7 @@ impl UnitFilter {
     ) -> bool {
         match self {
             Self::Rhai(function_index) => {
-                let executor = game.executor(unit_filter_scope(game, unit_data, other_unit_data, heroes, is_counter));
+                let executor = game.executor(unit_filter_input(game, unit_data, other_unit_data, heroes, is_counter));
                 match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {
@@ -285,28 +285,27 @@ impl UnitFilter {
     }
 }
 
-pub(crate) fn unit_filter_scope<D: Direction>(
+pub(crate) fn unit_filter_input<D: Direction>(
     game: &Board<D>,
     unit_data: UnitData<D>,
     other_unit_data: Option<UnitData<D>>,
     _heroes: &HeroMap<D>,
     // true only during counter-attacks
     is_counter: bool,
-) -> Scope<'static> {
-    let mut scope = Scope::new();
-    scope.push_constant(CONST_NAME_UNIT, unit_data.unit.clone());
-    scope.push_constant(CONST_NAME_POSITION, unit_data.pos);
-    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, dyn_opt(unit_data.unload_index.map(|i| i as i32)));
-    scope.push_constant(CONST_NAME_TRANSPORTER, dyn_opt(unit_data.original_transporter.map(|(u, _)| u.clone())));
-    scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, dyn_opt(unit_data.original_transporter.map(|(_, p)| p)));
-    scope.push_constant(CONST_NAME_OTHER_UNIT, dyn_opt(other_unit_data.map(|ud| ud.unit.clone())));
-    scope.push_constant(CONST_NAME_OTHER_POSITION, dyn_opt(other_unit_data.map(|ud| ud.pos)));
-    //scope.push_constant(CONST_NAME_OTHER_TRANSPORT_INDEX, dyn_opt(other_unit_data.map(|ud| ud.unload_index.map(|i| i as i32))));
-    //scope.push_constant(CONST_NAME_OTHER_TRANSPORTER, dyn_opt(other_unit_data.map(|ud| ud.original_transporter.map(|(u, _)| u.clone()))));
-    //scope.push_constant(CONST_NAME_OTHER_TRANSPORTER_POSITION, dyn_opt(other_unit_data.map(|ud| ud.original_transporter.map(|(_, p)| p))));
+) -> Map {
+    let mut result = Map::new();
+    result.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit_data.unit.clone()));
+    result.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_data.pos));
+    result.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(unit_data.unload_index.map(|i| i as i32)));
+    result.insert(CONST_NAME_TRANSPORTER.into(), dyn_opt(unit_data.original_transporter.map(|(u, _)| u.clone())));
+    result.insert(CONST_NAME_TRANSPORTER_POSITION.into(), dyn_opt(unit_data.original_transporter.map(|(_, p)| p)));
+    result.insert(CONST_NAME_OTHER_UNIT.into(), dyn_opt(other_unit_data.map(|ud| ud.unit.clone())));
+    result.insert(CONST_NAME_OTHER_POSITION.into(), dyn_opt(other_unit_data.map(|ud| ud.pos)));
+    //result.insert(CONST_NAME_OTHER_TRANSPORT_INDEX.into(), dyn_opt(other_unit_data.map(|ud| ud.unload_index.map(|i| i as i32))));
+    //result.insert(CONST_NAME_OTHER_TRANSPORTER.into(), dyn_opt(other_unit_data.map(|ud| ud.original_transporter.map(|(u, _)| u.clone()))));
+    //result.insert(CONST_NAME_OTHER_TRANSPORTER_POSITION.into(), dyn_opt(other_unit_data.map(|ud| ud.original_transporter.map(|(_, p)| p))));
     // TODO: heroes and ballast (put them into Arc<>s ?)
-    scope.push_constant(CONST_NAME_IS_COUNTER, is_counter);
-    scope.push_constant(CONST_NAME_OWNER_ID, game.current_owner() as i32);
-    scope
-
+    result.insert(CONST_NAME_IS_COUNTER.into(), Dynamic::from(is_counter));
+    result.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(game.current_owner() as i32));
+    result
 }

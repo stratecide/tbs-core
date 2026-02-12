@@ -1,6 +1,6 @@
 use num_rational::Rational32;
 use rustc_hash::FxHashSet;
-use rhai::{Array, Scope};
+use rhai::{Array, Dynamic, Map};
 use zipper::*;
 use zipper::zipper_derive::Zippable;
 
@@ -296,10 +296,10 @@ impl AttackPattern {
                 }
             }
             Self::Rhai { function_index, parameter_values, .. } => {
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_POSITION, attacker_pos);
-                scope.push_constant(CONST_NAME_ATTACK_DIRECTION, d);
-                let executor = game.executor(scope);
+                let mut first_argument = Map::new();
+                first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(attacker_pos));
+                first_argument.insert(CONST_NAME_ATTACK_DIRECTION.into(), Dynamic::from(d));
+                let executor = game.executor(first_argument);
                 match executor.run::<D, Array>(*function_index, parameter_values.clone()) {
                     Ok(list) => {
                         // Array -> Vec<Vec<PointWithDistortion>>

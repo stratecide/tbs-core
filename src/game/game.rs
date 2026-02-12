@@ -191,7 +191,10 @@ impl<D: Direction> Game<D> {
                 ClientPerspective::Team(team) => {
                     result.insert(team);
                 }
-                _ => panic!("player should not be neutral"),
+                _ => {
+                    crate::debug!("players: {:?}", self.players);
+                    panic!("player {} should not be neutral", p.get_owner_id())
+                }
             }
         }
         result

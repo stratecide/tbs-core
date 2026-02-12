@@ -16,23 +16,23 @@ fn unit_value(unit) {
     unit_value(unit, ())
 }
 
-fn unit_can_build(BOARD, UNIT, POSITION) {
-    let capacity = UNIT.transport_capacity;
+fn unit_can_build(board, unit, position) {
+    let capacity = unit.transport_capacity;
     if capacity > 0 {
         // build inside
-        if UNIT.get(TAG_DroneStationId) != () {
-            for p in BOARD.all_positions() {
-                let drone = BOARD.get_unit(p);
-                if drone != () && drone.get(TAG_DroneId) == UNIT.get(TAG_DroneStationId) {
+        if unit.get(TAG_DroneStationId) != () {
+            for p in board.all_positions() {
+                let drone = board.get_unit(p);
+                if drone != () && drone.get(TAG_DroneId) == unit.get(TAG_DroneStationId) {
                     capacity -= 1;
                 }
             }
         }
-        UNIT.transported_len < capacity
+        unit.transported_len < capacity
     } else {
         // build outside
-        for point in BOARD.get_neighbors(POSITION) {
-            if BOARD.get_unit(point) == () {
+        for point in board.get_neighbors(position) {
+            if board.get_unit(point) == () {
                 return true;
             }
         }
@@ -40,72 +40,72 @@ fn unit_can_build(BOARD, UNIT, POSITION) {
     }
 }
 
-fn build_unit_input(BOARD, PLAYER, UNIT, POSITION) {
+fn build_unit_input(board, player, parent_unit, position) {
     let options = new_shop("Build Unit");
-    let funds = BOARD.get(UNIT.owner_id, TAG_Funds) ?? 0;
-    for unit_type in BOARD.config.table_row("UNIT_BUILD", UNIT.type, true) {
-        let unit = Unit(BOARD.config, unit_type);
-        unit.owner_id = UNIT.owner_id;
-        unit.set(TAG_Hp, 100);
-        if UNIT.get(TAG_DroneStationId) != () {
-            unit.set(TAG_DroneId, UNIT.get(TAG_DroneStationId));
+    let funds = board.get(parent_unit.owner_id, TAG_Funds) ?? 0;
+    for unit_type in board.config.table_row("UNIT_BUILD", parent_unit.type, true) {
+        let new_unit = Unit(board.config, unit_type);
+        new_unit.owner_id = parent_unit.owner_id;
+        new_unit.set(TAG_Hp, 100);
+        if parent_unit.get(TAG_DroneStationId) != () {
+            new_unit.set(TAG_DroneId, parent_unit.get(TAG_DroneStationId));
         }
-        let price = unit_value(unit);
-        let item = ShopItem(unit);
+        let price = unit_value(new_unit);
+        let item = ShopItem(new_unit);
         item.costs.push(price);
         if price > funds {
             item.enabled = false;
         }
         options.add(item);
     }
-    let unit = PLAYER.choice(options, false).key;
-    if UNIT.transport_capacity == 0 {
+    let new_unit = player.choice(options, false).key;
+    if parent_unit.transport_capacity == 0 {
         // need to find a place outside
-        let options = new_direction_selection(POSITION);
-        for n in BOARD.get_neighbors_with_direction(POSITION) {
-            if BOARD.get_unit(n.point) == ()
-            && BOARD.get_terrain(n.point).movement_cost(unit.movement_type) != () {
+        let options = new_direction_selection(position);
+        for n in board.get_neighbors_with_direction(position) {
+            if board.get_unit(n.point) == ()
+            && board.get_terrain(n.point).movement_cost(new_unit.movement_type) != () {
                 options += n.direction
             }
         }
-        PLAYER.choice(options, false);
+        player.choice(options, false);
     }
     success()
 }
 
-fn build_unit(EVENT_HANDLER, UNIT, POSITION, exhaust, data) {
-    EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
-    let unit = data[0].key;
+fn build_unit(event_handler, parent_unit, position, exhaust, data) {
+    event_handler.set_unit_flag(position, FLAG_Exhausted);
+    let new_unit = data[0].key;
     let cost = data[0].costs[0];
     if exhaust {
-        unit.set(FLAG_Exhausted);
+        new_unit.set(FLAG_Exhausted);
     }
-    if unit.type == UNIT_LightDrone && !UNIT.has(TAG_DroneStationId) {
-        let uid = EVENT_HANDLER.generate_unique_id(TAG_DroneStationId);
-        EVENT_HANDLER.set_unit_tag(POSITION, TAG_DroneStationId, uid);
-        unit.set(TAG_DroneId, uid);
+    if new_unit.type == UNIT_LightDrone && !parent_unit.has(TAG_DroneStationId) {
+        let uid = event_handler.generate_unique_id(TAG_DroneStationId);
+        event_handler.set_unit_tag(position, TAG_DroneStationId, uid);
+        new_unit.set(TAG_DroneId, uid);
     }
-    if UNIT.transport_capacity == 0 {
+    if parent_unit.transport_capacity == 0 {
         let direction = data[1];
-        let target = EVENT_HANDLER.board.get_neighbor(POSITION, direction);
-        if EVENT_HANDLER.board.get_unit(target) != () {
+        let target = event_handler.board.get_neighbor(position, direction);
+        if event_handler.board.get_unit(target) != () {
             // hidden unit blocks the build, but money isn't spent either
             // TODO: show alert! effect
             return;
         }
-        // TODO: animate path from "POSITION" to "target"
-        EVENT_HANDLER.place_unit(target, unit);
+        // TODO: animate path from "position" to "target"
+        event_handler.place_unit(target, new_unit);
     } else {
-        EVENT_HANDLER.transport_unit(POSITION, unit);
+        event_handler.transport_unit(position, new_unit);
     }
-    EVENT_HANDLER.set(UNIT.owner_id, TAG_Funds, (EVENT_HANDLER.board.get(UNIT.owner_id, TAG_Funds) ?? 0) - cost);
+    event_handler.set(parent_unit.owner_id, TAG_Funds, (event_handler.board.get(parent_unit.owner_id, TAG_Funds) ?? 0) - cost);
 }
 
-fn terrain_buy_unit_input(BOARD, PLAYER, terrain_type, owner_id, direction) {
+fn terrain_buy_unit_input(board, player, terrain_type, owner_id, direction) {
     let options = new_shop("Build Unit");
-    let funds = BOARD.get(owner_id, TAG_Funds) ?? 0;
-    for unit_type in BOARD.config.table_row("TERRAIN_BUILD", terrain_type, true) {
-        let unit = Unit(BOARD.config, unit_type);
+    let funds = board.get(owner_id, TAG_Funds) ?? 0;
+    for unit_type in board.config.table_row("TERRAIN_BUILD", terrain_type, true) {
+        let unit = Unit(board.config, unit_type);
         unit.owner_id = owner_id;
         unit.set(TAG_Hp, 100);
         if direction != () {
@@ -122,47 +122,47 @@ fn terrain_buy_unit_input(BOARD, PLAYER, terrain_type, owner_id, direction) {
         }
         options.add(item);
     }
-    PLAYER.choice(options, false);
+    player.choice(options, false);
     success()
 }
 
-fn terrain_buy_unit(EVENT_HANDLER, position, owner_id, data, exhaust_unit) {
+fn terrain_buy_unit(event_handler, position, owner_id, data, exhaust_unit) {
     let unit = data[0].key;
     let cost = data[0].costs[0];
     if exhaust_unit {
         unit.set(FLAG_Exhausted);
     }
-    EVENT_HANDLER.set(owner_id, TAG_Funds, (EVENT_HANDLER.board.get(owner_id, TAG_Funds) ?? 0) - cost);
-    EVENT_HANDLER.place_unit(position, unit);
+    event_handler.set(owner_id, TAG_Funds, (event_handler.board.get(owner_id, TAG_Funds) ?? 0) - cost);
+    event_handler.place_unit(position, unit);
 }
 
-fn exhaust_all_on_chess_board(EVENT_HANDLER, start_position, owner_id) {
-    let positions = EVENT_HANDLER.board.spread_search(start_position, |board, p| {
+fn exhaust_all_on_chess_board(event_handler, start_position, owner_id) {
+    let positions = event_handler.board.spread_search(start_position, |board, p| {
         let terrain = board.get_terrain(p);
         terrain.type == TERRAIN_ChessTile || terrain.type == TERRAIN_ChessPawnTile
     });
     for p in positions {
-        if EVENT_HANDLER.board.get_unit(p)?.owner_id == owner_id {
-            EVENT_HANDLER.set_unit_flag(p, FLAG_Exhausted);
+        if event_handler.board.get_unit(p)?.owner_id == owner_id {
+            event_handler.set_unit_flag(p, FLAG_Exhausted);
         }
     }
 }
 
-fn change_unit_hp(EVENT_HANDLER, position, change) {
-    let unit = EVENT_HANDLER.board.get_unit(position);
-    EVENT_HANDLER.set_unit_tag(position, TAG_Hp, unit.get(TAG_Hp) + change);
+fn change_unit_hp(event_handler, position, change) {
+    let unit = event_handler.board.get_unit(position);
+    event_handler.set_unit_tag(position, TAG_Hp, unit.get(TAG_Hp) + change);
     FX_HpChange(change).at(position)
 }
 
-fn finish_capturing(EVENT_HANDLER, position, owner_id) {
-    let old_terrain = EVENT_HANDLER.board.get_terrain(position);
-    let terrain = Terrain(EVENT_HANDLER.config, old_terrain.type);
+fn finish_capturing(event_handler, position, owner_id) {
+    let old_terrain = event_handler.board.get_terrain(position);
+    let terrain = Terrain(event_handler.config, old_terrain.type);
     terrain.copy_from(old_terrain);
     terrain.remove(TAG_CaptureOwner);
     terrain.remove(TAG_CaptureProgress);
     terrain.owner_id = owner_id;
-    EVENT_HANDLER.replace_terrain(position, terrain);
+    event_handler.replace_terrain(position, terrain);
     if terrain.type == TERRAIN_Hq {
-        EVENT_HANDLER.make_player_lose(old_terrain.owner_id);
+        event_handler.make_player_lose(old_terrain.owner_id);
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::error::Error;
 use executor::Executor;
-use rhai::Scope;
+use rhai::{Dynamic, Map};
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::commander::commander_type::CommanderType;
@@ -47,11 +47,11 @@ impl TableLine for GlobalEventConfig {
         Ok(Self {
             typ,
             on_start_turn: match data.get(&H::StartTurn) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
+                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 1..=1)?.index),
                 _ => None,
             },
             on_end_turn: match data.get(&H::EndTurn) {
-                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 0..=0)?.index),
+                Some(s) if s.len() > 0 => Some(loader.rhai_function(s, 1..=1)?.index),
                 _ => None,
             },
         })
@@ -81,11 +81,11 @@ pub(crate) enum GlobalEventType {
 }
 
 impl GlobalEventType {
-    pub fn test_global<D: Direction>(&self, game: &Game<D>) -> Option<Scope<'static>> {
+    pub fn test_global<D: Direction>(&self, game: &Game<D>) -> Option<Map> {
         match self {
             Self::Global(filter) => {
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_OWNER_ID, game.current_player().get_owner_id() as i32);
+                let mut scope = Map::new();
+                scope.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(game.current_player().get_owner_id() as i32));
                 let board = Board::from(game);
                 let executor = board.executor(scope.clone());
                 if filter.iter().all(|filter| filter.check(game, &executor)) {
@@ -97,7 +97,7 @@ impl GlobalEventType {
         None
     }
 
-    pub fn test_local<D: Direction>(&self, handler: &mut EventHandler<D>, pos: Point, heroes: &HeroMap<D>) -> Vec<Scope<'static>> {
+    pub fn test_local<D: Direction>(&self, handler: &mut EventHandler<D>, pos: Point, heroes: &HeroMap<D>) -> Vec<Map> {
         let current_owner_id = handler.get_game().current_owner() as i32;
         let mut result = Vec::new();
         match self {
@@ -105,10 +105,10 @@ impl GlobalEventType {
             Self::Terrain(filter) => {
                 let terrain = handler.get_game().get_terrain(pos).unwrap();
                 let heroes = heroes.get(pos, terrain.get_owner_id());
-                let mut scope = Scope::new();
-                scope.push_constant(CONST_NAME_POSITION, pos);
-                scope.push_constant(CONST_NAME_TERRAIN, terrain.clone());
-                scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
+                let mut scope = Map::new();
+                scope.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+                scope.insert(CONST_NAME_TERRAIN.into(), Dynamic::from(terrain.clone()));
+                scope.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(current_owner_id));
                 let executor = handler.get_board().executor(scope.clone());
                 if filter.iter().all(|filter| filter.check(handler.get_board(), pos, &terrain, heroes, &executor)) {
                     result.push(scope)
@@ -116,10 +116,10 @@ impl GlobalEventType {
             }
             Self::Token(filter) => {
                 for token in handler.get_game().get_tokens(pos) {
-                    let mut scope = Scope::new();
-                    scope.push_constant(CONST_NAME_POSITION, pos);
-                    scope.push_constant(CONST_NAME_TOKEN, token.clone());
-                    scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
+                    let mut scope = Map::new();
+                    scope.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+                    scope.insert(CONST_NAME_TOKEN.into(), Dynamic::from(token.clone()));
+                    scope.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(current_owner_id));
                     let executor = handler.get_board().executor(scope.clone());
                     if filter.iter().all(|filter| filter.check(handler.get_board(), pos, &token, &executor)) {
                         result.push(scope)
@@ -137,13 +137,13 @@ impl GlobalEventType {
                     ballast: &[],
                     original_transporter: None,
                 }, None, heroes, false)) {
-                    let mut scope = Scope::new();
-                    scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                    scope.push_constant(CONST_NAME_UNIT_ID, handler.observe_unit(pos, None));
-                    scope.push_constant(CONST_NAME_POSITION, pos);
-                    scope.push_constant(CONST_NAME_TRANSPORT_INDEX, ());
-                    scope.push_constant(CONST_NAME_TRANSPORTER, ());
-                    scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
+                    let mut scope = Map::new();
+                    scope.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit.clone()));
+                    scope.insert(CONST_NAME_UNIT_ID.into(), Dynamic::from(handler.observe_unit(pos, None)));
+                    scope.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+                    //scope.insert(CONST_NAME_TRANSPORT_INDEX.into(), ());
+                    //scope.insert(CONST_NAME_TRANSPORTER.into(), ());
+                    scope.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(current_owner_id));
                     result.push(scope)
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
@@ -154,13 +154,13 @@ impl GlobalEventType {
                         ballast: &[],
                         original_transporter: Some((&unit, pos)),
                     }, None, heroes, false)) {
-                        let mut scope = Scope::new();
-                        scope.push_constant(CONST_NAME_UNIT, u.clone());
-                        scope.push_constant(CONST_NAME_UNIT_ID, handler.observe_unit(pos, Some(i)));
-                        scope.push_constant(CONST_NAME_POSITION, pos);
-                        scope.push_constant(CONST_NAME_TRANSPORT_INDEX, i as i32);
-                        scope.push_constant(CONST_NAME_TRANSPORTER, unit.clone());
-                        scope.push_constant(CONST_NAME_OWNER_ID, current_owner_id);
+                        let mut scope = Map::new();
+                        scope.insert(CONST_NAME_UNIT.into(), Dynamic::from(u.clone()));
+                        scope.insert(CONST_NAME_UNIT_ID.into(), Dynamic::from(handler.observe_unit(pos, Some(i))));
+                        scope.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
+                        scope.insert(CONST_NAME_TRANSPORT_INDEX.into(), Dynamic::from(i as i32));
+                        scope.insert(CONST_NAME_TRANSPORTER.into(), Dynamic::from(unit.clone()));
+                        scope.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(current_owner_id));
                         result.push(scope)
                     }
                 }
@@ -188,7 +188,7 @@ impl FromConfig for GlobalFilter {
             "Rhai" | "Script" => {
                 let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                 remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
             }
             "Commander" | "Co" => {
                 if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {

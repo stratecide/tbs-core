@@ -1,4 +1,4 @@
 
-fn unexhaust() {
-    EVENT_HANDLER.remove(UNIT_ID, FLAG_Exhausted);
+fn unexhaust(CONTEXT) {
+    CONTEXT.event_handler.remove(CONTEXT.unit_id, FLAG_Exhausted);
 }

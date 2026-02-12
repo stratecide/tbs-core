@@ -1,9 +1,9 @@
 
-fn tick_sludge() {
-    let counter = TOKEN.get(TAG_SludgeCounter) ?? 0;
-    let token = EVENT_HANDLER.remove_token(POSITION, TOKEN);
+fn tick_sludge(CONTEXT) {
+    let counter = CONTEXT.token.get(TAG_SludgeCounter) ?? 0;
+    let token = CONTEXT.event_handler.remove_token(CONTEXT.position, CONTEXT.token);
     if counter > 0 {
         token.set(TAG_SludgeCounter, counter - 1);
-        EVENT_HANDLER.place_token(POSITION, token);
+        CONTEXT.event_handler.place_token(CONTEXT.position, token);
     }
 }

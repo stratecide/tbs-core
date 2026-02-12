@@ -1,14 +1,14 @@
 
-fn co_recovery() {
+fn co_recovery(CONTEXT) {
     let effects = [];
-    for uwp in BOARD.all_units() {
-        if uwp.unit.owner_id == OWNER_ID && uwp.unit.has(TAG_Hp) {
-            effects.push(change_unit_hp(EVENT_HANDLER, uwp.position, 30));
+    for uwp in CONTEXT.board.all_units() {
+        if uwp.unit.owner_id == CONTEXT.owner_id && uwp.unit.has(TAG_Hp) {
+            effects.push(change_unit_hp(CONTEXT.event_handler, uwp.position, 30));
         }
     }
-    EVENT_HANDLER.effects(effects);
+    CONTEXT.event_handler.effects(effects);
 }
 
-fn level_increases_attack(value) {
-    value + Fraction(UNIT.get(TAG_Level) ?? 0, 10)
+fn level_increases_attack(CONTEXT, value) {
+    value + Fraction(CONTEXT.unit.get(TAG_Level) ?? 0, 10)
 }

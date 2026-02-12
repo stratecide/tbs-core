@@ -3,7 +3,7 @@ use std::ptr::with_exposed_provenance_mut;
 
 use interfaces::GameInterface;
 use interfaces::{ClientPerspective, Perspective as IPerspective, RandomFn};
-use rhai::{Dynamic, Scope};
+use rhai::{Dynamic, Map};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::config::environment::Environment;
@@ -588,14 +588,17 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
         if token_scripts.len() > 0 {
             let environment = self.environment().clone();
-            let mut scope = Scope::new();
+            let mut first_argument = Map::new();
             // TODO: information about the transporter the unit moved out of?
-            scope.push_constant(CONST_NAME_PATH, path.clone());
-            scope.push_constant(CONST_NAME_UNIT, unit);
-            scope.push_constant(CONST_NAME_UNIT_ID, unit_id);
-            let executor = self.executor(scope);
+            first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
+            first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit));
+            first_argument.insert(CONST_NAME_UNIT_ID.into(), Dynamic::from(unit_id));
             for (function_index, p, token) in token_scripts {
-                match executor.run::<D, ()>(function_index, (p, token)) {
+                let mut first_argument = first_argument.clone();
+                first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(p));
+                first_argument.insert(CONST_NAME_TOKEN.into(), Dynamic::from(token));
+                let executor = self.executor(first_argument);
+                match executor.run::<D, ()>(function_index, ()) {
                     Ok(()) => (),
                     Err(e) => {
                         environment.log_rhai_error("token OnUnitPath", environment.get_rhai_function_name(function_index), &e);
@@ -677,16 +680,16 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         if scripts.len() == 0 {
             return;
         }
-        let mut scope = Scope::new();
-        scope.push_constant(CONST_NAME_TRANSPORTER_POSITION, transporter.map(|_| Dynamic::from(path.start)).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_TRANSPORTER, transporter.map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
-        //scope.push_constant(CONST_NAME_TRANSPORT_INDEX, transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
-        scope.push_constant(CONST_NAME_PATH, path);
-        scope.push_constant(CONST_NAME_POSITION, p);
-        scope.push_constant(CONST_NAME_UNIT, unit);
-        scope.push_constant(CONST_NAME_UNIT_ID, UnitId(id, self.get_observed_unit(id).unwrap().2));
-        scope.push_constant(CONST_NAME_INTERRUPTED, interrupted);
-        let executor = self.executor(scope);
+        let mut first_argument = Map::new();
+        first_argument.insert(CONST_NAME_TRANSPORTER_POSITION.into(), transporter.map(|_| Dynamic::from(path.start)).unwrap_or(().into()));
+        first_argument.insert(CONST_NAME_TRANSPORTER.into(), transporter.map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
+        //first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), transport_index.map(|i| Dynamic::from(i as i32)).unwrap_or(().into()));
+        first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path));
+        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(p));
+        first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit));
+        first_argument.insert(CONST_NAME_UNIT_ID.into(), Dynamic::from(UnitId(id, self.get_observed_unit(id).unwrap().2)));
+        first_argument.insert(CONST_NAME_INTERRUPTED.into(), Dynamic::from(interrupted));
+        let executor = self.executor(first_argument);
         for function_index in scripts {
             match executor.run::<D, ()>(function_index, ()) {
                 Ok(()) => (),
@@ -860,19 +863,19 @@ impl<'a, D: Direction> EventHandler<'a, D> {
             let mut scripts = Vec::new();
             {
                 // commander scripts
-                if let Some(scope) = conf.typ.test_global(&*self.get_game()) {
-                    scripts.push((script, scope))
+                if let Some(first_argument) = conf.typ.test_global(&*self.get_game()) {
+                    scripts.push((script, first_argument))
                 } else {
                     // terrain, token, unit scripts
                     for p in all_points.iter().cloned() {
-                        for scope in conf.typ.test_local(self, p, &hero_auras) {
-                            scripts.push((script, scope));
+                        for first_argument in conf.typ.test_local(self, p, &hero_auras) {
+                            scripts.push((script, first_argument));
                         }
                     }
                 }
             }
-            for (function_index, scope) in scripts {
-                let executor = self.executor(scope);
+            for (function_index, first_argument) in scripts {
+                let executor = self.executor(first_argument);
                 match executor.run::<D, ()>(function_index, ()) {
                     Ok(()) => (),
                     Err(e) => {
@@ -919,9 +922,9 @@ impl<'a, D: Direction> EventHandler<'a, D> {
         }
     }
 
-    pub fn executor<'b>(&'b mut self, mut scope: Scope<'b>) -> Executor<'b> {
-        scope.push_constant(CONST_NAME_EVENT_HANDLER, EventHandlerPointer::from(self));
-        self.board.executor(scope)
+    pub fn executor<'b>(&'b mut self, mut first_argument: rhai::Map) -> Executor<'b> {
+        first_argument.insert(CONST_NAME_EVENT_HANDLER.into(), Dynamic::from(EventHandlerPointer::from(self)));
+        self.board.executor(first_argument)
     }
 }
 

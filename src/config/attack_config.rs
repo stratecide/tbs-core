@@ -111,7 +111,7 @@ impl TableLine for AttackSplashConfig {
             }
             s => {
                 AttackInstanceScript::Rhai {
-                    build_script: loader.rhai_function(&format!("{s}"), 0..=0)?.index,
+                    build_script: loader.rhai_function(&format!("{s}"), 1..=1)?.index,
                 }
             }
         };

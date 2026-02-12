@@ -14,7 +14,6 @@ use crate::map::point::Point;
 use crate::script::custom_action::*;
 use crate::script::*;
 use crate::map::direction::Direction;
-use crate::script::executor::Executor;
 use crate::units::commands::{UnitCommand, MAX_CUSTOM_ACTION_STEPS};
 use crate::units::hero::Hero;
 use super::event_handler::EventHandler;
@@ -169,12 +168,15 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
     let all_points = valid_points(handler.get_game());
     let environment = handler.environment().clone();
     let is_unit_dead_rhai = environment.is_unit_dead_rhai();
-    let executor = Executor::new(Scope::new(), environment.clone());
     for _ in 0..100 {
         let deaths: FxHashSet<Point> = all_points.iter().cloned()
         .filter(|p| {
             handler.get_game().get_unit(*p).cloned().map(|u| {
-                match executor.run::<D, bool>(is_unit_dead_rhai, (u,)) {
+                let mut first_argument = Map::new();
+                first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(*p));
+                first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(u));
+                let executor = handler.get_board().executor(first_argument);
+                match executor.run::<D, bool>(is_unit_dead_rhai, ()) {
                     Ok(result) => result,
                     Err(e) => {
                         environment.log_rhai_error("cleanup_dead_material::is_unit_dead_rhai", environment.get_rhai_function_name(is_unit_dead_rhai), &e);
@@ -196,13 +198,13 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
                 |handler| handler.unit_mass_death(&deaths),
                 |handler, scripts, unit_pos, unit, _observation_id| {
                     if scripts.len() > 0 {
-                        let mut scope = Scope::new();
-                        scope.push_constant(CONST_NAME_POSITION, unit_pos);
-                        scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                        scope.push_constant(CONST_NAME_OTHER_POSITION, ());
-                        scope.push_constant(CONST_NAME_OTHER_UNIT, ());
+                        let mut first_argument = Map::new();
+                        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
+                        first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit.clone()));
+                        //first_argument.insert(CONST_NAME_OTHER_POSITION.into(), ());
+                        //first_argument.insert(CONST_NAME_OTHER_UNIT.into(), ());
                         let environment = handler.environment().clone();
-                        let executor = handler.executor(scope);
+                        let executor = handler.executor(first_argument);
                         for function_index in scripts {
                             match executor.run::<D, ()>(function_index, ()) {
                                 Ok(()) => (),

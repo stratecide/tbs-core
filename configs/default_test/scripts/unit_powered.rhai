@@ -1,6 +1,6 @@
 
-fn multiply_hp(value) {
-    let hp = UNIT.get(TAG_Hp);
+fn multiply_hp(CONTEXT, value) {
+    let hp = CONTEXT.unit.get(TAG_Hp);
     if hp != () {
         value * hp / 100
     } else {
@@ -8,8 +8,8 @@ fn multiply_hp(value) {
     }
 }
 
-fn add_half_missing_hp(value) {
-    let hp = UNIT.get(TAG_Hp);
+fn add_half_missing_hp(CONTEXT, value) {
+    let hp = CONTEXT.unit.get(TAG_Hp);
     if hp != () {
         value + Fraction(100 - hp, 200)
     } else {
@@ -17,7 +17,7 @@ fn add_half_missing_hp(value) {
     }
 }
 
-fn terrain_defense(value) {
-    let terrain = BOARD.get_terrain(POSITION);
-    value + CONFIG.table_entry("TERRAIN_DEFENSE", UNIT.movement_type, terrain.type)
+fn terrain_defense(CONTEXT, value) {
+    let terrain = CONTEXT.board.get_terrain(CONTEXT.position);
+    value + CONTEXT.config.table_entry("TERRAIN_DEFENSE", CONTEXT.unit.movement_type, terrain.type)
 }

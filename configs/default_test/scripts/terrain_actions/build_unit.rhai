@@ -1,26 +1,26 @@
 
-fn build_unit_input() {
-    _build_unit_input(BOARD, PLAYER, TERRAIN)
+fn build_unit_input(CONTEXT) {
+    _build_unit_input(CONTEXT)
 }
 
-fn build_unit(data) {
-    EVENT_HANDLER.set_terrain_flag(POSITION, FLAG_Exhausted);
-    _build_unit(EVENT_HANDLER, TERRAIN, POSITION, data, true);
+fn build_unit(CONTEXT, data) {
+    CONTEXT.event_handler.set_terrain_flag(CONTEXT.position, FLAG_Exhausted);
+    _build_unit(CONTEXT, data, true);
 }
 
-fn and_turn_into_grass_input() {
-    _build_unit_input(BOARD, PLAYER, TERRAIN)
+fn and_turn_into_grass_input(CONTEXT) {
+    _build_unit_input(CONTEXT)
 }
 
-fn and_turn_into_grass(data) {
-    EVENT_HANDLER.replace_terrain(POSITION, Terrain(CONFIG, TERRAIN_Grass));
-    _build_unit(EVENT_HANDLER, TERRAIN, POSITION, data, true);
+fn and_turn_into_grass(CONTEXT, data) {
+    CONTEXT.event_handler.replace_terrain(CONTEXT.position, Terrain(CONTEXT.config, TERRAIN_Grass));
+    _build_unit(CONTEXT, data, true);
 }
 
-fn _build_unit_input(BOARD, PLAYER, TERRAIN) {
-    terrain_buy_unit_input(BOARD, PLAYER, TERRAIN.type, TERRAIN.owner_id, TERRAIN.get(TAG_Direction))
+fn _build_unit_input(CONTEXT) {
+    terrain_buy_unit_input(CONTEXT.board, CONTEXT.player, CONTEXT.terrain.type, CONTEXT.terrain.owner_id, CONTEXT.terrain.get(TAG_Direction))
 }
 
-fn _build_unit(EVENT_HANDLER, TERRAIN, POSITION, data, exhaust_unit) {
-    terrain_buy_unit(EVENT_HANDLER, POSITION, TERRAIN.owner_id, data, exhaust_unit)
+fn _build_unit(CONTEXT, data, exhaust_unit) {
+    terrain_buy_unit(CONTEXT.event_handler, CONTEXT.position, CONTEXT.terrain.owner_id, data, exhaust_unit)
 }

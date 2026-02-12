@@ -26,9 +26,9 @@ impl TableLine for CustomActionConfig {
         let name = get(H::Name)?.to_string();
         let script = match data.get(&H::Script) {
             Some(s) if s.len() > 0 => {
-                let exe = loader.rhai_function(s, 0..=1)?;
-                let input = if exe.parameters.len() > 0 {
-                    Some(loader.rhai_function(&format!("{s}_input"), 0..=0)?.index)
+                let exe = loader.rhai_function(s, 1..=2)?;
+                let input = if exe.parameters.len() > 1 {
+                    Some(loader.rhai_function(&format!("{s}_input"), 1..=1)?.index)
                 } else {
                     None
                 };

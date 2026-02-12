@@ -1,6 +1,6 @@
 use interfaces::ClientPerspective;
 use interfaces::GameInterface;
-use rhai::Scope;
+use rhai::{Dynamic, Map};
 use rustc_hash::FxHashSet as HashSet;
 use std::fmt;
 
@@ -135,13 +135,13 @@ impl<D: Direction> UnitAction<D> {
                         |handler| handler.unit_mass_death(&deaths),
                         |handler, scripts, unit_pos, unit, _observation_id| {
                             if scripts.len() > 0 {
-                                let mut scope = Scope::new();
-                                scope.push_constant(CONST_NAME_POSITION, unit_pos);
-                                scope.push_constant(CONST_NAME_UNIT, unit.clone());
-                                scope.push_constant(CONST_NAME_OTHER_POSITION, end);
-                                scope.push_constant(CONST_NAME_OTHER_UNIT, attacker.clone());
+                                let mut first_argument = Map::new();
+                                first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
+                                first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit.clone()));
+                                first_argument.insert(CONST_NAME_OTHER_POSITION.into(), Dynamic::from(end));
+                                first_argument.insert(CONST_NAME_OTHER_UNIT.into(), Dynamic::from(attacker.clone()));
                                 let environment = handler.environment().clone();
-                                let executor = handler.executor(scope);
+                                let executor = handler.executor(first_argument);
                                 for function_index in scripts {
                                     match executor.run::<D, ()>(function_index, ()) {
                                         Ok(()) => (),

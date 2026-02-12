@@ -1,4 +1,4 @@
 
-fn unexhaust() {
-    EVENT_HANDLER.remove_terrain_flag(POSITION, FLAG_Exhausted);
+fn unexhaust(CONTEXT) {
+    CONTEXT.event_handler.remove_terrain_flag(CONTEXT.position, FLAG_Exhausted);
 }

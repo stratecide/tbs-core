@@ -1,12 +1,12 @@
 
-fn co_resurrection() {
-    for point in BOARD.all_positions() {
-        if BOARD.get_unit(point) != () {
+fn co_resurrection(CONTEXT) {
+    for point in CONTEXT.board.all_positions() {
+        if CONTEXT.board.get_unit(point) != () {
             continue;
         }
-        let skull = EVENT_HANDLER.remove_token(point, TOKEN_Skull, OWNER_ID);
+        let skull = CONTEXT.event_handler.remove_token(point, TOKEN_Skull, CONTEXT.owner_id);
         if skull != () {
-            let unit = Unit(CONFIG, skull.get(TAG_UnitType));
+            let unit = Unit(CONTEXT.config, skull.get(TAG_UnitType));
             unit.copy_from(skull);
             unit.owner_id = skull.owner_id;
             unit.remove(TAG_UnitType);
@@ -16,7 +16,7 @@ fn co_resurrection() {
             }
             unit.set(TAG_Hp, 50);
             unit.set(FLAG_Zombified);
-            EVENT_HANDLER.place_unit(point, unit);
+            CONTEXT.event_handler.place_unit(point, unit);
         }
     }
 }

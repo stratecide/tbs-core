@@ -121,14 +121,6 @@ impl Environment {
         self.config.is_unit_movable_rhai
     }
 
-    pub fn calculate_attack_damage_rhai(&self) -> usize {
-        self.config.calculate_damage_rhai
-    }
-
-    pub fn weapon_effects_rhai(&self) -> Option<usize> {
-        self.config.weapon_effects_rhai
-    }
-
     pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
         //tracing::debug!("table_entry at {x:?}, {y:?}");
         self.config.custom_tables.iter()

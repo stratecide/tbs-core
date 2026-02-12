@@ -1,23 +1,23 @@
 
 // on unit death
-fn put_sludge() {
-    _put_sludge(EVENT_HANDLER, POSITION);
+fn put_sludge(CONTEXT) {
+    _put_sludge(CONTEXT, CONTEXT.position);
 }
 
-fn _put_sludge(EVENT_HANDLER, POSITION) {
-    EVENT_HANDLER.place_token(POSITION, Token(EVENT_HANDLER.config, TOKEN_Sludge));
+fn _put_sludge(CONTEXT, position) {
+    CONTEXT.event_handler.place_token(position, Token(CONTEXT.config, TOKEN_Sludge));
 }
 
 // on unit death
-fn spread_sludge() {
-    _spread_sludge(EVENT_HANDLER, [POSITION])
+fn spread_sludge(CONTEXT) {
+    _spread_sludge(CONTEXT, [CONTEXT.position])
 }
 
-fn _spread_sludge(EVENT_HANDLER, positions) {
+fn _spread_sludge(CONTEXT, positions) {
     // TODO: use set to avoid duplicate positions in 'targets'
     let targets = [];
     for origin in positions {
-        let sludge_exists = for t in EVENT_HANDLER.board.get_tokens(origin) {
+        let sludge_exists = for t in CONTEXT.event_handler.board.get_tokens(origin) {
             if t.type == TOKEN_Sludge {
                 // there's already a sludge token here, spread to surrounding tiles
                 break true;
@@ -25,33 +25,33 @@ fn _spread_sludge(EVENT_HANDLER, positions) {
             }
         };
         if sludge_exists == true {
-            targets.append(EVENT_HANDLER.board.get_neighbors(origin))
+            targets.append(CONTEXT.board.get_neighbors(origin))
         } else {
             targets.push(origin);
         }
     }
     for p in targets {
-        _put_sludge(EVENT_HANDLER, p);
+        _put_sludge(CONTEXT, p);
     }
 }
 
-fn co_noxious_spread() {
+fn co_noxious_spread(CONTEXT) {
     let targets = [];
-    for p in BOARD.all_positions() {
-        let unit = BOARD.get_unit(p);
-        if unit?.owner_id == OWNER_ID {
+    for p in CONTEXT.board.all_positions() {
+        let unit = CONTEXT.board.get_unit(p);
+        if unit?.owner_id == CONTEXT.owner_id {
             targets.push(p);
         }
     }
-    _spread_sludge(EVENT_HANDLER, targets);
+    _spread_sludge(CONTEXT, targets);
 }
 
-fn uf_can_clean_sludge() {
+fn uf_can_clean_sludge(CONTEXT) {
     // any unit that can capture can clean sludge
-    CONFIG.table_entry("TERRAIN_CAPTURE", UNIT.type, TERRAIN_Port)
+    CONTEXT.config.table_entry("TERRAIN_CAPTURE", CONTEXT.unit.type, TERRAIN_Port)
 }
 
-fn ua_clean_sludge() {
-    EVENT_HANDLER.remove_token(POSITION, TOKEN_Sludge, -1);
-    EVENT_HANDLER.set_unit_flag(POSITION, FLAG_Exhausted);
+fn ua_clean_sludge(CONTEXT) {
+    CONTEXT.event_handler.remove_token(CONTEXT.position, TOKEN_Sludge, -1);
+    CONTEXT.event_handler.set_unit_flag(CONTEXT.position, FLAG_Exhausted);
 }

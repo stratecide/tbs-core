@@ -1,14 +1,14 @@
 
-fn exhaust() {
-    exhaust_all_on_chess_board(EVENT_HANDLER, PATH.start, UNIT.owner_id);
-    EVENT_HANDLER.set(UNIT_ID, FLAG_Exhausted);
-    EVENT_HANDLER.remove(UNIT_ID, FLAG_Unmoved);
+fn exhaust(CONTEXT) {
+    exhaust_all_on_chess_board(CONTEXT.event_handler, CONTEXT.path.start, CONTEXT.unit.owner_id);
+    CONTEXT.event_handler.set(CONTEXT.unit_id, FLAG_Exhausted);
+    CONTEXT.event_handler.remove(CONTEXT.unit_id, FLAG_Unmoved);
 }
 
-fn setup_en_passant() {
-    if PATH.len > 1 {
-        let path = PATH;
+fn setup_en_passant(CONTEXT) {
+    if CONTEXT.path.len > 1 {
+        let path = CONTEXT.path;
         path.pop();
-        EVENT_HANDLER.set_unit_tag(POSITION, TAG_EnPassant, path.end(BOARD));
+        CONTEXT.event_handler.set_unit_tag(CONTEXT.position, TAG_EnPassant, path.end(CONTEXT.board));
     }
 }

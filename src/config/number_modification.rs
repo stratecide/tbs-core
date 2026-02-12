@@ -59,8 +59,8 @@ impl<T: MulRational32 + FromConfig> FromConfig for NumberMod<T> {
                 match base {
                     "Rhai" | "Script" => {
                         let (name, s) = parse_tuple1::<String>(s, loader)?;
-                        let f = loader.rhai_function(&name, 0..=1)?;
-                        if f.parameters.len() == 0 {
+                        let f = loader.rhai_function(&name, 1..=2)?;
+                        if f.parameters.len() == 1 {
                             Ok((Self::RhaiReplace(f.index), s))
                         } else {
                             Ok((Self::Rhai(f.index), s))

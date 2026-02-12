@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use interfaces::ClientPerspective;
-use rhai::Scope;
+use rhai::{Dynamic, Map};
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
@@ -124,7 +124,7 @@ impl FromConfig for EffectVisibility {
             "Rhai" | "Script" => {
                 let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                 remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
             }
             "Full" => Self::Full,
             "CurrentTeam" => Self::CurrentTeam,
@@ -154,14 +154,14 @@ impl EffectVisibility {
     pub fn fog_replacement<D: Direction>(&self, effect: &EffectWithoutPosition<D>, start: Option<Point>, p: Option<Point>, game: &Board<D>, team: ClientPerspective) -> Option<EffectWithoutPosition<D>> {
         match self {
             Self::Rhai(function_index) => {
-                let mut scope = Scope::new();
+                let mut first_argument = Map::new();
                 if let Some(start) = start {
-                    scope.push_constant(CONST_NAME_STARTING_POSITION, start);
+                    first_argument.insert(CONST_NAME_STARTING_POSITION.into(), Dynamic::from(start));
                 }
                 if let Some(p) = p {
-                    scope.push_constant(CONST_NAME_POSITION, p);
+                    first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(p));
                 }
-                let executor = game.executor(scope);
+                let executor = game.executor(first_argument);
                 match executor.run::<D, Option<EffectWithoutPosition<D>>>(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {

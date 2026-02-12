@@ -352,7 +352,9 @@ fn tess() {
         action: UnitAction::hero_power(1, vec![CustomActionInput::ShopItem(3.into()), CustomActionInput::Direction(Direction4::D0)]),
     }), Urc::new(|| 0.)).unwrap();
     assert!(!server.get_unit(Point::new(2, 1)).unwrap().has_flag(FLAG_EXHAUSTED));
-    assert!(server.get_owning_player(0).unwrap().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>() < 9999);
+    let remaining_funds = server.get_owning_player(0).unwrap().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>();
+    println!("remaining_funds: {remaining_funds}");
+    assert!(remaining_funds < 9999);
 }
 
 #[test]

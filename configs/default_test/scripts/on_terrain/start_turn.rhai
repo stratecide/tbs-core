@@ -1,25 +1,25 @@
 
-fn spawn_tentacle() {
-    let unit = Unit(CONFIG, UNIT_Tentacle);
+fn spawn_tentacle(CONTEXT) {
+    let unit = Unit(CONTEXT.config, UNIT_Tentacle);
     unit.set(TAG_Hp, 100);
-    EVENT_HANDLER.place_unit(POSITION, unit);
+    CONTEXT.event_handler.place_unit(CONTEXT.position, unit);
 }
 
-fn get_captured() {
-    let unit = BOARD.get_unit(POSITION);
-    if unit == () || unit.owner_id != TERRAIN.get(TAG_CaptureOwner) || !CONFIG.table_entry("TERRAIN_CAPTURE", unit.type, TERRAIN.type) {
-        EVENT_HANDLER.remove_terrain_tag(POSITION, TAG_CaptureOwner);
-        EVENT_HANDLER.remove_terrain_tag(POSITION, TAG_CaptureProgress);
+fn get_captured(CONTEXT) {
+    let unit = CONTEXT.board.get_unit(CONTEXT.position);
+    if unit == () || unit.owner_id != CONTEXT.terrain.get(TAG_CaptureOwner) || !CONTEXT.config.table_entry("TERRAIN_CAPTURE", unit.type, CONTEXT.terrain.type) {
+        CONTEXT.event_handler.remove_terrain_tag(CONTEXT.position, TAG_CaptureOwner);
+        CONTEXT.event_handler.remove_terrain_tag(CONTEXT.position, TAG_CaptureProgress);
     }
-    if unit?.owner_id == OWNER_ID && unit.team != TERRAIN.team && unit.has(FLAG_Capturing) && CONFIG.table_entry("TERRAIN_CAPTURE", unit.type, TERRAIN.type) {
+    if unit?.owner_id == CONTEXT.owner_id && unit.team != CONTEXT.terrain.team && unit.has(FLAG_Capturing) && CONTEXT.config.table_entry("TERRAIN_CAPTURE", unit.type, CONTEXT.terrain.type) {
         let gain = Fraction(unit.get(TAG_Hp) ?? 100, 10);
-        gain *= unit.update_custom_value(BOARD, POSITION, "CaptureStrength", Fraction(1));
-        let progress = (TERRAIN.get(TAG_CaptureProgress) ?? 0) + gain.ceil();
+        gain *= unit.update_custom_value(CONTEXT.board, CONTEXT.position, "CaptureStrength", Fraction(1));
+        let progress = (CONTEXT.terrain.get(TAG_CaptureProgress) ?? 0) + gain.ceil();
         if progress >= 10 {
-            finish_capturing(EVENT_HANDLER, POSITION, unit.owner_id);
+            finish_capturing(CONTEXT.event_handler, CONTEXT.position, unit.owner_id);
         } else {
-            EVENT_HANDLER.set_terrain_tag(POSITION, TAG_CaptureOwner, unit.owner_id);
-            EVENT_HANDLER.set_terrain_tag(POSITION, TAG_CaptureProgress, progress);
+            CONTEXT.event_handler.set_terrain_tag(CONTEXT.position, TAG_CaptureOwner, unit.owner_id);
+            CONTEXT.event_handler.set_terrain_tag(CONTEXT.position, TAG_CaptureProgress, progress);
         }
     }
 }

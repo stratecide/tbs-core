@@ -11,7 +11,7 @@ pub use attack_pattern::*;
 pub use attack::*;
 pub use splash_damage::*;
 
-use crate::config::unit_filter::unit_filter_scope;
+use crate::config::unit_filter::unit_filter_input;
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
 use crate::config::ConfigParseError;
@@ -429,7 +429,7 @@ impl FromConfig for ValidAttackTargets {
             "Friendly" => Self::Friendly,
             "All" => Self::All,
             name => {
-                Self::Rhai(loader.rhai_function(&name, 0..=0)?.index)
+                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
             }
         }, ""))
     }
@@ -450,7 +450,7 @@ impl ValidAttackTargets {
             Self::Friendly => unit_data.unit.get_team() == other_unit_data.unit.get_team(),
             Self::All => true,
             Self::Rhai(function_index) => {
-                let executor = game.executor(unit_filter_scope(game, unit_data, Some(other_unit_data), heroes, is_counter));
+                let executor = game.executor(unit_filter_input(game, unit_data, Some(other_unit_data), heroes, is_counter));
                 match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {

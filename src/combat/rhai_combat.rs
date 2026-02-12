@@ -151,7 +151,8 @@ pub(super) struct AttackContext<'a, 'c: 'a, D: Direction> {
     pub(super) attacker_ballast: &'a [TBallast<D>],
     pub(super) heroes: &'a HeroMap<D>,
     pub(super) counter_state: &'a AttackCounterState<D>,
-    pub(super) scripts: Vec<(Vec<Dynamic>, Option<Rational32>, Option<Rc<AST>>, ImmutableString)>,
+    default_ast: Rc<AST>,
+    pub(super) scripts: Vec<AttackContextScript<D>>,
     pointer: Rc<RefCell<Option<AttackContextPointer<D>>>>,
 }
 
@@ -171,6 +172,7 @@ impl<'a, 'c, D: Direction> AttackContext<'a, 'c, D> {
         attacker_ballast: &'a [TBallast<D>],
         heroes: &'a HeroMap<D>,
         counter_state: &'a AttackCounterState<D>,
+        default_ast: Rc<AST>,
     ) -> Self {
         Self {
             handler,
@@ -181,14 +183,15 @@ impl<'a, 'c, D: Direction> AttackContext<'a, 'c, D> {
             attacker_ballast,
             heroes,
             counter_state,
+            default_ast,
             scripts: Vec::new(),
             pointer: Rc::default(),
         }
     }
-    pub(super) fn executor<'b>(&'b mut self, mut scope: Scope<'b>) -> Executor<'b> {
+    pub(super) fn executor<'b>(&'b mut self, mut first_argument: rhai::Map) -> Executor<'b> {
         *self.pointer.borrow_mut() = Some(AttackContextPointer::from(self));
-        scope.push(CONST_NAME_ATTACK_CONTEXT, self.pointer.clone());
-        self.handler.get_board().executor(scope)
+        first_argument.insert(CONST_NAME_ATTACK_CONTEXT.into(), Dynamic::from(self.pointer.clone()));
+        self.handler.get_board().executor(first_argument)
     }
 
     fn remember_unit(&mut self, p: Point, unload_index: Option<i32>) -> Dynamic {
@@ -273,12 +276,15 @@ impl<'a, 'c, D: Direction> AttackContext<'a, 'c, D> {
     }
 
     fn add_script(&mut self, attack_script: AttackScript) {
-        self.scripts.push((
-            attack_script.arguments,
-            None,
-            None,
-            attack_script.function_name,
-        ));
+        self.scripts.push(AttackContextScript {
+            arguments: attack_script.arguments,
+            priority: None,
+            script: AttackExecutableScript::Rhai {
+                ast: self.default_ast.clone(),
+                script: attack_script.function_name,
+            },
+            defender_id: None
+        });
     }
 
     fn on_defend(&mut self, defend_script: OnDefendScript<D>) {
@@ -312,12 +318,15 @@ impl<'a, 'c, D: Direction> AttackContext<'a, 'c, D> {
         }
         for (function_index, priority) in scripts {
             let (ast, function_name) = environment.get_rhai_function(function_index);
-            self.scripts.push((
-                defend_script.arguments.clone(),
+            self.scripts.push(AttackContextScript {
+                arguments: defend_script.arguments.clone(),
                 priority,
-                Some(ast.clone()),
-                function_name.into(),
-            ));
+                script: AttackExecutableScript::Rhai {
+                    ast: ast.clone(),
+                    script: function_name.into(),
+                },
+                defender_id: Some(defend_script.defender_id),
+            });
         }
     }
 }
