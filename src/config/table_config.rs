@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use num_rational::Rational32;
-use rhai::Dynamic;
+use rhai::{Dynamic, ImmutableString};
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
@@ -84,7 +84,7 @@ impl TableConfig {
             if row_keys.contains(&left) {
                 return Err(Box::new(ConfigParseError::DuplicateHeader(format!("{left:?}"))))
             }
-            row_keys.push(left);
+            row_keys.push(left.clone());
             for (i, value) in line.enumerate() {
                 let value = value.trim();
                 if value.len() == 0 {
@@ -92,7 +92,7 @@ impl TableConfig {
                 }
                 let value = TableValue::from_conf(self.typ, value, loader)?;
                 if value != self.default_value {
-                    values.insert((headers[i], left), value);
+                    values.insert((headers[i].clone(), left.clone()), value);
                 }
             }
         }
@@ -182,15 +182,17 @@ crate::listable_enum! {
         Terrain,
         Hero,
         Movement,
+        String,
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TableAxisKey {
     Unit(UnitType),
     Terrain(TerrainType),
     Hero(HeroType),
     Movement(MovementType),
+    String(ImmutableString),
 }
 
 impl TableAxisKey {
@@ -208,6 +210,9 @@ impl TableAxisKey {
             TableAxis::Movement => {
                 Ok(Self::Movement(MovementType::from_conf(s, loader)?.0))
             }
+            TableAxis::String => {
+                Ok(Self::String(s.into()))
+            }
         }
     }
 
@@ -217,7 +222,11 @@ impl TableAxisKey {
             "TerrainType" => Some(Self::Terrain(value.try_cast()?)),
             "HeroType" => Some(Self::Hero(value.try_cast()?)),
             "MovementType" => Some(Self::Movement(value.try_cast()?)),
-            _ => None
+            "string" => Some(Self::String(value.try_cast()?)),
+            type_name => {
+                crate::debug!("Attempted to turn value of type {type_name} into TableAxis");
+                None
+            }
         }
     }
     pub fn into_dynamic(self) -> Dynamic {
@@ -226,6 +235,7 @@ impl TableAxisKey {
             Self::Terrain(value) => Dynamic::from(value),
             Self::Hero(value) => Dynamic::from(value),
             Self::Movement(value) => Dynamic::from(value),
+            Self::String(value) => Dynamic::from(value),
         }
     }
 }

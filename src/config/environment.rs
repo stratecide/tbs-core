@@ -139,8 +139,8 @@ impl Environment {
         if let Some((_, table)) = self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name) {
             for header in &table.column_keys {
-                if value == *table.values.get(&(*header, y)).unwrap_or(&table.default_value) {
-                    result.push(*header);
+                if value == *table.values.get(&(header.clone(), y.clone())).unwrap_or(&table.default_value) {
+                    result.push(header.clone());
                 }
             }
         }
@@ -151,8 +151,8 @@ impl Environment {
         if let Some((_, table)) = self.config.custom_tables.iter()
         .find(|(key, _)| key.as_str() == name) {
             for row_key in &table.row_keys {
-                if value == *table.values.get(&(x, *row_key)).unwrap_or(&table.default_value) {
-                    result.push(*row_key);
+                if value == *table.values.get(&(x.clone(), row_key.clone())).unwrap_or(&table.default_value) {
+                    result.push(row_key.clone());
                 }
             }
         }

@@ -1,5 +1,13 @@
 
 fn deal_damage_to_unit(CONTEXT) {
+    _deal_damage_to_unit(CONTEXT, CONTEXT.config.name(CONTEXT.attacker.type))
+}
+
+fn deal_damage_to_unit_2(CONTEXT) {
+    _deal_damage_to_unit(CONTEXT, CONTEXT.config.name(CONTEXT.attacker.type) + "_2")
+}
+
+fn _deal_damage_to_unit(CONTEXT, weapon) {
     if CONTEXT.splash_distance == 0 {
         let points = [];
         for target in CONTEXT.targets {
@@ -30,7 +38,7 @@ fn deal_damage_to_unit(CONTEXT) {
         }
         // check if that unit can be damaged by the attacker
         let defender = CONTEXT.board.get_unit(p);
-        let base_attack = CONTEXT.config.table_entry("ATTACK_DAMAGE", defender.type, CONTEXT.attacker.type);
+        let base_attack = CONTEXT.config.table_entry("ATTACK_DAMAGE", defender.type, weapon);
         if base_attack == 0 {
             continue;
         }
@@ -134,8 +142,8 @@ fn do_theft(CONTEXT, owner_id, money_gain) {
 
 // send animation events for weapon use
 fn do_weapon_effects(CONTEXT, attacker_direction, defender_positions) {
-    let weapon = CONTEXT.attacker.config.get_custom_value(CONTEXT.attacker.type, "Weapon");
-    switch weapon {
+    let weapon_category = CONTEXT.attacker.config.get_custom_value(CONTEXT.attacker.type, "Weapon");
+    switch weapon_category {
         "Flame" => {
             // fire follows a path
             let path = Path(CONTEXT.attacker_position);

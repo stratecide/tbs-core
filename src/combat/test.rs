@@ -157,8 +157,9 @@ fn dragon_head() {
     }), Urc::new(|| 0.)).unwrap();
     let hp1 = game.get_unit(Point::new(1, 0)).unwrap().get_hp();
     let hp2 = game.get_unit(Point::new(2, 0)).unwrap().get_hp();
-    assert!(hp1 < 100);
-    assert_eq!(hp1, hp2);
+    assert!(hp1 < 100, "{hp1} < 100");
+    assert!(hp2 < 100, "{hp2} < 100");
+    assert!(hp1 < hp2, "{hp1} < {hp2}");
     assert_eq!(100, game.get_unit(Point::new(3, 0)).unwrap().get_hp());
     // target the other enemy
     game = unchanged;

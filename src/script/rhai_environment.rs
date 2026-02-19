@@ -70,6 +70,11 @@ mod environment_module {
         }
         dyn_opt(environment.get_hero(owner_id as i8))
     }
+
+    #[rhai_fn(pure, name="name")]
+    pub fn unit_name(environment: &mut Config, unit_type: UnitType) -> ImmutableString {
+        environment.config.unit_name(unit_type).into()
+    }
 }
 
 def_package! {

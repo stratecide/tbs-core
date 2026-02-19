@@ -48,9 +48,9 @@ mod helper {
         pub const SNIPER: Self = Self(1);
         pub const BAZOOKA: Self = Self(2);
         pub const MAGNET: Self = Self(3);
-        pub const DRAGON_HEAD: Self = Self(4);
+        pub const ARTILLERY: Self = Self(4);
         pub const CONVOY: Self = Self(5);
-        pub const ARTILLERY: Self = Self(6);
+        pub const DRAGON_HEAD: Self = Self(6);
         pub const SMALL_TANK: Self = Self(7);
         pub const DRONE_BOAT: Self = Self(13);
         pub const WAVE_BREAKER: Self = Self(14);

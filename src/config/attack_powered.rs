@@ -211,8 +211,9 @@ impl AttackFilter {
                 let Some(splash) = splash else {
                     return false;
                 };
-                count_from_both_ends(*min, attack.splash_range as usize + 1) <= splash.splash_distance as i32
-                && splash.splash_distance as i32 <= count_from_both_ends(*max, attack.splash_range as usize + 1)
+                let r = count_from_both_ends(*min, attack.splash_range as usize + 1) <= splash.splash_distance as i32
+                && splash.splash_distance as i32 <= count_from_both_ends(*max, attack.splash_range as usize + 1);
+                r
             }
             Self::UnitFilter(uf) => uf.check(game, unit_data, other_unit_data, heroes, is_counter),
             Self::Rhai(function_index) => {
@@ -240,7 +241,7 @@ fn count_from_both_ends(value: i32, count: usize) -> i32 {
     if value >= 0 {
         value
     } else {
-        (count as i32 + value).max(0)
+        count as i32 + value
     }
 }
 
