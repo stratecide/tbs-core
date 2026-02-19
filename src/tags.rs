@@ -177,7 +177,6 @@ pub enum TagValue<D: Direction> {
     MovementType(MovementType),
 }
 
-const TAG_VALUE_ENUM_BITS: u8 = 4;
 impl<D: Direction> TagValue<D> {
     pub fn default_value(map: &Map<D>, tag_key: usize, random: f32) -> Self {
         match map.environment().config.tag_type(tag_key) {
@@ -197,46 +196,39 @@ impl<D: Direction> TagValue<D> {
     fn export(&self, zipper: &mut Zipper, environment: &Environment, tag_key: usize) {
         match self {
             Self::Unique(value) => {
-                zipper.write_u8(0, TAG_VALUE_ENUM_BITS);
                 value.export(zipper);
             }
             Self::Int(value) => {
-                zipper.write_u8(1, TAG_VALUE_ENUM_BITS);
                 value.export(zipper, environment, tag_key);
             }
             Self::Point(value) => {
-                zipper.write_u8(2, TAG_VALUE_ENUM_BITS);
                 value.export(zipper, environment);
             }
             Self::Direction(value) => {
-                zipper.write_u8(3, TAG_VALUE_ENUM_BITS);
                 value.zip(zipper);
             }
             Self::UnitType(value) => {
-                zipper.write_u8(4, TAG_VALUE_ENUM_BITS);
                 value.export(zipper, environment);
             }
             Self::TerrainType(value) => {
-                zipper.write_u8(5, TAG_VALUE_ENUM_BITS);
                 value.export(zipper, environment);
             }
             Self::MovementType(value) => {
-                zipper.write_u8(6, TAG_VALUE_ENUM_BITS);
                 value.export(zipper, environment);
             }
         }
     }
 
     fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Self, ZipperError> {
-        match unzipper.read_u8(TAG_VALUE_ENUM_BITS)? {
-            0 => Ok(Self::Unique(UniqueId::import(unzipper, environment, tag_key)?)),
-            1 => Ok(Self::Int(Int32::import(unzipper, environment, tag_key)?)),
-            2 => Ok(Self::Point(Point::import(unzipper, environment)?)),
-            3 => Ok(Self::Direction(D::unzip(unzipper)?)),
-            4 => Ok(Self::UnitType(UnitType::import(unzipper, environment)?)),
-            5 => Ok(Self::TerrainType(TerrainType::import(unzipper, environment)?)),
-            6 => Ok(Self::MovementType(MovementType::import(unzipper, environment)?)),
-            e => Err(ZipperError::EnumOutOfBounds(format!("TagValue::{e} for tag {}", environment.config.tag_name(tag_key))))
+        match environment.config.tag_type(tag_key) {
+            TagType::Unique { .. } => Ok(Self::Unique(UniqueId::import(unzipper, environment, tag_key)?)),
+            TagType::Int { .. } => Ok(Self::Int(Int32::import(unzipper, environment, tag_key)?)),
+            TagType::Point => Ok(Self::Point(Point::import(unzipper, environment)?)),
+            TagType::Direction => Ok(Self::Direction(D::unzip(unzipper)?)),
+            TagType::UnitType => Ok(Self::UnitType(UnitType::import(unzipper, environment)?)),
+            TagType::TerrainType => Ok(Self::TerrainType(TerrainType::import(unzipper, environment)?)),
+            TagType::MovementType => Ok(Self::MovementType(MovementType::import(unzipper, environment)?)),
+            TagType::Flag => Err(ZipperError::EnumOutOfBounds(format!("TagKey '{}' should actually be a flag", environment.config.tag_name(tag_key))))
         }
     }
 
@@ -422,7 +414,9 @@ impl SupportedZippable<&Environment> for TagKey {
         zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.config.tag_count() as u32));
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(support.config.tag_count() as u32))? as usize))
+        let tag_count = support.config.tag_count();
+        // TODO: return Err if tag_count == 0
+        Ok(Self((unzipper.read_u32(bits_needed_for_max_value(tag_count as u32))? as usize).min(tag_count - 1)))
     }
 }
 
