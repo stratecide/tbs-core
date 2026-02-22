@@ -2,7 +2,7 @@ use std::error::Error;
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::config::parse::*;
+use crate::config::{Pronouns, parse::*};
 
 use super::file_loader::{FileLoader, TableLine};
 use super::hero_power_config::HeroPowerConfig;
@@ -11,6 +11,7 @@ use super::ConfigParseError;
 #[derive(Debug)]
 pub struct HeroTypeConfig {
     pub(super) name: String,
+    pub(super) pronouns: Pronouns,
     pub(super) playable: bool,
     pub(super) max_charge: u32,
     pub(super) aura_range: i8,
@@ -32,6 +33,7 @@ impl TableLine for HeroTypeConfig {
         };
         let result = Self {
             name: get(H::Id)?.to_string(),
+            pronouns: parse(data, H::Pronouns, loader)?,
             playable: parse_def(data, H::Playable, true, loader)?,
             max_charge: parse_def(data, H::Charge, 0, loader)?,
             aura_range: parse_def(data, H::AuraRange, 0, loader)?,
@@ -52,6 +54,7 @@ crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum HeroTypeConfigHeader {
         Id,
+        Pronouns,
         Playable,
         Charge,
         AuraRange,

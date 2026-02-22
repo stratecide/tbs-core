@@ -96,3 +96,10 @@ crate::listable_enum! {
         Never,
     }
 }
+
+#[derive(Debug)]
+pub struct Pronouns {
+    pub they: String, // "{} took a walk"
+    pub their: String,// "{} hand was waving"
+    pub them: String, // "I gave {} a present"
+}

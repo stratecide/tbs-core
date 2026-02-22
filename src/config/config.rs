@@ -10,6 +10,7 @@ use rustc_hash::FxHashMap as HashMap;
 use uniform_smart_pointer::Urc;
 
 use crate::combat::*;
+use crate::config::Pronouns;
 use crate::game::event_fx::EffectType;
 use crate::map::board::Board;
 use crate::tokens::token_types::TokenType;
@@ -369,6 +370,10 @@ impl Config {
         None
     }
 
+    pub fn hero_pronouns(&self, typ: HeroType) -> &Pronouns {
+        &self.hero_config(typ).pronouns
+    }
+
     pub fn max_hero_charge(&self) -> u32 {
         self.max_hero_charge
     }
@@ -391,6 +396,14 @@ impl Config {
 
     pub fn hero_can_gain_charge(&self, typ: HeroType, power: usize) -> bool {
         !self.hero_powers(typ)[power].prevents_charging
+    }
+
+    pub fn hero_aura_range_basic(&self, typ: HeroType, transported: bool) -> i8 {
+        if transported {
+            self.hero_config(typ).aura_range_transported
+        } else {
+            self.hero_config(typ).aura_range
+        }
     }
 
     pub fn hero_aura_range<D: Direction>(
@@ -418,11 +431,7 @@ impl Config {
             &heroes,
             false,
             |iter, executor| -> i32 {
-                let aura_range = if transporter.is_none() {
-                    self.hero_config(hero.typ()).aura_range
-                } else {
-                    self.hero_config(hero.typ()).aura_range_transported
-                };
+                let aura_range = self.hero_aura_range_basic(hero.typ(), transporter.is_some());
                 NumberMod::update_value_repeatedly::<D>(
                     aura_range as i32,
                     iter.map(|c| c.aura_range),
@@ -757,6 +766,10 @@ impl Config {
 
     pub fn commander_name(&self, typ: CommanderType) -> &str {
         &self.commander_config(typ).name
+    }
+
+    pub fn commander_pronouns(&self, typ: CommanderType) -> &Pronouns {
+        &self.commander_config(typ).pronouns
     }
 
     pub fn max_commander_charge(&self) -> u32 {

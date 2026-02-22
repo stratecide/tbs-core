@@ -15,6 +15,7 @@ use num_rational::Rational32;
 use rhai::*;
 
 use crate::commander::commander_type::CommanderType;
+use crate::config::Pronouns;
 use crate::game::event_fx::effect_constructor_module;
 use crate::game::fog::FogIntensity;
 use crate::map::direction::{Direction, Direction4, Direction6};
@@ -919,5 +920,16 @@ impl FromConfig for [u8; 4] {
         } else {
             Err(ConfigParseError::InvalidColor(s.to_string()))
         }
+    }
+}
+
+impl FromConfig for Pronouns {
+    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+        let (they, their, them, s) = parse_tuple3(s, loader)?;
+        Ok((Pronouns {
+            they,
+            their,
+            them,
+        }, s))
     }
 }
