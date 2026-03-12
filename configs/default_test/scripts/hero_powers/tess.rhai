@@ -1,5 +1,6 @@
 
 fn ua_power_input(CONTEXT) {
+    // TODO: selection based on movement type
     build_unit_input(CONTEXT.board, CONTEXT.player, CONTEXT.unit, CONTEXT.position)
 }
 
