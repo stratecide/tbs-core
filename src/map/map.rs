@@ -8,32 +8,35 @@ use semver::Version;
 use zipper::*;
 use zipper_derive::Zippable;
 
+use crate::VERSION;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
-use crate::game::settings::{self, GameConfig, GameSettings, PlayerConfig, PlayerSelectedOptions, PlayerSettingError};
-use crate::game::game::*;
 use crate::game::fog::*;
+use crate::game::game::*;
+use crate::game::settings::{
+    self, GameConfig, GameSettings, PlayerConfig, PlayerSelectedOptions, PlayerSettingError,
+};
 use crate::map::board::{Board, BoardView};
-use crate::map::pipe::next_pipe_tile;
-use crate::map::wrapping_map::*;
 use crate::map::direction::*;
+use crate::map::pipe::next_pipe_tile;
 use crate::map::point::*;
-use uniform_smart_pointer::Urc;
+use crate::map::wrapping_map::*;
 use crate::player::Player;
 use crate::tags::TagBag;
-use crate::units::hero::HeroMap;
-use crate::VERSION;
-use crate::tokens;
 use crate::terrain::terrain::Terrain;
+use crate::tokens;
 use crate::tokens::token::Token;
+use crate::units::hero::HeroMap;
 use crate::units::unit::Unit;
+use uniform_smart_pointer::Urc;
 
-use super::point_map::MapSize;
 use super::pipe::PipeState;
+use super::point_map::MapSize;
 
 #[derive(Clone, PartialEq)]
 pub struct Map<D>
-where D: Direction
+where
+    D: Direction,
 {
     environment: Environment,
     wrapping_logic: WrappingMap<D>,
@@ -211,16 +214,20 @@ impl<D: Direction> Map<D> {
         }
         None
     }
-    
+
     /**
      * checks the pipe at dp.point for whether it can be entered by dp.direction and if true, returns the position of the next pipe tile
      * returns None if no pipe is at the given location, for example because the previous pipe tile was an exit
      */
     pub fn next_pipe_tile(&self, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
-        if let Some(disto) = self.pipes.get(&point)
-        .and_then(|pipes| pipes.iter().find_map(|pipe_state| pipe_state.distortion(direction))) {
-            self.wrapping_logic().get_neighbor(point, disto.update_direction(direction))
-            .and_then(|(p, d)| Some((p, disto + d)))
+        if let Some(disto) = self.pipes.get(&point).and_then(|pipes| {
+            pipes
+                .iter()
+                .find_map(|pipe_state| pipe_state.distortion(direction))
+        }) {
+            self.wrapping_logic()
+                .get_neighbor(point, disto.update_direction(direction))
+                .and_then(|(p, d)| Some((p, disto + d)))
         } else {
             None
         }
@@ -233,17 +240,35 @@ impl<D: Direction> Map<D> {
     pub fn get_neighbor(&self, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
         if let Some((point, mut distortion)) = self.wrapping_logic().get_neighbor(p, d) {
             // look for pipe to enter
-            if self.pipes.get(&point)
-            .map(|pipes| pipes.iter().any(|pipe_state| pipe_state.distortion(distortion.update_direction(d)).is_some()))
-            .unwrap_or(false) {
+            if self
+                .pipes
+                .get(&point)
+                .map(|pipes| {
+                    pipes.iter().any(|pipe_state| {
+                        pipe_state
+                            .distortion(distortion.update_direction(d))
+                            .is_some()
+                    })
+                })
+                .unwrap_or(false)
+            {
                 // check if pipe can be entered from here (meaning it isn't connected to a pipe at 'p')
                 // this should prevent infinite loops
-                if self.pipes.get(&p)
-                .map(|pipes| !pipes.iter().any(|pipe_state| pipe_state.distortion(d.opposite_direction()).is_some()))
-                .unwrap_or(true) {
+                if self
+                    .pipes
+                    .get(&p)
+                    .map(|pipes| {
+                        !pipes.iter().any(|pipe_state| {
+                            pipe_state.distortion(d.opposite_direction()).is_some()
+                        })
+                    })
+                    .unwrap_or(true)
+                {
                     // follow pipe to its end
                     let mut current = point;
-                    while let Some((next, disto)) = self.next_pipe_tile(current, distortion.update_direction(d)) {
+                    while let Some((next, disto)) =
+                        self.next_pipe_tile(current, distortion.update_direction(d))
+                    {
                         current = next;
                         distortion += disto;
                         if current == point {
@@ -266,12 +291,20 @@ impl<D: Direction> Map<D> {
             match mode {
                 NeighborMode::Direct => {
                     if let Some((p, distortion)) = self.wrapping_logic().get_neighbor(p, d) {
-                        result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+                        result.push(OrientedPoint::new(
+                            p,
+                            distortion.is_mirrored(),
+                            distortion.update_direction(d),
+                        ));
                     }
                 }
                 NeighborMode::FollowPipes => {
                     if let Some((p, distortion)) = self.get_neighbor(p, d) {
-                        result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+                        result.push(OrientedPoint::new(
+                            p,
+                            distortion.is_mirrored(),
+                            distortion.update_direction(d),
+                        ));
                     }
                 }
             }
@@ -281,18 +314,32 @@ impl<D: Direction> Map<D> {
 
     // the result includes start, the OrientedPoints point towards the next point
     // the result may be shorter than the requested length if not enough points could be found
-    pub fn get_line(&self, start: Point, d: D, length: usize, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+    pub fn get_line(
+        &self,
+        start: Point,
+        d: D,
+        length: usize,
+        mode: NeighborMode,
+    ) -> Vec<OrientedPoint<D>> {
         let mut result = vec![OrientedPoint::new(start, false, d)];
         let mut distortion = Distortion::neutral();
         while result.len() < length {
             let current = result.get(result.len() - 1).unwrap();
             let next = match mode {
-                NeighborMode::Direct => self.wrapping_logic().get_neighbor(current.point, distortion.update_direction(d)),
-                NeighborMode::FollowPipes => self.get_neighbor(current.point, distortion.update_direction(d)),
+                NeighborMode::Direct => self
+                    .wrapping_logic()
+                    .get_neighbor(current.point, distortion.update_direction(d)),
+                NeighborMode::FollowPipes => {
+                    self.get_neighbor(current.point, distortion.update_direction(d))
+                }
             };
             if let Some((p, disto)) = next {
                 distortion += disto;
-                result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+                result.push(OrientedPoint::new(
+                    p,
+                    distortion.is_mirrored(),
+                    distortion.update_direction(d),
+                ));
             } else {
                 break;
             }
@@ -300,7 +347,11 @@ impl<D: Direction> Map<D> {
         result
     }
 
-    pub fn width_search(&self, start: Point, mut f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
+    pub fn width_search(
+        &self,
+        start: Point,
+        mut f: Box<&mut dyn FnMut(Point) -> bool>,
+    ) -> HashSet<Point> {
         let mut result = HashSet::default();
         let mut rejected = HashSet::default();
         let mut to_check = HashSet::default();
@@ -358,7 +409,9 @@ impl<D: Direction> Map<D> {
                     dir_changes.push(d);
                 }
                 for mut dir_change in dir_changes {
-                    if let Some((point, distortion)) = self.get_neighbor(p, dir.rotate_by(dir_change)) {
+                    if let Some((point, distortion)) =
+                        self.get_neighbor(p, dir.rotate_by(dir_change))
+                    {
                         if distortion.is_mirrored() {
                             dir_change = dir_change.mirror_vertically();
                         }
@@ -400,7 +453,9 @@ impl<D: Direction> Map<D> {
                 owners.insert(t.get_owner_id() as u8);
             }
             for token in self.get_tokens(p) {
-                if token.get_owner_id() >= 0 && self.environment.config.token_owner_is_playable(token.typ()) {
+                if token.get_owner_id() >= 0
+                    && self.environment.config.token_owner_is_playable(token.typ())
+                {
                     owners.insert(token.get_owner_id() as u8);
                 }
             }
@@ -412,14 +467,26 @@ impl<D: Direction> Map<D> {
 
     pub fn get_field_data(&self, p: Point) -> FieldData<D> {
         FieldData {
-            pipes: self.pipes.get(&p).map(|pipes| pipes.clone().try_into().unwrap()).unwrap_or(LVec::new()),
+            pipes: self
+                .pipes
+                .get(&p)
+                .map(|pipes| pipes.clone().try_into().unwrap())
+                .unwrap_or(LVec::new()),
             terrain: self.terrain.get(&p).unwrap().clone(),
-            tokens: self.tokens.get(&p).cloned().map(|v| v.try_into().unwrap()).unwrap_or(LVec::new()),
+            tokens: self
+                .tokens
+                .get(&p)
+                .cloned()
+                .map(|v| v.try_into().unwrap())
+                .unwrap_or(LVec::new()),
             unit: self.units.get(&p).cloned(),
         }
     }
 
-    pub fn import_from_unzipper(unzipper: &mut Unzipper, environment: &mut Environment) -> Result<Self, ZipperError> {
+    pub fn import_from_unzipper(
+        unzipper: &mut Unzipper,
+        environment: &mut Environment,
+    ) -> Result<Self, ZipperError> {
         let wrapping_logic = WrappingMap::unzip(unzipper)?;
         environment.map_size = wrapping_logic.pointmap().size();
         let tags = TagBag::import(unzipper, environment)?;
@@ -472,7 +539,8 @@ impl<D: Direction> Map<D> {
             return Err(NotPlayable::TooFewPlayers);
         }
         let random: RandomFn = Urc::new(|| 0.);
-        let players:Vec<PlayerConfig<D>> = owners.into_iter()
+        let players: Vec<PlayerConfig<D>> = owners
+            .into_iter()
             .map(|owner| PlayerConfig::new(owner, self, &random))
             .collect();
         Ok(settings::GameConfig {
@@ -485,23 +553,24 @@ impl<D: Direction> Map<D> {
     #[cfg(feature = "rendering")]
     pub(crate) fn preview(&self) -> MapPreview {
         let mut base = Vec::new();
-        let base_x = if self.odd_if_hex() {
-            2
-        } else {
-            0
-        };
+        let base_x = if self.odd_if_hex() { 2 } else { 0 };
         for (p, terrain) in &self.terrain {
-            let (x, y) = D::T::between(&GlobalPoint::ZERO, &GlobalPoint::new(p.x as i16, p.y as i16), self.odd_if_hex()).screen_coordinates();
+            let (x, y) = D::T::between(
+                &GlobalPoint::ZERO,
+                &GlobalPoint::new(p.x as i16, p.y as i16),
+                self.odd_if_hex(),
+            )
+            .screen_coordinates();
             let pos = PreviewPos {
                 x: base_x + (x * 4.).round() as u16,
                 y: (y * 4.).round() as u16,
             };
-            for (shape, color) in self.environment.config.terrain_preview(terrain.typ(), terrain.get_owner_id()) {
-                base.push(PreviewTile {
-                    pos,
-                    shape,
-                    color,
-                });
+            for (shape, color) in self
+                .environment
+                .config
+                .terrain_preview(terrain.typ(), terrain.get_owner_id())
+            {
+                base.push(PreviewTile { pos, shape, color });
             }
         }
         MapPreview {
@@ -556,13 +625,23 @@ pub enum MapType {
     Hex(Map<Direction6>),
 }
 
-pub fn import_map(config: &Urc<Config>, bytes: Vec<u8>, version: Version) -> Result<MapType, ZipperError> {
+pub fn import_map(
+    config: &Urc<Config>,
+    bytes: Vec<u8>,
+    version: Version,
+) -> Result<MapType, ZipperError> {
     let mut environment = Environment::new_map(config.clone(), MapSize::new(0, 0));
     let mut unzipper = Unzipper::new(bytes, version);
     if unzipper.read_bool()? {
-        Ok(MapType::Hex(Map::import_from_unzipper(&mut unzipper, &mut environment)?))
+        Ok(MapType::Hex(Map::import_from_unzipper(
+            &mut unzipper,
+            &mut environment,
+        )?))
     } else {
-        Ok(MapType::Square(Map::import_from_unzipper(&mut unzipper, &mut environment)?))
+        Ok(MapType::Square(Map::import_from_unzipper(
+            &mut unzipper,
+            &mut environment,
+        )?))
     }
 }
 
@@ -571,7 +650,7 @@ pub fn import_map(config: &Urc<Config>, bytes: Vec<u8>, version: Version) -> Res
 pub struct FieldData<D: Direction> {
     pub pipes: LVec<PipeState<D>, 3>,
     pub terrain: Terrain<D>,
-    pub tokens: LVec<Token<D>, {tokens::MAX_STACK_SIZE}>,
+    pub tokens: LVec<Token<D>, { tokens::MAX_STACK_SIZE }>,
     pub unit: Option<Unit<D>>,
 }
 
@@ -586,13 +665,19 @@ impl<D: Direction> FieldData<D> {
     }
 
     pub fn fog_replacement(self, game: &Board<D>, pos: Point, intensity: FogIntensity) -> Self {
-        let tokens: Vec<_> = self.tokens.into_iter()
-        .filter_map(|d| d.fog_replacement(intensity))
-        .collect();
+        let tokens: Vec<_> = self
+            .tokens
+            .into_iter()
+            .filter_map(|d| d.fog_replacement(intensity))
+            .collect();
         Self {
             pipes: self.pipes.clone(),
-            unit: self.unit.and_then(|unit| unit.fog_replacement(game, pos, intensity)),
-            tokens: tokens.try_into().expect("Detail list shouldn't become longer after filtering"),
+            unit: self
+                .unit
+                .and_then(|unit| unit.fog_replacement(game, pos, intensity)),
+            tokens: tokens
+                .try_into()
+                .expect("Detail list shouldn't become longer after filtering"),
             terrain: self.terrain.fog_replacement(intensity),
         }
     }
@@ -605,7 +690,8 @@ impl<D: Direction> MapInterface for Map<D> {
         self.wrapping_logic.zip(&mut zipper);
         self.tags.export(&mut zipper, &self.environment);
         for p in self.all_points() {
-            self.get_field_data(p).export(&mut zipper, &self.environment);
+            self.get_field_data(p)
+                .export(&mut zipper, &self.environment);
         }
         zipper.finish()
     }
@@ -642,25 +728,43 @@ impl<D: Direction> MapInterface for Map<D> {
         }
     }
 
-    fn parse_settings(&self, bytes: Vec<u8>) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
+    fn parse_settings(
+        &self,
+        bytes: Vec<u8>,
+    ) -> Result<Box<dyn GameSettingsInterface>, Box<dyn Error>> {
         let settings = GameConfig::import(self, bytes)?;
         Ok(Box::new(settings))
     }
 
-    fn check_player_setting(&self, game_settings: Vec<u8>, player_index: usize, bytes: Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
+    fn check_player_setting(
+        &self,
+        game_settings: Vec<u8>,
+        player_index: usize,
+        bytes: Vec<u8>,
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
         let settings = GameConfig::import(self, game_settings)?;
         settings.check_player_setting(&self.environment.config, player_index, bytes)
     }
 
-    fn game_creator(self: Box<Self>, settings: Vec<u8>, player_settings: Vec<Vec<u8>>) -> Result<Box<dyn GameCreationInterface>, Box<dyn Error>> {
+    fn game_creator(
+        self: Box<Self>,
+        settings: Vec<u8>,
+        player_settings: Vec<Vec<u8>>,
+    ) -> Result<Box<dyn GameCreationInterface>, Box<dyn Error>> {
         let settings = GameConfig::import(&self, settings)?;
         if player_settings.len() != settings.players.len() {
-            return Err(Box::new(PlayerSettingError::PlayerCount(settings.players.len(), player_settings.len())));
+            return Err(Box::new(PlayerSettingError::PlayerCount(
+                settings.players.len(),
+                player_settings.len(),
+            )));
         }
         let mut player_selection = Vec::with_capacity(player_settings.len());
         for bytes in player_settings {
             let mut unzipper = Unzipper::new(bytes, Version::parse(VERSION).unwrap());
-            player_selection.push(PlayerSelectedOptions::import(&mut unzipper, &self.environment().config)?);
+            player_selection.push(PlayerSelectedOptions::import(
+                &mut unzipper,
+                &self.environment().config,
+            )?);
         }
         Ok(Box::new(GameCreation {
             map: *self.clone(),
@@ -704,10 +808,20 @@ impl<D: Direction> GameCreationInterface for GameCreation<D> {
         (Box::new(server), events)
     }
 
-    fn server_and_client(self: Box<Self>, client_perspective: ClientPerspective, random: RandomFn) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
+    fn server_and_client(
+        self: Box<Self>,
+        client_perspective: ClientPerspective,
+        random: RandomFn,
+    ) -> (Box<dyn GameInterface>, Box<dyn GameInterface>, Events) {
         let settings = self.settings.build(&self.player_selection, &random);
-        let (server, events) = Game::new_server(self.map.clone(), &self.settings, settings.clone(), random);
-        let client = Game::new_client(self.map, &self.settings, settings, events.get(&client_perspective.into()).unwrap_or(&[]));
+        let (server, events) =
+            Game::new_server(self.map.clone(), &self.settings, settings.clone(), random);
+        let client = Game::new_client(
+            self.map,
+            &self.settings,
+            settings,
+            events.get(&client_perspective.into()).unwrap_or(&[]),
+        );
         let events = events.export(server.environment());
         (Box::new(server), Box::new(client), events)
     }
@@ -723,7 +837,11 @@ pub fn valid_points<D: Direction>(board: &impl BoardView<D>) -> Vec<Point> {
     board.wrapping_logic().pointmap().get_valid_points()
 }
 
-pub fn get_unit<D: Direction>(board: &impl BoardView<D>, p: Point, unload_index: Option<usize>) -> Option<&Unit<D>> {
+pub fn get_unit<D: Direction>(
+    board: &impl BoardView<D>,
+    p: Point,
+    unload_index: Option<usize>,
+) -> Option<&Unit<D>> {
     let unit = board.get_unit(p)?;
     if let Some(index) = unload_index {
         unit.get_transported().get(index)
@@ -736,18 +854,30 @@ pub fn get_unit<D: Direction>(board: &impl BoardView<D>, p: Point, unload_index:
  * the returned Distortion has to be applied to 'd' in order to
  * keep moving in the same direction
  */
-pub fn get_neighbor<D: Direction>(board: &impl BoardView<D>, p: Point, d: D) -> Option<(Point, Distortion<D>)> {
+pub fn get_neighbor<D: Direction>(
+    board: &impl BoardView<D>,
+    p: Point,
+    d: D,
+) -> Option<(Point, Distortion<D>)> {
     if let Some((point, mut distortion)) = board.wrapping_logic().get_neighbor(p, d) {
         // look for pipe to enter
-        if board.get_pipes(point).iter()
-        .any(|pipe_state| pipe_state.distortion(distortion.update_direction(d)).is_some()) {
+        if board.get_pipes(point).iter().any(|pipe_state| {
+            pipe_state
+                .distortion(distortion.update_direction(d))
+                .is_some()
+        }) {
             // check if pipe can be entered from here (meaning it isn't connected to a pipe at 'p')
             // this should prevent infinite loops
-            if board.get_pipes(p).iter()
-            .all(|pipe_state| pipe_state.distortion(d.opposite_direction()).is_none()) {
+            if board
+                .get_pipes(p)
+                .iter()
+                .all(|pipe_state| pipe_state.distortion(d.opposite_direction()).is_none())
+            {
                 // follow pipe to its end
                 let mut current = point;
-                while let Some((next, disto)) = next_pipe_tile(board, current, distortion.update_direction(d)) {
+                while let Some((next, disto)) =
+                    next_pipe_tile(board, current, distortion.update_direction(d))
+                {
                     current = next;
                     distortion += disto;
                     if current == point {
@@ -764,18 +894,30 @@ pub fn get_neighbor<D: Direction>(board: &impl BoardView<D>, p: Point, d: D) -> 
     }
 }
 
-pub fn get_neighbors<D: Direction>(board: &impl BoardView<D>, p: Point, mode: NeighborMode) -> Vec<OrientedPoint<D>> {
+pub fn get_neighbors<D: Direction>(
+    board: &impl BoardView<D>,
+    p: Point,
+    mode: NeighborMode,
+) -> Vec<OrientedPoint<D>> {
     let mut result = vec![];
     for d in D::list() {
         match mode {
             NeighborMode::Direct => {
                 if let Some((p, distortion)) = board.wrapping_logic().get_neighbor(p, d) {
-                    result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+                    result.push(OrientedPoint::new(
+                        p,
+                        distortion.is_mirrored(),
+                        distortion.update_direction(d),
+                    ));
                 }
             }
             NeighborMode::FollowPipes => {
                 if let Some((p, distortion)) = get_neighbor(board, p, d) {
-                    result.push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+                    result.push(OrientedPoint::new(
+                        p,
+                        distortion.is_mirrored(),
+                        distortion.update_direction(d),
+                    ));
                 }
             }
         }
@@ -783,7 +925,11 @@ pub fn get_neighbors<D: Direction>(board: &impl BoardView<D>, p: Point, mode: Ne
     result
 }
 
-pub fn width_search<D: Direction>(board: &impl BoardView<D>, start: Point, mut f: Box<&mut dyn FnMut(Point) -> bool>) -> HashSet<Point> {
+pub fn width_search<D: Direction>(
+    board: &impl BoardView<D>,
+    start: Point,
+    mut f: Box<&mut dyn FnMut(Point) -> bool>,
+) -> HashSet<Point> {
     let mut result = HashSet::default();
     let mut rejected = HashSet::default();
     let mut to_check = HashSet::default();
@@ -807,7 +953,11 @@ pub fn width_search<D: Direction>(board: &impl BoardView<D>, start: Point, mut f
     result
 }
 
-pub fn get_neighbors_layers<D: Direction>(board: &impl BoardView<D>, center: Point, range: usize) -> Vec<HashSet<Point>> {
+pub fn get_neighbors_layers<D: Direction>(
+    board: &impl BoardView<D>,
+    center: Point,
+    range: usize,
+) -> Vec<HashSet<Point>> {
     if range == 0 {
         return Vec::new();
     }
@@ -841,7 +991,8 @@ pub fn get_neighbors_layers<D: Direction>(board: &impl BoardView<D>, center: Poi
                 dir_changes.push(d);
             }
             for mut dir_change in dir_changes {
-                if let Some((point, distortion)) = get_neighbor(board, p, dir.rotate_by(dir_change)) {
+                if let Some((point, distortion)) = get_neighbor(board, p, dir.rotate_by(dir_change))
+                {
                     if distortion.is_mirrored() {
                         dir_change = dir_change.mirror_vertically();
                     }
@@ -864,7 +1015,13 @@ pub fn get_neighbors_layers<D: Direction>(board: &impl BoardView<D>, center: Poi
  * the Distortions already include previous distortions
  * the result may be shorter than range+1 if not enough points could be found
  */
-pub fn get_line<D: Direction>(board: &impl BoardView<D>, start: Point, d: D, range: usize, mode: NeighborMode) -> Vec<(Point, Distortion<D>)> {
+pub fn get_line<D: Direction>(
+    board: &impl BoardView<D>,
+    start: Point,
+    d: D,
+    range: usize,
+    mode: NeighborMode,
+) -> Vec<(Point, Distortion<D>)> {
     let mut result = vec![(start, Distortion::neutral())];
     let wrapping_logic: &WrappingMap<D>;
     let get_next: Box<dyn Fn(Point, D) -> Option<(Point, Distortion<D>)>> = match mode {
@@ -872,7 +1029,7 @@ pub fn get_line<D: Direction>(board: &impl BoardView<D>, start: Point, d: D, ran
             wrapping_logic = board.wrapping_logic();
             Box::new(|p, d| wrapping_logic.get_neighbor(p, d))
         }
-        NeighborMode::FollowPipes => Box::new(|p, d| get_neighbor(board, p, d))
+        NeighborMode::FollowPipes => Box::new(|p, d| get_neighbor(board, p, d)),
     };
     for i in 0..range {
         if let Some((p, distortion)) = get_next(result[i].0, result[i].1.update_direction(d)) {
@@ -890,7 +1047,12 @@ pub fn get_line<D: Direction>(board: &impl BoardView<D>, start: Point, d: D, ran
  * when searching in all directions, set diagonal_directions to D::list()
  * setting diagonal_directions to Direction4::0 only searches towards the top-right
  */
-pub fn range_in_layers<D: Direction>(board: &impl BoardView<D>, center: Point, range: usize, diagonal_directions: &[D]) -> Vec<HashSet<(Point, Distortion<D>)>> {
+pub fn range_in_layers<D: Direction>(
+    board: &impl BoardView<D>,
+    center: Point,
+    range: usize,
+    diagonal_directions: &[D],
+) -> Vec<HashSet<(Point, Distortion<D>)>> {
     let mut result = Vec::new();
     for _ in 0..=range {
         result.push(HashSet::default());
@@ -903,7 +1065,9 @@ pub fn range_in_layers<D: Direction>(board: &impl BoardView<D>, center: Point, r
         for i in 1..=range {
             for (p, distortion) in previous_layer {
                 for d in [*d, d2] {
-                    if let Some((p, new_distortion)) = get_neighbor(board, p, distortion.update_direction(d)) {
+                    if let Some((p, new_distortion)) =
+                        get_neighbor(board, p, distortion.update_direction(d))
+                    {
                         layer.insert((p, distortion + new_distortion));
                     }
                 }
@@ -922,7 +1086,12 @@ pub fn range_in_layers<D: Direction>(board: &impl BoardView<D>, center: Point, r
  * when searching in all directions, set directions to D::list()
  * setting directions to Direction4::0 only searches towards the right
  */
-pub fn cannon_range_in_layers<D: Direction>(board: &impl BoardView<D>, center: Point, range: usize, directions: &[D]) -> Vec<HashSet<(Point, Distortion<D>)>> {
+pub fn cannon_range_in_layers<D: Direction>(
+    board: &impl BoardView<D>,
+    center: Point,
+    range: usize,
+    directions: &[D],
+) -> Vec<HashSet<(Point, Distortion<D>)>> {
     let mut result = Vec::new();
     for _ in 0..=range {
         result.push(HashSet::default());
@@ -938,13 +1107,17 @@ pub fn cannon_range_in_layers<D: Direction>(board: &impl BoardView<D>, center: P
             let mut forward: HashMap<(Point, Distortion<D>), u8> = HashMap::default();
             for i in 1..=range {
                 for (p, distortion) in previous_back {
-                    if let Some((p, new_distortion)) = get_neighbor(board, p, distortion.update_direction(*d)) {
+                    if let Some((p, new_distortion)) =
+                        get_neighbor(board, p, distortion.update_direction(*d))
+                    {
                         let distortion = distortion + new_distortion;
                         // move forward
                         back.insert((p, distortion));
                         // move sideways
                         for d in [d2, d3] {
-                            if let Some((p, new_distortion)) = get_neighbor(board, p, distortion.update_direction(d)) {
+                            if let Some((p, new_distortion)) =
+                                get_neighbor(board, p, distortion.update_direction(d))
+                            {
                                 let key = (p, distortion + new_distortion);
                                 let old_value = forward.remove(&key).unwrap_or(0u8);
                                 forward.insert(key, old_value + 1);
@@ -953,7 +1126,9 @@ pub fn cannon_range_in_layers<D: Direction>(board: &impl BoardView<D>, center: P
                     }
                 }
                 for ((p, distortion), strength) in previous_forward {
-                    if let Some((p, new_distortion)) = get_neighbor(board, p, distortion.update_direction(*d)) {
+                    if let Some((p, new_distortion)) =
+                        get_neighbor(board, p, distortion.update_direction(*d))
+                    {
                         let distortion = distortion + new_distortion;
                         // move forward
                         forward.insert((p, distortion), 2);
@@ -961,7 +1136,9 @@ pub fn cannon_range_in_layers<D: Direction>(board: &impl BoardView<D>, center: P
                     if strength >= 2 {
                         // move sideways
                         for d in [d2, d3] {
-                            if let Some((p, new_distortion)) = get_neighbor(board, p, distortion.update_direction(d)) {
+                            if let Some((p, new_distortion)) =
+                                get_neighbor(board, p, distortion.update_direction(d))
+                            {
                                 back.insert((p, distortion + new_distortion));
                             }
                         }
@@ -983,13 +1160,17 @@ pub fn cannon_range_in_layers<D: Direction>(board: &impl BoardView<D>, center: P
             let mut layer = HashSet::default();
             for i in 1..=range {
                 for (p, distortion) in previous_layer {
-                    if let Some((p, new_distortion)) = get_neighbor(board, p, distortion.update_direction(*d)) {
+                    if let Some((p, new_distortion)) =
+                        get_neighbor(board, p, distortion.update_direction(*d))
+                    {
                         let distortion = distortion + new_distortion;
                         // move forward
                         layer.insert((p, distortion));
                         // move sideways
                         for d in [d2, d3] {
-                            if let Some((p, new_distortion)) = get_neighbor(board, p, distortion.update_direction(d)) {
+                            if let Some((p, new_distortion)) =
+                                get_neighbor(board, p, distortion.update_direction(d))
+                            {
                                 layer.insert((p, distortion + new_distortion));
                             }
                         }

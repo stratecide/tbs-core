@@ -1,12 +1,12 @@
+use rhai::plugin::*;
+use rhai::*;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
-use std::cell::RefCell;
-use rhai::*;
-use rhai::plugin::*;
 
+use super::custom_action::*;
 use crate::map::direction::*;
 use crate::map::point::*;
-use super::custom_action::*;
 use crate::units::unit::Unit;
 
 macro_rules! action_data_module {
@@ -55,7 +55,10 @@ macro_rules! action_data_module {
                 ActionDataOptions::Direction(center, HashSet::new())
             }
             #[rhai_fn(name = "new_direction_selection")]
-            pub fn new_direction_selection_with_directions(center: Point, directions: Array) -> ActionDataOptions {
+            pub fn new_direction_selection_with_directions(
+                center: Point,
+                directions: Array,
+            ) -> ActionDataOptions {
                 let mut set = HashSet::new();
                 for d in directions {
                     if let Some(d) = d.try_cast::<$d>() {
@@ -110,15 +113,14 @@ macro_rules! action_data_module {
 
             #[rhai_fn(pure, get = "costs")]
             pub fn shop_item_get_costs(item: &mut ShopItem) -> Array {
-                item.costs.iter()
-                .map(|cost| cost.map(|cost| Dynamic::from(cost)).unwrap_or(().into()))
-                .collect()
+                item.costs
+                    .iter()
+                    .map(|cost| cost.map(|cost| Dynamic::from(cost)).unwrap_or(().into()))
+                    .collect()
             }
             #[rhai_fn(set = "costs")]
             pub fn shop_item_set_costs(item: &mut ShopItem, costs: Array) {
-                item.costs = costs.into_iter()
-                .map(|d| d.try_cast())
-                .collect();
+                item.costs = costs.into_iter().map(|d| d.try_cast()).collect();
             }
 
             pub fn new_shop(name: &str) -> ActionDataOptions {
@@ -142,7 +144,7 @@ macro_rules! action_data_module {
                             return;
                         }
                         list.push(item);
-                    },
+                    }
                     _ => (),
                 }
             }
@@ -158,13 +160,17 @@ macro_rules! action_data_module {
                             enabled: true,
                             costs: vec![Some(cost)],
                         });
-                    },
+                    }
                     _ => (),
                 }
             }
 
             #[rhai_fn(pure, name = "choice", return_raw)]
-            pub fn user_selection(controller: &mut Rc<RefCell<InputScriptController<$d>>>, options: ActionDataOptions, or_succeed: bool) -> Result<Dynamic, Box<EvalAltResult>> {
+            pub fn user_selection(
+                controller: &mut Rc<RefCell<InputScriptController<$d>>>,
+                options: ActionDataOptions,
+                or_succeed: bool,
+            ) -> Result<Dynamic, Box<EvalAltResult>> {
                 controller.borrow_mut().user_selection(options, or_succeed)
             }
         }

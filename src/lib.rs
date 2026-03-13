@@ -1,19 +1,19 @@
 #![feature(mapped_lock_guards)]
-pub mod map;
-pub mod player;
-pub mod terrain;
-pub mod units;
-pub mod tokens;
-pub mod game;
+pub mod combat;
 pub mod commander;
 pub mod config;
+pub mod game;
+pub mod map;
+pub mod player;
 pub mod script;
 pub mod tags;
-pub mod combat;
+pub mod terrain;
+pub mod tokens;
+pub mod units;
 
+pub use interfaces;
 use uniform_smart_pointer::SendSyncBound;
 pub use zipper;
-pub use interfaces;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -138,5 +138,7 @@ macro_rules! enum_with_custom {(
 pub(crate) use enum_with_custom;
 
 pub(crate) fn dyn_opt<T: 'static + SendSyncBound + Clone>(value: Option<T>) -> rhai::Dynamic {
-    value.map(rhai::Dynamic::from).unwrap_or(rhai::Dynamic::UNIT)
+    value
+        .map(rhai::Dynamic::from)
+        .unwrap_or(rhai::Dynamic::UNIT)
 }

@@ -1,27 +1,27 @@
-use rhai::*;
-use rhai::plugin::*;
-use rustc_hash::FxHashMap;
 use interfaces::ClientPerspective;
+use rhai::plugin::*;
+use rhai::*;
+use rustc_hash::FxHashMap;
 
+use super::event_handler::*;
 use crate::combat::*;
 use crate::config::environment::Environment;
 use crate::dyn_opt;
-use crate::map::wrapping_map::OrientedPoint;
-use crate::units::UnitData;
-use super::event_handler::*;
+use crate::game::event_fx::*;
+use crate::game::fog::*;
 use crate::map::board::*;
 use crate::map::direction::*;
 use crate::map::map::get_neighbor;
 use crate::map::point::*;
-use crate::units::unit::Unit;
-use crate::units::movement::*;
-use crate::units::hero::*;
-use crate::terrain::terrain::Terrain;
+use crate::map::wrapping_map::OrientedPoint;
 use crate::tags::*;
+use crate::terrain::terrain::Terrain;
 use crate::tokens::token::Token;
 use crate::tokens::token_types::TokenType;
-use crate::game::event_fx::*;
-use crate::game::fog::*;
+use crate::units::UnitData;
+use crate::units::hero::*;
+use crate::units::movement::*;
+use crate::units::unit::Unit;
 
 macro_rules! event_handler_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -447,7 +447,7 @@ event_handler_module!(EventHandlerPackage4, event_handler_module4, Direction4);
 event_handler_module!(EventHandlerPackage6, event_handler_module6, Direction6);
 
 #[export_module]
-mod event_handler_module{
+mod event_handler_module {
 
     #[rhai_fn()]
     pub fn new_mass_damage() -> FxHashMap<Point, i32> {
@@ -485,7 +485,7 @@ mod event_handler_module{
 }
 
 #[export_module]
-mod event_handler_module_vision{
+mod event_handler_module_vision {
     #[rhai_fn()]
     pub fn new_vision_map() -> FxHashMap<Point, FogIntensity> {
         FxHashMap::default()
@@ -517,7 +517,6 @@ mod event_handler_module_vision{
     }
 }
 
-
 fn eh_attack_as_ghost<D: Direction>(
     handler: &mut EventHandler<D>,
     attacker_pos: Point,
@@ -530,12 +529,32 @@ fn eh_attack_as_ghost<D: Direction>(
         return false;
     };
     let heroes = HeroMap::new(handler.get_board(), None);
-    let Some(attack) = attacker.environment().config.unit_configured_attacks(handler.get_board(), &attacker, attacker_pos, None, &AttackCounterState::NoCounter, &heroes, &[]).into_iter().next() else {
+    let Some(attack) = attacker
+        .environment()
+        .config
+        .unit_configured_attacks(
+            handler.get_board(),
+            &attacker,
+            attacker_pos,
+            None,
+            &AttackCounterState::NoCounter,
+            &heroes,
+            &[],
+        )
+        .into_iter()
+        .next()
+    else {
         return false;
     };
     let input = match attack.splash_pattern.points {
-        SplashDamagePointSource::AttackPattern => AttackInput::AttackPattern(target, target_direction),
-        _ => AttackInput::SplashPattern(OrientedPoint::new(target, target_mirrored, target_direction))
+        SplashDamagePointSource::AttackPattern => {
+            AttackInput::AttackPattern(target, target_direction)
+        }
+        _ => AttackInput::SplashPattern(OrientedPoint::new(
+            target,
+            target_mirrored,
+            target_direction,
+        )),
     };
     let target = UnitData {
         unit: &defender,
@@ -544,9 +563,24 @@ fn eh_attack_as_ghost<D: Direction>(
         ballast: &[],
         original_transporter: None,
     };
-    if attacker.can_target(handler.get_board(), attacker_pos, None, target, false, &heroes) {
+    if attacker.can_target(
+        handler.get_board(),
+        attacker_pos,
+        None,
+        target,
+        false,
+        &heroes,
+    ) {
         let attacker_position = AttackerPosition::Ghost(attacker_pos, attacker);
-        execute_attack(handler, attacker_position, input, None, &[], AttackCounterState::AllowCounter, true);
+        execute_attack(
+            handler,
+            attacker_position,
+            input,
+            None,
+            &[],
+            AttackCounterState::AllowCounter,
+            true,
+        );
         true
     } else {
         false

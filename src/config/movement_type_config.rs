@@ -1,17 +1,17 @@
-use std::error::Error;
 use rustc_hash::FxHashMap as HashMap;
+use std::error::Error;
 
 use crate::config::parse::*;
 use crate::map::board::Board;
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
-use crate::terrain::terrain::Terrain;
 use crate::terrain::ExtraMovementOptions;
+use crate::terrain::terrain::Terrain;
 use crate::units::movement::{MovementType, PathStep, PathStepTakes, PbEntry, TBallast};
 
-use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
+use super::file_loader::{FileLoader, TableLine};
 
 #[derive(Debug)]
 pub struct MovementTypeConfig {
@@ -21,12 +21,13 @@ pub struct MovementTypeConfig {
 
 impl TableLine for MovementTypeConfig {
     type Header = MovementTypeConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use MovementTypeConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use MovementTypeConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let name = get(H::Id)?.trim().to_string();
         let mut sub_types = parse_vec_def(data, H::SubMovementTypes, Vec::new(), loader)?;
         if sub_types.len() == 1 {
@@ -36,10 +37,7 @@ impl TableLine for MovementTypeConfig {
             sub_types.push(MovementType(loader.movement_types.len()));
         }
         loader.movement_types.push(name.clone());
-        Ok(Self {
-            name,
-            sub_types,
-        })
+        Ok(Self { name, sub_types })
     }
 
     fn simple_validation(&self) -> Result<(), Box<dyn Error>> {
@@ -75,16 +73,21 @@ crate::listable_enum! {
 impl MovementPattern {
     pub fn can_pass_friendly(&self) -> bool {
         match self {
-            Self::Standard |
-            Self::StandardLoopLess => true,
+            Self::Standard | Self::StandardLoopLess => true,
             _ => false,
         }
     }
 
-    pub fn add_temporary_ballast<D: Direction>(&self, terrain: &Terrain<D>, permanent_ballast: &[PbEntry<D>], temporary_ballast: &mut Vec<TBallast<D>>) {
+    pub fn add_temporary_ballast<D: Direction>(
+        &self,
+        terrain: &Terrain<D>,
+        permanent_ballast: &[PbEntry<D>],
+        temporary_ballast: &mut Vec<TBallast<D>>,
+    ) {
         match self {
-            MovementPattern::Standard |
-            MovementPattern::StandardLoopLess => temporary_ballast.push(TBallast::ForbiddenDirection(None)),
+            MovementPattern::Standard | MovementPattern::StandardLoopLess => {
+                temporary_ballast.push(TBallast::ForbiddenDirection(None))
+            }
             MovementPattern::Straight => temporary_ballast.push(TBallast::Direction(None)),
             MovementPattern::Diagonal => temporary_ballast.push(TBallast::DiagonalDirection(None)),
             MovementPattern::Pawn => {
@@ -103,8 +106,7 @@ impl MovementPattern {
                 temporary_ballast.push(TBallast::Direction(dir));
             }
             MovementPattern::None => (),
-            MovementPattern::Knight => {
-            }
+            MovementPattern::Knight => {}
             MovementPattern::Rays => {
                 temporary_ballast.push(TBallast::Direction(None));
                 temporary_ballast.push(TBallast::DiagonalDirection(None));
@@ -112,7 +114,15 @@ impl MovementPattern {
         }
     }
 
-    pub fn find_steps<D: Direction>(&self, _map: &Board<D>, _point: Point, step_id: usize, _permanent_ballast: &[PbEntry<D>], temporary_ballast: &[TBallast<D>], extra_movement_options: ExtraMovementOptions) -> Vec<PathStep<D>> {
+    pub fn find_steps<D: Direction>(
+        &self,
+        _map: &Board<D>,
+        _point: Point,
+        step_id: usize,
+        _permanent_ballast: &[PbEntry<D>],
+        temporary_ballast: &[TBallast<D>],
+        extra_movement_options: ExtraMovementOptions,
+    ) -> Vec<PathStep<D>> {
         let mut result = Vec::new();
         let add_dir = |result: &mut Vec<_>, d: D| {
             result.push(PathStep::Dir(d));
@@ -123,8 +133,7 @@ impl MovementPattern {
         };
         match self {
             Self::None => (),
-            Self::Standard |
-            Self::StandardLoopLess => {
+            Self::Standard | Self::StandardLoopLess => {
                 for d in D::list() {
                     add_dir(&mut result, d);
                 }
@@ -174,33 +183,44 @@ impl MovementPattern {
                 return result;
             }
         };
-        result.into_iter()
-        .filter(|step| {
-            temporary_ballast.iter().all(|temp| {
-                match (temp, step) {
-                    (TBallast::ForbiddenDirection(Some(d1)), PathStep::Dir(d2)) => d1 != d2,
-                    (TBallast::Direction(Some(d1)), PathStep::Dir(d2)) => d1 == d2,
-                    (TBallast::Direction(Some(_)), _) => false,
-                    (TBallast::DiagonalDirection(Some(d1)), PathStep::Diagonal(d2)) => d1 == d2,
-                    (TBallast::DiagonalDirection(Some(_)), _) => false,
-                    //(TBallast::StepCount(step_count), _) => *step_count > 0,
-                    _ => true
-                }
+        result
+            .into_iter()
+            .filter(|step| {
+                temporary_ballast.iter().all(|temp| {
+                    match (temp, step) {
+                        (TBallast::ForbiddenDirection(Some(d1)), PathStep::Dir(d2)) => d1 != d2,
+                        (TBallast::Direction(Some(d1)), PathStep::Dir(d2)) => d1 == d2,
+                        (TBallast::Direction(Some(_)), _) => false,
+                        (TBallast::DiagonalDirection(Some(d1)), PathStep::Diagonal(d2)) => d1 == d2,
+                        (TBallast::DiagonalDirection(Some(_)), _) => false,
+                        //(TBallast::StepCount(step_count), _) => *step_count > 0,
+                        _ => true,
+                    }
+                })
             })
-        }).collect()
+            .collect()
     }
 
-    pub fn update_temporary_ballast<D: Direction>(&self, step: &PathStep<D>, step_distortion: Distortion<D>, temporary_ballast: &mut [TBallast<D>]) {
+    pub fn update_temporary_ballast<D: Direction>(
+        &self,
+        step: &PathStep<D>,
+        step_distortion: Distortion<D>,
+        temporary_ballast: &mut [TBallast<D>],
+    ) {
         for p in temporary_ballast {
             match p {
                 TBallast::Direction(dir) => {
                     *dir = step.dir().map(|d| step_distortion.update_direction(d));
                 }
                 TBallast::DiagonalDirection(dir) => {
-                    *dir = step.diagonal_dir().map(|d| step_distortion.update_diagonal_direction(d));
+                    *dir = step
+                        .diagonal_dir()
+                        .map(|d| step_distortion.update_diagonal_direction(d));
                 }
                 TBallast::ForbiddenDirection(dir) => {
-                    *dir = step.dir().map(|d| step_distortion.update_direction(d.opposite_direction()));
+                    *dir = step
+                        .dir()
+                        .map(|d| step_distortion.update_direction(d.opposite_direction()));
                 }
                 TBallast::MovementPoints(_mp) => {
                     panic!("should already have been handled in movement.rs");
@@ -208,23 +228,18 @@ impl MovementPattern {
                 /*TBallast::StepCount(step_count) => {
                     TBallast::StepCount(*step_count - 1)
                 }*/
-                TBallast::Takes(takes) => {
-                    match self {
-                        Self::None |
-                        Self::Standard |
-                        Self::StandardLoopLess => *takes = PathStepTakes::Deny,
-                        Self::Straight |
-                        Self::Diagonal |
-                        Self::Knight |
-                        Self::Rays => *takes = PathStepTakes::Allow,
-                        Self::Pawn => {
-                            match step {
-                                PathStep::Diagonal(_) => *takes = PathStepTakes::Force,
-                                _ => *takes = PathStepTakes::Deny,
-                            }
-                        }
+                TBallast::Takes(takes) => match self {
+                    Self::None | Self::Standard | Self::StandardLoopLess => {
+                        *takes = PathStepTakes::Deny
                     }
-                }
+                    Self::Straight | Self::Diagonal | Self::Knight | Self::Rays => {
+                        *takes = PathStepTakes::Allow
+                    }
+                    Self::Pawn => match step {
+                        PathStep::Diagonal(_) => *takes = PathStepTakes::Force,
+                        _ => *takes = PathStepTakes::Deny,
+                    },
+                },
             }
         }
     }

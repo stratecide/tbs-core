@@ -1,19 +1,28 @@
 use zipper::*;
 
+use super::unit::UnitBuilder;
+use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
 use crate::map::direction::Direction;
-use crate::config::environment::Environment;
-use super::unit::UnitBuilder;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UnitType(pub usize);
 
 impl FromConfig for UnitType {
-    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut crate::config::file_loader::FileLoader,
+    ) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
-        match loader.unit_types.iter().position(|name| name.as_str() == base) {
+        match loader
+            .unit_types
+            .iter()
+            .position(|name| name.as_str() == base)
+        {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::MissingUnit(base.to_string()))
+            None => Err(crate::config::ConfigParseError::MissingUnit(
+                base.to_string(),
+            )),
         }
     }
 }
@@ -27,7 +36,10 @@ impl SupportedZippable<&Environment> for UnitType {
         let bits = bits_needed_for_max_value(environment.config.unit_count() as u32 - 1);
         let index = unzipper.read_u32(bits)? as usize;
         if index >= environment.config.unit_count() {
-            return Err(ZipperError::EnumOutOfBounds(format!("UnitType index {}", index)))
+            return Err(ZipperError::EnumOutOfBounds(format!(
+                "UnitType index {}",
+                index
+            )));
         }
         Ok(Self(index))
     }

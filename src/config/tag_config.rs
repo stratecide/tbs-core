@@ -6,8 +6,8 @@ use crate::config::editor_tag_config::TagEditorVisibility;
 use crate::config::parse::*;
 use crate::units::UnitVisibility;
 
-use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
+use super::file_loader::{FileLoader, TableLine};
 
 #[derive(Debug)]
 pub struct TagConfig {
@@ -20,12 +20,13 @@ pub struct TagConfig {
 
 impl TableLine for TagConfig {
     type Header = TagConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use TagConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use TagConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let name = get(H::Id)?.trim().to_string();
         let tag_type = match get(H::Type)?.trim().to_lowercase().as_str() {
             "flag" => TagType::Flag,
@@ -47,7 +48,11 @@ impl TableLine for TagConfig {
             "terrain_type" | "terraintype" => TagType::TerrainType,
             "unit_type" | "unittype" => TagType::UnitType,
             "movement_type" | "movementtype" => TagType::MovementType,
-            unknown => return Err(ConfigParseError::UnknownEnumMember(format!("TagType::{unknown}")).into())
+            unknown => {
+                return Err(
+                    ConfigParseError::UnknownEnumMember(format!("TagType::{unknown}")).into(),
+                );
+            }
         };
         Ok(Self {
             name,
@@ -65,10 +70,13 @@ impl TableLine for TagConfig {
         match self.tag_type {
             TagType::Int { min, max, .. } => {
                 if min >= max {
-                    return Err(Box::new(ConfigParseError::Other(format!("TagType {}'s minimum needs to be lower than maximum", self.name))));
+                    return Err(Box::new(ConfigParseError::Other(format!(
+                        "TagType {}'s minimum needs to be lower than maximum",
+                        self.name
+                    ))));
                 }
             }
-            _ => ()
+            _ => (),
         }
         Ok(())
     }
@@ -92,14 +100,8 @@ crate::listable_enum! {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TagType {
     Flag,
-    Int{
-        min: i32,
-        max: i32,
-        default: i32,
-    },
-    Unique {
-        pool: String,
-    },
+    Int { min: i32, max: i32, default: i32 },
+    Unique { pool: String },
     Point,
     Direction,
     TerrainType,

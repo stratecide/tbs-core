@@ -4,24 +4,28 @@ use std::error::Error;
 use crate::config::parse::*;
 use crate::script::custom_action::CustomAction;
 
+use super::ConfigParseError;
 use super::file_loader::{FileLoader, TableLine};
 use super::unit_filter::UnitFilter;
-use super::ConfigParseError;
 
 #[derive(Debug)]
 pub struct CustomActionConfig {
-    pub(crate) name: String,                    // displayed in the action menu
+    pub(crate) name: String, // displayed in the action menu
     pub(crate) unit_filter: Vec<UnitFilter>,
     pub(crate) script: CustomAction,
 }
 
 impl TableLine for CustomActionConfig {
     type Header = CustomActionConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use CustomActionConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
+        use CustomActionConfigHeader as H;
         let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("CustomActionConfig::{key:?}")))
+            data.get(&key)
+                .ok_or(E::MissingColumn(format!("CustomActionConfig::{key:?}")))
         };
         let name = get(H::Name)?.to_string();
         let script = match data.get(&H::Script) {
@@ -37,7 +41,9 @@ impl TableLine for CustomActionConfig {
             _ => Err(ConfigParseError::CustomActionScriptMissing(name.clone())),
         }?;
         let result = Self {
-            unit_filter: parse_vec_dyn_def(data, H::UnitFilter, Vec::new(), |s| UnitFilter::from_conf(s, loader))?,
+            unit_filter: parse_vec_dyn_def(data, H::UnitFilter, Vec::new(), |s| {
+                UnitFilter::from_conf(s, loader)
+            })?,
             script,
             name,
         };

@@ -4,9 +4,9 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::{Pronouns, parse::*};
 
+use super::ConfigParseError;
 use super::file_loader::{FileLoader, TableLine};
 use super::hero_power_config::HeroPowerConfig;
-use super::ConfigParseError;
 
 #[derive(Debug)]
 pub struct HeroTypeConfig {
@@ -25,12 +25,13 @@ pub struct HeroTypeConfig {
 
 impl TableLine for HeroTypeConfig {
     type Header = HeroTypeConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use HeroTypeConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use HeroTypeConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let result = Self {
             name: get(H::Id)?.to_string(),
             pronouns: parse(data, H::Pronouns, loader)?,

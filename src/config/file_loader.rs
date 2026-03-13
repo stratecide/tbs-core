@@ -8,8 +8,8 @@ use uniform_smart_pointer::Urc;
 
 use crate::script::create_base_engine;
 
-use super::parse::{FromConfig, GLOBAL_SCRIPT};
 use super::ConfigParseError;
+use super::parse::{FromConfig, GLOBAL_SCRIPT};
 
 pub struct FunctionPointer {
     pub index: usize,
@@ -62,12 +62,19 @@ impl FileLoader {
     // TODO: delete this function
     pub(super) fn load_config(&mut self, filename: &str) -> Result<String, Box<dyn Error>> {
         (self.load_file)(filename)
-        .map_err(|e| ConfigParseError::FileMissing(format!("{filename}: {e}")).into())
+            .map_err(|e| ConfigParseError::FileMissing(format!("{filename}: {e}")).into())
     }
 
-    pub(super) fn table_key_value(&mut self, filename: &str, mut f: impl FnMut(&str, &str, &mut Self) -> Result<(), Box<dyn Error>>) -> Result<(), Box<dyn Error>> {
+    pub(super) fn table_key_value(
+        &mut self,
+        filename: &str,
+        mut f: impl FnMut(&str, &str, &mut Self) -> Result<(), Box<dyn Error>>,
+    ) -> Result<(), Box<dyn Error>> {
         let data = self.load_config(filename)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').has_headers(false).from_reader(data.as_bytes());
+        let mut reader = csv::ReaderBuilder::new()
+            .delimiter(b';')
+            .has_headers(false)
+            .from_reader(data.as_bytes());
         for line in reader.records() {
             let line = line?;
             let mut line = line.iter();
@@ -84,15 +91,21 @@ impl FileLoader {
 
     pub(super) fn table_with_headers<
         Header: FromConfig + PartialEq + Eq + Hash + Clone,
-        Line: TableLine<Header=Header>,
-    >(&mut self, filename: &str, mut f: impl FnMut(Line) -> Result<(), Box<dyn Error>>) -> Result<(), Box<dyn Error>> {
+        Line: TableLine<Header = Header>,
+    >(
+        &mut self,
+        filename: &str,
+        mut f: impl FnMut(Line) -> Result<(), Box<dyn Error>>,
+    ) -> Result<(), Box<dyn Error>> {
         let data = self.load_config(filename)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut reader = csv::ReaderBuilder::new()
+            .delimiter(b';')
+            .from_reader(data.as_bytes());
         let mut headers: Vec<Header> = Vec::new();
         for h in reader.headers()? {
             let header = Header::from_conf(h, self)?.0;
             if headers.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())));
             }
             headers.push(header);
         }
@@ -109,46 +122,69 @@ impl FileLoader {
         Ok(())
     }
 
-    pub(crate) fn rhai_function(&mut self, name: &str, parameter_count: RangeInclusive<usize>) -> Result<FunctionPointer, ConfigParseError> {
+    pub(crate) fn rhai_function(
+        &mut self,
+        name: &str,
+        parameter_count: RangeInclusive<usize>,
+    ) -> Result<FunctionPointer, ConfigParseError> {
         let Some((filename, name)) = name.split_once('>') else {
-            return Err(ConfigParseError::ScriptNeedsFileAndFunctionName(name.to_string()));
+            return Err(ConfigParseError::ScriptNeedsFileAndFunctionName(
+                name.to_string(),
+            ));
         };
         let filename = filename.trim();
         let name = name.trim();
         if filename == GLOBAL_SCRIPT {
-            return Err(ConfigParseError::DontCallGlobalScriptDirectly(name.to_string()));
+            return Err(ConfigParseError::DontCallGlobalScriptDirectly(
+                name.to_string(),
+            ));
         }
-        let index = if let Some(index) = self.rhai_functions.iter()
-        .position(|(f, n, parameters)| f.as_str() == filename && n.as_str() == name && parameter_count.contains(&parameters.len())) {
+        let index = if let Some(index) =
+            self.rhai_functions.iter().position(|(f, n, parameters)| {
+                f.as_str() == filename
+                    && n.as_str() == name
+                    && parameter_count.contains(&parameters.len())
+            }) {
             index
         } else {
             let filename = filename.to_string();
             let ast = self.load_rhai_module(&filename)?;
             // check if a function with that name and correct parameter-count exists (parameter types can't be verified)
-            let Some(parameters) = ast.iter_functions()
-            .filter(|f| f.name == name)
-            .map(|f| f.params.iter().map(|s| s.to_string()).collect())
-            .filter(|parameters: &Vec<String>| parameter_count.contains(&parameters.len()))
-            .next() else {
-                return Err(ConfigParseError::ScriptFunctionNotFound(filename, name.to_string()));
+            let Some(parameters) = ast
+                .iter_functions()
+                .filter(|f| f.name == name)
+                .map(|f| f.params.iter().map(|s| s.to_string()).collect())
+                .filter(|parameters: &Vec<String>| parameter_count.contains(&parameters.len()))
+                .next()
+            else {
+                return Err(ConfigParseError::ScriptFunctionNotFound(
+                    filename,
+                    name.to_string(),
+                ));
             };
-            self.rhai_functions.push((filename, name.to_string(), Urc::new(parameters)));
+            self.rhai_functions
+                .push((filename, name.to_string(), Urc::new(parameters)));
             self.rhai_functions.len() - 1
         };
         Ok(FunctionPointer {
             index,
             parameters: self.rhai_functions[index].2.clone(),
         })
-}
+    }
 
-    pub(super) fn load_rhai_module(&mut self, filename: &String) -> Result<Urc<AST>, ConfigParseError> {
+    pub(super) fn load_rhai_module(
+        &mut self,
+        filename: &String,
+    ) -> Result<Urc<AST>, ConfigParseError> {
         if let Some(ast) = self.unoptimized_asts.get(filename) {
             Ok(ast.clone())
         } else {
             let path = format!("scripts/{filename}.rhai");
-            let script = (self.load_file)(&path)
-                .map_err(|_| ConfigParseError::FileMissing(path.clone()))?;
-            let ast = self.engine.compile(script)
+            let script =
+                (self.load_file)(&path).map_err(|_| ConfigParseError::FileMissing(path.clone()))?;
+            let ast = self
+                .engine
+                .compile(script)
                 .map_err(|e| ConfigParseError::ScriptCompilation(path.clone(), e.to_string()))?;
             let ast = Urc::new(ast);
             if filename != GLOBAL_SCRIPT {
@@ -170,18 +206,20 @@ impl FileLoader {
                 }
             }
         }
-        let functions: Vec<(usize, String)> = self.rhai_functions.into_iter().map(|(filename, name, _)| {
-            (*indices.get(&filename).unwrap(), name)
-        }).collect();
-        (
-            asts,
-            functions,
-        )
+        let functions: Vec<(usize, String)> = self
+            .rhai_functions
+            .into_iter()
+            .map(|(filename, name, _)| (*indices.get(&filename).unwrap(), name))
+            .collect();
+        (asts, functions)
     }
 }
 
 pub(super) trait TableLine: Sized {
     type Header: FromConfig;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>>;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>>;
     fn simple_validation(&self) -> Result<(), Box<dyn Error>>;
 }

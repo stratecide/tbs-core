@@ -1,4 +1,3 @@
-
 use rustc_hash::FxHashSet as HashSet;
 
 use crate::commander::commander_type::CommanderType;
@@ -27,44 +26,54 @@ pub(crate) enum TokenFilter {
 }
 
 impl FromConfig for TokenFilter {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
-        Ok((match base {
-            "Rhai" | "Script" => {
-                let (name, r) = parse_tuple1::<String>(remainder, loader)?;
-                remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
-            }
-            "Commander" | "Co" => {
-                if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
+        Ok((
+            match base {
+                "Rhai" | "Script" => {
+                    let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                     remainder = r;
-                    Self::Commander(commander, Some(power))
-                } else {
-                    let (commander, r) = parse_tuple1(remainder, loader)?;
-                    remainder = r;
-                    Self::Commander(commander, None)
+                    Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
                 }
-            }
-            "T" | "Type" => {
-                let (list, r) = parse_inner_vec::<TokenType>(remainder, true, loader)?;
-                remainder = r;
-                Self::Type(list.into_iter().collect())
-            }
-            "Ownable" => Self::Ownable,
-            "Unowned" => Self::Unowned,
-            "OwnerTurn" => Self::OwnerTurn,
-            "Flag" | "F" => {
-                let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
-                remainder = r;
-                Self::Flag(list.into_iter().collect())
-            }
-            "Not" => {
-                let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
-                remainder = r;
-                Self::Not(list)
-            }
-            _ => return Err(ConfigParseError::UnknownEnumMember(format!("TokenFilter::{s}")))
-        }, remainder))
+                "Commander" | "Co" => {
+                    if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
+                        remainder = r;
+                        Self::Commander(commander, Some(power))
+                    } else {
+                        let (commander, r) = parse_tuple1(remainder, loader)?;
+                        remainder = r;
+                        Self::Commander(commander, None)
+                    }
+                }
+                "T" | "Type" => {
+                    let (list, r) = parse_inner_vec::<TokenType>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Type(list.into_iter().collect())
+                }
+                "Ownable" => Self::Ownable,
+                "Unowned" => Self::Unowned,
+                "OwnerTurn" => Self::OwnerTurn,
+                "Flag" | "F" => {
+                    let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Flag(list.into_iter().collect())
+                }
+                "Not" => {
+                    let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Not(list)
+                }
+                _ => {
+                    return Err(ConfigParseError::UnknownEnumMember(format!(
+                        "TokenFilter::{s}"
+                    )));
+                }
+            },
+            remainder,
+        ))
     }
 }
 
@@ -89,18 +98,22 @@ impl TokenFilter {
             Self::Commander(commander_type, power) => {
                 let commander = token.get_commander(game);
                 commander.typ() == *commander_type
-                && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
+                    && (power.is_none()
+                        || power.clone().unwrap() as usize == commander.get_active_power())
             }
             Self::Type(t) => t.contains(&token.typ()),
-            Self::Ownable => token.environment().config.token_ownership(token.typ()) != OwnershipPredicate::Never,
+            Self::Ownable => {
+                token.environment().config.token_ownership(token.typ()) != OwnershipPredicate::Never
+            }
             Self::Unowned => token.get_owner_id() < 0,
             Self::OwnerTurn => token.get_owner_id() == game.current_owner(),
             Self::Flag(flags) => flags.iter().any(|flag| token.has_flag(flag.0)),
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
-                negated.iter()
-                .any(|negated| !negated.check(game, pos, token, executor))
+                negated
+                    .iter()
+                    .any(|negated| !negated.check(game, pos, token, executor))
             }
         }
     }

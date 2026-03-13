@@ -1,12 +1,12 @@
 pub mod commands;
+pub mod hero;
 pub mod movement;
 pub mod rhai_movement;
-pub mod hero;
-pub mod unit_types;
-pub mod unit;
 pub mod rhai_unit;
 #[cfg(test)]
 pub(crate) mod test;
+pub mod unit;
+pub mod unit_types;
 
 use movement::TBallast;
 use unit::Unit;
@@ -41,13 +41,18 @@ impl UnitVisibility {
 }
 
 impl FromConfig for UnitVisibility {
-    fn from_conf<'a>(s: &'a str, _: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        _: &mut crate::config::file_loader::FileLoader,
+    ) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
         match base {
             "Stealth" => Ok((Self::Stealth, s)),
             "Normal" => Ok((Self::Normal, s)),
             "Always" | "AlwaysVisible" => Ok((Self::AlwaysVisible, s)),
-            _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("Visibility::{base} - {s}")))
+            _ => Err(crate::config::ConfigParseError::UnknownEnumMember(format!(
+                "Visibility::{base} - {s}"
+            ))),
         }
     }
 }

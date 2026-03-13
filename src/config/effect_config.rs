@@ -6,15 +6,15 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::parse::*;
 use crate::game::event_fx::EffectWithoutPosition;
-use crate::game::fog::{is_unit_visible, visible_unit_with_attribute, FogIntensity};
-use crate::map::board::{current_team, Board, BoardView};
+use crate::game::fog::{FogIntensity, is_unit_visible, visible_unit_with_attribute};
+use crate::map::board::{Board, BoardView, current_team};
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::*;
 use crate::tags::{FlagKey, TagKey};
 
-use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
+use super::file_loader::{FileLoader, TableLine};
 
 #[derive(Debug)]
 pub struct EffectConfig {
@@ -26,30 +26,33 @@ pub struct EffectConfig {
 
 impl TableLine for EffectConfig {
     type Header = EffectConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use EffectConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use EffectConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let name = get(H::Id)?.trim().to_string();
         let (data_type, s) = string_base(get(H::DataType)?.trim());
         let data_type = match data_type.to_lowercase().as_str() {
             "" => None,
             "int" => {
                 let (min, max, _) = parse_tuple2(s, loader)?;
-                Some(EffectDataType::Int {
-                    min,
-                    max,
-                })
-            },
+                Some(EffectDataType::Int { min, max })
+            }
             "direction" => Some(EffectDataType::Direction),
             "terrain" => Some(EffectDataType::Terrain),
             "token" => Some(EffectDataType::Token),
             "unit" => Some(EffectDataType::Unit),
             "visibility" => Some(EffectDataType::Visibility),
             "team" => Some(EffectDataType::Team),
-            unknown => return Err(ConfigParseError::UnknownEnumMember(format!("EffectDataType::{unknown}")).into())
+            unknown => {
+                return Err(ConfigParseError::UnknownEnumMember(format!(
+                    "EffectDataType::{unknown}"
+                ))
+                .into());
+            }
         };
         Ok(Self {
             name,
@@ -63,8 +66,15 @@ impl TableLine for EffectConfig {
         if self.name.len() == 0 {
             return Err(Box::new(ConfigParseError::NameTooShort));
         }
-        if !self.name.chars().all(|c| c == '_' || c.is_ascii_alphanumeric()) {
-            return Err(Box::new(ConfigParseError::Other(format!("Effect ({}): Name can only contain ASCII letters, digits and '_'", self.name))));
+        if !self
+            .name
+            .chars()
+            .all(|c| c == '_' || c.is_ascii_alphanumeric())
+        {
+            return Err(Box::new(ConfigParseError::Other(format!(
+                "Effect ({}): Name can only contain ASCII letters, digits and '_'",
+                self.name
+            ))));
         }
         if self.visibility == EffectVisibility::Data {
             // TODO: check if self.data_type can be used to check visibility
@@ -72,10 +82,13 @@ impl TableLine for EffectConfig {
         match self.data_type {
             Some(EffectDataType::Int { min, max }) => {
                 if min >= max {
-                    return Err(Box::new(ConfigParseError::Other(format!("Effect DataType {}'s minimum needs to be lower than maximum", self.name))));
+                    return Err(Box::new(ConfigParseError::Other(format!(
+                        "Effect DataType {}'s minimum needs to be lower than maximum",
+                        self.name
+                    ))));
                 }
             }
-            _ => ()
+            _ => (),
         }
         Ok(())
     }
@@ -93,10 +106,7 @@ crate::listable_enum! {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum EffectDataType {
-    Int{
-        min: i32,
-        max: i32,
-    },
+    Int { min: i32, max: i32 },
     Direction,
     Terrain,
     Token,
@@ -118,45 +128,63 @@ pub enum EffectVisibility {
 }
 
 impl FromConfig for EffectVisibility {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
-        Ok((match base {
-            "Rhai" | "Script" => {
-                let (name, r) = parse_tuple1::<String>(remainder, loader)?;
-                remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
-            }
-            "Full" => Self::Full,
-            "CurrentTeam" => Self::CurrentTeam,
-            "Data" => Self::Data,
-            "Unit" => Self::Unit,
-            "UnitFlag" => {
-                let (key, r) = parse_tuple1::<FlagKey>(remainder, loader)?;
-                remainder = r;
-                Self::UnitFlag(key)
-            }
-            "UnitTag" => {
-                let (key, r) = parse_tuple1::<TagKey>(remainder, loader)?;
-                remainder = r;
-                Self::UnitTag(key)
-            }
-            "Fog" => {
-                let (key, r) = parse_tuple1::<FogIntensity>(remainder, loader)?;
-                remainder = r;
-                Self::Fog(key)
-            }
-            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("EffectVisibility::{invalid}"))),
-        }, remainder))
+        Ok((
+            match base {
+                "Rhai" | "Script" => {
+                    let (name, r) = parse_tuple1::<String>(remainder, loader)?;
+                    remainder = r;
+                    Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
+                }
+                "Full" => Self::Full,
+                "CurrentTeam" => Self::CurrentTeam,
+                "Data" => Self::Data,
+                "Unit" => Self::Unit,
+                "UnitFlag" => {
+                    let (key, r) = parse_tuple1::<FlagKey>(remainder, loader)?;
+                    remainder = r;
+                    Self::UnitFlag(key)
+                }
+                "UnitTag" => {
+                    let (key, r) = parse_tuple1::<TagKey>(remainder, loader)?;
+                    remainder = r;
+                    Self::UnitTag(key)
+                }
+                "Fog" => {
+                    let (key, r) = parse_tuple1::<FogIntensity>(remainder, loader)?;
+                    remainder = r;
+                    Self::Fog(key)
+                }
+                invalid => {
+                    return Err(ConfigParseError::UnknownEnumMember(format!(
+                        "EffectVisibility::{invalid}"
+                    )));
+                }
+            },
+            remainder,
+        ))
     }
 }
 
 impl EffectVisibility {
-    pub fn fog_replacement<D: Direction>(&self, effect: &EffectWithoutPosition<D>, start: Option<Point>, p: Option<Point>, game: &Board<D>, team: ClientPerspective) -> Option<EffectWithoutPosition<D>> {
+    pub fn fog_replacement<D: Direction>(
+        &self,
+        effect: &EffectWithoutPosition<D>,
+        start: Option<Point>,
+        p: Option<Point>,
+        game: &Board<D>,
+        team: ClientPerspective,
+    ) -> Option<EffectWithoutPosition<D>> {
         match self {
             Self::Rhai(function_index) => {
                 let mut first_argument = Map::new();
                 if let Some(start) = start {
-                    first_argument.insert(CONST_NAME_STARTING_POSITION.into(), Dynamic::from(start));
+                    first_argument
+                        .insert(CONST_NAME_STARTING_POSITION.into(), Dynamic::from(start));
                 }
                 if let Some(p) = p {
                     first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(p));
@@ -166,7 +194,11 @@ impl EffectVisibility {
                     Ok(result) => result,
                     Err(e) => {
                         let environment = game.environment();
-                        environment.log_rhai_error("EffectVisibility::Rhai", environment.get_rhai_function_name(*function_index), &e);
+                        environment.log_rhai_error(
+                            "EffectVisibility::Rhai",
+                            environment.get_rhai_function_name(*function_index),
+                            &e,
+                        );
                         // TODO: return "glitch" effect instead
                         None
                     }
@@ -198,7 +230,12 @@ impl EffectVisibility {
             }
             Self::UnitFlag(key) => {
                 let unit = game.get_unit(start?)?;
-                if visible_unit_with_attribute(game, team, p?, unit.environment().config.flag_visibility(key.0)) {
+                if visible_unit_with_attribute(
+                    game,
+                    team,
+                    p?,
+                    unit.environment().config.flag_visibility(key.0),
+                ) {
                     Some(effect.clone())
                 } else {
                     None
@@ -206,7 +243,12 @@ impl EffectVisibility {
             }
             Self::UnitTag(key) => {
                 let unit = game.get_unit(start?)?;
-                if visible_unit_with_attribute(game, team, p?, unit.environment().config.tag_visibility(key.0)) {
+                if visible_unit_with_attribute(
+                    game,
+                    team,
+                    p?,
+                    unit.environment().config.tag_visibility(key.0),
+                ) {
                     Some(effect.clone())
                 } else {
                     None

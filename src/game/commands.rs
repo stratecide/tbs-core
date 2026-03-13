@@ -2,36 +2,48 @@ use std::error::Error;
 use std::fmt::Display;
 
 use interfaces::{ClientPerspective, GameInterface};
-use rustc_hash::FxHashSet;
-use zipper_derive::Zippable;
-use zipper::*;
 use rhai::*;
+use rustc_hash::FxHashSet;
+use zipper::*;
+use zipper_derive::Zippable;
 
+use super::event_handler::EventHandler;
+use super::fog::FogIntensity;
 use crate::config::environment::Environment;
 use crate::map::board::{Board, BoardView};
+use crate::map::direction::Direction;
 use crate::map::map::valid_points;
 use crate::map::point::Point;
 use crate::script::custom_action::*;
 use crate::script::*;
-use crate::map::direction::Direction;
-use crate::units::commands::{UnitCommand, MAX_CUSTOM_ACTION_STEPS};
+use crate::units::commands::{MAX_CUSTOM_ACTION_STEPS, UnitCommand};
 use crate::units::hero::Hero;
-use super::event_handler::EventHandler;
-use super::fog::FogIntensity;
 
 #[derive(Debug, Clone, PartialEq, Zippable)]
 #[zippable(bits = 4, support_ref = Environment)]
 pub enum Command<D: Direction> {
     EndTurn,
     UnitCommand(UnitCommand<D>),
-    TerrainAction(Point, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
-    TokenAction(Point, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
-    CommanderPower(CommanderPowerIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
+    TerrainAction(
+        Point,
+        LVec<CustomActionInput<D>, { MAX_CUSTOM_ACTION_STEPS }>,
+    ),
+    TokenAction(
+        Point,
+        LVec<CustomActionInput<D>, { MAX_CUSTOM_ACTION_STEPS }>,
+    ),
+    CommanderPower(
+        CommanderPowerIndex,
+        LVec<CustomActionInput<D>, { MAX_CUSTOM_ACTION_STEPS }>,
+    ),
 }
 
 impl<D: Direction> Command<D> {
     pub fn commander_power(index: usize, custom_action_data: Vec<CustomActionInput<D>>) -> Self {
-        Self::CommanderPower(CommanderPowerIndex(index), custom_action_data.try_into().unwrap())
+        Self::CommanderPower(
+            CommanderPowerIndex(index),
+            custom_action_data.try_into().unwrap(),
+        )
     }
 
     pub fn execute(self, handler: &mut EventHandler<D>) -> Result<(), CommandError> {
@@ -60,7 +72,11 @@ impl<D: Direction> Command<D> {
                 let borrowed_game = handler.get_game();
                 let client_game;
                 let client = if handler.get_game().has_secrets() {
-                    client_game = handler.get_game().reimport_as_client(ClientPerspective::Team(handler.get_game().current_owner() as u8));
+                    client_game = handler
+                        .get_game()
+                        .reimport_as_client(ClientPerspective::Team(
+                            handler.get_game().current_owner() as u8,
+                        ));
                     &client_game
                 } else {
                     &*borrowed_game
@@ -74,14 +90,28 @@ impl<D: Direction> Command<D> {
                     let heroes = Hero::hero_influence_at(&board, pos, Some(client.current_owner()));
                     let (input_script, script) = {
                         for token in client.get_tokens(pos) {
-                            if client.environment().config.token_action_script(token.typ()).is_some() {
+                            if client
+                                .environment()
+                                .config
+                                .token_action_script(token.typ())
+                                .is_some()
+                            {
                                 return Err(CommandError::Blocked(pos));
                             }
                         }
-                        client.environment().config.terrain_action_script(&board, pos, &terrain, &heroes)
-                        .ok_or(CommandError::InvalidAction)
+                        client
+                            .environment()
+                            .config
+                            .terrain_action_script(&board, pos, &terrain, &heroes)
+                            .ok_or(CommandError::InvalidAction)
                     }?;
-                    let Some(data) = is_terrain_script_input_valid(input_script, &board, pos, terrain.clone(), &data) else {
+                    let Some(data) = is_terrain_script_input_valid(
+                        input_script,
+                        &board,
+                        pos,
+                        terrain.clone(),
+                        &data,
+                    ) else {
                         return Err(CommandError::InvalidAction);
                     };
                     (script, data)
@@ -104,7 +134,11 @@ impl<D: Direction> Command<D> {
                 let borrowed_game = handler.get_game();
                 let client_game;
                 let client = if handler.get_game().has_secrets() {
-                    client_game = handler.get_game().reimport_as_client(ClientPerspective::Team(handler.get_game().current_owner() as u8));
+                    client_game = handler
+                        .get_game()
+                        .reimport_as_client(ClientPerspective::Team(
+                            handler.get_game().current_owner() as u8,
+                        ));
                     &client_game
                 } else {
                     &*borrowed_game
@@ -116,14 +150,21 @@ impl<D: Direction> Command<D> {
                     let handler = ();
                     let mut script_data = None;
                     // look from top to bottom
-                    for token in client.get_tokens(pos).iter()
-                    .rev() {
-                        if let Some((input_script, script)) = client.environment().config.token_action_script(token.typ()) {
+                    for token in client.get_tokens(pos).iter().rev() {
+                        if let Some((input_script, script)) =
+                            client.environment().config.token_action_script(token.typ())
+                        {
                             if token.get_owner_id() != client.current_player().get_owner_id() {
                                 return Err(CommandError::Blocked(pos));
                             }
                             let board = Board::from(client);
-                            script_data = is_token_script_input_valid(input_script, &board, pos, token.clone(), &data)
+                            script_data = is_token_script_input_valid(
+                                input_script,
+                                &board,
+                                pos,
+                                token.clone(),
+                                &data,
+                            )
                             .map(|data| (script, token.clone(), data));
                             break;
                         }
@@ -143,7 +184,7 @@ impl<D: Direction> Command<D> {
                 let script = commander.power_activation_script(index.0);
                 let data = if let Some((Some(input_script), _)) = script {
                     is_commander_script_input_valid(input_script, handler.get_board(), &data)
-                    .ok_or(CommandError::PowerNotUsable)?
+                        .ok_or(CommandError::PowerNotUsable)?
                 } else if data.len() == 0 {
                     Vec::new()
                 } else {
@@ -169,23 +210,34 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
     let environment = handler.environment().clone();
     let is_unit_dead_rhai = environment.is_unit_dead_rhai();
     for _ in 0..100 {
-        let deaths: FxHashSet<Point> = all_points.iter().cloned()
-        .filter(|p| {
-            handler.get_game().get_unit(*p).cloned().map(|u| {
-                let mut first_argument = Map::new();
-                first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(*p));
-                first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(u));
-                let executor = handler.get_board().executor(first_argument);
-                match executor.run::<D, bool>(is_unit_dead_rhai, ()) {
-                    Ok(result) => result,
-                    Err(e) => {
-                        environment.log_rhai_error("cleanup_dead_material::is_unit_dead_rhai", environment.get_rhai_function_name(is_unit_dead_rhai), &e);
-                        false
-                    }
-                }
-            }).unwrap_or(false)
-        })
-        .collect();
+        let deaths: FxHashSet<Point> = all_points
+            .iter()
+            .cloned()
+            .filter(|p| {
+                handler
+                    .get_game()
+                    .get_unit(*p)
+                    .cloned()
+                    .map(|u| {
+                        let mut first_argument = Map::new();
+                        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(*p));
+                        first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(u));
+                        let executor = handler.get_board().executor(first_argument);
+                        match executor.run::<D, bool>(is_unit_dead_rhai, ()) {
+                            Ok(result) => result,
+                            Err(e) => {
+                                environment.log_rhai_error(
+                                    "cleanup_dead_material::is_unit_dead_rhai",
+                                    environment.get_rhai_function_name(is_unit_dead_rhai),
+                                    &e,
+                                );
+                                false
+                            }
+                        }
+                    })
+                    .unwrap_or(false)
+            })
+            .collect();
         if execute_scripts {
             handler.trigger_all_unit_scripts(
                 |game, unit, unit_pos, transporter, heroes| {
@@ -209,20 +261,27 @@ pub fn cleanup_dead_material<D: Direction>(handler: &mut EventHandler<D>, execut
                             match executor.run::<D, ()>(function_index, ()) {
                                 Ok(()) => (),
                                 Err(e) => {
-                                    environment.log_rhai_error("cleanup_dead_material::OnDeath", environment.get_rhai_function_name(function_index), &e);
+                                    environment.log_rhai_error(
+                                        "cleanup_dead_material::OnDeath",
+                                        environment.get_rhai_function_name(function_index),
+                                        &e,
+                                    );
                                 }
                             }
                         }
                     }
-                }
+                },
             );
         }
         // check if a player lost
         let viable_player_ids = handler.get_game().get_map().get_viable_player_ids();
-        let players: Vec<u8> = handler.get_game().players().iter()
-        .filter(|p| !p.dead)
-        .map(|p| p.color_id)
-        .collect();
+        let players: Vec<u8> = handler
+            .get_game()
+            .players()
+            .iter()
+            .filter(|p| !p.dead)
+            .map(|p| p.color_id)
+            .collect();
         let mut no_player_died = true;
         for owner_id in players {
             if !viable_player_ids.contains(&owner_id) {
@@ -241,7 +300,10 @@ pub struct CommanderPowerIndex(pub usize);
 
 impl SupportedZippable<&Environment> for CommanderPowerIndex {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        let max_len = support.config.commander_types().iter()
+        let max_len = support
+            .config
+            .commander_types()
+            .iter()
             .map(|co| support.config.commander_powers(*co).len())
             .max()
             .unwrap_or(0) as u32;
@@ -250,7 +312,10 @@ impl SupportedZippable<&Environment> for CommanderPowerIndex {
     }
 
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        let max_len = support.config.commander_types().iter()
+        let max_len = support
+            .config
+            .commander_types()
+            .iter()
             .map(|co| support.config.commander_powers(*co).len())
             .max()
             .unwrap_or(0) as u32;

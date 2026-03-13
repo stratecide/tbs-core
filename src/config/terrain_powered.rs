@@ -10,8 +10,8 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::executor::Executor;
 use crate::tags::*;
-use crate::terrain::terrain::Terrain;
 use crate::terrain::TerrainType;
+use crate::terrain::terrain::Terrain;
 use crate::units::hero::HeroInfluence;
 
 use super::file_loader::{FileLoader, TableLine};
@@ -31,44 +31,54 @@ pub(crate) enum TerrainFilter {
 }
 
 impl FromConfig for TerrainFilter {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
-        Ok((match base {
-            "Rhai" | "Script" => {
-                let (name, r) = parse_tuple1::<String>(remainder, loader)?;
-                remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
-            }
-            "Commander" | "Co" => {
-                if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
+        Ok((
+            match base {
+                "Rhai" | "Script" => {
+                    let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                     remainder = r;
-                    Self::Commander(commander, Some(power))
-                } else {
-                    let (commander, r) = parse_tuple1(remainder, loader)?;
-                    remainder = r;
-                    Self::Commander(commander, None)
+                    Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
                 }
-            }
-            "T" | "Type" => {
-                let (list, r) = parse_inner_vec::<TerrainType>(remainder, true, loader)?;
-                remainder = r;
-                Self::Type(list.into_iter().collect())
-            }
-            "Ownable" => Self::Ownable,
-            "Unowned" => Self::Unowned,
-            "OwnerTurn" => Self::OwnerTurn,
-            "Flag" | "F" => {
-                let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
-                remainder = r;
-                Self::Flag(list.into_iter().collect())
-            }
-            "Not" => {
-                let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
-                remainder = r;
-                Self::Not(list)
-            }
-            _ => return Err(ConfigParseError::UnknownEnumMember(format!("TerrainFilter::{s}")))
-        }, remainder))
+                "Commander" | "Co" => {
+                    if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
+                        remainder = r;
+                        Self::Commander(commander, Some(power))
+                    } else {
+                        let (commander, r) = parse_tuple1(remainder, loader)?;
+                        remainder = r;
+                        Self::Commander(commander, None)
+                    }
+                }
+                "T" | "Type" => {
+                    let (list, r) = parse_inner_vec::<TerrainType>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Type(list.into_iter().collect())
+                }
+                "Ownable" => Self::Ownable,
+                "Unowned" => Self::Unowned,
+                "OwnerTurn" => Self::OwnerTurn,
+                "Flag" | "F" => {
+                    let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Flag(list.into_iter().collect())
+                }
+                "Not" => {
+                    let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Not(list)
+                }
+                _ => {
+                    return Err(ConfigParseError::UnknownEnumMember(format!(
+                        "TerrainFilter::{s}"
+                    )));
+                }
+            },
+            remainder,
+        ))
     }
 }
 
@@ -95,18 +105,26 @@ impl TerrainFilter {
             Self::Commander(commander_type, power) => {
                 let commander = terrain.get_commander(game);
                 commander.typ() == *commander_type
-                && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
+                    && (power.is_none()
+                        || power.clone().unwrap() as usize == commander.get_active_power())
             }
             Self::Type(t) => t.contains(&terrain.typ()),
-            Self::Ownable => terrain.environment().config.terrain_ownership(terrain.typ()) != OwnershipPredicate::Never,
+            Self::Ownable => {
+                terrain
+                    .environment()
+                    .config
+                    .terrain_ownership(terrain.typ())
+                    != OwnershipPredicate::Never
+            }
             Self::Unowned => terrain.get_owner_id() < 0,
             Self::OwnerTurn => terrain.get_owner_id() == game.current_owner(),
             Self::Flag(flags) => flags.iter().any(|flag| terrain.has_flag(flag.0)),
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
-                negated.iter()
-                .any(|negated| !negated.check(game, pos, terrain, heroes, executor))
+                negated
+                    .iter()
+                    .any(|negated| !negated.check(game, pos, terrain, heroes, executor))
             }
         }
     }
@@ -122,7 +140,10 @@ pub(super) struct TerrainPoweredConfig {
 
 impl TableLine for TerrainPoweredConfig {
     type Header = TerrainPoweredConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use TerrainPoweredConfigHeader as H;
         let power = parse_vec_def(data, H::Power, Vec::new(), loader)?;
         let affects = parse_vec_def(data, H::Affects, Vec::new(), loader)?;

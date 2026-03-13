@@ -1,13 +1,9 @@
-use interfaces::game_interface::*;
-use interfaces::ClientPerspective;
-use interfaces::Perspective;
-use semver::Version;
-use uniform_smart_pointer::Urc;
+use crate::VERSION;
 use crate::commander::commander_type::CommanderType;
 use crate::config::config::Config;
 use crate::game::commands::Command;
-use crate::game::game::*;
 use crate::game::fog::*;
+use crate::game::game::*;
 use crate::map::board::BoardView;
 use crate::map::direction::*;
 use crate::map::map::Map;
@@ -16,7 +12,11 @@ use crate::map::point_map::PointMap;
 use crate::map::wrapping_map::WMBuilder;
 use crate::script::custom_action::CustomActionInput;
 use crate::units::unit_types::UnitType;
-use crate::VERSION;
+use interfaces::ClientPerspective;
+use interfaces::Perspective;
+use interfaces::game_interface::*;
+use semver::Version;
+use uniform_smart_pointer::Urc;
 
 #[test]
 fn export_import_chess() {
@@ -30,15 +30,34 @@ fn export_import_chess() {
         let mut settings = settings.clone();
         settings.fog_mode = FogMode::Constant(fog_setting);
         let perspective = Perspective::Team(0);
-        let (server, events) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
-        let client = Game::new_client(map.clone(), &settings, settings.build_default(), events.get(&perspective).unwrap());
+        let (server, events) = Game::new_server(
+            map.clone(),
+            &settings,
+            settings.build_default(),
+            Urc::new(|| 0.),
+        );
+        let client = Game::new_client(
+            map.clone(),
+            &settings,
+            settings.build_default(),
+            events.get(&perspective).unwrap(),
+        );
         let data = server.export();
         crate::debug!("data: {data:?}");
         let imported_server = Game::import_server(data.clone(), &config, version.clone()).unwrap();
         assert_eq!(server.get_fog(), imported_server.get_fog());
         assert_eq!(server.environment(), imported_server.environment());
         assert_eq!(server, imported_server);
-        assert_eq!(client, Game::import_client(data.public.clone(), data.get_team(0), &config, version.clone()).unwrap());
+        assert_eq!(
+            client,
+            Game::import_client(
+                data.public.clone(),
+                data.get_team(0),
+                &config,
+                version.clone()
+            )
+            .unwrap()
+        );
     }
 }
 
@@ -50,8 +69,24 @@ fn changing_visibility() {
     let mut map = Map::new(map.build(), &config);
     let environment = map.environment().clone();
     let origin = Point::new(0, 0);
-    map.set_unit(origin, Some(UnitType::BAZOOKA.instance(&environment).set_owner_id(0).build()));
-    map.set_unit(Point::new(7, 7), Some(UnitType::SMALL_TANK.instance(&environment).set_owner_id(1).build()));
+    map.set_unit(
+        origin,
+        Some(
+            UnitType::BAZOOKA
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(7, 7),
+        Some(
+            UnitType::SMALL_TANK
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
     let mut game_config = map.settings().unwrap();
     game_config.fog_mode = FogMode::Constant(FogSetting::Light(0));
     let mut settings = game_config.build_default();
@@ -66,9 +101,12 @@ fn changing_visibility() {
     assert_eq!(client.get_unit(origin).unwrap().typ(), UnitType::UNKNOWN);
 
     // now create a forest at origin, which changes the unit's visibility
-    let events = server.handle_command(Command::commander_power(1, vec![
-        CustomActionInput::Point(origin),
-    ]), Urc::new(|| 0.)).unwrap();
+    let events = server
+        .handle_command(
+            Command::commander_power(1, vec![CustomActionInput::Point(origin)]),
+            Urc::new(|| 0.),
+        )
+        .unwrap();
     for ev in events.get(&perspective).unwrap() {
         ev.apply(&mut client);
     }

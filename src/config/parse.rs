@@ -1,25 +1,25 @@
 use std::error::Error;
 use std::fmt::Debug;
+#[cfg(not(target_family = "wasm"))]
+use std::fs;
 use std::hash::Hash;
 #[cfg(not(target_family = "wasm"))]
 use std::path::PathBuf;
-#[cfg(not(target_family = "wasm"))]
-use std::fs;
-use std::usize;
 use std::rc::Rc;
+use std::usize;
 
+use num_rational::Rational32;
 use rhai::packages::Package;
+use rhai::*;
 use rustc_hash::FxHashMap as HashMap;
 use uniform_smart_pointer::Urc;
-use num_rational::Rational32;
-use rhai::*;
 
 use crate::commander::commander_type::CommanderType;
 use crate::config::Pronouns;
 use crate::game::event_fx::effect_constructor_module;
 use crate::game::fog::FogIntensity;
 use crate::map::direction::{Direction, Direction4, Direction6};
-use crate::script::{create_base_engine, MyPackage4, MyPackage6};
+use crate::script::{MyPackage4, MyPackage6, create_base_engine};
 use crate::tags::{FlagKey, TagKey};
 use crate::terrain::TerrainType;
 use crate::tokens::TokenType;
@@ -27,26 +27,26 @@ use crate::units::hero::HeroType;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
+use super::ConfigParseError;
 use super::attack_config::{AttackConfig, AttackSplashConfig};
 use super::attack_powered::AttackPoweredConfig;
+use super::commander_power_config::*;
+use super::commander_type_config::*;
+use super::commander_unit_config::*;
+use super::config::Config;
 use super::effect_config::{EffectConfig, EffectVisibility};
-use super::{custom_action_config::*, editor_tag_config};
 use super::file_loader::FileLoader;
 use super::global_events::GlobalEventConfig;
 use super::hero_power_config::*;
+use super::hero_type_config::*;
 use super::movement_type_config::MovementTypeConfig;
 use super::table_config::TableConfig;
 use super::tag_config::{TagConfig, TagType};
 use super::terrain_powered::*;
-use super::token_typ_config::TokenTypeConfig;
-use super::ConfigParseError;
-use super::commander_power_config::*;
-use super::commander_type_config::*;
-use super::commander_unit_config::*;
-use super::hero_type_config::*;
 use super::terrain_type_config::*;
+use super::token_typ_config::TokenTypeConfig;
 use super::unit_type_config::*;
-use super::config::Config;
+use super::{custom_action_config::*, editor_tag_config};
 
 const RULESET_CONFIG: &'static str = "ruleset.csv";
 const MOVEMENT_TYPE_CONFIG: &'static str = "movement_types.csv";
@@ -84,8 +84,14 @@ impl Config {
     ) -> Result<Self, Box<dyn Error>> {
         let mut file_loader = FileLoader::new(load_config);
         let mut constants = HashMap::default();
-        constants.insert("FOG_TrueSight".to_string(), Dynamic::from(FogIntensity::TrueSight));
-        constants.insert("FOG_Visible".to_string(), Dynamic::from(FogIntensity::NormalVision));
+        constants.insert(
+            "FOG_TrueSight".to_string(),
+            Dynamic::from(FogIntensity::TrueSight),
+        );
+        constants.insert(
+            "FOG_Visible".to_string(),
+            Dynamic::from(FogIntensity::NormalVision),
+        );
         constants.insert("FOG_Light".to_string(), Dynamic::from(FogIntensity::Light));
         constants.insert("FOG_Dark".to_string(), Dynamic::from(FogIntensity::Dark));
 
@@ -130,8 +136,13 @@ impl Config {
         //tracing::debug!("global constants: {global_constants:?}");
         // TODO: FileLoader also creates a base engine. no need to create two
         let engine = create_base_engine();
-        let global_module = engine.optimize_ast(&global_constants, global_ast.clone(), OptimizationLevel::Simple);
-        let global_module: Shared<Module> = Module::eval_ast_as_new(Scope::new(), &global_module, &engine)?.into();
+        let global_module = engine.optimize_ast(
+            &global_constants,
+            global_ast.clone(),
+            OptimizationLevel::Simple,
+        );
+        let global_module: Shared<Module> =
+            Module::eval_ast_as_new(Scope::new(), &global_module, &engine)?.into();
         let my_package_4 = MyPackage4::new();
         let my_package_6 = MyPackage6::new();
 
@@ -202,9 +213,13 @@ impl Config {
                 }
                 "UnknownUnit" => unknown_unit = value.to_string(),
                 "DefaultTerrain" => default_terrain = value.to_string(),
-                "UnitDeathTest" => result.is_unit_dead_rhai = file_loader.rhai_function(value, 1..=1)?.index,
-                "UnitMovableTest" => result.is_unit_movable_rhai = file_loader.rhai_function(value, 1..=1)?.index,
-                _ => ()
+                "UnitDeathTest" => {
+                    result.is_unit_dead_rhai = file_loader.rhai_function(value, 1..=1)?.index
+                }
+                "UnitMovableTest" => {
+                    result.is_unit_movable_rhai = file_loader.rhai_function(value, 1..=1)?.index
+                }
+                _ => (),
             }
             Ok(())
         })?;
@@ -224,10 +239,17 @@ impl Config {
 
         // movement types
         file_loader.table_with_headers(MOVEMENT_TYPE_CONFIG, |line: MovementTypeConfig| {
-            if result.movement_types.iter().any(|conf| conf.name == line.name) {
+            if result
+                .movement_types
+                .iter()
+                .any(|conf| conf.name == line.name)
+            {
                 // TODO: error
             }
-            constants.insert(format!("MOVEMENT_{}", line.name), Dynamic::from(MovementType(result.movement_types.len())));
+            constants.insert(
+                format!("MOVEMENT_{}", line.name),
+                Dynamic::from(MovementType(result.movement_types.len())),
+            );
             result.movement_types.push(line);
             Ok(())
         })?;
@@ -242,7 +264,9 @@ impl Config {
             result.splash_types.push((name.clone(), Vec::new()));
         }
         for splash_type in splash_types {
-            result.splash_types[splash_type.splash_type.0].1.push(splash_type);
+            result.splash_types[splash_type.splash_type.0]
+                .1
+                .push(splash_type);
         }
 
         // attack types
@@ -255,13 +279,17 @@ impl Config {
             result.attack_types.push((name.clone(), Vec::new()));
         }
         for attack_type in attack_types {
-            result.attack_types[attack_type.attack_type.0.unwrap()].1.push(attack_type);
+            result.attack_types[attack_type.attack_type.0.unwrap()]
+                .1
+                .push(attack_type);
         }
 
         // simple unit data
         file_loader.table_with_headers(UNIT_CONFIG, |line: UnitTypeConfig| {
             if result.units.iter().any(|conf| conf.name == line.name) {
-                return Err(ConfigParseError::DuplicateEntry(format!("UnitType::{}", line.name)).into())
+                return Err(
+                    ConfigParseError::DuplicateEntry(format!("UnitType::{}", line.name)).into(),
+                );
             }
             result.max_transported = result.max_transported.max(line.transport_capacity);
             result.units.push(line);
@@ -271,32 +299,53 @@ impl Config {
             file_loader.unit_types.push(conf.name.clone());
             constants.insert(format!("UNIT_{}", conf.name), Dynamic::from(UnitType(i)));
         }
-        match result.units.iter().position(|conf| conf.name == unknown_unit) {
+        match result
+            .units
+            .iter()
+            .position(|conf| conf.name == unknown_unit)
+        {
             Some(i) => result.unknown_unit = UnitType(i),
-            None => return Err(Box::new(ConfigParseError::MissingUnit("Unknown".to_string())))
+            None => {
+                return Err(Box::new(ConfigParseError::MissingUnit(
+                    "Unknown".to_string(),
+                )));
+            }
         }
 
         // simple terrain data
         file_loader.table_with_headers(TERRAIN_CONFIG, |line: TerrainTypeConfig| {
             if result.terrains.iter().any(|conf| conf.name == line.name) {
-                return Err(ConfigParseError::DuplicateEntry(format!("TerrainType::{}", line.name)).into())
+                return Err(
+                    ConfigParseError::DuplicateEntry(format!("TerrainType::{}", line.name)).into(),
+                );
             }
             result.terrains.push(line);
             Ok(())
         })?;
         for (i, conf) in result.terrains.iter().enumerate() {
             file_loader.terrain_types.push(conf.name.clone());
-            constants.insert(format!("TERRAIN_{}", conf.name), Dynamic::from(TerrainType(i)));
+            constants.insert(
+                format!("TERRAIN_{}", conf.name),
+                Dynamic::from(TerrainType(i)),
+            );
         }
-        match result.terrains.iter().position(|conf| conf.name == default_terrain) {
+        match result
+            .terrains
+            .iter()
+            .position(|conf| conf.name == default_terrain)
+        {
             Some(i) => result.default_terrain = TerrainType(i),
-            None => return Err(format!("missing entry in {RULESET_CONFIG}: 'DefaultTerrain'").into())
+            None => {
+                return Err(format!("missing entry in {RULESET_CONFIG}: 'DefaultTerrain'").into());
+            }
         }
 
         // simple token data
         file_loader.table_with_headers(TOKEN_CONFIG, |line: TokenTypeConfig| {
             if result.tokens.iter().any(|conf| conf.name == line.name) {
-                return Err(ConfigParseError::DuplicateEntry(format!("TokenType::{}", line.name)).into())
+                return Err(
+                    ConfigParseError::DuplicateEntry(format!("TokenType::{}", line.name)).into(),
+                );
             }
             result.tokens.push(line);
             Ok(())
@@ -326,8 +375,14 @@ impl Config {
             visibility: EffectVisibility::Data,
         });
         file_loader.table_with_headers(EFFECT_CONFIG, |line: EffectConfig| {
-            if result.effect_types.iter().any(|conf| conf.name == line.name) {
-                return Err(ConfigParseError::DuplicateEntry(format!("EffectType::{}", line.name)).into())
+            if result
+                .effect_types
+                .iter()
+                .any(|conf| conf.name == line.name)
+            {
+                return Err(
+                    ConfigParseError::DuplicateEntry(format!("EffectType::{}", line.name)).into(),
+                );
             }
             result.effect_types.push(line);
             Ok(())
@@ -347,7 +402,10 @@ impl Config {
         result.max_transported += bonus_transported;
         for (i, commander) in result.commanders.iter().enumerate() {
             file_loader.commander_types.push(commander.name.clone());
-            constants.insert(format!("COMMANDER_{}", commander.name), Dynamic::from(CommanderType(i)));
+            constants.insert(
+                format!("COMMANDER_{}", commander.name),
+                Dynamic::from(CommanderType(i)),
+            );
         }
         if result.commanders.len() == 0 {
             // TODO: error
@@ -359,10 +417,14 @@ impl Config {
                 // TODO: error
             }
             if line.max_charge > i32::MAX as u32 {
-                return Err(Box::new(ConfigParseError::HeroMaxChargeExceeded(i32::MAX as u32)));
+                return Err(Box::new(ConfigParseError::HeroMaxChargeExceeded(
+                    i32::MAX as u32,
+                )));
             }
             result.max_hero_charge = result.max_hero_charge.max(line.max_charge);
-            result.max_hero_transport_bonus = result.max_hero_transport_bonus.max(line.transport_capacity as usize);
+            result.max_hero_transport_bonus = result
+                .max_hero_transport_bonus
+                .max(line.transport_capacity as usize);
             result.heroes.push(line);
             Ok(())
         })?;
@@ -374,12 +436,14 @@ impl Config {
 
         // unit transport
         let data = file_loader.load_config(UNIT_TRANSPORT)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut reader = csv::ReaderBuilder::new()
+            .delimiter(b';')
+            .from_reader(data.as_bytes());
         let mut transported: Vec<UnitType> = Vec::new();
         for h in reader.headers()?.into_iter().skip(1) {
             let header = UnitType::from_conf(h, &mut file_loader)?.0;
             if transported.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())));
             }
             transported.push(header);
         }
@@ -417,16 +481,18 @@ impl Config {
                 // TODO: error
             }
         }
-    
+
         // movement cost
         let data = file_loader.load_config(MOVEMENT_CONFIG)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut reader = csv::ReaderBuilder::new()
+            .delimiter(b';')
+            .from_reader(data.as_bytes());
         // TODO: ensure uniqueness of column and row IDs
         let mut movement_types: Vec<MovementType> = Vec::new();
         for h in reader.headers()?.into_iter().skip(1) {
             let header = MovementType::from_conf(h, &mut file_loader)?.0;
             if movement_types.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())));
             }
             movement_types.push(header);
         }
@@ -452,14 +518,17 @@ impl Config {
             if conf.sub_types.len() < 2 {
                 continue;
             }
-            let data = file_loader.load_config(&format!("{SUB_MOVEMENT_TYPE_CONFIG}{}.csv", conf.name))?;
-            let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+            let data =
+                file_loader.load_config(&format!("{SUB_MOVEMENT_TYPE_CONFIG}{}.csv", conf.name))?;
+            let mut reader = csv::ReaderBuilder::new()
+                .delimiter(b';')
+                .from_reader(data.as_bytes());
             // TODO: ensure uniqueness of column and row IDs
             let mut headers: Vec<MovementType> = Vec::new();
             for h in reader.headers()?.into_iter().skip(1) {
                 let header = MovementType::from_conf(h, &mut file_loader)?.0;
                 if headers.contains(&header) {
-                    return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+                    return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())));
                 }
                 headers.push(header);
             }
@@ -483,7 +552,9 @@ impl Config {
             if map.len() == 0 {
                 // TODO: return error?
             }
-            result.movement_type_transformer.insert(MovementType(i), map);
+            result
+                .movement_type_transformer
+                .insert(MovementType(i), map);
         }
 
         // commander powers
@@ -504,14 +575,10 @@ impl Config {
         })?;
 
         // parse attack conditions now that all other attack data and simple units, ... are loaded
-        for attack_type in result.attack_types.iter_mut()
-        .map(|(_, at)| at)
-        .flatten() {
+        for attack_type in result.attack_types.iter_mut().map(|(_, at)| at).flatten() {
             attack_type.parse_deferred(&mut file_loader)?;
         }
-        for splash_type in result.splash_types.iter_mut()
-        .map(|(_, at)| at)
-        .flatten() {
+        for splash_type in result.splash_types.iter_mut().map(|(_, at)| at).flatten() {
             splash_type.parse_deferred(&mut file_loader)?;
         }
 
@@ -545,18 +612,36 @@ impl Config {
         }
 
         // editor tags
-        [result.terrain_flags, result.terrain_tags] = editor_tag_config::parse(TERRAIN_TAGS, &mut file_loader)?;
-        [result.token_flags, result.token_tags] = editor_tag_config::parse(TOKEN_TAGS, &mut file_loader)?;
-        [result.unit_flags, result.unit_tags] = editor_tag_config::parse(UNIT_TAGS, &mut file_loader)?;
+        [result.terrain_flags, result.terrain_tags] =
+            editor_tag_config::parse(TERRAIN_TAGS, &mut file_loader)?;
+        [result.token_flags, result.token_tags] =
+            editor_tag_config::parse(TOKEN_TAGS, &mut file_loader)?;
+        [result.unit_flags, result.unit_tags] =
+            editor_tag_config::parse(UNIT_TAGS, &mut file_loader)?;
 
         let constants = Urc::new(constants);
-        result.engines.push(construct_engine::<Direction4>(&my_package_4, &my_package_6, &result.effect_types, global_module.clone(), constants.clone()));
-        result.engines.push(construct_engine::<Direction6>(&my_package_4, &my_package_6, &result.effect_types, global_module, constants));
+        result.engines.push(construct_engine::<Direction4>(
+            &my_package_4,
+            &my_package_6,
+            &result.effect_types,
+            global_module.clone(),
+            constants.clone(),
+        ));
+        result.engines.push(construct_engine::<Direction6>(
+            &my_package_4,
+            &my_package_6,
+            &result.effect_types,
+            global_module,
+            constants,
+        ));
         let (asts, functions) = file_loader.finish();
         result.functions = functions;
-        result.asts = asts.into_iter().map(|ast| {
-            Rc::new(engine.optimize_ast(&global_constants, ast, OptimizationLevel::Simple))
-        }).collect();
+        result.asts = asts
+            .into_iter()
+            .map(|ast| {
+                Rc::new(engine.optimize_ast(&global_constants, ast, OptimizationLevel::Simple))
+            })
+            .collect();
 
         Ok(result)
     }
@@ -564,18 +649,23 @@ impl Config {
     #[cfg(not(target_family = "wasm"))]
     pub fn parse_folder(name: impl ToString, folder: PathBuf) -> Result<Self, Box<dyn Error>> {
         if !folder.exists() || !folder.is_dir() {
-            return Err(Box::new(ConfigParseError::FolderMissing(folder.to_path_buf())))
+            return Err(Box::new(ConfigParseError::FolderMissing(
+                folder.to_path_buf(),
+            )));
         }
-        let load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>> = Box::new(move |filename: &str| {
-            // canonicalize and then check if still in same folder
-            // to prevent path traversal attacks
-            let file = folder.join(filename);
-            let file = file.canonicalize()?;
-            if !file.starts_with(&folder) || !file.exists() || !file.is_file() {
-                return Err(Box::new(ConfigParseError::FileMissing(filename.to_string())))
-            }
-            Ok(fs::read_to_string(file)?)
-        });
+        let load_config: Box<dyn Fn(&str) -> Result<String, Box<dyn Error>>> =
+            Box::new(move |filename: &str| {
+                // canonicalize and then check if still in same folder
+                // to prevent path traversal attacks
+                let file = folder.join(filename);
+                let file = file.canonicalize()?;
+                if !file.starts_with(&folder) || !file.exists() || !file.is_file() {
+                    return Err(Box::new(ConfigParseError::FileMissing(
+                        filename.to_string(),
+                    )));
+                }
+                Ok(fs::read_to_string(file)?)
+            });
         Self::parse(name.to_string(), load_config)
     }
 }
@@ -596,9 +686,7 @@ fn construct_engine<D: Direction>(
     engine.register_global_module(effect_constructor_module::<D>(effects));
     engine.register_global_module(global_module);
     #[allow(deprecated)]
-    engine.on_var(move |name, _index, _context| {
-        Ok(constants.get(name).cloned())
-    });
+    engine.on_var(move |name, _index, _context| Ok(constants.get(name).cloned()));
     engine
 }
 
@@ -612,7 +700,10 @@ impl Default for Config {
 }
 
 pub trait FromConfig: Sized {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError>;
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError>;
 }
 
 impl FromConfig for bool {
@@ -633,7 +724,10 @@ impl FromConfig for bool {
 }
 
 impl FromConfig for Rational32 {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (num, mut s) = i32::from_conf(s, loader)?;
         let den = if s.starts_with('/') {
             let (den, r) = i32::from_conf(&s[1..], loader)?;
@@ -662,7 +756,10 @@ impl FromConfig for String {
 macro_rules! uint_from_config {
     ($name: ty) => {
         impl FromConfig for $name {
-            fn from_conf<'a>(s: &'a str, _: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+            fn from_conf<'a>(
+                s: &'a str,
+                _: &mut FileLoader,
+            ) -> Result<(Self, &'a str), ConfigParseError> {
                 let s = s.trim_start();
                 let index = s.find(|c| !char::is_numeric(c)).unwrap_or(s.len());
                 let (number, remainder) = s.split_at(index);
@@ -678,7 +775,10 @@ macro_rules! uint_from_config {
 macro_rules! sint_from_config {
     ($name: ty) => {
         impl FromConfig for $name {
-            fn from_conf<'a>(mut s: &'a str, _: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+            fn from_conf<'a>(
+                mut s: &'a str,
+                _: &mut FileLoader,
+            ) -> Result<(Self, &'a str), ConfigParseError> {
                 s = s.trim_start();
                 let sign = if s.starts_with('-') {
                     s = &s[1..];
@@ -705,7 +805,10 @@ sint_from_config!(i16);
 sint_from_config!(i32);
 
 impl<A: FromConfig, B: FromConfig> FromConfig for (A, Option<B>) {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         if let Ok((a, b, s)) = parse_tuple2::<A, B>(s, loader) {
             return Ok(((a, Some(b)), s));
         }
@@ -723,12 +826,15 @@ pub fn string_base(s: &str) -> (&str, &str) {
     }
 }
 
-pub fn parse_dyn<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Option<T>, mut from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>) -> Result<T, ConfigParseError> {
+pub fn parse_dyn<H: Hash + Eq + Debug, T>(
+    data: &HashMap<H, &str>,
+    key: H,
+    def: Option<T>,
+    mut from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>,
+) -> Result<T, ConfigParseError> {
     let value = match data.get(&key) {
         Some(s) => s,
-        None => {
-            return def.ok_or(ConfigParseError::MissingColumn(format!("{key:?}")))
-        }
+        None => return def.ok_or(ConfigParseError::MissingColumn(format!("{key:?}"))),
     };
     if value.len() == 0 && def.is_some() {
         return Ok(def.unwrap());
@@ -736,22 +842,44 @@ pub fn parse_dyn<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: 
     from_conf(value).map(|r| r.0)
 }
 
-fn _parse<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, def: Option<T>, loader: &mut FileLoader) -> Result<T, ConfigParseError> {
+fn _parse<H: Hash + Eq + Debug, T: FromConfig>(
+    data: &HashMap<H, &str>,
+    key: H,
+    def: Option<T>,
+    loader: &mut FileLoader,
+) -> Result<T, ConfigParseError> {
     parse_dyn(data, key, def, |s| T::from_conf(s, loader))
 }
 
-pub fn parse<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, loader: &mut FileLoader) -> Result<T, ConfigParseError> {
+pub fn parse<H: Hash + Eq + Debug, T: FromConfig>(
+    data: &HashMap<H, &str>,
+    key: H,
+    loader: &mut FileLoader,
+) -> Result<T, ConfigParseError> {
     _parse(data, key, None, loader)
 }
-pub fn parse_def<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, def: T, loader: &mut FileLoader) -> Result<T, ConfigParseError> {
+pub fn parse_def<H: Hash + Eq + Debug, T: FromConfig>(
+    data: &HashMap<H, &str>,
+    key: H,
+    def: T,
+    loader: &mut FileLoader,
+) -> Result<T, ConfigParseError> {
     _parse(data, key, Some(def), loader)
 }
 
-pub fn parse_inner_vec<'a, T: FromConfig>(s: &'a str, needs_content: bool, loader: &mut FileLoader) -> Result<(Vec<T>, &'a str), ConfigParseError> {
+pub fn parse_inner_vec<'a, T: FromConfig>(
+    s: &'a str,
+    needs_content: bool,
+    loader: &mut FileLoader,
+) -> Result<(Vec<T>, &'a str), ConfigParseError> {
     parse_inner_vec_dyn(s, needs_content, |s| T::from_conf(s, loader))
 }
 
-pub fn parse_inner_vec_dyn<T>(s: &str, needs_content: bool, mut from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>) -> Result<(Vec<T>, &str), ConfigParseError> {
+pub fn parse_inner_vec_dyn<T>(
+    s: &str,
+    needs_content: bool,
+    mut from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>,
+) -> Result<(Vec<T>, &str), ConfigParseError> {
     let mut result: Vec<T> = Vec::new();
     let mut s = s.trim_start();
     let mut stop_char = None;
@@ -780,10 +908,10 @@ pub fn parse_inner_vec_dyn<T>(s: &str, needs_content: bool, mut from_conf: impl 
     Ok((result, s))
 }
 
-pub fn parse_tuple1<
-    'a,
-    A: FromConfig,
->(source: &'a str, loader: &mut FileLoader) -> Result<(A, &'a str), ConfigParseError> {
+pub fn parse_tuple1<'a, A: FromConfig>(
+    source: &'a str,
+    loader: &mut FileLoader,
+) -> Result<(A, &'a str), ConfigParseError> {
     let mut s = source.trim_start();
     let mut stop_char = None;
     if s.starts_with('(') {
@@ -798,11 +926,10 @@ pub fn parse_tuple1<
     Ok((a, s))
 }
 
-pub fn parse_tuple2<
-    'a,
-    A: FromConfig,
-    B: FromConfig,
->(source: &'a str, loader: &mut FileLoader) -> Result<(A, B, &'a str), ConfigParseError> {
+pub fn parse_tuple2<'a, A: FromConfig, B: FromConfig>(
+    source: &'a str,
+    loader: &mut FileLoader,
+) -> Result<(A, B, &'a str), ConfigParseError> {
     let mut s = source.trim_start();
     let mut stop_char = None;
     if s.starts_with('(') {
@@ -810,7 +937,10 @@ pub fn parse_tuple2<
         s = &s[1..];
     }
     let (a, s) = A::from_conf(s, loader)?;
-    let s = s.trim_start().get(1..).ok_or(ConfigParseError::NotEnoughValues(source.to_string()))?;
+    let s = s
+        .trim_start()
+        .get(1..)
+        .ok_or(ConfigParseError::NotEnoughValues(source.to_string()))?;
     let (b, s) = B::from_conf(s, loader)?;
     let mut s = s.trim_start();
     if stop_char.map(|c| s.starts_with(c)).unwrap_or(false) {
@@ -819,12 +949,10 @@ pub fn parse_tuple2<
     Ok((a, b, s))
 }
 
-pub fn parse_tuple3<
-    'a,
-    A: FromConfig,
-    B: FromConfig,
-    C: FromConfig,
->(source: &'a str, loader: &mut FileLoader) -> Result<(A, B, C, &'a str), ConfigParseError> {
+pub fn parse_tuple3<'a, A: FromConfig, B: FromConfig, C: FromConfig>(
+    source: &'a str,
+    loader: &mut FileLoader,
+) -> Result<(A, B, C, &'a str), ConfigParseError> {
     let mut s = source.trim_start();
     let mut stop_char = None;
     if s.starts_with('(') {
@@ -832,9 +960,15 @@ pub fn parse_tuple3<
         s = &s[1..];
     }
     let (a, s) = A::from_conf(s, loader)?;
-    let s = s.trim_start().get(1..).ok_or(ConfigParseError::NotEnoughValues(source.to_string()))?;
+    let s = s
+        .trim_start()
+        .get(1..)
+        .ok_or(ConfigParseError::NotEnoughValues(source.to_string()))?;
     let (b, s) = B::from_conf(s, loader)?;
-    let s = s.trim_start().get(1..).ok_or(ConfigParseError::NotEnoughValues(source.to_string()))?;
+    let s = s
+        .trim_start()
+        .get(1..)
+        .ok_or(ConfigParseError::NotEnoughValues(source.to_string()))?;
     let (c, s) = C::from_conf(s, loader)?;
     let mut s = s.trim_start();
     if stop_char.map(|c| s.starts_with(c)).unwrap_or(false) {
@@ -843,37 +977,66 @@ pub fn parse_tuple3<
     Ok((a, b, c, s))
 }
 
-fn _parse_vec<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, def: Option<Vec<T>>, loader: &mut FileLoader) -> Result<Vec<T>, ConfigParseError> {
+fn _parse_vec<H: Hash + Eq + Debug, T: FromConfig>(
+    data: &HashMap<H, &str>,
+    key: H,
+    def: Option<Vec<T>>,
+    loader: &mut FileLoader,
+) -> Result<Vec<T>, ConfigParseError> {
     _parse_vec_dyn(data, key, def, |s| T::from_conf(s, loader))
 }
-fn _parse_vec_dyn<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Option<Vec<T>>, from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>) -> Result<Vec<T>, ConfigParseError> {
+fn _parse_vec_dyn<H: Hash + Eq + Debug, T>(
+    data: &HashMap<H, &str>,
+    key: H,
+    def: Option<Vec<T>>,
+    from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>,
+) -> Result<Vec<T>, ConfigParseError> {
     let value = match data.get(&key) {
         Some(s) => s,
-        None => {
-            return def.ok_or(ConfigParseError::MissingColumn(format!("{key:?}")))
-        }
+        None => return def.ok_or(ConfigParseError::MissingColumn(format!("{key:?}"))),
     };
     parse_inner_vec_dyn(value, false, from_conf).map(|(r, _)| r)
 }
 
-pub fn parse_vec<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, loader: &mut FileLoader) -> Result<Vec<T>, ConfigParseError> {
+pub fn parse_vec<H: Hash + Eq + Debug, T: FromConfig>(
+    data: &HashMap<H, &str>,
+    key: H,
+    loader: &mut FileLoader,
+) -> Result<Vec<T>, ConfigParseError> {
     _parse_vec(data, key, None, loader)
 }
-pub fn parse_vec_def<H: Hash + Eq + Debug, T: FromConfig>(data: &HashMap<H, &str>, key: H, def: Vec<T>, loader: &mut FileLoader) -> Result<Vec<T>, ConfigParseError> {
+pub fn parse_vec_def<H: Hash + Eq + Debug, T: FromConfig>(
+    data: &HashMap<H, &str>,
+    key: H,
+    def: Vec<T>,
+    loader: &mut FileLoader,
+) -> Result<Vec<T>, ConfigParseError> {
     _parse_vec(data, key, Some(def), loader)
 }
 
-pub fn parse_vec_dyn_def<H: Hash + Eq + Debug, T>(data: &HashMap<H, &str>, key: H, def: Vec<T>, from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>) -> Result<Vec<T>, ConfigParseError> {
+pub fn parse_vec_dyn_def<H: Hash + Eq + Debug, T>(
+    data: &HashMap<H, &str>,
+    key: H,
+    def: Vec<T>,
+    from_conf: impl FnMut(&str) -> Result<(T, &str), ConfigParseError>,
+) -> Result<Vec<T>, ConfigParseError> {
     _parse_vec_dyn(data, key, Some(def), from_conf)
 }
 
 #[cfg(feature = "rendering")]
 impl FromConfig for (interfaces::PreviewShape, Option<[u8; 4]>) {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (shape, s) = string_base(s);
         let shape = match shape.parse() {
             Ok(shape) => shape,
-            _ => return Err(ConfigParseError::UnknownEnumMember(format!("PreviewShape::{shape}")))
+            _ => {
+                return Err(ConfigParseError::UnknownEnumMember(format!(
+                    "PreviewShape::{shape}"
+                )));
+            }
         };
         let (color, s) = parse_tuple1::<String>(s, loader)?;
         let color = if color.trim().to_lowercase().as_str() != "owner" {
@@ -891,32 +1054,39 @@ impl FromConfig for [u8; 4] {
         if s.starts_with('#') {
             i += 1;
         }
-        let len = s[i..].find(|c| !"0123456789abcdefABCDEF".contains(c))
+        let len = s[i..]
+            .find(|c| !"0123456789abcdefABCDEF".contains(c))
             .unwrap_or(s.len() - i);
         if len == 6 || len == 8 {
             let alpha = if len == 6 {
                 255
             } else {
-                u8::from_str_radix(&s[i + 6 .. i + 8], 16).unwrap()
+                u8::from_str_radix(&s[i + 6..i + 8], 16).unwrap()
             };
-            Ok(([
-                u8::from_str_radix(&s[i .. i + 2], 16).unwrap(),
-                u8::from_str_radix(&s[i + 2 .. i + 4], 16).unwrap(),
-                u8::from_str_radix(&s[i + 4 .. i + 6], 16).unwrap(),
-                alpha,
-            ], &s[i + len..]))
+            Ok((
+                [
+                    u8::from_str_radix(&s[i..i + 2], 16).unwrap(),
+                    u8::from_str_radix(&s[i + 2..i + 4], 16).unwrap(),
+                    u8::from_str_radix(&s[i + 4..i + 6], 16).unwrap(),
+                    alpha,
+                ],
+                &s[i + len..],
+            ))
         } else if len == 3 || len == 4 {
             let alpha = if len == 3 {
                 255
             } else {
-                17 * u8::from_str_radix(&s[i + 3 .. i + 4], 16).unwrap()
+                17 * u8::from_str_radix(&s[i + 3..i + 4], 16).unwrap()
             };
-            Ok(([
-                17 * u8::from_str_radix(&s[i .. i + 1], 16).unwrap(),
-                17 * u8::from_str_radix(&s[i + 1 .. i + 2], 16).unwrap(),
-                17 * u8::from_str_radix(&s[i + 2 .. i + 3], 16).unwrap(),
-                alpha,
-            ], &s[i + len..]))
+            Ok((
+                [
+                    17 * u8::from_str_radix(&s[i..i + 1], 16).unwrap(),
+                    17 * u8::from_str_radix(&s[i + 1..i + 2], 16).unwrap(),
+                    17 * u8::from_str_radix(&s[i + 2..i + 3], 16).unwrap(),
+                    alpha,
+                ],
+                &s[i + len..],
+            ))
         } else {
             Err(ConfigParseError::InvalidColor(s.to_string()))
         }
@@ -924,12 +1094,11 @@ impl FromConfig for [u8; 4] {
 }
 
 impl FromConfig for Pronouns {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (they, their, them, s) = parse_tuple3(s, loader)?;
-        Ok((Pronouns {
-            they,
-            their,
-            them,
-        }, s))
+        Ok((Pronouns { they, their, them }, s))
     }
 }

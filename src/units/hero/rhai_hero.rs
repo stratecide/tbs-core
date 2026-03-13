@@ -1,10 +1,10 @@
-use rhai::*;
 use rhai::plugin::*;
+use rhai::*;
 
+use super::UnitId;
 use crate::config::environment::Environment;
 use crate::map::direction::*;
 use crate::map::point::*;
-use super::UnitId;
 
 #[export_module]
 mod hero_type_module {
@@ -32,9 +32,11 @@ mod hero_type_module {
 
     #[rhai_fn(pure, name = "HeroType")]
     pub fn new_hero_type(environment: &mut Environment, name: &str) -> Dynamic {
-        environment.config.find_hero_by_name(name)
-        .map(Dynamic::from)
-        .unwrap_or(().into())
+        environment
+            .config
+            .find_hero_by_name(name)
+            .map(Dynamic::from)
+            .unwrap_or(().into())
     }
 
     #[rhai_fn(name = "Hero")]
@@ -60,12 +62,13 @@ macro_rules! hero_module {
                 if owner < -1 || owner > i8::MAX as i32 {
                     return Vec::new();
                 }
-                map.get(pos, owner as i8).iter()
+                map.get(pos, owner as i8)
+                    .iter()
                     .cloned()
                     .map(Dynamic::from)
                     .collect()
             }
-            
+
             #[rhai_fn(pure, get = "unit_id")]
             pub fn unit_id(influence: &mut HeroInfluence) -> UnitId<$d> {
                 influence.0

@@ -1,5 +1,5 @@
-use rhai::*;
 use rhai::plugin::*;
+use rhai::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use uniform_smart_pointer::Urc;
 use zipper::*;
@@ -14,15 +14,14 @@ use crate::map::point::Point;
 use crate::map::point_map::MAX_AREA;
 use crate::map::wrapping_map::Distortion;
 use crate::terrain::TerrainType;
+use crate::units::UnitVisibility;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
-use crate::units::UnitVisibility;
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagBag<D: Direction> {
     flags: Vec<usize>,
-    tags: FxHashMap<usize, TagValue<D>>
+    tags: FxHashMap<usize, TagValue<D>>,
 }
 
 impl<D: Direction> TagBag<D> {
@@ -33,7 +32,11 @@ impl<D: Direction> TagBag<D> {
         }
     }
 
-    pub fn debug(&self, f: &mut std::fmt::Formatter<'_>, environment: &Environment) -> std::fmt::Result {
+    pub fn debug(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        environment: &Environment,
+    ) -> std::fmt::Result {
         write!(f, "FLAGS[")?;
         for flag in &self.flags {
             write!(f, "{}", environment.config.flag_name(*flag))?;
@@ -47,14 +50,22 @@ impl<D: Direction> TagBag<D> {
                 TagValue::Point(value) => write!(f, "{value:?}")?,
                 TagValue::Direction(value) => write!(f, "{value:?}")?,
                 TagValue::UnitType(value) => write!(f, "{}", environment.config.unit_name(*value))?,
-                TagValue::TerrainType(value) => write!(f, "{}", environment.config.terrain_name(*value))?,
-                TagValue::MovementType(value) => write!(f, "{}", environment.config.movement_type_name(*value))?,
+                TagValue::TerrainType(value) => {
+                    write!(f, "{}", environment.config.terrain_name(*value))?
+                }
+                TagValue::MovementType(value) => {
+                    write!(f, "{}", environment.config.movement_type_name(*value))?
+                }
             }
         }
         write!(f, "]")
     }
 
-    pub fn fog_replacement(&self, environment: &Environment, minimum_visibility: UnitVisibility) -> Self {
+    pub fn fog_replacement(
+        &self,
+        environment: &Environment,
+        minimum_visibility: UnitVisibility,
+    ) -> Self {
         let mut result = Self::new();
         for flag in &self.flags {
             if environment.config.flag_visibility(*flag) >= minimum_visibility {
@@ -110,7 +121,12 @@ impl<D: Direction> TagBag<D> {
         self.tags.get(&key).cloned()
     }
 
-    pub fn set_tag(&mut self, environment: &Environment, key: usize, value: TagValue<D>) -> Option<TagValue<D>> {
+    pub fn set_tag(
+        &mut self,
+        environment: &Environment,
+        key: usize,
+        value: TagValue<D>,
+    ) -> Option<TagValue<D>> {
         if value.has_valid_type(environment, key) {
             self.tags.insert(key, value)
         } else {
@@ -151,14 +167,21 @@ impl<D: Direction> SupportedZippable<&Environment> for TagBag<D> {
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let mut result = Self::new();
         let flag_bits = bits_needed_for_max_value(support.config.flag_count() as u32);
-        let flag_count = unzipper.read_u32(flag_bits)?.min(support.config.flag_count() as u32);
+        let flag_count = unzipper
+            .read_u32(flag_bits)?
+            .min(support.config.flag_count() as u32);
         for _ in 0..flag_count {
             result.set_flag(support, unzipper.read_u32(flag_bits)? as usize);
         }
         let tag_bits = bits_needed_for_max_value(support.config.tag_count() as u32);
-        let tag_count = unzipper.read_u32(tag_bits)?.min(support.config.tag_count() as u32);
+        let tag_count = unzipper
+            .read_u32(tag_bits)?
+            .min(support.config.tag_count() as u32);
         for _ in 0..tag_count {
-            let key = support.config.tag_count().min(unzipper.read_u32(tag_bits)? as usize);
+            let key = support
+                .config
+                .tag_count()
+                .min(unzipper.read_u32(tag_bits)? as usize);
             let value = TagValue::import(unzipper, support, key)?;
             result.set_tag(support, key, value);
         }
@@ -181,14 +204,17 @@ impl<D: Direction> TagValue<D> {
     pub fn default_value(map: &Map<D>, tag_key: usize, random: f32) -> Self {
         match map.environment().config.tag_type(tag_key) {
             TagType::Flag => panic!("Flag {tag_key} doesn't have a TagValue"),
-            TagType::Unique { .. } => {
-                Self::Unique(UniqueId::new(map.environment(), tag_key, random).expect(&format!("Couldn't generate unique ID for {tag_key}")))
-            },
+            TagType::Unique { .. } => Self::Unique(
+                UniqueId::new(map.environment(), tag_key, random)
+                    .expect(&format!("Couldn't generate unique ID for {tag_key}")),
+            ),
             TagType::Point => Self::Point(map.all_points()[0]),
             TagType::Direction => Self::Direction(D::angle_0()),
             TagType::UnitType => Self::UnitType(UnitType(0)),
             TagType::TerrainType => Self::TerrainType(map.environment().config.default_terrain),
-            TagType::MovementType => Self::MovementType(map.environment().config.movement_types()[0]),
+            TagType::MovementType => {
+                Self::MovementType(map.environment().config.movement_types()[0])
+            }
             TagType::Int { default, .. } => Self::Int(Int32(*default)),
         }
     }
@@ -219,33 +245,49 @@ impl<D: Direction> TagValue<D> {
         }
     }
 
-    fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Self, ZipperError> {
+    fn import(
+        unzipper: &mut Unzipper,
+        environment: &Environment,
+        tag_key: usize,
+    ) -> Result<Self, ZipperError> {
         match environment.config.tag_type(tag_key) {
-            TagType::Unique { .. } => Ok(Self::Unique(UniqueId::import(unzipper, environment, tag_key)?)),
+            TagType::Unique { .. } => Ok(Self::Unique(UniqueId::import(
+                unzipper,
+                environment,
+                tag_key,
+            )?)),
             TagType::Int { .. } => Ok(Self::Int(Int32::import(unzipper, environment, tag_key)?)),
             TagType::Point => Ok(Self::Point(Point::import(unzipper, environment)?)),
             TagType::Direction => Ok(Self::Direction(D::unzip(unzipper)?)),
             TagType::UnitType => Ok(Self::UnitType(UnitType::import(unzipper, environment)?)),
-            TagType::TerrainType => Ok(Self::TerrainType(TerrainType::import(unzipper, environment)?)),
-            TagType::MovementType => Ok(Self::MovementType(MovementType::import(unzipper, environment)?)),
-            TagType::Flag => Err(ZipperError::EnumOutOfBounds(format!("TagKey '{}' should actually be a flag", environment.config.tag_name(tag_key))))
+            TagType::TerrainType => Ok(Self::TerrainType(TerrainType::import(
+                unzipper,
+                environment,
+            )?)),
+            TagType::MovementType => Ok(Self::MovementType(MovementType::import(
+                unzipper,
+                environment,
+            )?)),
+            TagType::Flag => Err(ZipperError::EnumOutOfBounds(format!(
+                "TagKey '{}' should actually be a flag",
+                environment.config.tag_name(tag_key)
+            ))),
         }
     }
 
     pub(crate) fn has_valid_type(&self, environment: &Environment, key: usize) -> bool {
         match (self, environment.config.tag_type(key)) {
             (Self::Unique(value), tag_type) => {
-                value.environment == *environment && environment.config.tag_type(value.tag) == tag_type
-            },
+                value.environment == *environment
+                    && environment.config.tag_type(value.tag) == tag_type
+            }
             (Self::Point(_), TagType::Point) => true,
             (Self::Direction(_), TagType::Direction) => true,
             (Self::UnitType(_), TagType::UnitType) => true,
             (Self::TerrainType(_), TagType::TerrainType) => true,
             (Self::MovementType(_), TagType::MovementType) => true,
-            (Self::Int(value), TagType::Int { min, max, .. }) => {
-                value.0 >= *min && value.0 <= *max
-            }
-            _ => false
+            (Self::Int(value), TagType::Int { min, max, .. }) => value.0 >= *min && value.0 <= *max,
+            _ => false,
         }
     }
 
@@ -254,15 +296,13 @@ impl<D: Direction> TagValue<D> {
             Self::Direction(d) => {
                 *d = distortion.update_direction(*d);
             }
-            _ => ()
+            _ => (),
         }
     }
     pub fn translate(&mut self, translations: [D::T; 2], odd_if_hex: bool) {
         match self {
-            Self::Point(p) => {
-                *p = p.translate::<D>(&translations[p.y as usize % 2], odd_if_hex)
-            }
-            _ => ()
+            Self::Point(p) => *p = p.translate::<D>(&translations[p.y as usize % 2], odd_if_hex),
+            _ => (),
         }
     }
 
@@ -312,14 +352,24 @@ impl<D: Direction> From<i32> for TagValue<D> {
 impl Int32 {
     fn export(&self, zipper: &mut Zipper, environment: &Environment, tag_key: usize) {
         let TagType::Int { min, max, .. } = environment.config.tag_type(tag_key) else {
-            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.config.tag_name(tag_key));
+            panic!(
+                "TagValue::Int doesn't have TagType::Int: '{}'",
+                environment.config.tag_name(tag_key)
+            );
         };
         let bits = bits_needed_for_max_value((*max - *min) as u32);
         zipper.write_u32((self.0 - *min) as u32, bits);
     }
-    fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Self, ZipperError> {
+    fn import(
+        unzipper: &mut Unzipper,
+        environment: &Environment,
+        tag_key: usize,
+    ) -> Result<Self, ZipperError> {
         let TagType::Int { min, max, .. } = environment.config.tag_type(tag_key) else {
-            panic!("TagValue::Int doesn't have TagType::Int: '{}'", environment.config.tag_name(tag_key));
+            panic!(
+                "TagValue::Int doesn't have TagType::Int: '{}'",
+                environment.config.tag_name(tag_key)
+            );
         };
         let bits = bits_needed_for_max_value((*max - *min) as u32);
         Ok(Self((unzipper.read_u32(bits)? as i32 + *min).min(*max)))
@@ -366,7 +416,11 @@ impl UniqueId {
         zipper.write_u32(self.id as u32, bits);
     }
 
-    fn import(unzipper: &mut Unzipper, environment: &Environment, tag_key: usize) -> Result<Urc<Self>, ZipperError> {
+    fn import(
+        unzipper: &mut Unzipper,
+        environment: &Environment,
+        tag_key: usize,
+    ) -> Result<Urc<Self>, ZipperError> {
         let bits = bits_needed_for_max_value(Self::MAX_VALUE as u32);
         let id = Self::MAX_VALUE.min(unzipper.read_u32(bits)? as usize);
         environment.add_unique_id(tag_key, id);
@@ -389,19 +443,31 @@ pub struct FlagKey(pub usize);
 
 impl SupportedZippable<&Environment> for FlagKey {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.config.flag_count() as u32));
+        zipper.write_u32(
+            self.0 as u32,
+            bits_needed_for_max_value(support.config.flag_count() as u32),
+        );
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(support.config.flag_count() as u32))? as usize))
+        Ok(Self(
+            unzipper.read_u32(bits_needed_for_max_value(support.config.flag_count() as u32))?
+                as usize,
+        ))
     }
 }
 
 impl FromConfig for FlagKey {
-    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut crate::config::file_loader::FileLoader,
+    ) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
         match loader.flags.iter().position(|name| name.as_str() == base) {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("FlagKey::{}", base.to_string())))
+            None => Err(crate::config::ConfigParseError::UnknownEnumMember(format!(
+                "FlagKey::{}",
+                base.to_string()
+            ))),
         }
     }
 }
@@ -411,12 +477,18 @@ pub struct TagKey(pub usize);
 
 impl SupportedZippable<&Environment> for TagKey {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.config.tag_count() as u32));
+        zipper.write_u32(
+            self.0 as u32,
+            bits_needed_for_max_value(support.config.tag_count() as u32),
+        );
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let tag_count = support.config.tag_count();
         // TODO: return Err if tag_count == 0
-        Ok(Self((unzipper.read_u32(bits_needed_for_max_value(tag_count as u32))? as usize).min(tag_count - 1)))
+        Ok(Self(
+            (unzipper.read_u32(bits_needed_for_max_value(tag_count as u32))? as usize)
+                .min(tag_count - 1),
+        ))
     }
 }
 
@@ -440,15 +512,20 @@ impl<const K: usize, D: Direction> SupportedZippable<&Environment> for TagKeyVal
 }
 
 impl FromConfig for TagKey {
-    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut crate::config::file_loader::FileLoader,
+    ) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
         match loader.tags.iter().position(|name| name.as_str() == base) {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::UnknownEnumMember(format!("TagKey::{}", base.to_string())))
+            None => Err(crate::config::ConfigParseError::UnknownEnumMember(format!(
+                "TagKey::{}",
+                base.to_string()
+            ))),
         }
     }
 }
-
 
 #[export_module]
 mod tag_module {
@@ -498,7 +575,7 @@ pub mod tests {
     pub const FLAG_REPAIRING: usize = 3;
     pub const FLAG_CAPTURING: usize = 4;
     pub const FLAG_STUNNED: usize = 5;
-    
+
     pub const TAG_HP: usize = 0;
     pub const TAG_DRONE_STATION_ID: usize = 1;
     pub const TAG_DRONE_ID: usize = 2;
@@ -525,17 +602,35 @@ pub mod tests {
         assert_eq!(environment.config.flag_name(FLAG_CAPTURING), "Capturing");
         assert_eq!(environment.config.flag_name(FLAG_STUNNED), "Stunned");
         assert_eq!(environment.config.tag_name(TAG_HP), "Hp");
-        assert_eq!(environment.config.tag_name(TAG_DRONE_STATION_ID), "DroneStationId");
+        assert_eq!(
+            environment.config.tag_name(TAG_DRONE_STATION_ID),
+            "DroneStationId"
+        );
         assert_eq!(environment.config.tag_name(TAG_DRONE_ID), "DroneId");
         assert_eq!(environment.config.tag_name(TAG_LEVEL), "Level");
         assert_eq!(environment.config.tag_name(TAG_EN_PASSANT), "EnPassant");
-        assert_eq!(environment.config.tag_name(TAG_PAWN_DIRECTION), "PawnDirection");
+        assert_eq!(
+            environment.config.tag_name(TAG_PAWN_DIRECTION),
+            "PawnDirection"
+        );
         assert_eq!(environment.config.tag_name(TAG_ANGER), "Anger");
-        assert_eq!(environment.config.tag_name(TAG_BUILT_THIS_TURN), "BuiltThisTurn");
-        assert_eq!(environment.config.tag_name(TAG_CAPTURE_OWNER), "CaptureOwner");
-        assert_eq!(environment.config.tag_name(TAG_CAPTURE_PROGRESS), "CaptureProgress");
+        assert_eq!(
+            environment.config.tag_name(TAG_BUILT_THIS_TURN),
+            "BuiltThisTurn"
+        );
+        assert_eq!(
+            environment.config.tag_name(TAG_CAPTURE_OWNER),
+            "CaptureOwner"
+        );
+        assert_eq!(
+            environment.config.tag_name(TAG_CAPTURE_PROGRESS),
+            "CaptureProgress"
+        );
         assert_eq!(environment.config.tag_name(TAG_UNIT_TYPE), "UnitType");
-        assert_eq!(environment.config.tag_name(TAG_MOVEMENT_TYPE), "MovementType");
+        assert_eq!(
+            environment.config.tag_name(TAG_MOVEMENT_TYPE),
+            "MovementType"
+        );
         assert_eq!(environment.config.tag_name(TAG_COINS), "Coins");
         assert_eq!(environment.config.tag_name(TAG_FUNDS), "Funds");
         assert_eq!(environment.config.tag_name(TAG_INCOME), "Income");
@@ -547,7 +642,12 @@ pub mod tests {
         let environment = Environment::new_map(config, MapSize::new(5, 5));
         // ids get dropped and freed immediately, so all ids are the same (since the rng is fixed)
         for _ in 0..10 {
-            assert_eq!(UniqueId::new(&environment, TAG_DRONE_STATION_ID, 0.).unwrap().id, 0);
+            assert_eq!(
+                UniqueId::new(&environment, TAG_DRONE_STATION_ID, 0.)
+                    .unwrap()
+                    .id,
+                0
+            );
             assert_eq!(UniqueId::new(&environment, TAG_DRONE_ID, 0.).unwrap().id, 0);
         }
         // now ids don't get dropped, so all ids are sequential (since the rng is fixed)

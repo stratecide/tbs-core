@@ -14,10 +14,16 @@ pub struct Owner(pub i8);
 
 impl SupportedZippable<&Config> for Owner {
     fn export(&self, zipper: &mut Zipper, support: &Config) {
-        zipper.write_u8((self.0 + 1) as u8, bits_needed_for_max_value(support.max_player_count() as u32));
+        zipper.write_u8(
+            (self.0 + 1) as u8,
+            bits_needed_for_max_value(support.max_player_count() as u32),
+        );
     }
     fn import(unzipper: &mut Unzipper, support: &Config) -> Result<Self, ZipperError> {
-        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(support.max_player_count() as u32))? as i8 - 1))
+        Ok(Self(
+            unzipper.read_u8(bits_needed_for_max_value(support.max_player_count() as u32))? as i8
+                - 1,
+        ))
     }
 }
 impl SupportedZippable<&Environment> for Owner {
@@ -40,10 +46,15 @@ pub struct Team(pub u8);
 
 impl SupportedZippable<&Config> for Team {
     fn export(&self, zipper: &mut Zipper, support: &Config) {
-        zipper.write_u8(self.0, bits_needed_for_max_value(support.max_player_count() as u32));
+        zipper.write_u8(
+            self.0,
+            bits_needed_for_max_value(support.max_player_count() as u32),
+        );
     }
     fn import(unzipper: &mut Unzipper, support: &Config) -> Result<Self, ZipperError> {
-        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(support.max_player_count() as u32))?))
+        Ok(Self(unzipper.read_u8(bits_needed_for_max_value(
+            support.max_player_count() as u32,
+        ))?))
     }
 }
 impl SupportedZippable<&Environment> for Team {
@@ -140,7 +151,9 @@ impl<D: Direction> Player<D> {
             owner_id: self.owner_id,
             dead: self.dead,
             commander: self.commander.clone(),
-            tags: self.tags.fog_replacement(self.commander.environment(), UnitVisibility::Normal),
+            tags: self
+                .tags
+                .fog_replacement(self.commander.environment(), UnitVisibility::Normal),
         }
     }
 }

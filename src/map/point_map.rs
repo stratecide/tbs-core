@@ -1,18 +1,18 @@
 use crate::map::point::*;
 
-use zipper::*;
 use zipper::zipper_derive::*;
+use zipper::*;
 
 use super::direction::*;
 
-pub const MIN_SIZE:u8 = 3;
-pub const MAX_SIZE:u32 = 50;
-pub const MAX_AREA:u32 = MAX_SIZE * MAX_SIZE;
+pub const MIN_SIZE: u8 = 3;
+pub const MAX_SIZE: u32 = 50;
+pub const MAX_AREA: u32 = MAX_SIZE * MAX_SIZE;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Zippable)]
 pub struct MapSize {
-    pub width: U<{MAX_SIZE as i32}>,
-    pub height: U<{MAX_SIZE as i32}>,
+    pub width: U<{ MAX_SIZE as i32 }>,
+    pub height: U<{ MAX_SIZE as i32 }>,
 }
 
 impl MapSize {
@@ -66,7 +66,9 @@ impl PointMap {
     pub fn filled(width: u8, height: u8, odd_if_hex: bool, value: bool) -> Self {
         PointMap {
             odd_if_hex,
-            point_validity: vec![vec![value; width as usize].try_into().unwrap(); height as usize].try_into().unwrap(),
+            point_validity: vec![vec![value; width as usize].try_into().unwrap(); height as usize]
+                .try_into()
+                .unwrap(),
         }
     }
 
@@ -77,7 +79,10 @@ impl PointMap {
         }
     }
     pub fn width(&self) -> u8 {
-        self.point_validity.get(0).map(|pv| pv.len() as u8).unwrap_or(0)
+        self.point_validity
+            .get(0)
+            .map(|pv| pv.len() as u8)
+            .unwrap_or(0)
     }
     pub fn height(&self) -> u8 {
         self.point_validity.len() as u8
@@ -100,7 +105,11 @@ impl PointMap {
     pub fn crop<D: Direction>(&mut self) -> [D::T; 2] {
         let was_odd = self.odd_if_hex;
         // from bottom
-        while self.height() > 0 && !self.point_validity[self.height() as usize - 1].iter().any(|b| *b) {
+        while self.height() > 0
+            && !self.point_validity[self.height() as usize - 1]
+                .iter()
+                .any(|b| *b)
+        {
             self.point_validity.pop();
         }
         let mut from_top = 0;
@@ -120,13 +129,16 @@ impl PointMap {
                 row.remove(0);
             }
         }
-        let mut translations = [D::T::between(&GlobalPoint::new(from_left, from_top), &GlobalPoint::ZERO, was_odd); 2];
+        let mut translations = [D::T::between(
+            &GlobalPoint::new(from_left, from_top),
+            &GlobalPoint::ZERO,
+            was_odd,
+        ); 2];
         if D::is_hex() && self.width() > 0 && self.height() > 0 {
             // check if flipping oddness could reduce size
-            let flipped_oddness = if (0..self.height() as usize).all(|y| {
-                (self.odd_if_hex == (y % 2 == 0))
-                || !self.point_validity[y][0]
-            }) {
+            let flipped_oddness = if (0..self.height() as usize)
+                .all(|y| (self.odd_if_hex == (y % 2 == 0)) || !self.point_validity[y][0])
+            {
                 for y in 0..self.height() as usize {
                     if self.odd_if_hex != (y % 2 == 0) {
                         self.point_validity[y].remove(0);
@@ -152,7 +164,12 @@ impl PointMap {
             }
         }
         // from right
-        while self.width() > 0 && !self.point_validity.iter().any(|b| b[self.width() as usize - 1]) {
+        while self.width() > 0
+            && !self
+                .point_validity
+                .iter()
+                .any(|b| b[self.width() as usize - 1])
+        {
             for row in self.point_validity.iter_mut() {
                 row.pop();
             }
@@ -161,16 +178,19 @@ impl PointMap {
     }
 
     pub fn is_inside(&self, point: Point) -> bool {
-        point.x() < self.width() &&
-        point.y() < self.height()
+        point.x() < self.width() && point.y() < self.height()
     }
     pub fn is_point_valid(&self, point: Point) -> bool {
-        self.is_inside(point) &&
-        self.point_validity[point.y() as usize][point.x() as usize]
+        self.is_inside(point) && self.point_validity[point.y() as usize][point.x() as usize]
     }
     pub fn set_valid(&mut self, point: Point, value: bool) {
         if self.is_inside(point) {
-            *self.point_validity.get_mut(point.y() as usize).unwrap().get_mut(point.x() as usize).unwrap() = value;
+            *self
+                .point_validity
+                .get_mut(point.y() as usize)
+                .unwrap()
+                .get_mut(point.x() as usize)
+                .unwrap() = value;
         }
     }
     pub fn get_valid_points(&self) -> Vec<Point> {
@@ -191,9 +211,8 @@ impl PointMap {
 mod tests {
     use semver::Version;
 
-    use crate::{map::point::Point, VERSION};
     use super::*;
-
+    use crate::{VERSION, map::point::Point};
 
     #[test]
     fn filled_point_map() {
@@ -248,7 +267,9 @@ mod tests {
         assert_eq!(map.height(), 6);
         assert_eq!(map.odd_if_hex(), false);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())));
+            assert!(map.is_point_valid(
+                p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+            ));
         }
 
         let mut map = PointMap::filled(7, 6, false, false);
@@ -262,7 +283,9 @@ mod tests {
         assert_eq!(map.height(), 1);
         assert_eq!(map.odd_if_hex(), false);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction4>(&translations[p.y as usize % 2], map.odd_if_hex())));
+            assert!(map.is_point_valid(
+                p.translate::<Direction4>(&translations[p.y as usize % 2], map.odd_if_hex())
+            ));
         }
 
         let mut map = PointMap::filled(7, 6, false, false);
@@ -270,12 +293,20 @@ mod tests {
         map.set_valid(Point::new(2, 1), true);
         let points = map.get_valid_points();
         let translations = map.crop::<Direction6>();
-        assert_eq!(translations, [Direction6::D0.translation(-3), Direction6::D0.translation(-2)]);
+        assert_eq!(
+            translations,
+            [
+                Direction6::D0.translation(-3),
+                Direction6::D0.translation(-2)
+            ]
+        );
         assert_eq!(map.width(), 1);
         assert_eq!(map.height(), 2);
         assert_eq!(map.odd_if_hex(), true);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())));
+            assert!(map.is_point_valid(
+                p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+            ));
         }
 
         let mut map = PointMap::filled(2, 2, false, false);
@@ -283,12 +314,20 @@ mod tests {
         map.set_valid(Point::new(0, 1), true);
         let points = map.get_valid_points();
         let translations = map.crop::<Direction6>();
-        assert_eq!(translations, [Direction6::D0.translation(-1), Direction6::D0.translation(0)]);
+        assert_eq!(
+            translations,
+            [
+                Direction6::D0.translation(-1),
+                Direction6::D0.translation(0)
+            ]
+        );
         assert_eq!(map.width(), 1);
         assert_eq!(map.height(), 2);
         assert_eq!(map.odd_if_hex(), true);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())));
+            assert!(map.is_point_valid(
+                p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+            ));
         }
 
         let mut map = PointMap::filled(2, 2, true, false);
@@ -296,51 +335,89 @@ mod tests {
         map.set_valid(Point::new(1, 1), true);
         let points = map.get_valid_points();
         let translations = map.crop::<Direction6>();
-        assert_eq!(translations, [Direction6::D0.translation(0), Direction6::D0.translation(-1)]);
+        assert_eq!(
+            translations,
+            [
+                Direction6::D0.translation(0),
+                Direction6::D0.translation(-1)
+            ]
+        );
         assert_eq!(map.width(), 1);
         assert_eq!(map.height(), 2);
         assert_eq!(map.odd_if_hex(), false);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())));
+            assert!(map.is_point_valid(
+                p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+            ));
         }
-    
+
         let mut map = PointMap::filled(2, 3, true, false);
         map.set_valid(Point::new(1, 1), true);
         map.set_valid(Point::new(0, 2), true);
         let points = map.get_valid_points();
         let translations = map.crop::<Direction6>();
-        assert_eq!(translations, [Direction6::D0.translation(-1) + Direction6::D60.translation(1); 2]);
+        assert_eq!(
+            translations,
+            [Direction6::D0.translation(-1) + Direction6::D60.translation(1); 2]
+        );
         assert_eq!(map.width(), 1);
         assert_eq!(map.height(), 2);
         assert_eq!(map.odd_if_hex(), true);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())), "{p:?} -> {:?}", p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex()));
+            assert!(
+                map.is_point_valid(
+                    p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+                ),
+                "{p:?} -> {:?}",
+                p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+            );
         }
-    
+
         let mut map = PointMap::filled(2, 3, false, false);
         map.set_valid(Point::new(0, 1), true);
         map.set_valid(Point::new(1, 2), true);
         let points = map.get_valid_points();
         let translations = map.crop::<Direction6>();
-        assert_eq!(translations, [Direction6::D0.translation(-1) + Direction6::D60.translation(1); 2]);
+        assert_eq!(
+            translations,
+            [Direction6::D0.translation(-1) + Direction6::D60.translation(1); 2]
+        );
         assert_eq!(map.width(), 1);
         assert_eq!(map.height(), 2);
         assert_eq!(map.odd_if_hex(), false);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())), "{p:?}, {:?}", p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex()));
+            assert!(
+                map.is_point_valid(
+                    p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+                ),
+                "{p:?}, {:?}",
+                p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+            );
         }
-    
+
         let mut map = PointMap::filled(2, 3, false, false);
         map.set_valid(Point::new(1, 1), true);
         map.set_valid(Point::new(1, 2), true);
         let points = map.get_valid_points();
         let translations = map.crop::<Direction6>();
-        assert_eq!(translations, [Direction6::D0.translation(-2) + Direction6::D60.translation(1), Direction6::D0.translation(-1) + Direction6::D60.translation(1)]);
+        assert_eq!(
+            translations,
+            [
+                Direction6::D0.translation(-2) + Direction6::D60.translation(1),
+                Direction6::D0.translation(-1) + Direction6::D60.translation(1)
+            ]
+        );
         assert_eq!(map.width(), 1);
         assert_eq!(map.height(), 2);
         assert_eq!(map.odd_if_hex(), true);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())), "{p:?}, {:?}", p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex()));
+            assert!(
+                map.is_point_valid(
+                    p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+                ),
+                "{p:?}, {:?}",
+                p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+            );
         }
 
         let mut map = PointMap::filled(2, 3, true, false);
@@ -354,7 +431,13 @@ mod tests {
         assert_eq!(map.height(), 2);
         assert_eq!(map.odd_if_hex(), false);
         for p in points {
-            assert!(map.is_point_valid(p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())), "{p:?} -> {:?}", p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex()));
+            assert!(
+                map.is_point_valid(
+                    p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+                ),
+                "{p:?} -> {:?}",
+                p.translate::<Direction6>(&translations[p.y as usize % 2], map.odd_if_hex())
+            );
         }
     }
 }

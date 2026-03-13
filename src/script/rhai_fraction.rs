@@ -1,6 +1,6 @@
-use rhai::*;
-use rhai::plugin::*;
 use num_rational::Rational32;
+use rhai::plugin::*;
+use rhai::*;
 
 #[export_module]
 mod fraction_module {
@@ -163,7 +163,11 @@ mod fraction_module {
             "Fraction" | "Ratio<i32>" => {
                 *a = Dynamic::from(add_ff(a.clone().cast(), b));
             }
-            typename => return Err(format!("Attempted to add Fraction to a value of type '{typename}'").into())
+            typename => {
+                return Err(
+                    format!("Attempted to add Fraction to a value of type '{typename}'").into(),
+                );
+            }
         }
         Ok(())
     }
@@ -181,7 +185,12 @@ mod fraction_module {
             "Fraction" | "Ratio<i32>" => {
                 *a = Dynamic::from(sub_ff(a.clone().cast(), b));
             }
-            typename => return Err(format!("Attempted to subtract Fraction from a value of type '{typename}'").into())
+            typename => {
+                return Err(format!(
+                    "Attempted to subtract Fraction from a value of type '{typename}'"
+                )
+                .into());
+            }
         }
         Ok(())
     }
@@ -228,7 +237,12 @@ mod fraction_module {
             "Fraction" | "Ratio<i32>" => {
                 *a = Dynamic::from(mul_ff(a.clone().cast(), b));
             }
-            typename => return Err(format!("Attempted to multiply a value of type '{typename}' with a Fraction").into())
+            typename => {
+                return Err(format!(
+                    "Attempted to multiply a value of type '{typename}' with a Fraction"
+                )
+                .into());
+            }
         }
         Ok(())
     }
@@ -246,7 +260,12 @@ mod fraction_module {
             "Fraction" | "Ratio<i32>" => {
                 *a = Dynamic::from(div_ff(a.clone().cast(), b));
             }
-            typename => return Err(format!("Attempted to divide a value of type '{typename}' by a Fraction").into())
+            typename => {
+                return Err(format!(
+                    "Attempted to divide a value of type '{typename}' by a Fraction"
+                )
+                .into());
+            }
         }
         Ok(())
     }

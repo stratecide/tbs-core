@@ -1,8 +1,8 @@
-use rhai::*;
 use rhai::plugin::*;
+use rhai::*;
 
-use crate::map::direction::*;
 use crate::map::direction::Direction as Dir;
+use crate::map::direction::*;
 
 macro_rules! direction_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -36,7 +36,10 @@ macro_rules! direction_module {
             }
 
             #[rhai_fn(pure)]
-            pub fn update_straight_direction(distortion: &mut Distortion, d: Direction) -> Direction {
+            pub fn update_straight_direction(
+                distortion: &mut Distortion,
+                d: Direction,
+            ) -> Direction {
                 distortion.update_direction(d)
             }
         }

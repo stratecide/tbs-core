@@ -8,18 +8,31 @@ use crate::config::parse::FromConfig;
 pub struct CommanderType(pub usize);
 
 impl FromConfig for CommanderType {
-    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut crate::config::file_loader::FileLoader,
+    ) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
-        match loader.commander_types.iter().position(|name| name.as_str() == base) {
+        match loader
+            .commander_types
+            .iter()
+            .position(|name| name.as_str() == base)
+        {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::MissingCommander(base.to_string()))
+            None => Err(crate::config::ConfigParseError::MissingCommander(
+                base.to_string(),
+            )),
         }
     }
 }
 
 impl SupportedZippable<&Config> for CommanderType {
     fn export(&self, zipper: &mut Zipper, support: &Config) {
-        let index = support.commander_types().iter().position(|t| t == self).unwrap();
+        let index = support
+            .commander_types()
+            .iter()
+            .position(|t| t == self)
+            .unwrap();
         let bits = bits_needed_for_max_value(support.commander_count() as u32 - 1);
         zipper.write_u32(index as u32, bits);
     }
@@ -29,7 +42,10 @@ impl SupportedZippable<&Config> for CommanderType {
         if index < support.commander_count() {
             Ok(support.commander_types()[index])
         } else {
-            Err(ZipperError::EnumOutOfBounds(format!("CommanderType index {}", index)))
+            Err(ZipperError::EnumOutOfBounds(format!(
+                "CommanderType index {}",
+                index
+            )))
         }
     }
 }
@@ -40,11 +56,16 @@ pub struct CommanderChargeChange(pub i32);
 impl SupportedZippable<&Environment> for CommanderChargeChange {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         let max = support.config.max_commander_charge() as i32;
-        zipper.write_u32((self.0 + max) as u32, bits_needed_for_max_value(max as u32 * 2));
+        zipper.write_u32(
+            (self.0 + max) as u32,
+            bits_needed_for_max_value(max as u32 * 2),
+        );
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let max = support.config.max_commander_charge() as i32;
-        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(max as u32 * 2))? as i32 - max))
+        Ok(Self(
+            unzipper.read_u32(bits_needed_for_max_value(max as u32 * 2))? as i32 - max,
+        ))
     }
 }
 

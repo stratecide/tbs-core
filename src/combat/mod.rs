@@ -1,20 +1,20 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
-mod attack_pattern;
 mod attack;
+mod attack_pattern;
 pub mod rhai_combat;
 mod splash_damage;
 #[cfg(test)]
 mod test;
 
-pub use attack_pattern::*;
 pub use attack::*;
+pub use attack_pattern::*;
 pub use splash_damage::*;
 
-use crate::config::unit_filter::unit_filter_input;
+use crate::config::ConfigParseError;
 use crate::config::file_loader::FileLoader;
 use crate::config::parse::FromConfig;
-use crate::config::ConfigParseError;
+use crate::config::unit_filter::unit_filter_input;
 use crate::game::event_handler::EventHandler;
 use crate::game::fog::get_visible_unit;
 use crate::map::board::{Board, BoardView};
@@ -36,7 +36,7 @@ use crate::units::{UnitData, UnitId};
  * should an attack be possible if no direct target exists, only via splash damage?
  * when can a unit hit by splash damage counter attack?
  * can a counter-attack be blocked by individual attacks or only for the whole combat?
- * 
+ *
  * for the craziest effects, allow disabling 'normal' attacks so they can be replaced with custom actions
  * possibly allow setting a "default"-flag for the first custom action so this feels like a 'normal' attack
 */
@@ -61,22 +61,27 @@ impl<D: Direction> AttackCounterState<D> {
 
     pub fn is_counter(&self) -> bool {
         match self {
-            Self::RealCounter{..} |
-            Self::FakeCounter => true,
-            _ => false
+            Self::RealCounter { .. } | Self::FakeCounter => true,
+            _ => false,
         }
     }
 
     pub fn attacker(&self) -> Option<UnitData<'_, D>> {
         match self {
-            Self::RealCounter { unit, pos, ballast, original_transporter, .. } => Some(UnitData {
+            Self::RealCounter {
+                unit,
+                pos,
+                ballast,
+                original_transporter,
+                ..
+            } => Some(UnitData {
                 unit,
                 pos: *pos,
                 unload_index: None,
                 ballast: &ballast,
                 original_transporter: original_transporter.as_ref().map(|(u, p)| (u, *p)),
             }),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -98,13 +103,15 @@ impl<D: Direction> AttackerPosition<D> {
     fn get_unit(&self, handler: &EventHandler<D>) -> Option<Unit<D>> {
         match self {
             Self::Ghost(_, unit) => Some(unit.clone()),
-            Self::Real(id) => handler.get_observed_unit_pos(id.0).map(|(p, unload_index)| {
-                let unit = handler.get_game().get_unit(p).unwrap();
-                match unload_index {
-                    Some(i) => unit.get_transported()[i].clone(),
-                    None => unit.clone(),
-                }
-            }),
+            Self::Real(id) => handler
+                .get_observed_unit_pos(id.0)
+                .map(|(p, unload_index)| {
+                    let unit = handler.get_game().get_unit(p).unwrap();
+                    match unload_index {
+                        Some(i) => unit.get_transported()[i].clone(),
+                        None => unit.clone(),
+                    }
+                }),
         }
     }
 }
@@ -144,8 +151,20 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
         let attacker = self.attacker_position.get_unit(handler)?;
         let attacker_pos = self.attacker_position.get_position(handler)?.0;
         let board = handler.get_board();
-        let pattern = attacker.attack_pattern(board, attacker_pos, &self.counter_state, heroes, self.temporary_ballast);
-        let allowed_directions = attacker.attack_pattern_directions(board, attacker_pos, &self.counter_state, heroes, self.temporary_ballast);
+        let pattern = attacker.attack_pattern(
+            board,
+            attacker_pos,
+            &self.counter_state,
+            heroes,
+            self.temporary_ballast,
+        );
+        let allowed_directions = attacker.attack_pattern_directions(
+            board,
+            attacker_pos,
+            &self.counter_state,
+            heroes,
+            self.temporary_ballast,
+        );
         let mut allowed_directions = allowed_directions.get_dirs(&attacker, self.temporary_ballast);
         let mut direction_hint = self.targeting.direction_hint;
         if let AttackerPosition::Real(UnitId(id, distortion)) = self.attacker_position {
@@ -174,23 +193,34 @@ impl<'a, D: Direction> AttackerInfo<'a, D> {
             }
         };
         let mut result = None;
-        let possible_attack_targets: Vec<_> = allowed_directions.into_iter()
+        let possible_attack_targets: Vec<_> = allowed_directions
+            .into_iter()
             .map(|d| (d, pattern.possible_attack_targets(board, attacker_pos, d)))
             .collect();
         // prefer attacks at minimum range
-        let max_range = possible_attack_targets.iter().map(|(_, layers)| layers.len()).max()?;
+        let max_range = possible_attack_targets
+            .iter()
+            .map(|(_, layers)| layers.len())
+            .max()?;
         'outer: for range in 0..max_range {
             for (d, layers) in &possible_attack_targets {
                 let Some(layer) = layers.get(range) else {
                     continue;
                 };
-                for dp in layer.iter().filter(|dp| target.is_none() || target == Some(dp.point)) {
+                for dp in layer
+                    .iter()
+                    .filter(|dp| target.is_none() || target == Some(dp.point))
+                {
                     let attack_input = match attack.splash_pattern.points {
-                        SplashDamagePointSource::AttackPattern => AttackInput::AttackPattern(dp.point, *d),
-                        _ => AttackInput::SplashPattern(*dp)
+                        SplashDamagePointSource::AttackPattern => {
+                            AttackInput::AttackPattern(dp.point, *d)
+                        }
+                        _ => AttackInput::SplashPattern(*dp),
                     };
                     if *d == direction_hint
-                    && (attack.splash_pattern.points == SplashDamagePointSource::AttackPattern || self.targeting.target == *dp) {
+                        && (attack.splash_pattern.points == SplashDamagePointSource::AttackPattern
+                            || self.targeting.target == *dp)
+                    {
                         // found a perfect match, return immediately
                         return Some((attack_input, *d, layers.clone()));
                     }
@@ -219,11 +249,27 @@ pub fn execute_attack<D: Direction>(
     let attackers = {
         let attacker_pos = attacker_position.get_position(handler).unwrap().0;
         let attacker = attacker_position.get_unit(handler).unwrap();
-        let unit_id = get_visible_unit(handler.get_board(), handler.get_game().current_team(), input.target());
+        let unit_id = get_visible_unit(
+            handler.get_board(),
+            handler.get_game().current_team(),
+            input.target(),
+        );
         let unit_id = unit_id.map(|_| handler.observe_unit(input.target(), None).0);
         let board = handler.get_board();
-        let attack_pattern = attacker.attack_pattern(board, attacker_pos, &AttackCounterState::NoCounter, &heroes, temporary_ballast);
-        let allowed_directions = attacker.attack_pattern_directions(board, attacker_pos, &counter_state, &heroes, temporary_ballast);
+        let attack_pattern = attacker.attack_pattern(
+            board,
+            attacker_pos,
+            &AttackCounterState::NoCounter,
+            &heroes,
+            temporary_ballast,
+        );
+        let allowed_directions = attacker.attack_pattern_directions(
+            board,
+            attacker_pos,
+            &counter_state,
+            &heroes,
+            temporary_ballast,
+        );
         let allowed_directions = allowed_directions.get_dirs(&attacker, temporary_ballast);
         if allowed_directions.len() == 0 {
             return;
@@ -234,17 +280,25 @@ pub fn execute_attack<D: Direction>(
                     return;
                 }
                 let attack_pattern = attack_pattern.possible_attack_targets(board, attacker_pos, d);
-                let Some(dp) = attack_pattern.iter()
-                .flatten()
-                .find(|dp| dp.point == point)
-                .cloned() else {
+                let Some(dp) = attack_pattern
+                    .iter()
+                    .flatten()
+                    .find(|dp| dp.point == point)
+                    .cloned()
+                else {
                     return;
                 };
                 (dp, d, attack_pattern)
             }
             AttackInput::SplashPattern(dp) => {
-                let mut patterns = allowed_directions.into_iter()
-                    .map(|d| (d, attack_pattern.possible_attack_targets(board, attacker_pos, d)))
+                let mut patterns = allowed_directions
+                    .into_iter()
+                    .map(|d| {
+                        (
+                            d,
+                            attack_pattern.possible_attack_targets(board, attacker_pos, d),
+                        )
+                    })
                     .filter_map(|(d, pattern)| {
                         for (i, layer) in pattern.iter().enumerate() {
                             if layer.contains(&dp) {
@@ -277,13 +331,26 @@ pub fn execute_attack<D: Direction>(
             AttackerPosition::Real(id) if counter_state.allows_counter() => {
                 // add all counter-attackers to attackers list
                 let attacker_id = id;
-                let counter_attackers = find_counter_attackers(handler.get_board(), &attacker, attacker_pos, &attack_pattern, input, transporter, temporary_ballast, &heroes);
+                let counter_attackers = find_counter_attackers(
+                    handler.get_board(),
+                    &attacker,
+                    attacker_pos,
+                    &attack_pattern,
+                    input,
+                    transporter,
+                    temporary_ballast,
+                    &heroes,
+                );
                 for (p, counter_direction_hint) in counter_attackers {
                     let unit_id = handler.observe_unit(p, None);
                     attackers.push(AttackerInfo {
                         attacker_position: AttackerPosition::Real(unit_id),
                         targeting: AttackTargeting {
-                            target: OrientedPoint::new(attacker_pos, target.mirrored, direction_hint.opposite_direction()),
+                            target: OrientedPoint::new(
+                                attacker_pos,
+                                target.mirrored,
+                                direction_hint.opposite_direction(),
+                            ),
                             direction_hint: counter_direction_hint,
                             unit_id: Some(attacker_id.0),
                         },
@@ -304,11 +371,20 @@ pub fn execute_attack<D: Direction>(
         attackers
     };
     let board = handler.get_board();
-    let mut attack_map: FxHashMap<i8, Vec<(AttackerInfo<D>, ConfiguredAttack)>> = FxHashMap::default();
+    let mut attack_map: FxHashMap<i8, Vec<(AttackerInfo<D>, ConfiguredAttack)>> =
+        FxHashMap::default();
     for attacker in attackers {
         let unit = attacker.attacker_position.get_unit(handler).unwrap();
         let pos = attacker.attacker_position.get_position(handler).unwrap().0;
-        for attack in unit.environment().config.unit_configured_attacks(board, &unit, pos, attacker.transporter, &attacker.counter_state, &heroes, attacker.temporary_ballast) {
+        for attack in unit.environment().config.unit_configured_attacks(
+            board,
+            &unit,
+            pos,
+            attacker.transporter,
+            &attacker.counter_state,
+            &heroes,
+            attacker.temporary_ballast,
+        ) {
             let priority = attack.priority;
             let value = (attacker.clone(), attack);
             if let Some(list) = attack_map.get_mut(&priority) {
@@ -322,7 +398,8 @@ pub fn execute_attack<D: Direction>(
     priorities.sort_by(|a, b| b.cmp(a));
     while let Some(priority) = priorities.pop() {
         let attacks = attack_map.remove(&priority).unwrap();
-        let scripted_attacks = execute_attacks_with_equal_priority(handler, attacks, execute_scripts);
+        let scripted_attacks =
+            execute_attacks_with_equal_priority(handler, attacks, execute_scripts);
         // on_defend scripts can add attackers. add them to the map here
         if scripted_attacks.len() > 0 {
             let board = handler.get_board();
@@ -330,7 +407,8 @@ pub fn execute_attack<D: Direction>(
                 let Some((pos, None)) = atk.attacker.get_position(handler) else {
                     continue;
                 };
-                let Some((defender_pos, _)) = handler.get_observed_unit_pos(atk.defender_id.0) else {
+                let Some((defender_pos, _)) = handler.get_observed_unit_pos(atk.defender_id.0)
+                else {
                     continue;
                 };
                 let unit = atk.attacker.get_unit(handler).unwrap();
@@ -342,20 +420,31 @@ pub fn execute_attack<D: Direction>(
                 let transporter = None;
                 let temporary_ballast = &[];
                 let counter_state = AttackCounterState::FakeCounter;
-                for attack in unit.environment().config.unit_configured_attacks(board, &unit, pos, transporter, &counter_state, &heroes, temporary_ballast) {
+                for attack in unit.environment().config.unit_configured_attacks(
+                    board,
+                    &unit,
+                    pos,
+                    transporter,
+                    &counter_state,
+                    &heroes,
+                    temporary_ballast,
+                ) {
                     let prio = attack.priority as i32 + atk.priority;
                     if prio <= priority as i32 || prio > i8::MAX as i32 {
                         // don't add attack instances that should have happened in the past
                         continue;
                     }
                     let priority = prio as i8;
-                    let value = (AttackerInfo {
-                        attacker_position: atk.attacker.clone(),
-                        targeting: targeting.clone(),
-                        transporter,
-                        temporary_ballast,
-                        counter_state: counter_state.clone(),
-                    }, attack);
+                    let value = (
+                        AttackerInfo {
+                            attacker_position: atk.attacker.clone(),
+                            targeting: targeting.clone(),
+                            transporter,
+                            temporary_ballast,
+                            counter_state: counter_state.clone(),
+                        },
+                        attack,
+                    );
                     if let Some(list) = attack_map.get_mut(&priority) {
                         list.push(value);
                     } else {
@@ -379,7 +468,15 @@ fn find_counter_attackers<D: Direction>(
     temporary_ballast: &[TBallast<D>],
     heroes: &HeroMap<D>,
 ) -> Vec<(Point, D)> {
-    let configured_attacks = attacker.environment().config.unit_configured_attacks(game, attacker, attacker_pos, transporter, &AttackCounterState::NoCounter, heroes, temporary_ballast);
+    let configured_attacks = attacker.environment().config.unit_configured_attacks(
+        game,
+        attacker,
+        attacker_pos,
+        transporter,
+        &AttackCounterState::NoCounter,
+        heroes,
+        temporary_ballast,
+    );
     let mut checked = FxHashSet::default();
     let mut result = Vec::new();
     let attacker_data = UnitData {
@@ -391,17 +488,40 @@ fn find_counter_attackers<D: Direction>(
     };
     for attack in &configured_attacks {
         // don't need to consider splashes that don't allow counter attacks
-        let Some(splash_range) = attack.splash.iter().filter(|a| a.allows_counter_attack).map(|a| a.splash_distance).max() else {
+        let Some(splash_range) = attack
+            .splash
+            .iter()
+            .filter(|a| a.allows_counter_attack)
+            .map(|a| a.splash_distance)
+            .max()
+        else {
             continue;
         };
-        let ranges: Vec<Vec<OrientedPoint<D>>> = attack.splash_pattern.get_splash(game, attacker, temporary_ballast, attack_pattern, target, splash_range);
-        for dp in ranges.into_iter()
-        .enumerate()
-        .filter(|(i, _)| attack.splash.iter().any(|a| a.allows_counter_attack && a.splash_distance == *i)) // skip ranges where counter-attack isn't allowed
-        .map(|(_, range)| range)
-        .flatten() {
+        let ranges: Vec<Vec<OrientedPoint<D>>> = attack.splash_pattern.get_splash(
+            game,
+            attacker,
+            temporary_ballast,
+            attack_pattern,
+            target,
+            splash_range,
+        );
+        for dp in ranges
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| {
+                attack
+                    .splash
+                    .iter()
+                    .any(|a| a.allows_counter_attack && a.splash_distance == *i)
+            }) // skip ranges where counter-attack isn't allowed
+            .map(|(_, range)| range)
+            .flatten()
+        {
             if checked.insert(dp.point) {
-                if let Some(unit) = game.get_unit(dp.point).filter(|u| u.get_team() != attacker.get_team()) {
+                if let Some(unit) = game
+                    .get_unit(dp.point)
+                    .filter(|u| u.get_team() != attacker.get_team())
+                {
                     if unit.can_target(game, dp.point, None, attacker_data, true, &heroes) {
                         // could reverse SplashDirectionModifier for direction_hint here
                         result.push((dp.point, dp.direction.opposite_direction()));
@@ -422,16 +542,20 @@ pub enum ValidAttackTargets {
 }
 
 impl FromConfig for ValidAttackTargets {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
-        Ok((match s.trim() {
-            "" => Self::Enemy,
-            "Enemy" => Self::Enemy,
-            "Friendly" => Self::Friendly,
-            "All" => Self::All,
-            name => {
-                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
-            }
-        }, ""))
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
+        Ok((
+            match s.trim() {
+                "" => Self::Enemy,
+                "Enemy" => Self::Enemy,
+                "Friendly" => Self::Friendly,
+                "All" => Self::All,
+                name => Self::Rhai(loader.rhai_function(&name, 1..=1)?.index),
+            },
+            "",
+        ))
     }
 }
 
@@ -450,12 +574,22 @@ impl ValidAttackTargets {
             Self::Friendly => unit_data.unit.get_team() == other_unit_data.unit.get_team(),
             Self::All => true,
             Self::Rhai(function_index) => {
-                let executor = game.executor(unit_filter_input(game, unit_data, Some(other_unit_data), heroes, is_counter));
+                let executor = game.executor(unit_filter_input(
+                    game,
+                    unit_data,
+                    Some(other_unit_data),
+                    heroes,
+                    is_counter,
+                ));
                 match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
                     Err(e) => {
                         let environment = game.environment();
-                        environment.log_rhai_error("ValidAttackTargets::Rhai", environment.get_rhai_function_name(*function_index), &e);
+                        environment.log_rhai_error(
+                            "ValidAttackTargets::Rhai",
+                            environment.get_rhai_function_name(*function_index),
+                            &e,
+                        );
                         false
                     }
                 }

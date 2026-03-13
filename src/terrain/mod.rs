@@ -1,14 +1,14 @@
-pub mod terrain;
 pub mod rhai_terrain;
+pub mod terrain;
 #[cfg(test)]
 mod test;
 
 use zipper::*;
 
+use crate::config::ConfigParseError;
 use crate::config::environment::Environment;
 use crate::config::file_loader::FileLoader;
-use crate::config::parse::{string_base, FromConfig};
-use crate::config::ConfigParseError;
+use crate::config::parse::{FromConfig, string_base};
 use crate::map::direction::Direction;
 
 use self::terrain::TerrainBuilder;
@@ -17,11 +17,20 @@ use self::terrain::TerrainBuilder;
 pub struct TerrainType(pub usize);
 
 impl FromConfig for TerrainType {
-    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut crate::config::file_loader::FileLoader,
+    ) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
-        match loader.terrain_types.iter().position(|name| name.as_str() == base) {
+        match loader
+            .terrain_types
+            .iter()
+            .position(|name| name.as_str() == base)
+        {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::MissingTerrain(base.to_string()))
+            None => Err(crate::config::ConfigParseError::MissingTerrain(
+                base.to_string(),
+            )),
         }
     }
 }
@@ -35,7 +44,10 @@ impl SupportedZippable<&Environment> for TerrainType {
         let bits = bits_needed_for_max_value(environment.config.terrain_count() as u32 - 1);
         let index = unzipper.read_u32(bits)? as usize;
         if index >= environment.config.terrain_count() {
-            return Err(ZipperError::EnumOutOfBounds(format!("TerrainType index {}", index)))
+            return Err(ZipperError::EnumOutOfBounds(format!(
+                "TerrainType index {}",
+                index
+            )));
         }
         Ok(Self(index))
     }
@@ -54,12 +66,22 @@ pub enum ExtraMovementOptions {
 }
 
 impl FromConfig for ExtraMovementOptions {
-    fn from_conf<'a>(s: &'a str, _loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        _loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, remainder) = string_base(s);
-        Ok((match base {
-            "None" => Self::None,
-            "Jump" => Self::Jump,
-            invalid => return Err(ConfigParseError::UnknownEnumMember(format!("ExtraMovementOptions::{invalid}"))),
-        }, remainder))
+        Ok((
+            match base {
+                "None" => Self::None,
+                "Jump" => Self::Jump,
+                invalid => {
+                    return Err(ConfigParseError::UnknownEnumMember(format!(
+                        "ExtraMovementOptions::{invalid}"
+                    )));
+                }
+            },
+            remainder,
+        ))
     }
 }

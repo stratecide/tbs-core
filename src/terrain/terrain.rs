@@ -6,10 +6,10 @@ use num_rational::Rational32;
 use uniform_smart_pointer::Urc;
 use zipper::*;
 
-use crate::commander::commander_type::CommanderType;
 use crate::commander::Commander;
-use crate::config::environment::Environment;
+use crate::commander::commander_type::CommanderType;
 use crate::config::OwnershipPredicate;
+use crate::config::environment::Environment;
 use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::settings::GameSettings;
 use crate::map::board::{Board, BoardView};
@@ -19,11 +19,11 @@ use crate::map::point::Point;
 use crate::map::wrapping_map::Distortion;
 use crate::player::{Owner, Player};
 use crate::tags::*;
+use crate::units::UnitVisibility;
 use crate::units::hero::HeroInfluence;
 use crate::units::movement::MovementType;
-use crate::units::UnitVisibility;
 
-use super::{TerrainType, ExtraMovementOptions};
+use super::{ExtraMovementOptions, TerrainType};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Terrain<D: Direction> {
@@ -46,13 +46,13 @@ impl<D: Direction> Terrain<D> {
     pub(super) fn new(environment: Environment, typ: TerrainType) -> Self {
         let owner = match environment.config.terrain_ownership(typ) {
             OwnershipPredicate::Always => environment.config.max_player_count() - 1,
-            _ => -1
+            _ => -1,
         };
         Self {
             environment,
             typ,
             owner: Owner(owner),
-            tags: TagBag::new()
+            tags: TagBag::new(),
         }
     }
 
@@ -84,7 +84,9 @@ impl<D: Direction> Terrain<D> {
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
     ) -> Rational32 {
-        self.environment.config.terrain_income_factor(game, pos, self, heroes)
+        self.environment
+            .config
+            .terrain_income_factor(game, pos, self, heroes)
     }
 
     pub fn vision_range(
@@ -94,18 +96,21 @@ impl<D: Direction> Terrain<D> {
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
     ) -> Option<usize> {
-        let mut range = self.environment.config.terrain_vision_range(game, pos, self, heroes)?;
+        let mut range = self
+            .environment
+            .config
+            .terrain_vision_range(game, pos, self, heroes)?;
         // TODO: add config column for whether fog_setting should increase vision range instead of this check
         if range == 0 {
             return Some(range);
         }
         match game.get_fog_setting() {
             FogSetting::None => (),
-            FogSetting::Light(bonus) |
-            FogSetting::Sharp(bonus) |
-            FogSetting::Fade1(bonus) |
-            FogSetting::Fade2(bonus) |
-            FogSetting::ExtraDark(bonus) => range += bonus as usize,
+            FogSetting::Light(bonus)
+            | FogSetting::Sharp(bonus)
+            | FogSetting::Fade1(bonus)
+            | FogSetting::Fade2(bonus)
+            | FogSetting::ExtraDark(bonus) => range += bonus as usize,
         }
         Some(range)
     }
@@ -115,7 +120,9 @@ impl<D: Direction> Terrain<D> {
     }
 
     pub fn movement_cost(&self, movement_type: MovementType) -> Option<Rational32> {
-        self.environment.config.terrain_movement_cost(self.typ, movement_type)
+        self.environment
+            .config
+            .terrain_movement_cost(self.typ, movement_type)
     }
 
     pub fn get_owner_id(&self) -> i8 {
@@ -141,8 +148,8 @@ impl<D: Direction> Terrain<D> {
 
     pub fn get_commander(&self, game: &impl BoardView<D>) -> Commander {
         self.get_player(game)
-        .and_then(|player| Some(player.commander.clone()))
-        .unwrap_or(Commander::new(&self.environment, CommanderType(0)))
+            .and_then(|player| Some(player.commander.clone()))
+            .unwrap_or(Commander::new(&self.environment, CommanderType(0)))
     }
 
     pub(super) fn copy_from(&mut self, other: &Terrain<D>) {
@@ -195,15 +202,16 @@ impl<D: Direction> Terrain<D> {
         pos: Point,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
-        team: ClientPerspective
+        team: ClientPerspective,
     ) -> HashMap<Point, FogIntensity> {
-        let allow_vision = if self.environment.config.terrain_ownership(self.typ) == OwnershipPredicate::Never {
-            // terrain can never be owned, so its vision is provided to all
-            true
-        } else {
-            // terrain can be owned. it's vision is only provided to the team that owns it
-            self.get_team() == team && team != ClientPerspective::Neutral
-        };
+        let allow_vision =
+            if self.environment.config.terrain_ownership(self.typ) == OwnershipPredicate::Never {
+                // terrain can never be owned, so its vision is provided to all
+                true
+            } else {
+                // terrain can be owned. it's vision is only provided to the team that owns it
+                self.get_team() == team && team != ClientPerspective::Neutral
+            };
         if !allow_vision {
             return HashMap::new();
         }
@@ -216,7 +224,7 @@ impl<D: Direction> Terrain<D> {
             FogSetting::ExtraDark(_) => 0,
             FogSetting::Fade1(_) => 1.max(vision_range) - 1,
             FogSetting::Fade2(_) => 2.max(vision_range) - 2,
-            _ => vision_range
+            _ => vision_range,
         };
         let layers = get_neighbors_layers(game, pos, vision_range);
         for (i, layer) in layers.into_iter().enumerate() {
@@ -226,7 +234,10 @@ impl<D: Direction> Terrain<D> {
                 } else {
                     FogIntensity::Light
                 };
-                result.insert(p, vision.min(result.get(&p).cloned().unwrap_or(FogIntensity::Dark)));
+                result.insert(
+                    p,
+                    vision.min(result.get(&p).cloned().unwrap_or(FogIntensity::Dark)),
+                );
             }
         }
         result
@@ -242,7 +253,9 @@ impl<D: Direction> Terrain<D> {
             FogIntensity::Light => UnitVisibility::Normal,
             FogIntensity::Dark => UnitVisibility::AlwaysVisible,
         };
-        let mut builder = self.typ.instance(&self.environment)
+        let mut builder = self
+            .typ
+            .instance(&self.environment)
             .set_tag_bag(self.tags.fog_replacement(&self.environment, visibility));
         if self.environment.config.terrain_owner_visibility(self.typ) >= visibility {
             builder = builder.set_owner_id(self.owner.0);
@@ -288,9 +301,7 @@ pub struct TerrainBuilder<D: Direction> {
 impl<D: Direction> TerrainBuilder<D> {
     pub fn new(environment: &Environment, typ: TerrainType) -> Self {
         let terrain = Terrain::new(environment.clone(), typ);
-        Self {
-            terrain,
-        }
+        Self { terrain }
     }
 
     pub fn copy_from(mut self, other: &Terrain<D>) -> Self {

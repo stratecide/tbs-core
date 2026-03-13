@@ -5,45 +5,46 @@ use std::rc::Rc;
 use interfaces::*;
 use num_rational::Rational32;
 use rhai::*;
-use semver::Version;
 use rustc_hash::FxHashMap as HashMap;
+use semver::Version;
 use uniform_smart_pointer::Urc;
 
+use crate::VERSION;
 use crate::combat::*;
-use crate::config::Pronouns;
-use crate::game::event_fx::EffectType;
-use crate::map::board::Board;
-use crate::tokens::token_types::TokenType;
-use crate::game::fog::VisionMode;
 use crate::commander::commander_type::CommanderType;
-use crate::game::{import_client, import_server};
+use crate::config::Pronouns;
 use crate::game::GameType;
+use crate::game::event_fx::EffectType;
+use crate::game::fog::VisionMode;
+use crate::game::{import_client, import_server};
+use crate::map::board::Board;
 use crate::map::direction::Direction;
-use crate::map::map::import_map;
 use crate::map::map::MapType;
+use crate::map::map::import_map;
 use crate::map::point::Point;
 use crate::script::executor::Executor;
 use crate::script::*;
 use crate::terrain::terrain::Terrain;
 use crate::terrain::*;
-use crate::units::{UnitData, UnitVisibility};
+use crate::tokens::token_types::TokenType;
+use crate::units::hero::*;
 use crate::units::movement::*;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
-use crate::units::hero::*;
-use crate::VERSION;
+use crate::units::{UnitData, UnitVisibility};
 
+use super::OwnershipPredicate;
 use super::attack_config::{AttackConfig, AttackSplashConfig};
-use super::attack_powered::{attack_filter_input, AttackPoweredConfig};
+use super::attack_powered::{AttackPoweredConfig, attack_filter_input};
+use super::commander_power_config::CommanderPowerConfig;
+use super::commander_type_config::CommanderTypeConfig;
+use super::commander_unit_config::CommanderPowerUnitConfig;
 use super::custom_action_config::CustomActionConfig;
 use super::editor_tag_config::TagEditorVisibility;
 use super::effect_config::{EffectConfig, EffectDataType, EffectVisibility};
 use super::global_events::GlobalEventConfig;
 use super::hero_power_config::HeroPowerConfig;
 use super::hero_type_config::HeroTypeConfig;
-use super::commander_power_config::CommanderPowerConfig;
-use super::commander_type_config::CommanderTypeConfig;
-use super::commander_unit_config::CommanderPowerUnitConfig;
 use super::movement_type_config::{MovementPattern, MovementTypeConfig};
 use super::number_modification::NumberMod;
 use super::table_config::CustomTable;
@@ -53,7 +54,6 @@ use super::terrain_type_config::TerrainTypeConfig;
 use super::token_typ_config::TokenTypeConfig;
 use super::unit_filter::unit_filter_input;
 use super::unit_type_config::UnitTypeConfig;
-use super::OwnershipPredicate;
 
 pub struct Config {
     pub(super) name: String,
@@ -62,7 +62,8 @@ pub struct Config {
     pub(super) flags: Vec<TagConfig>,
     pub(super) tags: Vec<TagConfig>,
     pub(super) movement_types: Vec<MovementTypeConfig>,
-    pub(super) movement_type_transformer: HashMap<MovementType, HashMap<(TerrainType, MovementType), MovementType>>,
+    pub(super) movement_type_transformer:
+        HashMap<MovementType, HashMap<(TerrainType, MovementType), MovementType>>,
     // units
     pub(super) units: Vec<UnitTypeConfig>,
     pub(super) unknown_unit: UnitType,
@@ -131,14 +132,21 @@ impl ConfigInterface for Config {
         }
     }
 
-    fn parse_server(self: Urc<Self>, data: ExportedGame) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
+    fn parse_server(
+        self: Urc<Self>,
+        data: ExportedGame,
+    ) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
         match import_server(&self, data, Version::parse(VERSION)?)? {
             GameType::Hex(game) => Ok(Box::new(game)),
             GameType::Square(game) => Ok(Box::new(game)),
         }
     }
 
-    fn parse_client(self: Urc<Self>, public: Vec<u8>, secret: Option<(Team, Vec<u8>)>) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
+    fn parse_client(
+        self: Urc<Self>,
+        public: Vec<u8>,
+        secret: Option<(Team, Vec<u8>)>,
+    ) -> Result<Box<dyn GameInterface>, Box<dyn Error>> {
         match import_client(&self, public, secret, Version::parse(VERSION)?)? {
             GameType::Hex(game) => Ok(Box::new(game)),
             GameType::Square(game) => Ok(Box::new(game)),
@@ -159,7 +167,6 @@ impl Config {
         &self.owner_colors
     }
 
-
     pub(crate) fn engine<D: Direction>(&self) -> &Engine {
         if D::is_hex() {
             &self.engines[1]
@@ -179,7 +186,9 @@ impl Config {
         &self.flags[index].name
     }
     pub fn flag_by_name(&self, name: &str) -> Option<usize> {
-        self.flags.iter().position(|flag| flag.name.as_str() == name)
+        self.flags
+            .iter()
+            .position(|flag| flag.name.as_str() == name)
     }
 
     pub fn tag_count(&self) -> usize {
@@ -202,34 +211,64 @@ impl Config {
     }
 
     pub fn flag_ev_terrain(&self, typ: TerrainType, flag: usize) -> TagEditorVisibility {
-        self.terrain_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
+        self.terrain_flags
+            .get(&(flag, typ))
+            .cloned()
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn tag_ev_terrain(&self, typ: TerrainType, tag: usize) -> TagEditorVisibility {
-        self.terrain_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
+        self.terrain_tags
+            .get(&(tag, typ))
+            .cloned()
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn flag_ev_token(&self, typ: TokenType, flag: usize) -> TagEditorVisibility {
-        self.token_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
+        self.token_flags
+            .get(&(flag, typ))
+            .cloned()
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn tag_ev_token(&self, typ: TokenType, tag: usize) -> TagEditorVisibility {
-        self.token_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
+        self.token_tags
+            .get(&(tag, typ))
+            .cloned()
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn flag_ev_unit(&self, typ: UnitType, flag: usize) -> TagEditorVisibility {
-        self.unit_flags.get(&(flag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
+        self.unit_flags
+            .get(&(flag, typ))
+            .cloned()
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn tag_ev_unit(&self, typ: UnitType, tag: usize) -> TagEditorVisibility {
-        self.unit_tags.get(&(tag, typ)).cloned().unwrap_or(TagEditorVisibility::Hidden)
+        self.unit_tags
+            .get(&(tag, typ))
+            .cloned()
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn flag_ev_player(&self, flag: usize) -> TagEditorVisibility {
-        self.flags.get(flag).map(|tc| tc.player).unwrap_or(TagEditorVisibility::Hidden)
+        self.flags
+            .get(flag)
+            .map(|tc| tc.player)
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn tag_ev_player(&self, tag: usize) -> TagEditorVisibility {
-        self.tags.get(tag).map(|tc| tc.player).unwrap_or(TagEditorVisibility::Hidden)
+        self.tags
+            .get(tag)
+            .map(|tc| tc.player)
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn flag_ev_global(&self, flag: usize) -> TagEditorVisibility {
-        self.flags.get(flag).map(|tc| tc.global).unwrap_or(TagEditorVisibility::Hidden)
+        self.flags
+            .get(flag)
+            .map(|tc| tc.global)
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
     pub fn tag_ev_global(&self, tag: usize) -> TagEditorVisibility {
-        self.tags.get(tag).map(|tc| tc.global).unwrap_or(TagEditorVisibility::Hidden)
+        self.tags
+            .get(tag)
+            .map(|tc| tc.global)
+            .unwrap_or(TagEditorVisibility::Hidden)
     }
 
     // units
@@ -252,8 +291,13 @@ impl Config {
 
     pub fn unit_max_transport_capacity(&self, typ: UnitType) -> usize {
         self.unit_config(typ).transport_capacity
-        + self.commanders.iter().map(|c| c.transport_capacity as usize).max().unwrap_or(0)
-        + self.max_hero_transport_bonus
+            + self
+                .commanders
+                .iter()
+                .map(|c| c.transport_capacity as usize)
+                .max()
+                .unwrap_or(0)
+            + self.max_hero_transport_bonus
     }
 
     pub(super) fn unit_config(&self, typ: UnitType) -> &UnitTypeConfig {
@@ -267,7 +311,7 @@ impl Config {
     pub fn find_unit_by_name(&self, name: &str) -> Option<UnitType> {
         for (unit_type, conf) in self.units.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(UnitType(unit_type))
+                return Some(UnitType(unit_type));
             }
         }
         None
@@ -364,7 +408,7 @@ impl Config {
     pub fn find_hero_by_name(&self, name: &str) -> Option<HeroType> {
         for (hero_type, conf) in self.heroes.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(HeroType(hero_type))
+                return Some(HeroType(hero_type));
             }
         }
         None
@@ -414,7 +458,7 @@ impl Config {
         transporter: Option<(&Unit<D>, usize)>,
     ) -> Option<usize> {
         let Some(hero) = unit.get_hero() else {
-            return None
+            return None;
         };
         // avoid infinite loop
         let heroes = HeroMap::new_without_aura(map, Some(unit.get_owner_id()));
@@ -437,7 +481,7 @@ impl Config {
                     iter.map(|c| c.aura_range),
                     executor,
                 )
-            }
+            },
         );
         if result < 0 {
             None
@@ -467,7 +511,7 @@ impl Config {
     pub fn find_terrain_by_name(&self, name: &str) -> Option<TerrainType> {
         for (terrain_type, conf) in self.terrains.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(TerrainType(terrain_type))
+                return Some(TerrainType(terrain_type));
             }
         }
         None
@@ -496,7 +540,10 @@ impl Config {
         terrain: &'a Terrain<D>,
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &'a [HeroInfluence<D>],
-        f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a TerrainPoweredConfig> + 'a>, &Executor) -> R,
+        f: impl FnOnce(
+            Box<dyn DoubleEndedIterator<Item = &'a TerrainPoweredConfig> + 'a>,
+            &Executor,
+        ) -> R,
     ) -> R {
         let mut first_argument = Map::new();
         first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
@@ -506,14 +553,19 @@ impl Config {
         let executor_ = executor.clone();
         let max_len = self.terrain_overrides.len();
         let limit = game.get_terrain_config_limit();
-        let it = self.terrain_overrides.iter()
-        .take(limit.unwrap_or(max_len))
-        .enumerate()
-        .filter(move |(i, config)| {
-            game.set_terrain_config_limit(Some(*i));
-            config.affects.iter().all(|filter| filter.check(game, pos, terrain, heroes, &executor))
-        })
-        .map(|(_, config)| config);
+        let it = self
+            .terrain_overrides
+            .iter()
+            .take(limit.unwrap_or(max_len))
+            .enumerate()
+            .filter(move |(i, config)| {
+                game.set_terrain_config_limit(Some(*i));
+                config
+                    .affects
+                    .iter()
+                    .all(|filter| filter.check(game, pos, terrain, heroes, &executor))
+            })
+            .map(|(_, config)| config);
         let r = f(Box::new(it), &executor_);
         game.set_terrain_config_limit(limit);
         r
@@ -523,10 +575,15 @@ impl Config {
         self.terrain_config(typ).extra_movement_options
     }
 
-    pub fn terrain_movement_cost(&self, typ: TerrainType, movement_type: MovementType) -> Option<Rational32> {
-        self.movement_cost.get(&typ)
-        .and_then(|map| map.get(&movement_type))
-        .cloned()
+    pub fn terrain_movement_cost(
+        &self,
+        typ: TerrainType,
+        movement_type: MovementType,
+    ) -> Option<Rational32> {
+        self.movement_cost
+            .get(&typ)
+            .and_then(|map| map.get(&movement_type))
+            .cloned()
     }
 
     pub fn terrain_owner_visibility(&self, _typ: TerrainType) -> UnitVisibility {
@@ -551,19 +608,13 @@ impl Config {
         // the heroes affecting this terrain. shouldn't be taken from game since they could have died before this function is called
         heroes: &[HeroInfluence<D>],
     ) -> Option<usize> {
-        let result = self.terrain_power_configs(
-            map,
-            pos,
-            terrain,
-            heroes,
-            |iter, executor| {
-                NumberMod::update_value_repeatedly::<D>(
-                    self.terrain_config(terrain.typ()).vision_range,
-                    iter.map(|c| c.vision),
-                    executor,
-                ) as i8
-            }
-        );
+        let result = self.terrain_power_configs(map, pos, terrain, heroes, |iter, executor| {
+            NumberMod::update_value_repeatedly::<D>(
+                self.terrain_config(terrain.typ()).vision_range,
+                iter.map(|c| c.vision),
+                executor,
+            ) as i8
+        });
         if result < 0 {
             None
         } else {
@@ -582,19 +633,13 @@ impl Config {
         terrain: &Terrain<D>,
         heroes: &[HeroInfluence<D>],
     ) -> Rational32 {
-        self.terrain_power_configs(
-            map,
-            pos,
-            terrain,
-            heroes,
-            |iter, executor| {
-                NumberMod::update_value_repeatedly::<D>(
-                    self.terrain_config(terrain.typ()).income_factor,
-                    iter.map(|c| c.income_factor),
-                    executor,
-                )
-            }
-        )
+        self.terrain_power_configs(map, pos, terrain, heroes, |iter, executor| {
+            NumberMod::update_value_repeatedly::<D>(
+                self.terrain_config(terrain.typ()).income_factor,
+                iter.map(|c| c.income_factor),
+                executor,
+            )
+        })
     }
 
     pub fn terrain_action_script<D: Direction>(
@@ -605,30 +650,32 @@ impl Config {
         heroes: &[HeroInfluence<D>],
     ) -> Option<(usize, usize)> {
         let mut result = None;
-        self.terrain_power_configs(
-            map,
-            pos,
-            terrain,
-            heroes,
-            |iter, _executor| {
-                for config in iter {
-                    if let Some(script) = config.action_script {
-                        result = Some(script);
-                    }
+        self.terrain_power_configs(map, pos, terrain, heroes, |iter, _executor| {
+            for config in iter {
+                if let Some(script) = config.action_script {
+                    result = Some(script);
                 }
             }
-        );
+        });
         result
     }
 
     #[cfg(feature = "rendering")]
-    pub fn terrain_preview(&self, typ: TerrainType, owner: i8) -> Vec<(interfaces::PreviewShape, [u8; 4])> {
-        self.terrain_config(typ).preview.iter()
-        .map(|(shape, color)| {
-            let color = color.clone()
-                .unwrap_or(self.owner_colors[(owner + 1) as usize]);
-            (*shape, color)
-        }).collect()
+    pub fn terrain_preview(
+        &self,
+        typ: TerrainType,
+        owner: i8,
+    ) -> Vec<(interfaces::PreviewShape, [u8; 4])> {
+        self.terrain_config(typ)
+            .preview
+            .iter()
+            .map(|(shape, color)| {
+                let color = color
+                    .clone()
+                    .unwrap_or(self.owner_colors[(owner + 1) as usize]);
+                (*shape, color)
+            })
+            .collect()
     }
 
     // tokens
@@ -652,7 +699,7 @@ impl Config {
     pub fn find_token_by_name(&self, name: &str) -> Option<TokenType> {
         for (token_type, conf) in self.tokens.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(TokenType(token_type))
+                return Some(TokenType(token_type));
             }
         }
         None
@@ -699,17 +746,19 @@ impl Config {
     }
 
     pub fn movement_types(&self) -> Vec<MovementType> {
-        (0..self.movement_type_count()).map(|i| MovementType(i)).collect()
+        (0..self.movement_type_count())
+            .map(|i| MovementType(i))
+            .collect()
     }
 
     pub fn movement_type_name(&self, typ: MovementType) -> &str {
         &self.movement_types[typ.0].name
     }
-    
+
     pub fn find_movement_by_name(&self, name: &str) -> Option<MovementType> {
         for (movement_type, conf) in self.movement_types.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(MovementType(movement_type))
+                return Some(MovementType(movement_type));
             }
         }
         None
@@ -732,7 +781,7 @@ impl Config {
     pub fn find_effect_by_name(&self, name: &str) -> Option<EffectType> {
         for (effect_type, conf) in self.effect_types.iter().enumerate() {
             if conf.name.as_str() == name {
-                return Some(EffectType(effect_type))
+                return Some(EffectType(effect_type));
             }
         }
         None
@@ -757,7 +806,9 @@ impl Config {
     }
 
     pub fn commander_types(&self) -> Vec<CommanderType> {
-        (0..self.commander_count()).map(|i| CommanderType(i)).collect()
+        (0..self.commander_count())
+            .map(|i| CommanderType(i))
+            .collect()
     }
 
     pub(super) fn commander_config(&self, typ: CommanderType) -> &CommanderTypeConfig {
@@ -785,9 +836,10 @@ impl Config {
     }
 
     pub fn commander_can_gain_charge(&self, typ: CommanderType, power: usize) -> bool {
-        self.commander_powers(typ).get(power)
-        .map(|power| !power.prevents_charging)
-        .unwrap_or(false)
+        self.commander_powers(typ)
+            .get(power)
+            .map(|power| !power.prevents_charging)
+            .unwrap_or(false)
     }
 
     // commander unit
@@ -805,20 +857,27 @@ impl Config {
         other_unit_data: Option<UnitData<'a, D>>,
         heroes: &'a HeroMap<D>,
         is_counter: bool,
-        f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> + 'a>, &Executor) -> R,
+        f: impl FnOnce(
+            Box<dyn DoubleEndedIterator<Item = &'a CommanderPowerUnitConfig> + 'a>,
+            &Executor,
+        ) -> R,
     ) -> R {
         let scope = unit_filter_input(game, unit_data, other_unit_data, heroes, is_counter);
         let executor = game.executor(scope);
         let max_len = self.unit_overrides.len();
         let limit = game.get_unit_config_limit();
-        let it = self.unit_overrides.iter()
-        .take(limit.unwrap_or(max_len))
-        .enumerate()
-        .filter(move |(i, config)| {
-            game.set_unit_config_limit(Some(*i));
-            config.affects.iter().all(|filter| filter.check(game, unit_data, other_unit_data, heroes, is_counter))
-        })
-        .map(|(_, config)| config);
+        let it = self
+            .unit_overrides
+            .iter()
+            .take(limit.unwrap_or(max_len))
+            .enumerate()
+            .filter(move |(i, config)| {
+                game.set_unit_config_limit(Some(*i));
+                config.affects.iter().all(|filter| {
+                    filter.check(game, unit_data, other_unit_data, heroes, is_counter)
+                })
+            })
+            .map(|(_, config)| config);
         let r = f(Box::new(it), &executor);
         game.set_unit_config_limit(limit);
         r
@@ -852,7 +911,7 @@ impl Config {
                         break;
                     }
                 }
-            }
+            },
         );
         result
     }
@@ -882,7 +941,7 @@ impl Config {
                     iter.map(|c| c.vision),
                     executor,
                 )
-            }
+            },
         ) as usize
     }
 
@@ -911,7 +970,7 @@ impl Config {
                     iter.map(|c| c.true_vision),
                     executor,
                 )
-            }
+            },
         ) as usize
     }
 
@@ -942,7 +1001,7 @@ impl Config {
                 for config in iter {
                     result.extend(config.on_death.iter().cloned())
                 }
-            }
+            },
         );
         result
     }
@@ -976,7 +1035,7 @@ impl Config {
                 for config in iter {
                     result.extend(config.on_normal_action.iter().cloned())
                 }
-            }
+            },
         );
         result
     }
@@ -1007,7 +1066,7 @@ impl Config {
                     iter.map(|c| c.movement_points),
                     executor,
                 )
-            }
+            },
         )
     }
 
@@ -1038,7 +1097,7 @@ impl Config {
                     }
                 }
                 self.unit_config(unit.typ()).pass_enemy_units
-            }
+            },
         )
     }
 
@@ -1052,20 +1111,43 @@ impl Config {
         // the heroes affecting this unit. shouldn't be taken from game since they could have died before this function is called
         heroes: &'a HeroMap<D>,
         is_counter: bool,
-        f: impl FnOnce(Box<dyn DoubleEndedIterator<Item = &'a AttackPoweredConfig> + 'a>, &Executor) -> R,
+        f: impl FnOnce(
+            Box<dyn DoubleEndedIterator<Item = &'a AttackPoweredConfig> + 'a>,
+            &Executor,
+        ) -> R,
     ) -> R {
-        let first_argument = attack_filter_input(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter);
+        let first_argument = attack_filter_input(
+            game,
+            &attack,
+            splash.as_ref(),
+            unit_data,
+            other_unit_data,
+            heroes,
+            is_counter,
+        );
         let executor = game.executor(first_argument);
         let max_len = self.attack_overrides.len();
         let limit = game.get_attack_config_limit();
-        let it = self.attack_overrides.iter()
-        .take(limit.unwrap_or(max_len))
-        .enumerate()
-        .filter(move |(i, config)| {
-            game.set_attack_config_limit(Some(*i));
-            config.affects.iter().all(|filter| filter.check(game, &attack, splash.as_ref(), unit_data, other_unit_data, heroes, is_counter))
-        })
-        .map(|(_, config)| config);
+        let it = self
+            .attack_overrides
+            .iter()
+            .take(limit.unwrap_or(max_len))
+            .enumerate()
+            .filter(move |(i, config)| {
+                game.set_attack_config_limit(Some(*i));
+                config.affects.iter().all(|filter| {
+                    filter.check(
+                        game,
+                        &attack,
+                        splash.as_ref(),
+                        unit_data,
+                        other_unit_data,
+                        heroes,
+                        is_counter,
+                    )
+                })
+            })
+            .map(|(_, config)| config);
         let r = f(Box::new(it), &executor);
         game.set_attack_config_limit(limit);
         r
@@ -1105,7 +1187,7 @@ impl Config {
                     iter.map(|c| c.get_fraction(column_name)),
                     executor,
                 )
-            }
+            },
         )
     }
 
@@ -1142,7 +1224,7 @@ impl Config {
                 for conf in iter {
                     result.extend(conf.get_script(column_name, argument_count));
                 }
-            }
+            },
         );
         result
     }
@@ -1178,7 +1260,7 @@ impl Config {
                         break;
                     }
                 }
-            }
+            },
         );
         targeting.check(game, unit_data, defender, heroes, is_counter)
     }
@@ -1215,7 +1297,7 @@ impl Config {
                     }
                 }
                 self.unit_config(unit.typ()).attack_type
-            }
+            },
         ) else {
             return Vec::new();
         };
@@ -1229,15 +1311,17 @@ impl Config {
                 splash: Vec::new(),
                 focus: attack.focus,
             };
-            if attack.condition.iter().all(|cond| cond.check(
-                game,
-                &atk,
-                None,
-                unit_data,
-                other_unit_data,
-                heroes,
-                counter.is_counter(),
-            )) {
+            if attack.condition.iter().all(|cond| {
+                cond.check(
+                    game,
+                    &atk,
+                    None,
+                    unit_data,
+                    other_unit_data,
+                    heroes,
+                    counter.is_counter(),
+                )
+            }) {
                 self.attack_power_configs(
                     game,
                     atk.clone(),
@@ -1246,21 +1330,35 @@ impl Config {
                     other_unit_data,
                     heroes,
                     counter.is_counter(),
-                        |iter, executor| {
+                    |iter, executor| {
                         for conf in iter {
-                            atk.priority = conf.attack_priority.update_value::<D>(atk.priority, executor);
-                            atk.splash_range = conf.splash_range.update_value::<D>(atk.splash_range, executor);
+                            atk.priority = conf
+                                .attack_priority
+                                .update_value::<D>(atk.priority, executor);
+                            atk.splash_range = conf
+                                .splash_range
+                                .update_value::<D>(atk.splash_range, executor);
                             if let Some(focus) = conf.focus {
                                 atk.focus = focus;
                             }
                         }
-                    }
+                    },
                 );
                 if atk.splash_pattern.points == SplashDamagePointSource::AttackPattern {
-                    let mut pattern = self.unit_attack_pattern(game, unit, pos, counter, heroes, temporary_ballast);
-                    if let Some((_, range)) = pattern.parameters().iter()
-                    .filter(|(name, _)| name.as_str() == AttackPattern::MAX_RANGE)
-                    .next() {
+                    let mut pattern = self.unit_attack_pattern(
+                        game,
+                        unit,
+                        pos,
+                        counter,
+                        heroes,
+                        temporary_ballast,
+                    );
+                    if let Some((_, range)) = pattern
+                        .parameters()
+                        .iter()
+                        .filter(|(name, _)| name.as_str() == AttackPattern::MAX_RANGE)
+                        .next()
+                    {
                         atk.splash_range = range.to_integer().max(0).min(50) as u8;
                     }
                 };
@@ -1273,15 +1371,17 @@ impl Config {
                             direction_modifier: splash.direction_modifier,
                             script: splash.script,
                         };
-                        if splash.condition.iter().all(|cond| cond.check(
-                            game,
-                            &atk,
-                            Some(&spl),
-                            unit_data,
-                            other_unit_data,
-                            heroes,
-                            counter.is_counter(),
-                        )) {
+                        if splash.condition.iter().all(|cond| {
+                            cond.check(
+                                game,
+                                &atk,
+                                Some(&spl),
+                                unit_data,
+                                other_unit_data,
+                                heroes,
+                                counter.is_counter(),
+                            )
+                        }) {
                             self.attack_power_configs(
                                 game,
                                 atk.clone(),
@@ -1290,17 +1390,21 @@ impl Config {
                                 other_unit_data,
                                 heroes,
                                 counter.is_counter(),
-                                                |iter, executor| {
+                                |iter, executor| {
                                     for conf in iter {
-                                        spl.priority = conf.splash_priority.update_value::<D>(spl.priority, executor);
-                                        if let Some(allows_counter_attack) = conf.allows_counter_attack {
+                                        spl.priority = conf
+                                            .splash_priority
+                                            .update_value::<D>(spl.priority, executor);
+                                        if let Some(allows_counter_attack) =
+                                            conf.allows_counter_attack
+                                        {
                                             spl.allows_counter_attack = allows_counter_attack;
                                         }
                                         if let Some(direction_modifier) = conf.direction_modifier {
                                             spl.direction_modifier = direction_modifier;
                                         }
                                     }
-                                }
+                                },
                             );
                             atk.splash.push(spl);
                         }
@@ -1346,7 +1450,7 @@ impl Config {
                         result = pattern.clone();
                     }
                 }
-            }
+            },
         );
         for (name, value) in result.parameters() {
             *value = self.unit_power_configs(
@@ -1354,14 +1458,14 @@ impl Config {
                 unit_data,
                 other_unit_data,
                 heroes,
-                    is_counter,
+                is_counter,
                 |iter, executor| {
                     NumberMod::update_value_repeatedly::<D>(
                         *value,
                         iter.map(|c| c.get_fraction(&name)),
                         executor,
                     )
-                }
+                },
             )
         }
         result
@@ -1397,7 +1501,7 @@ impl Config {
                     }
                 }
                 self.default_attack_direction(unit.typ())
-            }
+            },
         )
     }
 
@@ -1435,7 +1539,7 @@ impl Config {
                     iter.map(|c| c.get_fraction(column_name)),
                     executor,
                 )
-            }
+            },
         )
     }
 
@@ -1473,7 +1577,7 @@ impl Config {
                     iter.map(|c| c.get_fraction(column_name)),
                     executor,
                 )
-            }
+            },
         )
     }
 
@@ -1512,7 +1616,7 @@ impl Config {
                     }
                 }
                 self.unit_config(unit.typ()).can_be_displaced
-            }
+            },
         )
     }
 
@@ -1543,8 +1647,7 @@ impl Config {
                     iter.map(|c| c.get_fraction(column_name)),
                     executor,
                 )
-            }
+            },
         )
     }
-
 }

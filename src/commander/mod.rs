@@ -19,13 +19,23 @@ pub struct Commander {
 impl SupportedZippable<&Environment> for Commander {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         self.typ.export(zipper, &support.config);
-        zipper.write_u32(self.charge, bits_needed_for_max_value(support.config.max_commander_charge()));
-        zipper.write_u8(self.power as u8, bits_needed_for_max_value(support.config.commander_powers(self.typ).len() as u32 - 1));
+        zipper.write_u32(
+            self.charge,
+            bits_needed_for_max_value(support.config.max_commander_charge()),
+        );
+        zipper.write_u8(
+            self.power as u8,
+            bits_needed_for_max_value(support.config.commander_powers(self.typ).len() as u32 - 1),
+        );
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let typ = CommanderType::import(unzipper, &support.config)?;
-        let charge = unzipper.read_u32(bits_needed_for_max_value(support.config.max_commander_charge()))?;
-        let power = unzipper.read_u8(bits_needed_for_max_value(support.config.commander_powers(typ).len() as u32 - 1))? as usize;
+        let charge = unzipper.read_u32(bits_needed_for_max_value(
+            support.config.max_commander_charge(),
+        ))?;
+        let power = unzipper.read_u8(bits_needed_for_max_value(
+            support.config.commander_powers(typ).len() as u32 - 1,
+        ))? as usize;
         Ok(Self {
             typ,
             charge,
@@ -67,7 +77,9 @@ impl Commander {
         self.charge = (self.charge as i32 + delta).max(0) as u32;
     }
     pub fn can_gain_charge(&self) -> bool {
-        self.environment.config.commander_can_gain_charge(self.typ, self.power)
+        self.environment
+            .config
+            .commander_can_gain_charge(self.typ, self.power)
     }
 
     pub fn power_count(&self) -> usize {
@@ -75,13 +87,21 @@ impl Commander {
     }
 
     pub fn power_name(&self, index: usize) -> &str {
-        self.environment.config.commander_powers(self.typ)
-        .get(index).and_then(|p| Some(p.name.as_str()))
-        .unwrap_or("")
+        self.environment
+            .config
+            .commander_powers(self.typ)
+            .get(index)
+            .and_then(|p| Some(p.name.as_str()))
+            .unwrap_or("")
     }
 
     pub fn get_next_power(&self) -> usize {
-        let power = match self.environment.config.commander_powers(self.typ).get(self.power) {
+        let power = match self
+            .environment
+            .config
+            .commander_powers(self.typ)
+            .get(self.power)
+        {
             Some(power) => power,
             None => return 0,
         };
@@ -97,20 +117,30 @@ impl Commander {
     }
 
     pub fn can_activate_power(&self, index: usize, automatic: bool) -> bool {
-        let power = match self.environment.config.commander_powers(self.typ).get(index) {
+        let power = match self
+            .environment
+            .config
+            .commander_powers(self.typ)
+            .get(index)
+        {
             Some(power) => power,
             None => return false,
         };
         power.required_charge <= self.charge
-        && if automatic {
-            index == self.get_next_power()
-        } else {
-            power.usable_from_power.contains(&(self.power as u8))
-        }
+            && if automatic {
+                index == self.get_next_power()
+            } else {
+                power.usable_from_power.contains(&(self.power as u8))
+            }
     }
 
     pub fn power_cost(&self, index: usize) -> u32 {
-        let power = match self.environment.config.commander_powers(self.typ).get(index) {
+        let power = match self
+            .environment
+            .config
+            .commander_powers(self.typ)
+            .get(index)
+        {
             Some(power) => power,
             None => return 0,
         };
@@ -118,8 +148,10 @@ impl Commander {
     }
 
     pub fn power_activation_script(&self, index: usize) -> Option<CustomAction> {
-        self.environment.config.commander_powers(self.typ).get(index)
+        self.environment
+            .config
+            .commander_powers(self.typ)
+            .get(index)
             .and_then(|config| config.script)
     }
-
 }

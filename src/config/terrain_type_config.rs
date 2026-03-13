@@ -25,12 +25,13 @@ pub struct TerrainTypeConfig {
 
 impl TableLine for TerrainTypeConfig {
     type Header = TerrainTypeConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use TerrainTypeConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use TerrainTypeConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let result = Self {
             name: get(H::Id)?.to_string(),
             owned: parse_def(data, H::Owned, OwnershipPredicate::Either, loader)?,
@@ -38,7 +39,12 @@ impl TableLine for TerrainTypeConfig {
             vision_range: parse_def(data, H::VisionRange, -1, loader)?,
             income_factor: parse_def(data, H::IncomeFactor, Rational32::from_integer(0), loader)?,
             chess: parse_def(data, H::Chess, false, loader)?,
-            extra_movement_options: parse_def(data, H::MovementOptions, ExtraMovementOptions::None, loader)?,
+            extra_movement_options: parse_def(
+                data,
+                H::MovementOptions,
+                ExtraMovementOptions::None,
+                loader,
+            )?,
             #[cfg(feature = "rendering")]
             preview: parse_vec_def(data, H::Preview, Vec::new(), loader)?,
         };

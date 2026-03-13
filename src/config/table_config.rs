@@ -10,12 +10,12 @@ use crate::units::hero::HeroType;
 use crate::units::movement::MovementType;
 use crate::units::unit_types::UnitType;
 
-use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
+use super::file_loader::{FileLoader, TableLine};
 
 pub struct CustomTable {
     pub default_value: TableValue,
-    pub values: HashMap<(TableAxisKey, TableAxisKey),  TableValue>,
+    pub values: HashMap<(TableAxisKey, TableAxisKey), TableValue>,
     pub row_keys: Vec<TableAxisKey>,
     pub column_keys: Vec<TableAxisKey>,
 }
@@ -32,12 +32,13 @@ pub struct TableConfig {
 
 impl TableLine for TableConfig {
     type Header = TableConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use TableConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use TableConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let typ = parse(data, H::Type, loader)?;
         let default_value = TableValue::from_conf(typ, get(H::DefaultValue)?, loader)?;
         let result = Self {
@@ -60,15 +61,20 @@ impl TableLine for TableConfig {
 }
 
 impl TableConfig {
-    pub(crate) fn build_table(&self, loader: &mut FileLoader) -> Result<CustomTable, Box<dyn Error>> {
+    pub(crate) fn build_table(
+        &self,
+        loader: &mut FileLoader,
+    ) -> Result<CustomTable, Box<dyn Error>> {
         let data = loader.load_config(&format!("tables/{}", self.path))?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+        let mut reader = csv::ReaderBuilder::new()
+            .delimiter(b';')
+            .from_reader(data.as_bytes());
         // TODO: ensure uniqueness of column and row IDs
         let mut headers: Vec<TableAxisKey> = Vec::new();
         for h in reader.headers()?.into_iter().skip(1) {
             let header = TableAxisKey::from_conf(self.top, h, loader)?;
             if headers.contains(&header) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+                return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())));
             }
             headers.push(header);
         }
@@ -82,7 +88,9 @@ impl TableConfig {
                 _ => continue,
             };
             if row_keys.contains(&left) {
-                return Err(Box::new(ConfigParseError::DuplicateHeader(format!("{left:?}"))))
+                return Err(Box::new(ConfigParseError::DuplicateHeader(format!(
+                    "{left:?}"
+                ))));
             }
             row_keys.push(left.clone());
             for (i, value) in line.enumerate() {
@@ -117,7 +125,6 @@ crate::listable_enum! {
     }
 }
 
-
 crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub(crate) enum TableType {
@@ -135,17 +142,15 @@ pub enum TableValue {
 }
 
 impl TableValue {
-    fn from_conf(typ: TableType, s: &str, loader: &mut FileLoader) -> Result<Self, ConfigParseError> {
+    fn from_conf(
+        typ: TableType,
+        s: &str,
+        loader: &mut FileLoader,
+    ) -> Result<Self, ConfigParseError> {
         match typ {
-            TableType::Boolean => {
-                Ok(Self::Bool(bool::from_conf(s, loader)?.0))
-            }
-            TableType::Int => {
-                Ok(Self::Int(i32::from_conf(s, loader)?.0))
-            }
-            TableType::Fraction => {
-                Ok(Self::Fraction(Rational32::from_conf(s, loader)?.0))
-            }
+            TableType::Boolean => Ok(Self::Bool(bool::from_conf(s, loader)?.0)),
+            TableType::Int => Ok(Self::Int(i32::from_conf(s, loader)?.0)),
+            TableType::Fraction => Ok(Self::Fraction(Rational32::from_conf(s, loader)?.0)),
         }
     }
 
@@ -154,7 +159,7 @@ impl TableValue {
             "bool" => Some(Self::Bool(value.try_cast()?)),
             "i32" => Some(Self::Int(value.try_cast()?)),
             "Ratio<i32>" => Some(Self::Fraction(value.try_cast()?)),
-            _ => None
+            _ => None,
         }
     }
     pub fn into_dynamic(self) -> Dynamic {
@@ -173,7 +178,6 @@ impl TableValue {
         }
     }
 }
-
 
 crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,23 +200,17 @@ pub enum TableAxisKey {
 }
 
 impl TableAxisKey {
-    fn from_conf(axis: TableAxis, s: &str, loader: &mut FileLoader) -> Result<Self, ConfigParseError> {
+    fn from_conf(
+        axis: TableAxis,
+        s: &str,
+        loader: &mut FileLoader,
+    ) -> Result<Self, ConfigParseError> {
         match axis {
-            TableAxis::Unit => {
-                Ok(Self::Unit(UnitType::from_conf(s, loader)?.0))
-            }
-            TableAxis::Terrain => {
-                Ok(Self::Terrain(TerrainType::from_conf(s, loader)?.0))
-            }
-            TableAxis::Hero => {
-                Ok(Self::Hero(HeroType::from_conf(s, loader)?.0))
-            }
-            TableAxis::Movement => {
-                Ok(Self::Movement(MovementType::from_conf(s, loader)?.0))
-            }
-            TableAxis::String => {
-                Ok(Self::String(s.into()))
-            }
+            TableAxis::Unit => Ok(Self::Unit(UnitType::from_conf(s, loader)?.0)),
+            TableAxis::Terrain => Ok(Self::Terrain(TerrainType::from_conf(s, loader)?.0)),
+            TableAxis::Hero => Ok(Self::Hero(HeroType::from_conf(s, loader)?.0)),
+            TableAxis::Movement => Ok(Self::Movement(MovementType::from_conf(s, loader)?.0)),
+            TableAxis::String => Ok(Self::String(s.into())),
         }
     }
 

@@ -1,15 +1,15 @@
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::cell::RefCell;
 
-use zipper_derive::Zippable;
 use zipper::*;
+use zipper_derive::Zippable;
 
 use crate::config::environment::Environment;
 use crate::dyn_opt;
 use crate::game::event_handler::EventHandler;
-use crate::map::board::{current_team, Board, BoardView};
+use crate::map::board::{Board, BoardView, current_team};
 use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::terrain::terrain::Terrain;
@@ -45,7 +45,9 @@ impl Zippable for ShopItemIndex {
         let bits = bits_needed_for_max_value(max_value);
         let inner = unzipper.read_u32(bits)?;
         if inner > max_value {
-            return Err(ZipperError::EnumOutOfBounds(format!("ShopItemIndex({inner})")));
+            return Err(ZipperError::EnumOutOfBounds(format!(
+                "ShopItemIndex({inner})"
+            )));
         }
         Ok(Self(inner as usize))
     }
@@ -86,7 +88,10 @@ impl<D: Direction> ShopItemKey<D> {
             "Unit" => Some(Self::Unit(value.cast())),
             "HeroType" => Some(Self::HeroType(value.cast())),
             _ => {
-                crate::warn!("ShopItemKey::from_dynamic value has type {}", value.type_name());
+                crate::warn!(
+                    "ShopItemKey::from_dynamic value has type {}",
+                    value.type_name()
+                );
                 None
             }
         }
@@ -138,11 +143,12 @@ impl<D: Direction> CustomActionDataOptions<D> {
                 }
             }
             (Self::Shop(_, options), CustomActionInput::ShopItem(index)) => {
-                return options.get(index.0)
-                .filter(|item| item.enabled)
-                .map(|item| CustomActionData::ShopItem(item.clone()));
+                return options
+                    .get(index.0)
+                    .filter(|item| item.enabled)
+                    .map(|item| CustomActionData::ShopItem(item.clone()));
             }
-            _ => ()
+            _ => (),
         }
         None
     }
@@ -158,7 +164,6 @@ pub enum CustomActionTestResult<D: Direction> {
     NextOrSuccess(CustomActionDataOptions<D>),
 }
 
-
 pub fn run_unit_input_script<D: Direction>(
     script: usize,
     board: &Board<D>,
@@ -166,18 +171,28 @@ pub fn run_unit_input_script<D: Direction>(
     transport_index: Option<usize>,
     data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
-    if let Some((board, unit_pos, unit)) = board.unit_path_without_placing(transport_index, path) {
-        let board = board.replace_unit(unit_pos, Some(unit.clone()));
-        let mut first_argument = Map::new();
-        first_argument.insert(CONST_NAME_TRANSPORTER.into(), board.get_unit(path.start).map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
-        first_argument.insert(CONST_NAME_TRANSPORTER_POSITION.into(), Dynamic::from(path.start));
-        first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(transport_index));
-        first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
-        first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit));
-        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
-        run_input_script(script, &board, first_argument, data)
-    } else {
-        CustomActionTestResult::Failure
+    match board.unit_path_without_placing(transport_index, path) {
+        Some((board, unit_pos, unit)) => {
+            let board = board.replace_unit(unit_pos, Some(unit.clone()));
+            let mut first_argument = Map::new();
+            first_argument.insert(
+                CONST_NAME_TRANSPORTER.into(),
+                board
+                    .get_unit(path.start)
+                    .map(|u| Dynamic::from(u.clone()))
+                    .unwrap_or(().into()),
+            );
+            first_argument.insert(
+                CONST_NAME_TRANSPORTER_POSITION.into(),
+                Dynamic::from(path.start),
+            );
+            first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(transport_index));
+            first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
+            first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit));
+            first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
+            run_input_script(script, &board, first_argument, data)
+        }
+        _ => CustomActionTestResult::Failure,
     }
 }
 
@@ -213,8 +228,14 @@ pub fn run_commander_input_script<D: Direction>(
     data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
     let mut first_argument = Map::new();
-    first_argument.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(game.current_owner() as i32));
-    first_argument.insert(CONST_NAME_TEAM.into(), Dynamic::from(current_team(game).to_i16() as i32));
+    first_argument.insert(
+        CONST_NAME_OWNER_ID.into(),
+        Dynamic::from(game.current_owner() as i32),
+    );
+    first_argument.insert(
+        CONST_NAME_TEAM.into(),
+        Dynamic::from(current_team(game).to_i16() as i32),
+    );
     run_input_script(script, game, first_argument, data)
 }
 
@@ -224,20 +245,28 @@ fn run_input_script<D: Direction>(
     mut first_argument: Map,
     data: &[CustomActionInput<D>],
 ) -> CustomActionTestResult<D> {
-    let controller = Rc::new(RefCell::new(InputScriptController::new(script, data.to_vec())));
+    let controller = Rc::new(RefCell::new(InputScriptController::new(
+        script,
+        data.to_vec(),
+    )));
     first_argument.insert(CONST_NAME_PLAYER.into(), Dynamic::from(controller.clone()));
     let executor = game.executor(first_argument);
     match executor.run::<D, bool>(script, ()) {
         Ok(true) => CustomActionTestResult::Success,
         Ok(false) => CustomActionTestResult::Failure,
         Err(e) => {
-            if let Some(result) = controller.borrow_mut().test_result.take() {
-                result
-            } else {
-                // script had an error
-                let environment = game.environment();
-                environment.log_rhai_error("run_input_script", environment.get_rhai_function_name(script), &e);
-                CustomActionTestResult::Failure
+            match controller.borrow_mut().test_result.take() {
+                Some(result) => result,
+                _ => {
+                    // script had an error
+                    let environment = game.environment();
+                    environment.log_rhai_error(
+                        "run_input_script",
+                        environment.get_rhai_function_name(script),
+                        &e,
+                    );
+                    CustomActionTestResult::Failure
+                }
             }
         }
     }
@@ -261,7 +290,11 @@ impl<D: Direction> InputScriptController<D> {
         }
     }
 
-    pub(super) fn user_selection(&mut self, options: CustomActionDataOptions<D>, or_succeed: bool) -> Result<Dynamic, Box<EvalAltResult>> {
+    pub(super) fn user_selection(
+        &mut self,
+        options: CustomActionDataOptions<D>,
+        or_succeed: bool,
+    ) -> Result<Dynamic, Box<EvalAltResult>> {
         let i = self.data.len();
         if i >= self.input.len() {
             if or_succeed {
@@ -269,11 +302,20 @@ impl<D: Direction> InputScriptController<D> {
             } else {
                 self.test_result = Some(CustomActionTestResult::Next(options.clone()));
             }
-            return Err(format!("not enough data ({}) for script {}", self.input.len(), self.script).into());
+            return Err(format!(
+                "not enough data ({}) for script {}",
+                self.input.len(),
+                self.script
+            )
+            .into());
         }
         let Some(data) = options.contains(&self.input[i]) else {
             self.is_data_invalid = true;
-            return Err(format!("script {} asks for ({i}) {options:?} but received {:?}", self.script, self.input[i]).into());
+            return Err(format!(
+                "script {} asks for ({i}) {options:?} but received {:?}",
+                self.script, self.input[i]
+            )
+            .into());
         };
         self.data.push(data.clone());
         Ok(data.into_dynamic())
@@ -287,18 +329,27 @@ pub fn is_unit_script_input_valid<D: Direction>(
     transport_index: Option<usize>,
     data: &[CustomActionInput<D>],
 ) -> Option<Vec<CustomActionData<D>>> {
-    if let Some((game, unit_pos, unit)) = game.unit_path_without_placing(transport_index, path) {
-        let game = game.replace_unit(unit_pos, Some(unit.clone()));
-        let mut first_argument = Map::new();
-        first_argument.insert(CONST_NAME_TRANSPORTER.into(), game.get_unit(path.start).map(|u| Dynamic::from(u.clone())).unwrap_or(().into()));
-        first_argument.insert(CONST_NAME_TRANSPORTER_POSITION.into(), Dynamic::from(path.start));
-        first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(transport_index));
-        first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
-        first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit));
-        first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
-        is_script_input_valid(script, &game, first_argument, data)
-    } else {
-        None
+    match game.unit_path_without_placing(transport_index, path) {
+        Some((game, unit_pos, unit)) => {
+            let game = game.replace_unit(unit_pos, Some(unit.clone()));
+            let mut first_argument = Map::new();
+            first_argument.insert(
+                CONST_NAME_TRANSPORTER.into(),
+                game.get_unit(path.start)
+                    .map(|u| Dynamic::from(u.clone()))
+                    .unwrap_or(().into()),
+            );
+            first_argument.insert(
+                CONST_NAME_TRANSPORTER_POSITION.into(),
+                Dynamic::from(path.start),
+            );
+            first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(transport_index));
+            first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
+            first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit));
+            first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
+            is_script_input_valid(script, &game, first_argument, data)
+        }
+        _ => None,
     }
 }
 
@@ -334,8 +385,14 @@ pub fn is_commander_script_input_valid<D: Direction>(
     data: &[CustomActionInput<D>],
 ) -> Option<Vec<CustomActionData<D>>> {
     let mut first_argument = Map::new();
-    first_argument.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(game.current_owner() as i32));
-    first_argument.insert(CONST_NAME_TEAM.into(), Dynamic::from(current_team(game).to_i16() as i32));
+    first_argument.insert(
+        CONST_NAME_OWNER_ID.into(),
+        Dynamic::from(game.current_owner() as i32),
+    );
+    first_argument.insert(
+        CONST_NAME_TEAM.into(),
+        Dynamic::from(current_team(game).to_i16() as i32),
+    );
     is_script_input_valid(script, game, first_argument, data)
 }
 
@@ -345,7 +402,10 @@ fn is_script_input_valid<D: Direction>(
     mut first_argument: Map,
     data: &[CustomActionInput<D>],
 ) -> Option<Vec<CustomActionData<D>>> {
-    let controller = Rc::new(RefCell::new(InputScriptController::new(script, data.to_vec())));
+    let controller = Rc::new(RefCell::new(InputScriptController::new(
+        script,
+        data.to_vec(),
+    )));
     first_argument.insert(CONST_NAME_PLAYER.into(), Dynamic::from(controller.clone()));
     let executor = game.executor(first_argument);
     match executor.run::<D, bool>(script, ()) {
@@ -361,18 +421,29 @@ fn is_script_input_valid<D: Direction>(
         }
         Err(e) => {
             let mut controller = controller.borrow_mut();
-            if matches!(controller.test_result, Some(CustomActionTestResult::NextOrSuccess(_))) {
+            if matches!(
+                controller.test_result,
+                Some(CustomActionTestResult::NextOrSuccess(_))
+            ) {
                 // early success
                 Some(controller.data.drain(..).collect())
             } else if controller.is_data_invalid {
                 // wrong data supplied
                 let environment = game.environment();
-                environment.log_rhai_error("is_script_input_valid data", environment.get_rhai_function_name(script), &e);
+                environment.log_rhai_error(
+                    "is_script_input_valid data",
+                    environment.get_rhai_function_name(script),
+                    &e,
+                );
                 None
             } else {
                 // script had an error
                 let environment = game.environment();
-                environment.log_rhai_error("is_script_input_valid error", environment.get_rhai_function_name(script), &e);
+                environment.log_rhai_error(
+                    "is_script_input_valid error",
+                    environment.get_rhai_function_name(script),
+                    &e,
+                );
                 None
             }
         }
@@ -391,9 +462,18 @@ pub fn execute_unit_script<D: Direction>(
     data: Option<Vec<CustomActionData<D>>>,
 ) {
     let mut first_argument = Map::new();
-    first_argument.insert(CONST_NAME_TRANSPORTER.into(), dyn_opt(transporter.map(|(t, _)| t.clone())));
-    first_argument.insert(CONST_NAME_TRANSPORTER_POSITION.into(), Dynamic::from(path.start));
-    first_argument.insert(CONST_NAME_TRANSPORT_INDEX.into(), dyn_opt(transporter.map(|(_, i)| i)));
+    first_argument.insert(
+        CONST_NAME_TRANSPORTER.into(),
+        dyn_opt(transporter.map(|(t, _)| t.clone())),
+    );
+    first_argument.insert(
+        CONST_NAME_TRANSPORTER_POSITION.into(),
+        Dynamic::from(path.start),
+    );
+    first_argument.insert(
+        CONST_NAME_TRANSPORT_INDEX.into(),
+        dyn_opt(transporter.map(|(_, i)| i)),
+    );
     first_argument.insert(CONST_NAME_PATH.into(), Dynamic::from(path.clone()));
     first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit.clone()));
     first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
@@ -432,8 +512,14 @@ pub fn execute_commander_script<D: Direction>(
     data: Option<Vec<CustomActionData<D>>>,
 ) {
     let mut first_argument = Map::new();
-    first_argument.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(handler.get_game().current_owner() as i32));
-    first_argument.insert(CONST_NAME_TEAM.into(), Dynamic::from(handler.get_game().current_team().to_i16() as i32));
+    first_argument.insert(
+        CONST_NAME_OWNER_ID.into(),
+        Dynamic::from(handler.get_game().current_owner() as i32),
+    );
+    first_argument.insert(
+        CONST_NAME_TEAM.into(),
+        Dynamic::from(handler.get_game().current_team().to_i16() as i32),
+    );
     execute_script(script, handler, first_argument, data)
 }
 
@@ -445,10 +531,11 @@ fn execute_script<D: Direction>(
 ) {
     let executor = handler.executor(first_argument);
     let result: Result<(), Box<EvalAltResult>> = if let Some(data) = data {
-        let data = data.iter()
-        .map(CustomActionData::into_dynamic)
-        .collect::<Array>();
-        executor.run::<D, ()>(script, (data, ))
+        let data = data
+            .iter()
+            .map(CustomActionData::into_dynamic)
+            .collect::<Array>();
+        executor.run::<D, ()>(script, (data,))
     } else {
         executor.run::<D, ()>(script, ())
     };
@@ -456,7 +543,11 @@ fn execute_script<D: Direction>(
         Ok(_) => (),
         Err(e) => {
             let environment = handler.environment();
-            environment.log_rhai_error("execute_script", environment.get_rhai_function_name(script), &e);
+            environment.log_rhai_error(
+                "execute_script",
+                environment.get_rhai_function_name(script),
+                &e,
+            );
             handler.effect_glitch();
         }
     }

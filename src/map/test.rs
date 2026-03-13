@@ -26,29 +26,181 @@ pub fn chess_board() -> Map<Direction4> {
         }
     }
     // rooks
-    map.set_unit(Point::new(0, 0), Some(UnitType::ROOK.instance(&environment).set_owner_id(1).build()));
-    map.set_unit(Point::new(7, 0), Some(UnitType::ROOK.instance(&environment).set_owner_id(1).build()));
-    map.set_unit(Point::new(0, 7), Some(UnitType::ROOK.instance(&environment).set_owner_id(0).build()));
-    map.set_unit(Point::new(7, 7), Some(UnitType::ROOK.instance(&environment).set_owner_id(0).build()));
+    map.set_unit(
+        Point::new(0, 0),
+        Some(
+            UnitType::ROOK
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(7, 0),
+        Some(
+            UnitType::ROOK
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(0, 7),
+        Some(
+            UnitType::ROOK
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(7, 7),
+        Some(
+            UnitType::ROOK
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
     // knights
-    map.set_unit(Point::new(1, 0), Some(UnitType::KNIGHT.instance(&environment).set_owner_id(1).build()));
-    map.set_unit(Point::new(6, 0), Some(UnitType::KNIGHT.instance(&environment).set_owner_id(1).build()));
-    map.set_unit(Point::new(1, 7), Some(UnitType::KNIGHT.instance(&environment).set_owner_id(0).build()));
-    map.set_unit(Point::new(6, 7), Some(UnitType::KNIGHT.instance(&environment).set_owner_id(0).build()));
+    map.set_unit(
+        Point::new(1, 0),
+        Some(
+            UnitType::KNIGHT
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(6, 0),
+        Some(
+            UnitType::KNIGHT
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(1, 7),
+        Some(
+            UnitType::KNIGHT
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(6, 7),
+        Some(
+            UnitType::KNIGHT
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
     // bishops
-    map.set_unit(Point::new(2, 0), Some(UnitType::BISHOP.instance(&environment).set_owner_id(1).build()));
-    map.set_unit(Point::new(5, 0), Some(UnitType::BISHOP.instance(&environment).set_owner_id(1).build()));
-    map.set_unit(Point::new(2, 7), Some(UnitType::BISHOP.instance(&environment).set_owner_id(0).build()));
-    map.set_unit(Point::new(5, 7), Some(UnitType::BISHOP.instance(&environment).set_owner_id(0).build()));
+    map.set_unit(
+        Point::new(2, 0),
+        Some(
+            UnitType::BISHOP
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(5, 0),
+        Some(
+            UnitType::BISHOP
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(2, 7),
+        Some(
+            UnitType::BISHOP
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(5, 7),
+        Some(
+            UnitType::BISHOP
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
     // queens and kings
-    map.set_unit(Point::new(3, 0), Some(UnitType::QUEEN.instance(&environment).set_owner_id(1).build()));
-    map.set_unit(Point::new(4, 0), Some(UnitType::KING.instance(&environment).set_owner_id(1).build()));
-    map.set_unit(Point::new(3, 7), Some(UnitType::QUEEN.instance(&environment).set_owner_id(0).build()));
-    map.set_unit(Point::new(4, 7), Some(UnitType::KING.instance(&environment).set_owner_id(0).build()));
+    map.set_unit(
+        Point::new(3, 0),
+        Some(
+            UnitType::QUEEN
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(4, 0),
+        Some(
+            UnitType::KING
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(3, 7),
+        Some(
+            UnitType::QUEEN
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(4, 7),
+        Some(
+            UnitType::KING
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
     // pawns
     for x in 0..8 {
-        map.set_unit(Point::new(x, 1), Some(UnitType::PAWN.instance(&environment).set_tag(TAG_PAWN_DIRECTION, crate::tags::TagValue::Direction(Direction4::D270)).set_owner_id(1).build()));
-        map.set_unit(Point::new(x, 6), Some(UnitType::PAWN.instance(&environment).set_tag(TAG_PAWN_DIRECTION, crate::tags::TagValue::Direction(Direction4::D90)).set_owner_id(0).build()));
+        map.set_unit(
+            Point::new(x, 1),
+            Some(
+                UnitType::PAWN
+                    .instance(&environment)
+                    .set_tag(
+                        TAG_PAWN_DIRECTION,
+                        crate::tags::TagValue::Direction(Direction4::D270),
+                    )
+                    .set_owner_id(1)
+                    .build(),
+            ),
+        );
+        map.set_unit(
+            Point::new(x, 6),
+            Some(
+                UnitType::PAWN
+                    .instance(&environment)
+                    .set_tag(
+                        TAG_PAWN_DIRECTION,
+                        crate::tags::TagValue::Direction(Direction4::D90),
+                    )
+                    .set_owner_id(0)
+                    .build(),
+            ),
+        );
     }
     map
 }
@@ -62,17 +214,52 @@ fn simple_distortions() {
     }
 
     let distortion = Distortion::new(true, Direction6::D60);
-    assert_eq!(distortion.update_direction(Direction6::D0), Direction6::D240);
-    assert_eq!(distortion.update_direction(Direction6::D60), Direction6::D180);
-    assert_eq!(distortion.update_direction(Direction6::D120), Direction6::D120);
-    assert_eq!(distortion.update_direction(Direction6::D180), Direction6::D60);
-    assert_eq!(distortion.update_direction(Direction6::D240), Direction6::D0);
-    assert_eq!(distortion.update_direction(Direction6::D300), Direction6::D300);
-    assert_eq!(distortion.update_diagonal_direction(Direction6::D0), Direction6::D180);
-    assert_eq!(distortion.update_diagonal_direction(Direction6::D60), Direction6::D120);
-    assert_eq!(distortion.update_diagonal_direction(Direction6::D120), Direction6::D60);
-    assert_eq!(distortion.update_diagonal_direction(Direction6::D180), Direction6::D0);
-    assert_eq!(distortion.update_diagonal_direction(Direction6::D240), Direction6::D300);
-    assert_eq!(distortion.update_diagonal_direction(Direction6::D300), Direction6::D240);
+    assert_eq!(
+        distortion.update_direction(Direction6::D0),
+        Direction6::D240
+    );
+    assert_eq!(
+        distortion.update_direction(Direction6::D60),
+        Direction6::D180
+    );
+    assert_eq!(
+        distortion.update_direction(Direction6::D120),
+        Direction6::D120
+    );
+    assert_eq!(
+        distortion.update_direction(Direction6::D180),
+        Direction6::D60
+    );
+    assert_eq!(
+        distortion.update_direction(Direction6::D240),
+        Direction6::D0
+    );
+    assert_eq!(
+        distortion.update_direction(Direction6::D300),
+        Direction6::D300
+    );
+    assert_eq!(
+        distortion.update_diagonal_direction(Direction6::D0),
+        Direction6::D180
+    );
+    assert_eq!(
+        distortion.update_diagonal_direction(Direction6::D60),
+        Direction6::D120
+    );
+    assert_eq!(
+        distortion.update_diagonal_direction(Direction6::D120),
+        Direction6::D60
+    );
+    assert_eq!(
+        distortion.update_diagonal_direction(Direction6::D180),
+        Direction6::D0
+    );
+    assert_eq!(
+        distortion.update_diagonal_direction(Direction6::D240),
+        Direction6::D300
+    );
+    assert_eq!(
+        distortion.update_diagonal_direction(Direction6::D300),
+        Direction6::D240
+    );
 }
-

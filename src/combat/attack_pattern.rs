@@ -1,25 +1,25 @@
 use num_rational::Rational32;
-use rustc_hash::FxHashSet;
 use rhai::{Array, Dynamic, Map};
-use zipper::*;
+use rustc_hash::FxHashSet;
 use zipper::zipper_derive::Zippable;
+use zipper::*;
 
+use crate::config::ConfigParseError;
 use crate::config::environment::Environment;
 use crate::config::file_loader::FileLoader;
-use crate::config::parse::{parse_inner_vec, parse_tuple1, parse_tuple2, string_base};
 use crate::config::parse::FromConfig;
-use crate::config::ConfigParseError;
+use crate::config::parse::{parse_inner_vec, parse_tuple1, parse_tuple2, string_base};
 use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
 use crate::map::map::*;
 use crate::map::point::*;
 use crate::map::wrapping_map::{Distortion, OrientedPoint};
-use uniform_smart_pointer::Urc;
 use crate::script::{CONST_NAME_ATTACK_DIRECTION, CONST_NAME_POSITION};
 use crate::tags::{TagKey, TagValue};
 use crate::units::hero::HeroMap;
 use crate::units::movement::TBallast;
 use crate::units::unit::*;
+use uniform_smart_pointer::Urc;
 
 use super::{AttackCounterState, SplashDamagePointSource};
 
@@ -38,42 +38,61 @@ crate::enum_with_custom! {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttackPattern {
     None,
-    Adjacent,                                                   // no range
-    Straight{ min: Rational32, max: Rational32 },               // uses get_line, can get blocked by units that stand in the way
-    TriangleDiagonal{ min: Rational32, max: Rational32 },       // uses range_in_layers
-    TriangleStraight{ min: Rational32, max: Rational32 },       // uses cannon_range_in_layers, like BH cannons in advance wars
-    Rhai{ function_index: usize, parameter_names: Urc<Vec<String>>, parameter_values: Vec<Rational32> },
+    Adjacent, // no range
+    Straight {
+        min: Rational32,
+        max: Rational32,
+    }, // uses get_line, can get blocked by units that stand in the way
+    TriangleDiagonal {
+        min: Rational32,
+        max: Rational32,
+    }, // uses range_in_layers
+    TriangleStraight {
+        min: Rational32,
+        max: Rational32,
+    }, // uses cannon_range_in_layers, like BH cannons in advance wars
+    Rhai {
+        function_index: usize,
+        parameter_names: Urc<Vec<String>>,
+        parameter_values: Vec<Rational32>,
+    },
 }
 
 impl FromConfig for AttackPattern {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
-        Ok((match base {
-            "None" => Self::None,
-            "Adjacent" => Self::Adjacent,
-            s @ "Straight" | s @ "TriangleDiagonal" | s @ "TriangleStraight" => {
-                let (min, max, r) = parse_tuple2::<Rational32, Rational32>(remainder, loader)?;
-                remainder = r;
-                match s {
-                    "Straight" => Self::Straight{min, max},
-                    "TriangleDiagonal" => Self::TriangleDiagonal{min, max},
-                    "TriangleStraight" => Self::TriangleStraight{min, max},
-                    _ => panic!("impossible AttackType error")
+        Ok((
+            match base {
+                "None" => Self::None,
+                "Adjacent" => Self::Adjacent,
+                s @ "Straight" | s @ "TriangleDiagonal" | s @ "TriangleStraight" => {
+                    let (min, max, r) = parse_tuple2::<Rational32, Rational32>(remainder, loader)?;
+                    remainder = r;
+                    match s {
+                        "Straight" => Self::Straight { min, max },
+                        "TriangleDiagonal" => Self::TriangleDiagonal { min, max },
+                        "TriangleStraight" => Self::TriangleStraight { min, max },
+                        _ => panic!("impossible AttackType error"),
+                    }
                 }
-            }
-            script => {
-                let (parameter_values, r) = parse_inner_vec::<Rational32>(remainder, false, loader)?;
-                remainder = r;
-                let parameter_count = parameter_values.len();
-                let fun = loader.rhai_function(script, parameter_count..=parameter_count)?;
-                Self::Rhai {
-                    function_index: fun.index,
-                    parameter_names: fun.parameters,
-                    parameter_values,
-                }
-            }
-            //invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
-        }, remainder))
+                script => {
+                    let (parameter_values, r) =
+                        parse_inner_vec::<Rational32>(remainder, false, loader)?;
+                    remainder = r;
+                    let parameter_count = parameter_values.len();
+                    let fun = loader.rhai_function(script, parameter_count..=parameter_count)?;
+                    Self::Rhai {
+                        function_index: fun.index,
+                        parameter_names: fun.parameters,
+                        parameter_values,
+                    }
+                } //invalid => return Err(ConfigParseError::UnknownEnumMember(invalid.to_string())),
+            },
+            remainder,
+        ))
     }
 }
 
@@ -85,25 +104,35 @@ impl AttackPattern {
         match self {
             Self::None => AttackPatternType::None,
             Self::Adjacent => AttackPatternType::Adjacent,
-            Self::Straight {..} => AttackPatternType::Straight,
-            Self::TriangleDiagonal {..} => AttackPatternType::TriangleDiagonal,
-            Self::TriangleStraight {..} => AttackPatternType::TriangleStraight,
-            Self::Rhai { function_index, .. } => AttackPatternType::Custom(environment.get_rhai_function_name(*function_index).clone())
+            Self::Straight { .. } => AttackPatternType::Straight,
+            Self::TriangleDiagonal { .. } => AttackPatternType::TriangleDiagonal,
+            Self::TriangleStraight { .. } => AttackPatternType::TriangleStraight,
+            Self::Rhai { function_index, .. } => AttackPatternType::Custom(
+                environment.get_rhai_function_name(*function_index).clone(),
+            ),
         }
     }
 
     pub(crate) fn parameters(&mut self) -> Vec<(String, &mut Rational32)> {
         match self {
-            Self::None |
-            Self::Adjacent => Vec::new(),
-            Self::Straight { min, max } |
-            Self::TriangleDiagonal { min, max } |
-            Self::TriangleStraight { min, max } => {
-                vec![(Self::MIN_RANGE.to_string(), min), (Self::MAX_RANGE.to_string(), max)]
+            Self::None | Self::Adjacent => Vec::new(),
+            Self::Straight { min, max }
+            | Self::TriangleDiagonal { min, max }
+            | Self::TriangleStraight { min, max } => {
+                vec![
+                    (Self::MIN_RANGE.to_string(), min),
+                    (Self::MAX_RANGE.to_string(), max),
+                ]
             }
-            Self::Rhai { parameter_names, parameter_values, .. } => {
-                parameter_names.iter().cloned().zip(parameter_values.iter_mut()).collect()
-            }
+            Self::Rhai {
+                parameter_names,
+                parameter_values,
+                ..
+            } => parameter_names
+                .iter()
+                .cloned()
+                .zip(parameter_values.iter_mut())
+                .collect(),
         }
     }
 }
@@ -117,37 +146,57 @@ pub enum AllowedAttackInputDirectionSource {
 }
 
 impl FromConfig for AllowedAttackInputDirectionSource {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
-        Ok((match base {
-            "AllDirections" => Self::AllDirections,
-            "Movement" => Self::Movement,
-            "Tag" => {
-                let (tag, s) = parse_tuple1::<String>(remainder, loader)?;
-                remainder = s;
-                if let Some(i) = loader.tags.iter().position(|t| *t == tag) {
-                    Self::UnitTag(TagKey(i))
-                } else {
-                    return Err(ConfigParseError::UnknownEnumMember(format!("Tag::{tag}")))
+        Ok((
+            match base {
+                "AllDirections" => Self::AllDirections,
+                "Movement" => Self::Movement,
+                "Tag" => {
+                    let (tag, s) = parse_tuple1::<String>(remainder, loader)?;
+                    remainder = s;
+                    if let Some(i) = loader.tags.iter().position(|t| *t == tag) {
+                        Self::UnitTag(TagKey(i))
+                    } else {
+                        return Err(ConfigParseError::UnknownEnumMember(format!("Tag::{tag}")));
+                    }
                 }
-            }
-            //script if script.contains('>') => {...}
-            _ => return Err(ConfigParseError::UnknownEnumMember(format!("AllowedAttackInputDirectionSource::{base}")))
-        }, remainder))
+                //script if script.contains('>') => {...}
+                _ => {
+                    return Err(ConfigParseError::UnknownEnumMember(format!(
+                        "AllowedAttackInputDirectionSource::{base}"
+                    )));
+                }
+            },
+            remainder,
+        ))
     }
 }
 
 impl AllowedAttackInputDirectionSource {
-    pub fn get_dirs<D: Direction>(&self, attacker: &Unit<D>, temporary_ballast: &[TBallast<D>]) -> Vec<D> {
+    pub fn get_dirs<D: Direction>(
+        &self,
+        attacker: &Unit<D>,
+        temporary_ballast: &[TBallast<D>],
+    ) -> Vec<D> {
         match self {
             Self::AllDirections => D::list(),
             Self::Movement => {
                 let mut result = FxHashSet::default();
                 for ballast in temporary_ballast {
                     match ballast {
-                        TBallast::ForbiddenDirection(Some(d)) => {result.insert(d.opposite_direction());}
-                        TBallast::Direction(d) => {result.extend(*d);}
-                        TBallast::DiagonalDirection(d) => {result.extend(*d);}
+                        TBallast::ForbiddenDirection(Some(d)) => {
+                            result.insert(d.opposite_direction());
+                        }
+                        TBallast::Direction(d) => {
+                            result.extend(*d);
+                        }
+                        TBallast::DiagonalDirection(d) => {
+                            result.extend(*d);
+                        }
                         _ => (),
                     }
                 }
@@ -155,12 +204,10 @@ impl AllowedAttackInputDirectionSource {
                 result.sort_by_key(|d| d.list_index());
                 result
             }
-            Self::UnitTag(tag) => {
-                match attacker.get_tag(tag.0) {
-                    Some(TagValue::Direction(d)) => vec![d],
-                    _ => return Vec::new()
-                }
-            }
+            Self::UnitTag(tag) => match attacker.get_tag(tag.0) {
+                Some(TagValue::Direction(d)) => vec![d],
+                _ => return Vec::new(),
+            },
         }
     }
 }
@@ -196,24 +243,58 @@ impl<D: Direction> AttackInput<D> {
         heroes: &HeroMap<D>,
     ) -> Vec<Self> {
         let counter_state = AttackCounterState::NoCounter;
-        let Some(attack) = attacker.environment().config.unit_configured_attacks(&*game, &attacker, attacker_pos, transporter, &counter_state, heroes, temporary_ballast).into_iter().next() else {
+        let Some(attack) = attacker
+            .environment()
+            .config
+            .unit_configured_attacks(
+                &*game,
+                &attacker,
+                attacker_pos,
+                transporter,
+                &counter_state,
+                heroes,
+                temporary_ballast,
+            )
+            .into_iter()
+            .next()
+        else {
             return Vec::new();
         };
-        let attack_pattern = attacker.attack_pattern(&*game, attacker_pos, &counter_state, &heroes, temporary_ballast);
-        let allowed_directions = attacker.attack_pattern_directions(&*game, attacker_pos, &counter_state, &heroes, temporary_ballast);
+        let attack_pattern = attacker.attack_pattern(
+            &*game,
+            attacker_pos,
+            &counter_state,
+            &heroes,
+            temporary_ballast,
+        );
+        let allowed_directions = attacker.attack_pattern_directions(
+            &*game,
+            attacker_pos,
+            &counter_state,
+            &heroes,
+            temporary_ballast,
+        );
         let allowed_directions = allowed_directions.get_dirs(&attacker, temporary_ballast);
         let mut layers = Vec::new();
         for d in allowed_directions.into_iter() {
-            for (i, layer) in attack_pattern.possible_attack_targets(&*game, attacker_pos, d).into_iter().enumerate() {
+            for (i, layer) in attack_pattern
+                .possible_attack_targets(&*game, attacker_pos, d)
+                .into_iter()
+                .enumerate()
+            {
                 while i >= layers.len() {
                     layers.push(Vec::new());
                 }
-                layers[i].extend(layer.into_iter().map(|dp| {
-                    match attack.splash_pattern.points {
-                        SplashDamagePointSource::AttackPattern => AttackInput::AttackPattern(dp.point, d),
-                        _ => AttackInput::SplashPattern(dp)
-                    }
-                }));
+                layers[i].extend(
+                    layer
+                        .into_iter()
+                        .map(|dp| match attack.splash_pattern.points {
+                            SplashDamagePointSource::AttackPattern => {
+                                AttackInput::AttackPattern(dp.point, d)
+                            }
+                            _ => AttackInput::SplashPattern(dp),
+                        }),
+                );
             }
         }
         let mut avoid_duplicates = FxHashSet::default();
@@ -233,7 +314,12 @@ impl AttackPattern {
     /**
      * Assumes that self's min and max ranges are pre-modified according to unit_powered.csv
      */
-    pub fn possible_attack_targets<D: Direction>(&self, game: &Board<D>, attacker_pos: Point, d: D) -> Vec<Vec<OrientedPoint<D>>> {
+    pub fn possible_attack_targets<D: Direction>(
+        &self,
+        game: &Board<D>,
+        attacker_pos: Point,
+        d: D,
+    ) -> Vec<Vec<OrientedPoint<D>>> {
         let mut avoid_duplicates = Vec::new();
         let mut result = Vec::new();
         let mut add = |distance: usize, p: Point, distortion: Distortion<D>| {
@@ -242,7 +328,11 @@ impl AttackPattern {
                 result.push(Vec::new());
             }
             if avoid_duplicates[distance].insert((p, distortion)) {
-                result[distance].push(OrientedPoint::new(p, distortion.is_mirrored(), distortion.update_direction(d)));
+                result[distance].push(OrientedPoint::new(
+                    p,
+                    distortion.is_mirrored(),
+                    distortion.update_direction(d),
+                ));
             }
         };
         match self {
@@ -295,7 +385,11 @@ impl AttackPattern {
                     }
                 }
             }
-            Self::Rhai { function_index, parameter_values, .. } => {
+            Self::Rhai {
+                function_index,
+                parameter_values,
+                ..
+            } => {
                 let mut first_argument = Map::new();
                 first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(attacker_pos));
                 first_argument.insert(CONST_NAME_ATTACK_DIRECTION.into(), Dynamic::from(d));
@@ -322,7 +416,11 @@ impl AttackPattern {
                     }
                     Err(e) => {
                         let environment = game.environment();
-                        environment.log_rhai_error("AttackPattern::Rhai", environment.get_rhai_function_name(*function_index), &e);
+                        environment.log_rhai_error(
+                            "AttackPattern::Rhai",
+                            environment.get_rhai_function_name(*function_index),
+                            &e,
+                        );
                     }
                 }
             }

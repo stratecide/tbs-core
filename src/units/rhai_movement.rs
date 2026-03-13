@@ -1,11 +1,11 @@
-use rhai::*;
 use rhai::plugin::*;
+use rhai::*;
 
+use super::movement::*;
 use crate::map::board::BoardPointer;
 use crate::map::direction::*;
-use crate::map::wrapping_map::Distortion;
 use crate::map::point::*;
-use super::movement::*;
+use crate::map::wrapping_map::Distortion;
 
 macro_rules! movement_module {
     ($pack: ident, $name: ident, $d: ty) => {
@@ -52,11 +52,15 @@ macro_rules! movement_module {
             }
             #[rhai_fn(pure)]
             pub fn end(path: &mut Path, board: BoardPointer<$d>) -> Point {
-                path.end(board.as_ref()).expect("User should not be able to create an invalid path").0
+                path.end(board.as_ref())
+                    .expect("User should not be able to create an invalid path")
+                    .0
             }
             #[rhai_fn(pure)]
             pub fn distortion(path: &mut Path, board: BoardPointer<$d>) -> Distortion<$d> {
-                path.end(board.as_ref()).expect("User should not be able to create an invalid path").1
+                path.end(board.as_ref())
+                    .expect("User should not be able to create an invalid path")
+                    .1
             }
         }
 

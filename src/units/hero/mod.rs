@@ -6,6 +6,9 @@ pub mod rhai_hero;
 #[cfg(test)]
 mod test;
 
+use super::UnitId;
+use super::commands::UnitAction;
+use super::unit::Unit;
 use crate::config::config::Config;
 use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
@@ -14,19 +17,25 @@ use crate::map::board::{Board, BoardView};
 use crate::map::direction::Direction;
 use crate::map::map::{get_neighbors_layers, valid_points};
 use crate::map::point::Point;
-use super::commands::UnitAction;
-use super::unit::Unit;
-use super::UnitId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HeroType(pub usize);
 
 impl FromConfig for HeroType {
-    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut crate::config::file_loader::FileLoader,
+    ) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
-        match loader.hero_types.iter().position(|name| name.as_str() == base) {
+        match loader
+            .hero_types
+            .iter()
+            .position(|name| name.as_str() == base)
+        {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::MissingHero(base.to_string()))
+            None => Err(crate::config::ConfigParseError::MissingHero(
+                base.to_string(),
+            )),
         }
     }
 }
@@ -43,7 +52,10 @@ impl SupportedZippable<&Config> for HeroType {
         if index < support.hero_count() {
             Ok(support.hero_types()[index])
         } else {
-            Err(ZipperError::EnumOutOfBounds(format!("HeroType index {}", index)))
+            Err(ZipperError::EnumOutOfBounds(format!(
+                "HeroType index {}",
+                index
+            )))
         }
     }
 }
@@ -101,7 +113,9 @@ impl Hero {
         self.charge = charge.min(self.typ.max_charge(environment));
     }
     pub fn can_gain_charge(&self, environment: &Environment) -> bool {
-        environment.config.hero_can_gain_charge(self.typ, self.power)
+        environment
+            .config
+            .hero_can_gain_charge(self.typ, self.power)
     }
 
     pub fn get_next_power(&self, environment: &Environment) -> usize {
@@ -119,7 +133,12 @@ impl Hero {
         self.power = index;
     }
 
-    pub fn can_activate_power(&self, environment: &Environment, index: usize, automatic: bool) -> bool {
+    pub fn can_activate_power(
+        &self,
+        environment: &Environment,
+        index: usize,
+        automatic: bool,
+    ) -> bool {
         if self.power == index {
             return false;
         }
@@ -128,11 +147,11 @@ impl Hero {
             None => return false,
         };
         power.required_charge <= self.charge
-        && if automatic {
-            index == self.get_next_power(environment)
-        } else {
-            power.usable_from_power.contains(&(self.power as u8))
-        }
+            && if automatic {
+                index == self.get_next_power(environment)
+            } else {
+                power.usable_from_power.contains(&(self.power as u8))
+            }
     }
 
     pub fn power_cost(&self, environment: &Environment, index: usize) -> u32 {
@@ -149,7 +168,10 @@ impl Hero {
         unit_pos: Point,
         transporter: Option<(&Unit<D>, usize)>,
     ) -> Option<usize> {
-        map.environment().config.hero_aura_range(map, unit, unit_pos, transporter).map(|r| r as usize)
+        map.environment()
+            .config
+            .hero_aura_range(map, unit, unit_pos, transporter)
+            .map(|r| r as usize)
     }
 
     pub fn in_range<D: Direction>(
@@ -159,7 +181,9 @@ impl Hero {
         transporter: Option<(&Unit<D>, usize)>,
         target: Point,
     ) -> bool {
-        Self::aura(map, unit, unit_pos, transporter).keys().any(|p| *p == target)
+        Self::aura(map, unit, unit_pos, transporter)
+            .keys()
+            .any(|p| *p == target)
     }
 
     pub fn aura<D: Direction>(
@@ -171,7 +195,7 @@ impl Hero {
         let mut result = FxHashMap::default();
         let mut aura_range = match Self::aura_range(map, unit, unit_pos, transporter) {
             Some(aura_range) => aura_range,
-            _ => return result
+            _ => return result,
         };
         result.insert(unit_pos, aura_range);
         for layer in get_neighbors_layers(map, unit_pos, aura_range) {
@@ -183,7 +207,11 @@ impl Hero {
         result
     }
 
-    pub fn hero_influence_at<D: Direction>(map: &Board<D>, point: Point, only_owner_id: Option<i8>) -> Vec<HeroInfluence<D>> {
+    pub fn hero_influence_at<D: Direction>(
+        map: &Board<D>,
+        point: Point,
+        only_owner_id: Option<i8>,
+    ) -> Vec<HeroInfluence<D>> {
         let mut result = Vec::new();
         for p in valid_points(map) {
             if let Some(unit) = map.get_unit(p) {
@@ -197,7 +225,8 @@ impl Hero {
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
                     if let Some(hero) = u.get_hero() {
-                        if let Some(strength) = Self::aura(map, u, p, Some((&unit, i))).get(&point) {
+                        if let Some(strength) = Self::aura(map, u, p, Some((&unit, i))).get(&point)
+                        {
                             result.push((u.clone(), hero.clone(), p, Some(i), *strength as u8));
                         }
                     }
@@ -212,7 +241,13 @@ impl Hero {
         list: &mut Vec<UnitAction<D>>,
         game: &Board<D>,
     ) {
-        for (i, _) in game.environment().config.hero_powers(self.typ).iter().enumerate() {
+        for (i, _) in game
+            .environment()
+            .config
+            .hero_powers(self.typ)
+            .iter()
+            .enumerate()
+        {
             if self.can_activate_power(&game.environment(), i, false) {
                 list.push(UnitAction::hero_power(i, Vec::new()));
             }
@@ -223,7 +258,10 @@ impl Hero {
 impl SupportedZippable<&Environment> for Hero {
     fn export(&self, zipper: &mut Zipper, environment: &Environment) {
         self.typ.export(zipper, &environment.config);
-        zipper.write_u8(self.power as u8, bits_needed_for_max_value(environment.config.hero_powers(self.typ).len() as u32 - 1));
+        zipper.write_u8(
+            self.power as u8,
+            bits_needed_for_max_value(environment.config.hero_powers(self.typ).len() as u32 - 1),
+        );
         if self.typ.max_charge(&environment) > 0 {
             let bits = bits_needed_for_max_value(self.typ.max_charge(&environment) as u32);
             zipper.write_u32(self.charge, bits);
@@ -233,7 +271,9 @@ impl SupportedZippable<&Environment> for Hero {
     fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
         let typ = HeroType::import(unzipper, &environment.config)?;
         let mut result = Self::new(typ);
-        result.power = unzipper.read_u8(bits_needed_for_max_value(environment.config.hero_powers(typ).len() as u32 - 1))? as usize;
+        result.power = unzipper.read_u8(bits_needed_for_max_value(
+            environment.config.hero_powers(typ).len() as u32 - 1,
+        ))? as usize;
         if typ.max_charge(environment) > 0 {
             let bits = bits_needed_for_max_value(typ.max_charge(environment) as u32);
             result.charge = typ.max_charge(environment).min(unzipper.read_u32(bits)?);
@@ -249,7 +289,7 @@ pub struct HeroMap<D: Direction> {
     hero_auras: FxHashMap<(Point, i8), Vec<HeroInfluence<D>>>,
 }
 
-impl <D: Direction> HeroMap<D> {
+impl<D: Direction> HeroMap<D> {
     pub fn new_empty() -> Self {
         Self {
             hero_auras: FxHashMap::default(),
@@ -257,9 +297,13 @@ impl <D: Direction> HeroMap<D> {
     }
 
     pub fn new(map: &Board<D>, only_owner_id: Option<i8>) -> Self {
-        let hero_auras = Self::_new(map, only_owner_id, |unit: &Unit<D>, unit_pos: Point, transporter: Option<(&Unit<D>, usize)>| {
-            Box::new(Hero::aura(map, unit, unit_pos, transporter).into_iter())
-        });
+        let hero_auras = Self::_new(
+            map,
+            only_owner_id,
+            |unit: &Unit<D>, unit_pos: Point, transporter: Option<(&Unit<D>, usize)>| {
+                Box::new(Hero::aura(map, unit, unit_pos, transporter).into_iter())
+            },
+        );
         Self {
             hero_auras,
             //only_owner_id,
@@ -276,7 +320,15 @@ impl <D: Direction> HeroMap<D> {
         }
     }
 
-    fn _new(map: &Board<D>, only_owner_id: Option<i8>, aura: impl Fn(&Unit<D>, Point, Option<(&Unit<D>, usize)>) -> Box<dyn Iterator<Item = (Point, usize)>>) -> FxHashMap<(Point, i8), Vec<HeroInfluence<D>>> {
+    fn _new(
+        map: &Board<D>,
+        only_owner_id: Option<i8>,
+        aura: impl Fn(
+            &Unit<D>,
+            Point,
+            Option<(&Unit<D>, usize)>,
+        ) -> Box<dyn Iterator<Item = (Point, usize)>>,
+    ) -> FxHashMap<(Point, i8), Vec<HeroInfluence<D>>> {
         let mut heroes = Vec::new();
         for p in valid_points(map) {
             if let Some(unit) = map.get_unit(p) {
@@ -298,7 +350,13 @@ impl <D: Direction> HeroMap<D> {
             let transporter = hero.3.map(|i| (map.get_unit(hero.2).unwrap(), i));
             for (p, strength) in aura(&hero.0, hero.2, transporter) {
                 let key = (p, hero.0.get_owner_id());
-                let value = (hero.0.clone(), hero.1.clone(), hero.2, hero.3, strength as u8);
+                let value = (
+                    hero.0.clone(),
+                    hero.1.clone(),
+                    hero.2,
+                    hero.3,
+                    strength as u8,
+                );
                 if let Some(list) = hero_auras.get_mut(&key) {
                     list.push(value);
                 } else {
@@ -310,21 +368,27 @@ impl <D: Direction> HeroMap<D> {
     }
 
     pub(crate) fn with_ids(&self, handler: &mut EventHandler<D>) -> HeroMapWithId<D> {
-        let mut hero_auras: FxHashMap<(Point, i8), Vec<HeroInfluenceWithId<D>>> = FxHashMap::default();
+        let mut hero_auras: FxHashMap<(Point, i8), Vec<HeroInfluenceWithId<D>>> =
+            FxHashMap::default();
         for (key, list) in self.hero_auras.iter() {
-            let list = list.iter()
+            let list = list
+                .iter()
                 .cloned()
                 .map(|(unit, hero, position, unload_index, strength)| {
                     let id = handler.observe_unit(position, unload_index);
                     (id, unit, hero, position, unload_index, strength)
-                }).collect();
+                })
+                .collect();
             hero_auras.insert(*key, list);
         }
         HeroMapWithId(rhai::Shared::new(hero_auras))
     }
 
     pub fn get(&self, position: Point, owner_id: i8) -> &[HeroInfluence<D>] {
-        self.hero_auras.get(&(position, owner_id)).map(|h| h.as_slice()).unwrap_or(&[])
+        self.hero_auras
+            .get(&(position, owner_id))
+            .map(|h| h.as_slice())
+            .unwrap_or(&[])
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&(Point, i8), &Vec<HeroInfluence<D>>)> {
@@ -332,7 +396,8 @@ impl <D: Direction> HeroMap<D> {
     }
 
     pub fn iter_owned(&self, owner_id: i8) -> impl Iterator<Item = &HeroInfluence<D>> {
-        self.hero_auras.iter()
+        self.hero_auras
+            .iter()
             .filter(move |((_, o), _)| *o == owner_id)
             .map(|(_, influence)| influence)
             .flatten()
@@ -340,11 +405,16 @@ impl <D: Direction> HeroMap<D> {
 }
 
 #[derive(Clone)]
-pub(crate) struct HeroMapWithId<D: Direction>(rhai::Shared<FxHashMap<(Point, i8), Vec<HeroInfluenceWithId<D>>>>);
+pub(crate) struct HeroMapWithId<D: Direction>(
+    rhai::Shared<FxHashMap<(Point, i8), Vec<HeroInfluenceWithId<D>>>>,
+);
 
-impl <D: Direction> HeroMapWithId<D> {
+impl<D: Direction> HeroMapWithId<D> {
     pub(crate) fn get(&self, position: Point, owner_id: i8) -> &[HeroInfluenceWithId<D>] {
-        self.0.get(&(position, owner_id)).map(|h| h.as_slice()).unwrap_or(&[])
+        self.0
+            .get(&(position, owner_id))
+            .map(|h| h.as_slice())
+            .unwrap_or(&[])
     }
 }
 
@@ -354,11 +424,16 @@ pub struct HeroChargeChange(pub i32);
 impl SupportedZippable<&Environment> for HeroChargeChange {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
         let max = support.config.max_hero_charge() as i32;
-        zipper.write_u32((self.0 + max) as u32, bits_needed_for_max_value(max as u32 * 2));
+        zipper.write_u32(
+            (self.0 + max) as u32,
+            bits_needed_for_max_value(max as u32 * 2),
+        );
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
         let max = support.config.max_hero_charge() as i32;
-        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(max as u32 * 2))? as i32 - max))
+        Ok(Self(
+            unzipper.read_u32(bits_needed_for_max_value(max as u32 * 2))? as i32 - max,
+        ))
     }
 }
 

@@ -13,13 +13,13 @@ use crate::map::direction::*;
 use crate::map::map::Map;
 use crate::map::point::*;
 use crate::map::point_map::{MapSize, PointMap};
-use crate::script::custom_action::test::CA_UNIT_CAPTURE;
-use crate::script::custom_action::CustomActionInput;
-use crate::terrain::TerrainType;
 use crate::map::wrapping_map::*;
-use crate::units::commands::{UnitCommand, UnitAction};
-use crate::units::movement::{Path, PathStep};
+use crate::script::custom_action::CustomActionInput;
+use crate::script::custom_action::test::CA_UNIT_CAPTURE;
 use crate::tags::tests::*;
+use crate::terrain::TerrainType;
+use crate::units::commands::{UnitAction, UnitCommand};
+use crate::units::movement::{Path, PathStep};
 use crate::units::unit_types::UnitType;
 
 // helpers
@@ -48,22 +48,58 @@ impl TerrainType {
 fn verify_terrain_type_constants() {
     let config = Urc::new(Config::default());
     let environment = Environment::new_map(config, MapSize::new(5, 5));
-    assert_eq!(environment.config.terrain_name(TerrainType::ChessPawnTile), "ChessPawnTile");
-    assert_eq!(environment.config.terrain_name(TerrainType::ChessTile), "ChessTile");
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::ChessPawnTile),
+        "ChessPawnTile"
+    );
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::ChessTile),
+        "ChessTile"
+    );
     assert_eq!(environment.config.terrain_name(TerrainType::City), "City");
-    assert_eq!(environment.config.terrain_name(TerrainType::Factory), "Factory");
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::Factory),
+        "Factory"
+    );
     assert_eq!(environment.config.terrain_name(TerrainType::Flame), "Flame");
-    assert_eq!(environment.config.terrain_name(TerrainType::Forest), "Forest");
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::Forest),
+        "Forest"
+    );
     assert_eq!(environment.config.terrain_name(TerrainType::Grass), "Grass");
-    assert_eq!(environment.config.terrain_name(TerrainType::Kraken), "Kraken");
-    assert_eq!(environment.config.terrain_name(TerrainType::Mountain), "Mountain");
-    assert_eq!(environment.config.terrain_name(TerrainType::OilPlatform), "OilPlatform");
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::Kraken),
+        "Kraken"
+    );
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::Mountain),
+        "Mountain"
+    );
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::OilPlatform),
+        "OilPlatform"
+    );
     assert_eq!(environment.config.terrain_name(TerrainType::Sea), "Sea");
-    assert_eq!(environment.config.terrain_name(TerrainType::ShallowSea), "ShallowSea");
-    assert_eq!(environment.config.terrain_name(TerrainType::Street), "Street");
-    assert_eq!(environment.config.terrain_name(TerrainType::StatueLand), "StatueLand");
-    assert_eq!(environment.config.terrain_name(TerrainType::TentacleDepths), "TentacleDepths");
-    assert_eq!(environment.config.terrain_name(TerrainType::FairyForest), "FairyForest");
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::ShallowSea),
+        "ShallowSea"
+    );
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::Street),
+        "Street"
+    );
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::StatueLand),
+        "StatueLand"
+    );
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::TentacleDepths),
+        "TentacleDepths"
+    );
+    assert_eq!(
+        environment.config.terrain_name(TerrainType::FairyForest),
+        "FairyForest"
+    );
 }
 
 // actual tests
@@ -74,42 +110,118 @@ fn capture_city() {
     let environment = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
-    map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(-1).build());
-    map.set_terrain(Point::new(0, 0), TerrainType::City.instance(&environment).set_owner_id(0).build());
-    map.set_unit(Point::new(0, 0), Some(UnitType::SNIPER.instance(&environment).set_owner_id(0).set_hp(55).build()));
-    map.set_unit(Point::new(3, 3), Some(UnitType::SNIPER.instance(&environment).set_owner_id(1).build()));
+    map.set_terrain(
+        Point::new(1, 1),
+        TerrainType::City
+            .instance(&environment)
+            .set_owner_id(-1)
+            .build(),
+    );
+    map.set_terrain(
+        Point::new(0, 0),
+        TerrainType::City
+            .instance(&environment)
+            .set_owner_id(0)
+            .build(),
+    );
+    map.set_unit(
+        Point::new(0, 0),
+        Some(
+            UnitType::SNIPER
+                .instance(&environment)
+                .set_owner_id(0)
+                .set_hp(55)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(3, 3),
+        Some(
+            UnitType::SNIPER
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     // can't capture your own properties
-    game.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::new(Point::new(0, 0)),
-        action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
-    }), Urc::new(|| 0.)).unwrap_err();
-    game.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::with_steps(Point::new(0, 0), vec![
-            PathStep::Dir(Direction4::D0),
-            PathStep::Dir(Direction4::D270),
-        ]),
-        action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
-    }), Urc::new(|| 0.)).unwrap();
-    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(-1, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
-    assert!(game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_CAPTURING));
-    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(-1, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
-    assert!(!game.get_unit(Point::new(1, 1)).unwrap().has_flag(FLAG_CAPTURING));
-    assert_eq!(Some(6.into()), game.get_terrain(Point::new(1, 1)).unwrap().get_tag(TAG_CAPTURE_PROGRESS));
-    assert_eq!(Some(0.into()), game.get_terrain(Point::new(1, 1)).unwrap().get_tag(TAG_CAPTURE_OWNER));
-    game.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::with_steps(Point::new(1, 1), Vec::new()),
-        action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
-    }), Urc::new(|| 0.)).unwrap();
-    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(0, game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id());
+    game.handle_command(
+        Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(0, 0)),
+            action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
+        }),
+        Urc::new(|| 0.),
+    )
+    .unwrap_err();
+    game.handle_command(
+        Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::with_steps(
+                Point::new(0, 0),
+                vec![
+                    PathStep::Dir(Direction4::D0),
+                    PathStep::Dir(Direction4::D270),
+                ],
+            ),
+            action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
+        }),
+        Urc::new(|| 0.),
+    )
+    .unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.))
+        .unwrap();
+    assert_eq!(
+        -1,
+        game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id()
+    );
+    assert!(
+        game.get_unit(Point::new(1, 1))
+            .unwrap()
+            .has_flag(FLAG_CAPTURING)
+    );
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.))
+        .unwrap();
+    assert_eq!(
+        -1,
+        game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id()
+    );
+    assert!(
+        !game
+            .get_unit(Point::new(1, 1))
+            .unwrap()
+            .has_flag(FLAG_CAPTURING)
+    );
+    assert_eq!(
+        Some(6.into()),
+        game.get_terrain(Point::new(1, 1))
+            .unwrap()
+            .get_tag(TAG_CAPTURE_PROGRESS)
+    );
+    assert_eq!(
+        Some(0.into()),
+        game.get_terrain(Point::new(1, 1))
+            .unwrap()
+            .get_tag(TAG_CAPTURE_OWNER)
+    );
+    game.handle_command(
+        Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::with_steps(Point::new(1, 1), Vec::new()),
+            action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
+        }),
+        Urc::new(|| 0.),
+    )
+    .unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.))
+        .unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.))
+        .unwrap();
+    assert_eq!(
+        0,
+        game.get_terrain(Point::new(1, 1)).unwrap().get_owner_id()
+    );
 }
 
 #[test]
@@ -118,21 +230,55 @@ fn capture_hq() {
     let environment = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
-    map.set_terrain(Point::new(0, 0), TerrainType::Hq.instance(&environment).set_owner_id(1).build());
-    map.set_unit(Point::new(0, 0), Some(UnitType::SNIPER.instance(&environment).set_owner_id(0).build()));
-    map.set_unit(Point::new(3, 3), Some(UnitType::SNIPER.instance(&environment).set_owner_id(1).build()));
+    map.set_terrain(
+        Point::new(0, 0),
+        TerrainType::Hq
+            .instance(&environment)
+            .set_owner_id(1)
+            .build(),
+    );
+    map.set_unit(
+        Point::new(0, 0),
+        Some(
+            UnitType::SNIPER
+                .instance(&environment)
+                .set_owner_id(0)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(3, 3),
+        Some(
+            UnitType::SNIPER
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
-    game.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::new(Point::new(0, 0)),
-        action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
-    }), Urc::new(|| 0.)).unwrap();
-    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(1, game.get_terrain(Point::new(0, 0)).unwrap().get_owner_id());
+    game.handle_command(
+        Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(0, 0)),
+            action: UnitAction::custom(CA_UNIT_CAPTURE, Vec::new()),
+        }),
+        Urc::new(|| 0.),
+    )
+    .unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.))
+        .unwrap();
+    assert_eq!(
+        1,
+        game.get_terrain(Point::new(0, 0)).unwrap().get_owner_id()
+    );
     assert!(!game.players()[1].dead);
-    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert_eq!(0, game.get_terrain(Point::new(0, 0)).unwrap().get_owner_id());
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.))
+        .unwrap();
+    assert_eq!(
+        0,
+        game.get_terrain(Point::new(0, 0)).unwrap().get_owner_id()
+    );
     assert!(game.players()[1].dead);
 }
 
@@ -142,24 +288,81 @@ fn build_unit() {
     let environment = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
-    map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());
-    map.set_terrain(Point::new(1, 1), TerrainType::City.instance(&environment).set_owner_id(0).build());
-    map.set_unit(Point::new(3, 3), Some(UnitType::SNIPER.instance(&environment).set_owner_id(1).build()));
+    map.set_terrain(
+        Point::new(0, 0),
+        TerrainType::Factory
+            .instance(&environment)
+            .set_owner_id(0)
+            .build(),
+    );
+    map.set_terrain(
+        Point::new(1, 1),
+        TerrainType::City
+            .instance(&environment)
+            .set_owner_id(0)
+            .build(),
+    );
+    map.set_unit(
+        Point::new(3, 3),
+        Some(
+            UnitType::SNIPER
+                .instance(&environment)
+                .set_owner_id(1)
+                .build(),
+        ),
+    );
     let mut settings = map.settings().unwrap();
-    settings.players[0].get_tag_bag_mut().set_tag(&environment, TAG_INCOME, 1000.into());
+    settings.players[0]
+        .get_tag_bag_mut()
+        .set_tag(&environment, TAG_INCOME, 1000.into());
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
-    assert_eq!(1000, game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>());
-    game.handle_command(Command::TerrainAction(Point::new(0, 0), vec![
-        CustomActionInput::ShopItem(0.into()),
-    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
-    assert!(game.current_player().get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>() < 1000);
+    assert_eq!(
+        1000,
+        game.current_player()
+            .get_tag(TAG_FUNDS)
+            .unwrap()
+            .into_dynamic()
+            .cast::<i32>()
+    );
+    game.handle_command(
+        Command::TerrainAction(
+            Point::new(0, 0),
+            vec![CustomActionInput::ShopItem(0.into())]
+                .try_into()
+                .unwrap(),
+        ),
+        Urc::new(|| 0.),
+    )
+    .unwrap();
+    assert!(
+        game.current_player()
+            .get_tag(TAG_FUNDS)
+            .unwrap()
+            .into_dynamic()
+            .cast::<i32>()
+            < 1000
+    );
     assert_eq!(0, game.get_unit(Point::new(0, 0)).unwrap().get_owner_id());
-    assert!(game.get_unit(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
+    assert!(
+        game.get_unit(Point::new(0, 0))
+            .unwrap()
+            .has_flag(FLAG_EXHAUSTED)
+    );
     //assert_eq!(Some(TagValue::Int(Int32(1))), game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_BUILT_THIS_TURN));
-    assert!(game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
+    assert!(
+        game.get_terrain(Point::new(0, 0))
+            .unwrap()
+            .has_flag(FLAG_EXHAUSTED)
+    );
     // property should get unexhausted when the owner ends their turn
-    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
-    assert!(!game.get_terrain(Point::new(0, 0)).unwrap().has_flag(FLAG_EXHAUSTED));
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.))
+        .unwrap();
+    assert!(
+        !game
+            .get_terrain(Point::new(0, 0))
+            .unwrap()
+            .has_flag(FLAG_EXHAUSTED)
+    );
 }
 
 #[test]
@@ -170,34 +373,115 @@ fn kraken() {
     let mut map = Map::new2(wmap, &map_env);
     for x in 0..map.width() {
         for y in 0..map.height() {
-            map.set_terrain(Point::new(x, y), TerrainType::TentacleDepths.instance(&map_env).build());
+            map.set_terrain(
+                Point::new(x, y),
+                TerrainType::TentacleDepths.instance(&map_env).build(),
+            );
         }
     }
-    map.set_terrain(Point::new(2, 2), TerrainType::Kraken.instance(&map_env).set_tag(TAG_ANGER, 7.into()).build());
-    map.set_terrain(Point::new(0, 0), TerrainType::Kraken.instance(&map_env).build());
-    map.set_unit(Point::new(2, 1), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(1).set_hp(100).build()));
-    map.set_unit(Point::new(1, 2), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(0).set_hp(100).build()));
-    map.set_unit(Point::new(3, 2), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(0).set_hp(100).build()));
+    map.set_terrain(
+        Point::new(2, 2),
+        TerrainType::Kraken
+            .instance(&map_env)
+            .set_tag(TAG_ANGER, 7.into())
+            .build(),
+    );
+    map.set_terrain(
+        Point::new(0, 0),
+        TerrainType::Kraken.instance(&map_env).build(),
+    );
+    map.set_unit(
+        Point::new(2, 1),
+        Some(
+            UnitType::WAR_SHIP
+                .instance(&map_env)
+                .set_owner_id(1)
+                .set_hp(100)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(1, 2),
+        Some(
+            UnitType::WAR_SHIP
+                .instance(&map_env)
+                .set_owner_id(0)
+                .set_hp(100)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(3, 2),
+        Some(
+            UnitType::WAR_SHIP
+                .instance(&map_env)
+                .set_owner_id(0)
+                .set_hp(100)
+                .build(),
+        ),
+    );
     let settings = map.settings().unwrap();
     let (mut game, _) = Game::new_server(map, &settings, settings.build_default(), Urc::new(|| 0.));
     let environment = game.environment();
-    assert_eq!(game.get_unit(Point::new(1, 0)), Some(&UnitType::TENTACLE.instance(&environment).set_hp(100).build()));
-    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(7.into()));
-    game.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::new(Point::new(3, 2)),
-        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(4, 2), Direction4::D0))),
-    }), Urc::new(|| 0.)).unwrap();
+    assert_eq!(
+        game.get_unit(Point::new(1, 0)),
+        Some(
+            &UnitType::TENTACLE
+                .instance(&environment)
+                .set_hp(100)
+                .build()
+        )
+    );
+    assert_eq!(
+        game.get_terrain(Point::new(2, 2))
+            .unwrap()
+            .get_tag(TAG_ANGER),
+        Some(7.into())
+    );
+    game.handle_command(
+        Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(3, 2)),
+            action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(
+                Point::new(4, 2),
+                Direction4::D0,
+            ))),
+        }),
+        Urc::new(|| 0.),
+    )
+    .unwrap();
     assert_eq!(game.get_unit(Point::new(4, 2)), None);
-    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), Some(8.into()));
+    assert_eq!(
+        game.get_terrain(Point::new(2, 2))
+            .unwrap()
+            .get_tag(TAG_ANGER),
+        Some(8.into())
+    );
     assert_eq!(game.get_unit(Point::new(3, 2)).unwrap().get_hp(), 100);
-    game.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::new(Point::new(1, 2)),
-        action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(Point::new(0, 2), Direction4::D180))),
-    }), Urc::new(|| 0.)).unwrap();
-    assert_eq!(game.get_terrain(Point::new(2, 2)).unwrap().get_tag(TAG_ANGER), None);
-    assert_eq!(game.get_terrain(Point::new(0, 0)).unwrap().get_tag(TAG_ANGER), Some(2.into()));
+    game.handle_command(
+        Command::UnitCommand(UnitCommand {
+            unload_index: None,
+            path: Path::new(Point::new(1, 2)),
+            action: UnitAction::Attack(AttackInput::SplashPattern(OrientedPoint::simple(
+                Point::new(0, 2),
+                Direction4::D180,
+            ))),
+        }),
+        Urc::new(|| 0.),
+    )
+    .unwrap();
+    assert_eq!(
+        game.get_terrain(Point::new(2, 2))
+            .unwrap()
+            .get_tag(TAG_ANGER),
+        None
+    );
+    assert_eq!(
+        game.get_terrain(Point::new(0, 0))
+            .unwrap()
+            .get_tag(TAG_ANGER),
+        Some(2.into())
+    );
     assert!(game.get_unit(Point::new(3, 2)).unwrap().get_hp() < 100);
 }
 
@@ -207,32 +491,96 @@ fn terrain_vision() {
     let environment = Environment::new_map(Urc::new(Config::default()), map.size());
     let wmap: WrappingMap<Direction4> = WMBuilder::new(map).build();
     let mut map = Map::new2(wmap, &environment);
-    map.set_terrain(Point::new(0, 0), TerrainType::Factory.instance(&environment).set_owner_id(0).build());
-    map.set_terrain(Point::new(3, 0), TerrainType::City.instance(&environment).set_owner_id(0).build());
-    map.set_terrain(Point::new(0, 3), TerrainType::Airport.instance(&environment).set_owner_id(1).build());
-    map.set_terrain(Point::new(3, 3), TerrainType::City.instance(&environment).set_owner_id(-1).build());
+    map.set_terrain(
+        Point::new(0, 0),
+        TerrainType::Factory
+            .instance(&environment)
+            .set_owner_id(0)
+            .build(),
+    );
+    map.set_terrain(
+        Point::new(3, 0),
+        TerrainType::City
+            .instance(&environment)
+            .set_owner_id(0)
+            .build(),
+    );
+    map.set_terrain(
+        Point::new(0, 3),
+        TerrainType::Airport
+            .instance(&environment)
+            .set_owner_id(1)
+            .build(),
+    );
+    map.set_terrain(
+        Point::new(3, 3),
+        TerrainType::City
+            .instance(&environment)
+            .set_owner_id(-1)
+            .build(),
+    );
     let mut map_settings = map.settings().unwrap();
     map_settings.fog_mode = FogMode::Constant(FogSetting::Sharp(0));
     let mut settings = map_settings.build_default();
     settings.players[0].set_commander(CommanderType::Lageos);
     let (mut game, _) = Game::new_server(map, &map_settings, settings, Urc::new(|| 0.));
-    game.handle_command(Command::EndTurn, Urc::new(|| 0.)).unwrap();
+    game.handle_command(Command::EndTurn, Urc::new(|| 0.))
+        .unwrap();
     // neutral city gives no vision to anybody
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(3, 3)));
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(3, 3)));
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(3, 3)));
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(3, 3))
+    );
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(3, 3))
+    );
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(3, 3))
+    );
     // player 0's factory gives true vision, but only to its owner
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(0, 0)));
-    assert_eq!(FogIntensity::TrueSight, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(0, 0)));
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(0, 0)));
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(0, 0))
+    );
+    assert_eq!(
+        FogIntensity::TrueSight,
+        game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(0, 0))
+    );
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(0, 0))
+    );
     // player 0's factory doesn't give vision next to itself, even if the commander's units have +1 vision
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(1, 0)));
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(1, 0))
+    );
     // player 1's airport gives true vision, but only to its owner
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(0, 3)));
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(0, 3)));
-    assert_eq!(FogIntensity::TrueSight, game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(0, 3)));
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(0, 3))
+    );
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(0, 3))
+    );
+    assert_eq!(
+        FogIntensity::TrueSight,
+        game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(0, 3))
+    );
     // player 0's city gives vision, but only to its owner
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(3, 0)));
-    assert!(FogIntensity::Dark > game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(3, 0)));
-    assert_eq!(FogIntensity::Dark, game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(3, 0)));
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Neutral, Point::new(3, 0))
+    );
+    assert!(
+        FogIntensity::Dark
+            > game.get_fog_at(interfaces::ClientPerspective::Team(0), Point::new(3, 0))
+    );
+    assert_eq!(
+        FogIntensity::Dark,
+        game.get_fog_at(interfaces::ClientPerspective::Team(1), Point::new(3, 0))
+    );
 }

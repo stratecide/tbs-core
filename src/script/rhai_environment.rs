@@ -1,9 +1,9 @@
-use rhai::*;
 use rhai::plugin::*;
+use rhai::*;
 
-use crate::dyn_opt;
 use crate::config::environment::Environment;
 use crate::config::table_config::*;
+use crate::dyn_opt;
 use crate::units::unit_types::UnitType;
 
 #[export_module]
@@ -14,7 +14,7 @@ mod environment_module {
     pub fn parse_int(s: ImmutableString) -> Dynamic {
         match s.parse::<i32>() {
             Ok(result) => Dynamic::from(result),
-            _ => ().into()
+            _ => ().into(),
         }
     }
 
@@ -26,7 +26,8 @@ mod environment_module {
         let Some(y) = TableAxisKey::from_dynamic(y) else {
             return ().into();
         };
-        environment.table_entry(name, x, y)
+        environment
+            .table_entry(name, x, y)
             .map(TableValue::into_dynamic)
             .unwrap_or(().into())
     }
@@ -39,8 +40,10 @@ mod environment_module {
         let Some(value) = TableValue::from_dynamic(value) else {
             return Array::new();
         };
-        environment.table_row(name, y, value)
-            .into_iter().map(TableAxisKey::into_dynamic)
+        environment
+            .table_row(name, y, value)
+            .into_iter()
+            .map(TableAxisKey::into_dynamic)
             .collect::<Vec<_>>()
     }
     #[rhai_fn(pure)]
@@ -51,14 +54,21 @@ mod environment_module {
         let Some(value) = TableValue::from_dynamic(value) else {
             return Array::new();
         };
-        environment.table_column(name, x, value)
-            .into_iter().map(TableAxisKey::into_dynamic)
+        environment
+            .table_column(name, x, value)
+            .into_iter()
+            .map(TableAxisKey::into_dynamic)
             .collect::<Vec<_>>()
     }
 
     #[rhai_fn(pure)]
-    pub fn get_custom_value(environment: &mut Config, unit_type: UnitType, column_name: ImmutableString) -> Dynamic {
-        environment.unit_custom_attribute(unit_type, column_name)
+    pub fn get_custom_value(
+        environment: &mut Config,
+        unit_type: UnitType,
+        column_name: ImmutableString,
+    ) -> Dynamic {
+        environment
+            .unit_custom_attribute(unit_type, column_name)
             .map(|result| result.into())
             .unwrap_or(().into())
     }
@@ -71,7 +81,7 @@ mod environment_module {
         dyn_opt(environment.get_hero(owner_id as i8))
     }
 
-    #[rhai_fn(pure, name="name")]
+    #[rhai_fn(pure, name = "name")]
     pub fn unit_name(environment: &mut Config, unit_type: UnitType) -> ImmutableString {
         environment.config.unit_name(unit_type).into()
     }

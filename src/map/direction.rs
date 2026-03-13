@@ -1,17 +1,28 @@
+use crate::map::point::*;
 use std::fmt;
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Neg, Rem, Sub, SubAssign};
-use crate::map::point::*;
 
 use num_rational::Rational32;
-use zipper::*;
 use zipper::zipper_derive::*;
+use zipper::*;
 
 use super::wrapping_map::Distortion;
 
-
-pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display {
-    type T: Translation<Self> + Clone + Copy + Hash + PartialEq + Eq + fmt::Debug + Sync + Send + SupportedZippable<u16> + Rem<Output = Self::T>;
+pub trait Direction:
+    'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zippable + fmt::Display
+{
+    type T: Translation<Self>
+        + Clone
+        + Copy
+        + Hash
+        + PartialEq
+        + Eq
+        + fmt::Debug
+        + Sync
+        + Send
+        + SupportedZippable<u16>
+        + Rem<Output = Self::T>;
     fn is_hex() -> bool;
     fn angle_0() -> Self;
     fn translation(&self, distance: i16) -> Self::T;
@@ -24,7 +35,10 @@ pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zip
         self.translation(1).translate_point(&point, odd_if_hex)
     }
     fn get_neighbor(&self, point: Point, odd_if_hex: bool) -> Option<Point> {
-        let gp = self.get_global_neighbor(GlobalPoint::new(point.x() as i16, point.y() as i16), odd_if_hex);
+        let gp = self.get_global_neighbor(
+            GlobalPoint::new(point.x() as i16, point.y() as i16),
+            odd_if_hex,
+        );
         if gp.x() >= 0 && gp.x() <= 255 && gp.y() >= 0 && gp.y() <= 255 {
             Some(Point::new(gp.x() as u8, gp.y() as u8))
         } else {
@@ -38,7 +52,9 @@ pub trait Direction: 'static + Eq + Copy + Hash + fmt::Debug + Sync + Send + Zip
     }
     fn list_index(&self) -> usize {
         let list = Self::list();
-        list.iter().position(|d| self == d).expect("Unable to find Direction in list of all Directions")
+        list.iter()
+            .position(|d| self == d)
+            .expect("Unable to find Direction in list of all Directions")
     }
     fn rotate(&self, clockwise: bool) -> Self {
         let list = Self::list();
@@ -100,18 +116,13 @@ impl Direction for Direction4 {
         Translation4::new(*self, distance)
     }
     fn list() -> Vec<Self> {
-        vec![
-            Self::D0,
-            Self::D90,
-            Self::D180,
-            Self::D270,
-        ]
+        vec![Self::D0, Self::D90, Self::D180, Self::D270]
     }
     fn mirror_horizontally(&self) -> Self {
         match self {
             Self::D0 => Self::D180,
             Self::D180 => Self::D0,
-            _ => self.clone()
+            _ => self.clone(),
         }
     }
 }
@@ -182,8 +193,18 @@ impl fmt::Display for Direction6 {
     }
 }
 
-pub trait Translation<D>: Clone + Copy + PartialEq + Neg<Output = Self> + Add<Self, Output = Self> + Sub<Self, Output = Self> + AddAssign + SubAssign
-where D: Direction {
+pub trait Translation<D>:
+    Clone
+    + Copy
+    + PartialEq
+    + Neg<Output = Self>
+    + Add<Self, Output = Self>
+    + Sub<Self, Output = Self>
+    + AddAssign
+    + SubAssign
+where
+    D: Direction,
+{
     fn new(direction: D, distance: i16) -> Self;
     fn len(&self) -> u16;
     fn between<P: Position<i16>>(from: &P, to: &P, odd_if_hex: bool) -> Self;
@@ -195,7 +216,8 @@ where D: Direction {
     fn mirror_horizontally(&self) -> Self;
     fn distort(&self, distortion: Distortion<D>) -> Self {
         if distortion.is_mirrored() {
-            self.mirror_horizontally().rotate_by(distortion.get_rotation())
+            self.mirror_horizontally()
+                .rotate_by(distortion.get_rotation())
         } else {
             self.rotate_by(distortion.get_rotation())
         }
@@ -215,9 +237,10 @@ impl Rem for Translation4 {
     fn rem(self, rhs: Self) -> Self::Output {
         let mut x = self.x as i32;
         let mut y = self.y as i32;
-            // dot product with the normalized wrapping_vector
+        // dot product with the normalized wrapping_vector
         let vector_length = rhs.x as i32 * rhs.x as i32 + rhs.y as i32 * rhs.y as i32;
-        let factor = Rational32::from_integer(rhs.x as i32 * x + rhs.y as i32 * y) / Rational32::from_integer(vector_length);
+        let factor = Rational32::from_integer(rhs.x as i32 * x + rhs.y as i32 * y)
+            / Rational32::from_integer(vector_length);
         let factor = factor.round().to_integer();
         x -= rhs.x as i32 * factor;
         y -= rhs.y as i32 * factor;
@@ -231,10 +254,10 @@ impl Rem for Translation4 {
 impl Translation<Direction4> for Translation4 {
     fn new(direction: Direction4, distance: i16) -> Self {
         match direction {
-            Direction4::D0 => Translation4 {x: distance, y: 0},
-            Direction4::D90 => Translation4 {x: 0, y: -distance},
-            Direction4::D180 => Translation4 {x: -distance, y: 0},
-            Direction4::D270 => Translation4 {x: 0, y: distance},
+            Direction4::D0 => Translation4 { x: distance, y: 0 },
+            Direction4::D90 => Translation4 { x: 0, y: -distance },
+            Direction4::D180 => Translation4 { x: -distance, y: 0 },
+            Direction4::D270 => Translation4 { x: 0, y: distance },
         }
     }
     fn len(&self) -> u16 {
@@ -260,7 +283,8 @@ impl Translation<Direction4> for Translation4 {
         } else if self.x == 0 {
             self.y % other.y == 0 || other.y % self.y == 0
         } else {
-            self.x % other.x == 0 && self.x / other.x * other.y == self.y || other.x % self.x == 0 && other.x / self.x * self.y == other.y
+            self.x % other.x == 0 && self.x / other.x * other.y == self.y
+                || other.x % self.x == 0 && other.x / self.x * self.y == other.y
         }
     }
     #[cfg(feature = "rendering")]
@@ -270,13 +294,25 @@ impl Translation<Direction4> for Translation4 {
     fn rotate_by(&self, angle: Direction4) -> Self {
         match angle {
             Direction4::D0 => self.clone(),
-            Direction4::D90 => Translation4 {x: self.y, y: -self.x},
-            Direction4::D180 => Translation4 {x: -self.x, y: -self.y},
-            Direction4::D270 => Translation4 {x: -self.y, y: self.x},
+            Direction4::D90 => Translation4 {
+                x: self.y,
+                y: -self.x,
+            },
+            Direction4::D180 => Translation4 {
+                x: -self.x,
+                y: -self.y,
+            },
+            Direction4::D270 => Translation4 {
+                x: -self.y,
+                y: self.x,
+            },
         }
     }
     fn mirror_horizontally(&self) -> Self {
-        Translation4 {x: -self.x, y: self.y}
+        Translation4 {
+            x: -self.x,
+            y: self.y,
+        }
     }
     fn translate_point<P: Position<i16>>(&self, p: &P, _: bool) -> P {
         P::new(p.x() + self.x, p.y() + self.y)
@@ -332,9 +368,10 @@ impl Rem for Translation6 {
     fn rem(self, rhs: Self) -> Self::Output {
         let mut x = self.d0 as i32;
         let mut y = self.d60 as i32;
-            // dot product with the normalized wrapping_vector
+        // dot product with the normalized wrapping_vector
         let vector_length = rhs.d0 as i32 * rhs.d0 as i32 + rhs.d60 as i32 * rhs.d60 as i32;
-        let factor = Rational32::from_integer(rhs.d0 as i32 * x + rhs.d60 as i32 * y) / Rational32::from_integer(vector_length);
+        let factor = Rational32::from_integer(rhs.d0 as i32 * x + rhs.d60 as i32 * y)
+            / Rational32::from_integer(vector_length);
         let factor = factor.round().to_integer();
         x -= rhs.d0 as i32 * factor;
         y -= rhs.d60 as i32 * factor;
@@ -348,12 +385,30 @@ impl Rem for Translation6 {
 impl Translation<Direction6> for Translation6 {
     fn new(direction: Direction6, distance: i16) -> Self {
         match direction {
-            Direction6::D0 => Translation6 {d0: distance, d60: 0},
-            Direction6::D60 => Translation6 {d0: 0, d60: distance},
-            Direction6::D120 => Translation6 {d0: -distance, d60: distance},
-            Direction6::D180 => Translation6 {d0: -distance, d60: 0},
-            Direction6::D240 => Translation6 {d0: 0, d60: -distance},
-            Direction6::D300 => Translation6 {d0: distance, d60: -distance},
+            Direction6::D0 => Translation6 {
+                d0: distance,
+                d60: 0,
+            },
+            Direction6::D60 => Translation6 {
+                d0: 0,
+                d60: distance,
+            },
+            Direction6::D120 => Translation6 {
+                d0: -distance,
+                d60: distance,
+            },
+            Direction6::D180 => Translation6 {
+                d0: -distance,
+                d60: 0,
+            },
+            Direction6::D240 => Translation6 {
+                d0: 0,
+                d60: -distance,
+            },
+            Direction6::D300 => Translation6 {
+                d0: distance,
+                d60: -distance,
+            },
         }
     }
     fn len(&self) -> u16 {
@@ -389,7 +444,8 @@ impl Translation<Direction6> for Translation6 {
         } else if self.d0 == 0 {
             self.d60 % other.d60 == 0 || other.d60 % self.d60 == 0
         } else {
-            self.d0 % other.d0 == 0 && self.d0 / other.d0 * other.d60 == self.d60 || other.d0 % self.d0 == 0 && other.d0 / self.d0 * self.d60 == other.d60
+            self.d0 % other.d0 == 0 && self.d0 / other.d0 * other.d60 == self.d60
+                || other.d0 % self.d0 == 0 && other.d0 / self.d0 * self.d60 == other.d60
         }
     }
     #[cfg(feature = "rendering")]
@@ -399,15 +455,33 @@ impl Translation<Direction6> for Translation6 {
     fn rotate_by(&self, angle: Direction6) -> Self {
         match angle {
             Direction6::D0 => self.clone(),
-            Direction6::D60 => Translation6 {d0: -self.d60, d60: self.d0 + self.d60},
-            Direction6::D120 => Translation6 {d0: -self.d0 - self.d60, d60: self.d0},
-            Direction6::D180 => Translation6 {d0: -self.d0, d60: -self.d60},
-            Direction6::D240 => Translation6 {d0: self.d60, d60: -self.d0 - self.d60},
-            Direction6::D300 => Translation6 {d0: self.d0 + self.d60, d60: -self.d0},
+            Direction6::D60 => Translation6 {
+                d0: -self.d60,
+                d60: self.d0 + self.d60,
+            },
+            Direction6::D120 => Translation6 {
+                d0: -self.d0 - self.d60,
+                d60: self.d0,
+            },
+            Direction6::D180 => Translation6 {
+                d0: -self.d0,
+                d60: -self.d60,
+            },
+            Direction6::D240 => Translation6 {
+                d0: self.d60,
+                d60: -self.d0 - self.d60,
+            },
+            Direction6::D300 => Translation6 {
+                d0: self.d0 + self.d60,
+                d60: -self.d0,
+            },
         }
     }
     fn mirror_horizontally(&self) -> Self {
-        Translation6 {d0: -self.d0 - self.d60, d60: self.d60}
+        Translation6 {
+            d0: -self.d0 - self.d60,
+            d60: self.d60,
+        }
     }
     fn translate_point<P: Position<i16>>(&self, p: &P, odd_if_hex: bool) -> P {
         let mut x = p.x() + self.d0 + self.d60 / 2;

@@ -1,5 +1,5 @@
-use rhai::*;
 use rhai::plugin::*;
+use rhai::*;
 
 #[export_module]
 mod commander_type_module {
@@ -14,7 +14,6 @@ mod commander_type_module {
     pub fn ht_neq(u1: &mut CommanderType, u2: CommanderType) -> bool {
         *u1 != u2
     }
-
 }
 
 def_package! {

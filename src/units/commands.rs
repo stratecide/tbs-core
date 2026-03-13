@@ -20,11 +20,11 @@ use crate::map::point::Point;
 use crate::script::custom_action::*;
 use crate::script::*;
 
+use super::UnitData;
+use super::UnitId;
 use super::hero::*;
 use super::movement::*;
 use super::unit::Unit;
-use super::UnitData;
-use super::UnitId;
 
 pub const UNIT_REPAIR: u32 = 30;
 pub const MAX_CUSTOM_ACTION_STEPS: u32 = 8;
@@ -36,8 +36,14 @@ pub enum UnitAction<D: Direction> {
     Take,
     Enter,
     Attack(AttackInput<D>),
-    HeroPower(HeroPowerIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
-    Custom(CustomActionIndex, LVec<CustomActionInput<D>, {MAX_CUSTOM_ACTION_STEPS}>),
+    HeroPower(
+        HeroPowerIndex,
+        LVec<CustomActionInput<D>, { MAX_CUSTOM_ACTION_STEPS }>,
+    ),
+    Custom(
+        CustomActionIndex,
+        LVec<CustomActionInput<D>, { MAX_CUSTOM_ACTION_STEPS }>,
+    ),
 }
 
 impl<D: Direction> fmt::Display for UnitAction<D> {
@@ -55,14 +61,28 @@ impl<D: Direction> fmt::Display for UnitAction<D> {
 
 impl<D: Direction> UnitAction<D> {
     pub fn custom(index: usize, custom_action_data: Vec<CustomActionInput<D>>) -> Self {
-        Self::Custom(CustomActionIndex(index), custom_action_data.try_into().unwrap())
+        Self::Custom(
+            CustomActionIndex(index),
+            custom_action_data.try_into().unwrap(),
+        )
     }
 
     pub fn hero_power(index: usize, custom_action_data: Vec<CustomActionInput<D>>) -> Self {
-        Self::HeroPower(HeroPowerIndex(index), custom_action_data.try_into().unwrap())
+        Self::HeroPower(
+            HeroPowerIndex(index),
+            custom_action_data.try_into().unwrap(),
+        )
     }
 
-    pub fn build_action_data_if_valid(&self, game: &Board<D>, unit: &Unit<D>, path: &Path<D>, _destination: Point, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>]) -> Option<Vec<CustomActionData<D>>> {
+    pub fn build_action_data_if_valid(
+        &self,
+        game: &Board<D>,
+        unit: &Unit<D>,
+        path: &Path<D>,
+        _destination: Point,
+        transporter: Option<(&Unit<D>, usize)>,
+        ballast: &[TBallast<D>],
+    ) -> Option<Vec<CustomActionData<D>>> {
         let options = unit.options_after_path(game, path, transporter, ballast);
         match self {
             Self::HeroPower(index, data) => {
@@ -75,9 +95,15 @@ impl<D: Direction> UnitAction<D> {
                 let environment = game.environment();
                 let power = &environment.config.hero_powers(hero.typ())[index.0];
                 if let Some((Some(input_script), _)) = power.script {
-                    return is_unit_script_input_valid(input_script, game, path, transporter.map(|(_, i)| i), data);
+                    return is_unit_script_input_valid(
+                        input_script,
+                        game,
+                        path,
+                        transporter.map(|(_, i)| i),
+                        data,
+                    );
                 } else if data.len() == 0 {
-                    return Some(Vec::new())
+                    return Some(Vec::new());
                 }
             }
             Self::Custom(index, data) => {
@@ -87,14 +113,20 @@ impl<D: Direction> UnitAction<D> {
                 let environment = game.environment();
                 let custom_action = &environment.config.custom_actions()[index.0];
                 if let Some(input_script) = custom_action.script.0 {
-                    return is_unit_script_input_valid(input_script, game, path, transporter.map(|(_, i)| i), data);
+                    return is_unit_script_input_valid(
+                        input_script,
+                        game,
+                        path,
+                        transporter.map(|(_, i)| i),
+                        data,
+                    );
                 } else if data.len() == 0 {
-                    return Some(Vec::new())
+                    return Some(Vec::new());
                 }
             }
             _ => {
                 if options.contains(self) {
-                    return Some(Vec::new())
+                    return Some(Vec::new());
                 }
             }
         }
@@ -102,7 +134,16 @@ impl<D: Direction> UnitAction<D> {
         None
     }
 
-    pub fn execute(&self, handler: &mut EventHandler<D>, unit_id: usize, end: Point, path: &Path<D>, transporter: Option<(&Unit<D>, usize)>, ballast: &[TBallast<D>], action_data: Vec<CustomActionData<D>>) {
+    pub fn execute(
+        &self,
+        handler: &mut EventHandler<D>,
+        unit_id: usize,
+        end: Point,
+        path: &Path<D>,
+        transporter: Option<(&Unit<D>, usize)>,
+        ballast: &[TBallast<D>],
+        action_data: Vec<CustomActionData<D>>,
+    ) {
         let needs_to_exhaust = match self {
             Self::Wait => true,
             Self::Enter => true,
@@ -112,7 +153,9 @@ impl<D: Direction> UnitAction<D> {
                     let mut deaths = HashSet::default();
                     for dp in valid_points(handler.get_game()) {
                         if let Some(u) = handler.get_game().get_unit(dp) {
-                            if attacker.could_take(&u, PathStepTakes::Allow) && u.get_en_passant() == Some(end) {
+                            if attacker.could_take(&u, PathStepTakes::Allow)
+                                && u.get_en_passant() == Some(end)
+                            {
                                 deaths.insert(dp);
                             }
                         }
@@ -127,7 +170,14 @@ impl<D: Direction> UnitAction<D> {
                     handler.trigger_all_unit_scripts(
                         |game, unit, unit_pos, transporter, heroes| {
                             if deaths.contains(&unit_pos) {
-                                unit.on_death(game, unit_pos, transporter, Some(attacker_data), heroes, &[])
+                                unit.on_death(
+                                    game,
+                                    unit_pos,
+                                    transporter,
+                                    Some(attacker_data),
+                                    heroes,
+                                    &[],
+                                )
                             } else {
                                 Vec::new()
                             }
@@ -136,22 +186,32 @@ impl<D: Direction> UnitAction<D> {
                         |handler, scripts, unit_pos, unit, _observation_id| {
                             if scripts.len() > 0 {
                                 let mut first_argument = Map::new();
-                                first_argument.insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
-                                first_argument.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit.clone()));
-                                first_argument.insert(CONST_NAME_OTHER_POSITION.into(), Dynamic::from(end));
-                                first_argument.insert(CONST_NAME_OTHER_UNIT.into(), Dynamic::from(attacker.clone()));
+                                first_argument
+                                    .insert(CONST_NAME_POSITION.into(), Dynamic::from(unit_pos));
+                                first_argument
+                                    .insert(CONST_NAME_UNIT.into(), Dynamic::from(unit.clone()));
+                                first_argument
+                                    .insert(CONST_NAME_OTHER_POSITION.into(), Dynamic::from(end));
+                                first_argument.insert(
+                                    CONST_NAME_OTHER_UNIT.into(),
+                                    Dynamic::from(attacker.clone()),
+                                );
                                 let environment = handler.environment().clone();
                                 let executor = handler.executor(first_argument);
                                 for function_index in scripts {
                                     match executor.run::<D, ()>(function_index, ()) {
                                         Ok(()) => (),
                                         Err(e) => {
-                                            environment.log_rhai_error("OnDeath", environment.get_rhai_function_name(function_index), &e);
+                                            environment.log_rhai_error(
+                                                "OnDeath",
+                                                environment.get_rhai_function_name(function_index),
+                                                &e,
+                                            );
                                         }
                                     }
                                 }
                             }
-                        }
+                        },
                     );
                 }
                 true
@@ -173,8 +233,23 @@ impl<D: Direction> UnitAction<D> {
                         ballast: &[],
                         original_transporter: None,
                     };
-                    if attacker.can_target(handler.get_board(), end, transporter, target, false, &heroes) {
-                        execute_attack(handler, attacker_position, *input, transporter, ballast, AttackCounterState::AllowCounter, true);
+                    if attacker.can_target(
+                        handler.get_board(),
+                        end,
+                        transporter,
+                        target,
+                        false,
+                        &heroes,
+                    ) {
+                        execute_attack(
+                            handler,
+                            attacker_position,
+                            *input,
+                            transporter,
+                            ballast,
+                            AttackCounterState::AllowCounter,
+                            true,
+                        );
                     } else {
                         handler.effect_fog_surprise(end);
                     }
@@ -190,10 +265,21 @@ impl<D: Direction> UnitAction<D> {
                 let power = &config.hero_powers(hero.typ())[index.0];
                 handler.add_hero_charge(end, None, -(power.required_charge as i32));
                 handler.hero_power(end, index.0);
-                let heroes = Hero::hero_influence_at(handler.get_board(), end, Some(unit.get_owner_id()));
+                let heroes =
+                    Hero::hero_influence_at(handler.get_board(), end, Some(unit.get_owner_id()));
                 if let Some((input_script, function_index)) = power.script {
                     let action_data = input_script.map(|_| action_data);
-                    execute_unit_script(function_index, handler, &unit, path, end, transporter, &heroes, ballast, action_data);
+                    execute_unit_script(
+                        function_index,
+                        handler,
+                        &unit,
+                        path,
+                        end,
+                        transporter,
+                        &heroes,
+                        ballast,
+                        action_data,
+                    );
                 }
                 false
             }
@@ -201,9 +287,20 @@ impl<D: Direction> UnitAction<D> {
                 let unit = handler.get_game().get_unit(end).unwrap().clone();
                 let config = handler.environment().config.clone();
                 let custom_action = &config.custom_actions()[index.0];
-                let heroes = Hero::hero_influence_at(handler.get_board(), end, Some(unit.get_owner_id()));
+                let heroes =
+                    Hero::hero_influence_at(handler.get_board(), end, Some(unit.get_owner_id()));
                 let action_data = custom_action.script.0.map(|_| action_data);
-                execute_unit_script(custom_action.script.1, handler, &unit, path, end, transporter, &heroes, ballast, action_data);
+                execute_unit_script(
+                    custom_action.script.1,
+                    handler,
+                    &unit,
+                    path,
+                    end,
+                    transporter,
+                    &heroes,
+                    ballast,
+                    action_data,
+                );
                 false
             }
         };
@@ -227,7 +324,8 @@ impl<D: Direction> UnitCommand<D> {
         let borrowed_game = handler.get_game();
         let client_game;
         let client = if borrowed_game.has_secrets() {
-            client_game = borrowed_game.reimport_as_client(ClientPerspective::Team(borrowed_game.current_owner() as u8));
+            client_game = borrowed_game
+                .reimport_as_client(ClientPerspective::Team(borrowed_game.current_owner() as u8));
             &client_game
         } else {
             &*borrowed_game
@@ -239,12 +337,18 @@ impl<D: Direction> UnitCommand<D> {
             if !client.get_map().is_point_valid(start) {
                 return Err(CommandError::InvalidPoint(start));
             }
-            let unit = client.get_unit(start).ok_or(CommandError::MissingUnit)?.clone();
+            let unit = client
+                .get_unit(start)
+                .ok_or(CommandError::MissingUnit)?
+                .clone();
             let mut transporter = None;
             let unit = if let Some(index) = self.unload_index {
                 transporter = Some((&unit, index.0));
                 let boarded = unit.get_transported();
-                boarded.get(index.0).ok_or(CommandError::MissingBoardedUnit)?.clone()
+                boarded
+                    .get(index.0)
+                    .ok_or(CommandError::MissingBoardedUnit)?
+                    .clone()
             } else {
                 unit
             };
@@ -255,26 +359,42 @@ impl<D: Direction> UnitCommand<D> {
             if !unit.can_move(&board, start) {
                 return Err(CommandError::UnitCannotMove);
             }
-            let ballast = search_path(&board, &unit, &self.path, transporter, |path, p, can_stop_here, _| {
-                if *path == self.path && board_at_the_end {
-                    if let Some(transporter) = client.get_unit(p) {
-                        if p != path.start && transporter.can_transport(&unit) {
-                            return PathSearchFeedback::Found;
+            let ballast = search_path(
+                &board,
+                &unit,
+                &self.path,
+                transporter,
+                |path, p, can_stop_here, _| {
+                    if *path == self.path && board_at_the_end {
+                        if let Some(transporter) = client.get_unit(p) {
+                            if p != path.start && transporter.can_transport(&unit) {
+                                return PathSearchFeedback::Found;
+                            }
                         }
+                    } else if *path == self.path && !board_at_the_end && can_stop_here {
+                        return PathSearchFeedback::Found;
                     }
-                } else if *path == self.path && !board_at_the_end && can_stop_here {
-                    return PathSearchFeedback::Found;
-                }
-                PathSearchFeedback::Rejected
-            }).ok_or(CommandError::InvalidPath)?.1;
+                    PathSearchFeedback::Rejected
+                },
+            )
+            .ok_or(CommandError::InvalidPath)?
+            .1;
             let destination = self.path.end(client).unwrap().0;
             let ballast = if self.path.len() == 0 {
                 &[]
             } else {
                 ballast.get_entries()
             };
-            self.action.build_action_data_if_valid(&board, &unit, &self.path, destination, transporter, ballast)
-            .ok_or(CommandError::InvalidAction)?
+            self.action
+                .build_action_data_if_valid(
+                    &board,
+                    &unit,
+                    &self.path,
+                    destination,
+                    transporter,
+                    ballast,
+                )
+                .ok_or(CommandError::InvalidAction)?
         };
 
         // now we know that the player entered a valid command
@@ -290,21 +410,29 @@ impl<D: Direction> UnitCommand<D> {
         } else {
             unit
         };
-        let unit_id = handler.observe_unit(start, self.unload_index.map(|ui| ui.0)).0;
+        let unit_id = handler
+            .observe_unit(start, self.unload_index.map(|ui| ui.0))
+            .0;
         let mut ballast;
         loop {
-            ballast = search_path(handler.get_board(), &unit, &path_taken, transporter, |path, p, can_stop_here, _| {
-                if *path == path_taken && board_at_the_end {
-                    if let Some(transporter) = handler.get_board().get_unit(p) {
-                        if p != path.start && transporter.can_transport(&unit) {
-                            return PathSearchFeedback::Found;
+            ballast = search_path(
+                handler.get_board(),
+                &unit,
+                &path_taken,
+                transporter,
+                |path, p, can_stop_here, _| {
+                    if *path == path_taken && board_at_the_end {
+                        if let Some(transporter) = handler.get_board().get_unit(p) {
+                            if p != path.start && transporter.can_transport(&unit) {
+                                return PathSearchFeedback::Found;
+                            }
                         }
+                    } else if *path == path_taken && !board_at_the_end && can_stop_here {
+                        return PathSearchFeedback::Found;
                     }
-                } else if *path == path_taken && !board_at_the_end && can_stop_here {
-                    return PathSearchFeedback::Found;
-                }
-                PathSearchFeedback::Rejected
-            });
+                    PathSearchFeedback::Rejected
+                },
+            );
             if ballast.is_some() || path_taken.len() == 0 {
                 break;
             } else {
@@ -312,10 +440,17 @@ impl<D: Direction> UnitCommand<D> {
                 path_taken.steps.pop();
             }
         }
-        let ballast = ballast.expect(&format!("couldn't handle unit command {:?}", self)).1;
+        let ballast = ballast
+            .expect(&format!("couldn't handle unit command {:?}", self))
+            .1;
         // no event for the path is necessary if the unit is unable to move at all
         let ballast = if path_taken.steps.len() > 0 {
-            handler.unit_path(self.unload_index.map(|i| i.0), &path_taken, board_at_the_end, false);
+            handler.unit_path(
+                self.unload_index.map(|i| i.0),
+                &path_taken,
+                board_at_the_end,
+                false,
+            );
             ballast.get_entries()
         } else {
             &[]
@@ -329,7 +464,15 @@ impl<D: Direction> UnitCommand<D> {
         } else {
             // TODO: need to check whether action can really be executed
             // so far the code mainly checks whether it looks correct from the user perspective
-            self.action.execute(handler, unit_id, end, &path_taken, transporter, ballast, action_data);
+            self.action.execute(
+                handler,
+                unit_id,
+                end,
+                &path_taken,
+                transporter,
+                ballast,
+                action_data,
+            );
         }
         Ok(())
     }
@@ -340,10 +483,15 @@ pub struct UnloadIndex(pub usize);
 
 impl SupportedZippable<&Environment> for UnloadIndex {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        zipper.write_u32(self.0 as u32, bits_needed_for_max_value(support.config.max_player_count() as u32));
+        zipper.write_u32(
+            self.0 as u32,
+            bits_needed_for_max_value(support.config.max_player_count() as u32),
+        );
     }
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(support.config.max_player_count() as u32))? as usize))
+        Ok(Self(unzipper.read_u32(bits_needed_for_max_value(
+            support.config.max_player_count() as u32
+        ))? as usize))
     }
 }
 
@@ -375,7 +523,10 @@ pub struct HeroPowerIndex(pub usize);
 
 impl SupportedZippable<&Environment> for HeroPowerIndex {
     fn export(&self, zipper: &mut Zipper, support: &Environment) {
-        let max_len = support.config.hero_types().iter()
+        let max_len = support
+            .config
+            .hero_types()
+            .iter()
             .map(|hero| support.config.hero_powers(*hero).len())
             .max()
             .unwrap_or(0) as u32;
@@ -384,7 +535,10 @@ impl SupportedZippable<&Environment> for HeroPowerIndex {
     }
 
     fn import(unzipper: &mut Unzipper, support: &Environment) -> Result<Self, ZipperError> {
-        let max_len = support.config.hero_types().iter()
+        let max_len = support
+            .config
+            .hero_types()
+            .iter()
             .map(|hero| support.config.hero_powers(*hero).len())
             .max()
             .unwrap_or(0) as u32;

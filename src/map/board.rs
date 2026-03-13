@@ -8,19 +8,18 @@ use rhai::*;
 use crate::config::environment::Environment;
 use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::game::Game;
-use crate::map::map::{get_unit, Map};
-use crate::map::pipe::PipeState;
-use crate::player::Player;
-use crate::script::executor::Executor;
-use crate::script::CONST_NAME_BOARD;
-use crate::tokens::Token;
 use crate::map::direction::*;
+use crate::map::map::{Map, get_unit};
+use crate::map::pipe::PipeState;
 use crate::map::point::*;
 use crate::map::wrapping_map::WrappingMap;
+use crate::player::Player;
+use crate::script::CONST_NAME_BOARD;
+use crate::script::executor::Executor;
 use crate::terrain::terrain::Terrain;
+use crate::tokens::Token;
 use crate::units::movement::Path;
 use crate::units::unit::Unit;
-
 
 pub trait BoardView<D: Direction> {
     fn environment(&self) -> &Environment;
@@ -39,11 +38,10 @@ pub trait BoardView<D: Direction> {
     fn get_fog_at(&self, team: ClientPerspective, position: Point) -> FogIntensity;
 }
 
-
 pub enum Board<'a, D: Direction> {
     Base {
         base: &'a dyn BoardView<D>,
-        limits: Limits
+        limits: Limits,
     },
     UnitPath {
         base: &'a Self,
@@ -75,24 +73,43 @@ impl<'a, D: Direction> Board<'a, D> {
     }
 
     pub fn executor<'b>(&'b self, mut first_argument: rhai::Map) -> Executor<'b> {
-        first_argument.insert(CONST_NAME_BOARD.into(), Dynamic::from(BoardPointer::from(self)));
+        first_argument.insert(
+            CONST_NAME_BOARD.into(),
+            Dynamic::from(BoardPointer::from(self)),
+        );
         Executor::new(first_argument, self.environment().clone())
     }
 
-    pub fn unit_path_without_placing(&'a self, unload_index: Option<usize>, path: &Path<D>) -> Option<(Self, Point, Unit<D>)> {
-        if let Some(mut unit) = get_unit(self, path.start, unload_index).cloned() {
-            // TODO: update fog, funds after path, ...
-            // would be better to somehow wrap EventHandler, i guess?
-            let (end, _) = path.end(self).unwrap();
-            unit.transformed_by_path(self, path);
-            Some((Self::UnitPath { base: self, start: path.start }, end, unit))
-        } else {
-            None
+    pub fn unit_path_without_placing(
+        &'a self,
+        unload_index: Option<usize>,
+        path: &Path<D>,
+    ) -> Option<(Self, Point, Unit<D>)> {
+        match get_unit(self, path.start, unload_index).cloned() {
+            Some(mut unit) => {
+                // TODO: update fog, funds after path, ...
+                // would be better to somehow wrap EventHandler, i guess?
+                let (end, _) = path.end(self).unwrap();
+                unit.transformed_by_path(self, path);
+                Some((
+                    Self::UnitPath {
+                        base: self,
+                        start: path.start,
+                    },
+                    end,
+                    unit,
+                ))
+            }
+            _ => None,
         }
     }
 
     pub fn replace_unit(&'a self, pos: Point, unit: Option<Unit<D>>) -> Self {
-        Self::PutUnit { base: self, pos, unit }
+        Self::PutUnit {
+            base: self,
+            pos,
+            unit,
+        }
     }
 
     pub fn ignore_units(&'a self) -> Self {
@@ -178,7 +195,7 @@ impl<'a, D: Direction> BoardView<D> for Board<'a, D> {
                 }
             }
             Self::IgnoreUnits { .. } => return None,
-            _ => ()
+            _ => (),
         }
         self.parent().get_unit(p)
     }
@@ -219,8 +236,7 @@ impl<D: Direction> BoardPointer<D> {
 
     pub(crate) fn as_ref<'a>(&'a self) -> &'a Board<'a, D> {
         let ptr: *const Board<'a, D> = with_exposed_provenance_mut(self.ptr);
-        unsafe {ptr.as_ref()}
-            .unwrap()
+        unsafe { ptr.as_ref() }.unwrap()
     }
 }
 

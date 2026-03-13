@@ -10,10 +10,10 @@ use crate::combat::ValidAttackTargets;
 use crate::config::parse::*;
 use crate::units::UnitVisibility;
 
+use super::ConfigParseError;
 use super::file_loader::FileLoader;
 use super::file_loader::TableLine;
 use super::number_modification::NumberMod;
-use super::ConfigParseError;
 use super::unit_filter::UnitFilter;
 
 #[derive(Debug)]
@@ -37,7 +37,10 @@ pub(super) struct CommanderPowerUnitConfig {
 
 impl TableLine for CommanderPowerUnitConfig {
     type Header = CommanderPowerUnitConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use CommanderPowerUnitConfigHeader as H;
         let power = parse_vec_def(data, H::Power, Vec::new(), loader)?;
         let affects = parse_vec_def(data, H::Affects, Vec::new(), loader)?;
@@ -46,7 +49,7 @@ impl TableLine for CommanderPowerUnitConfig {
             if let H::Custom(name) = header {
                 let s = s.trim();
                 if s.len() > 0 {
-                    let nm =NumberMod::from_conf(s, loader)?.0;
+                    let nm = NumberMod::from_conf(s, loader)?.0;
                     custom_columns.insert(name.clone(), nm);
                 }
             }
@@ -61,7 +64,10 @@ impl TableLine for CommanderPowerUnitConfig {
             vision: parse_def(data, H::Vision, NumberMod::Keep, loader)?,
             true_vision: parse_def(data, H::TrueVision, NumberMod::Keep, loader)?,
             pass_enemy_units: match data.get(&H::PassEnemyUnits) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
+                Some(s) if s.len() > 0 => Some(
+                    s.parse()
+                        .map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?,
+                ),
                 _ => None,
             },
             attack_pattern: match data.get(&H::AttackPattern) {
@@ -77,11 +83,16 @@ impl TableLine for CommanderPowerUnitConfig {
                 _ => None,
             },
             attack_direction: match data.get(&H::AttackDirection) {
-                Some(s) if s.len() > 0 => Some(AllowedAttackInputDirectionSource::from_conf(s, loader)?.0),
+                Some(s) if s.len() > 0 => {
+                    Some(AllowedAttackInputDirectionSource::from_conf(s, loader)?.0)
+                }
                 _ => None,
             },
             can_be_displaced: match data.get(&H::CanBeDisplaced) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
+                Some(s) if s.len() > 0 => Some(
+                    s.parse()
+                        .map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?,
+                ),
                 _ => None,
             },
             on_death: match data.get(&H::OnDeath) {
@@ -104,9 +115,10 @@ impl TableLine for CommanderPowerUnitConfig {
 
 impl CommanderPowerUnitConfig {
     pub(super) fn get_fraction(&self, column_name: &String) -> NumberMod<Rational32> {
-        self.custom_columns.get(column_name)
-        .cloned()
-        .unwrap_or(NumberMod::Keep)
+        self.custom_columns
+            .get(column_name)
+            .cloned()
+            .unwrap_or(NumberMod::Keep)
     }
 }
 

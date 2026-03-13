@@ -4,9 +4,9 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::config::{Pronouns, parse::*};
 
+use super::ConfigParseError;
 use super::commander_power_config::CommanderPowerConfig;
 use super::file_loader::{FileLoader, TableLine};
-use super::ConfigParseError;
 
 /**
  * contains data that shouldn't change when using a different power
@@ -22,12 +22,13 @@ pub struct CommanderTypeConfig {
 
 impl TableLine for CommanderTypeConfig {
     type Header = CommanderTypeConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use CommanderTypeConfigHeader as H;
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let result = Self {
             name: get(H::Id)?.to_string(),
             pronouns: parse(data, H::Pronouns, loader)?,
@@ -43,7 +44,9 @@ impl TableLine for CommanderTypeConfig {
             return Err(Box::new(ConfigParseError::NameTooShort));
         }
         if self.max_charge > i32::MAX as u32 {
-            return Err(Box::new(ConfigParseError::CommanderMaxChargeExceeded(i32::MAX as u32)));
+            return Err(Box::new(ConfigParseError::CommanderMaxChargeExceeded(
+                i32::MAX as u32,
+            )));
         }
         Ok(())
     }

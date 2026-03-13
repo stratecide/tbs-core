@@ -1,19 +1,19 @@
-use rhai::*;
-use rhai::plugin::*;
 use num_rational::Rational32;
+use rhai::plugin::*;
+use rhai::*;
 
-use crate::config::environment::Environment;
+use super::hero::*;
 use crate::commander::commander_type::CommanderType;
+use crate::config::environment::Environment;
 use crate::map::board::BoardPointer;
 use crate::map::direction::*;
 use crate::map::point::*;
-use crate::units::unit_types::UnitType;
-use crate::units::hero::Hero;
-use crate::units::movement::MovementType;
-use crate::units::UnitVisibility;
 use crate::tags::*;
 use crate::tokens::token::Token;
-use super::hero::*;
+use crate::units::UnitVisibility;
+use crate::units::hero::Hero;
+use crate::units::movement::MovementType;
+use crate::units::unit_types::UnitType;
 
 #[export_module]
 mod unit_type_module {
@@ -24,9 +24,11 @@ mod unit_type_module {
 
     #[rhai_fn(pure, name = "UnitType")]
     pub fn new_unit_type(environment: &mut Environment, name: &str) -> Dynamic {
-        environment.config.find_unit_by_name(name)
-        .map(Dynamic::from)
-        .unwrap_or(().into())
+        environment
+            .config
+            .find_unit_by_name(name)
+            .map(Dynamic::from)
+            .unwrap_or(().into())
     }
 
     #[rhai_fn(pure, name = "==")]
@@ -93,7 +95,11 @@ macro_rules! unit_module {
             }
             #[rhai_fn(set = "owner_id")]
             pub fn set_owner_id(unit: &mut Unit, owner_id: i32) {
-                unit.set_owner_id(owner_id.max(-1).min(unit.environment().config.max_player_count() as i32) as i8)
+                unit.set_owner_id(
+                    owner_id
+                        .max(-1)
+                        .min(unit.environment().config.max_player_count() as i32) as i8,
+                )
             }
 
             #[rhai_fn(pure, get = "team")]
@@ -110,10 +116,23 @@ macro_rules! unit_module {
             }
 
             #[rhai_fn(pure)]
-            pub fn update_custom_value(unit: &mut Unit, board: BoardPointer<$d>, position: Point, column_id: &str, base_value: Rational32) -> Rational32 {
+            pub fn update_custom_value(
+                unit: &mut Unit,
+                board: BoardPointer<$d>,
+                position: Point,
+                column_id: &str,
+                base_value: Rational32,
+            ) -> Rational32 {
                 let board = board.as_ref();
                 let heroes = HeroMap::new(board, Some(unit.get_owner_id()));
-                unit.environment().config.custom_column_value(&column_id.to_string(), base_value, board, unit, position, &heroes)
+                unit.environment().config.custom_column_value(
+                    &column_id.to_string(),
+                    base_value,
+                    board,
+                    unit,
+                    position,
+                    &heroes,
+                )
             }
 
             #[rhai_fn(pure, name = "has")]
@@ -135,7 +154,9 @@ macro_rules! unit_module {
             }
             #[rhai_fn(pure, name = "get")]
             pub fn get_tag(unit: &mut Unit, key: TagKey) -> Dynamic {
-                unit.get_tag(key.0).map(|v| v.into_dynamic()).unwrap_or(().into())
+                unit.get_tag(key.0)
+                    .map(|v| v.into_dynamic())
+                    .unwrap_or(().into())
             }
             #[rhai_fn(name = "set")]
             pub fn set_tag(unit: &mut Unit, key: TagKey, value: Dynamic) {
@@ -150,9 +171,10 @@ macro_rules! unit_module {
 
             #[rhai_fn(pure, get = "transported")]
             pub fn get_transported(unit: &mut Unit) -> Array {
-                unit.get_transported().iter()
-                .map(|u| Dynamic::from(u.clone()))
-                .collect()
+                unit.get_transported()
+                    .iter()
+                    .map(|u| Dynamic::from(u.clone()))
+                    .collect()
             }
             #[rhai_fn(pure, get = "transported_len")]
             pub fn get_transported_len(unit: &mut Unit) -> i32 {
@@ -165,9 +187,12 @@ macro_rules! unit_module {
 
             #[rhai_fn(pure, get = "movement_types")]
             pub fn get_movement_types(unit: &mut Unit) -> Array {
-                unit.environment().config.sub_movement_types(unit.environment().config.base_movement_type(unit.typ())).iter()
-                .map(|mt| Dynamic::from(*mt))
-                .collect()
+                unit.environment()
+                    .config
+                    .sub_movement_types(unit.environment().config.base_movement_type(unit.typ()))
+                    .iter()
+                    .map(|mt| Dynamic::from(*mt))
+                    .collect()
             }
             #[rhai_fn(pure, get = "movement_type")]
             pub fn get_movement_type(unit: &mut Unit) -> MovementType {
@@ -186,8 +211,8 @@ macro_rules! unit_module {
             #[rhai_fn(pure, get = "hero")]
             pub fn get_hero(unit: &mut Unit) -> Dynamic {
                 unit.get_hero()
-                .map(|hero| Dynamic::from(hero.clone()))
-                .unwrap_or(().into())
+                    .map(|hero| Dynamic::from(hero.clone()))
+                    .unwrap_or(().into())
             }
             #[rhai_fn(set = "hero")]
             pub fn set_hero(unit: &mut Unit, hero: Hero) {
@@ -204,13 +229,19 @@ macro_rules! unit_module {
             #[rhai_fn(pure)]
             pub fn get_max_charge(unit: &mut Unit) -> i32 {
                 unit.get_hero()
-                .map(|hero| hero.typ().max_charge(unit.environment()) as i32)
-                .unwrap_or(0)
+                    .map(|hero| hero.typ().max_charge(unit.environment()) as i32)
+                    .unwrap_or(0)
             }
 
             #[rhai_fn(pure, name = "visibility")]
-            pub fn get_visibility(unit: &mut Unit, board: BoardPointer<$d>, position: Point) -> UnitVisibility {
-                unit.environment().config.unit_visibility(board.as_ref(), unit, position, None)
+            pub fn get_visibility(
+                unit: &mut Unit,
+                board: BoardPointer<$d>,
+                position: Point,
+            ) -> UnitVisibility {
+                unit.environment()
+                    .config
+                    .unit_visibility(board.as_ref(), unit, position, None)
             }
         }
 

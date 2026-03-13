@@ -6,8 +6,8 @@ use crate::config::parse::*;
 use crate::script::custom_action::CustomAction;
 use crate::units::hero::HeroType;
 
-use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
+use super::file_loader::{FileLoader, TableLine};
 
 #[derive(Debug)]
 pub struct HeroPowerConfig {
@@ -22,12 +22,13 @@ pub struct HeroPowerConfig {
 
 impl TableLine for HeroPowerConfig {
     type Header = HeroPowerConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use HeroPowerConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use HeroPowerConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let script = match data.get(&H::Script) {
             Some(s) if s.len() > 0 => {
                 let exe = loader.rhai_function(s, 1..=2)?;

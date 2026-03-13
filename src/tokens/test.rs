@@ -40,9 +40,18 @@ fn verify_token_test_constants() {
     assert_eq!(environment.config.token_name(TokenType::COINS), "CoinPile");
     assert_eq!(environment.config.token_name(TokenType::SKULL), "Skull");
     assert_eq!(environment.config.token_name(TokenType::SLUDGE), "Sludge");
-    assert_eq!(environment.config.token_name(TokenType::BUBBLE_AIRPORT), "AirportBubble");
-    assert_eq!(environment.config.token_name(TokenType::BUBBLE_FACTORY), "FactoryBubble");
-    assert_eq!(environment.config.token_name(TokenType::BUBBLE_PORT), "PortBubble");
+    assert_eq!(
+        environment.config.token_name(TokenType::BUBBLE_AIRPORT),
+        "AirportBubble"
+    );
+    assert_eq!(
+        environment.config.token_name(TokenType::BUBBLE_FACTORY),
+        "FactoryBubble"
+    );
+    assert_eq!(
+        environment.config.token_name(TokenType::BUBBLE_PORT),
+        "PortBubble"
+    );
 }
 
 #[test]
@@ -52,8 +61,26 @@ fn collect_coin_tokens() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(50).build()));
-    map.set_unit(Point::new(4, 4), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(
+        Point::new(0, 0),
+        Some(
+            UnitType::SMALL_TANK
+                .instance(&map_env)
+                .set_owner_id(0)
+                .set_hp(50)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(4, 4),
+        Some(
+            UnitType::WAR_SHIP
+                .instance(&map_env)
+                .set_owner_id(1)
+                .set_hp(100)
+                .build(),
+        ),
+    );
     let coins = [1, 2].map(|factor| {
         let mut coins = Token::new(map_env.clone(), TokenType::COINS);
         coins.set_tag(TAG_COINS, factor.into());
@@ -63,22 +90,58 @@ fn collect_coin_tokens() {
     map.set_tokens(Point::new(2, 0), vec![coins[1].clone()]);
     let mut settings = map.settings().unwrap();
     for player in &mut settings.players {
-        player.get_tag_bag_mut().set_tag(&map_env, TAG_INCOME, 100.into());
+        player
+            .get_tag_bag_mut()
+            .set_tag(&map_env, TAG_INCOME, 100.into());
     }
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
+    let (mut server, _) = Game::new_server(
+        map.clone(),
+        &settings,
+        settings.build_default(),
+        Urc::new(|| 0.),
+    );
     for player in &server.players {
-        assert_eq!(player.get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 0);
+        assert_eq!(
+            player
+                .get_tag(TAG_FUNDS)
+                .unwrap()
+                .into_dynamic()
+                .cast::<i32>(),
+            0
+        );
     }
-    server.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::with_steps(Point::new(0, 0), vec![PathStep::Dir(Direction4::D0), PathStep::Dir(Direction4::D0)]),
-        action: UnitAction::Wait,
-    }), Urc::new(|| 0.)).unwrap();
+    server
+        .handle_command(
+            Command::UnitCommand(UnitCommand {
+                unload_index: None,
+                path: Path::with_steps(
+                    Point::new(0, 0),
+                    vec![PathStep::Dir(Direction4::D0), PathStep::Dir(Direction4::D0)],
+                ),
+                action: UnitAction::Wait,
+            }),
+            Urc::new(|| 0.),
+        )
+        .unwrap();
     assert_eq!(server.get_map().get_tokens(Point::new(0, 0)), &[]);
     assert_eq!(server.get_map().get_tokens(Point::new(2, 0)), &[]);
-    assert_eq!(server.players[0].get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 150);
-    assert_eq!(server.players[1].get_tag(TAG_FUNDS).unwrap().into_dynamic().cast::<i32>(), 0);
+    assert_eq!(
+        server.players[0]
+            .get_tag(TAG_FUNDS)
+            .unwrap()
+            .into_dynamic()
+            .cast::<i32>(),
+        150
+    );
+    assert_eq!(
+        server.players[1]
+            .get_tag(TAG_FUNDS)
+            .unwrap()
+            .into_dynamic()
+            .cast::<i32>(),
+        0
+    );
 }
 
 #[test]
@@ -88,8 +151,26 @@ fn bubble_token() {
     let map = WMBuilder::<Direction4>::new(map);
     let mut map = Map::new(map.build(), &config);
     let map_env = map.environment().clone();
-    map.set_unit(Point::new(0, 0), Some(UnitType::SMALL_TANK.instance(&map_env).set_owner_id(0).set_hp(50).build()));
-    map.set_unit(Point::new(4, 4), Some(UnitType::WAR_SHIP.instance(&map_env).set_owner_id(1).set_hp(100).build()));
+    map.set_unit(
+        Point::new(0, 0),
+        Some(
+            UnitType::SMALL_TANK
+                .instance(&map_env)
+                .set_owner_id(0)
+                .set_hp(50)
+                .build(),
+        ),
+    );
+    map.set_unit(
+        Point::new(4, 4),
+        Some(
+            UnitType::WAR_SHIP
+                .instance(&map_env)
+                .set_owner_id(1)
+                .set_hp(100)
+                .build(),
+        ),
+    );
     let mut bubble = Token::new(map_env.clone(), TokenType::BUBBLE_FACTORY);
     bubble.set_owner_id(0);
     map.set_tokens(Point::new(1, 0), vec![bubble.clone()]);
@@ -103,39 +184,99 @@ fn bubble_token() {
     map.set_tokens(Point::new(4, 0), vec![bubble]);
     let mut settings = map.settings().unwrap();
     for player in &mut settings.players {
-        player.get_tag_bag_mut().set_tag(&map_env, TAG_FUNDS, 20000.into());
+        player
+            .get_tag_bag_mut()
+            .set_tag(&map_env, TAG_FUNDS, 20000.into());
     }
     assert_eq!(settings.players.len(), 3);
     settings.fog_mode = FogMode::Constant(FogSetting::None);
-    let (mut server, _) = Game::new_server(map.clone(), &settings, settings.build_default(), Urc::new(|| 0.));
-    server.handle_command(Command::UnitCommand(UnitCommand {
-        unload_index: None,
-        path: Path::with_steps(Point::new(0, 0), vec![
-            PathStep::Dir(Direction4::D0),
-            PathStep::Dir(Direction4::D0),
-            PathStep::Dir(Direction4::D0),
-            PathStep::Dir(Direction4::D0),
-            PathStep::Dir(Direction4::D0),
-        ]),
-        action: UnitAction::Wait,
-    }), Urc::new(|| 0.)).unwrap();
+    let (mut server, _) = Game::new_server(
+        map.clone(),
+        &settings,
+        settings.build_default(),
+        Urc::new(|| 0.),
+    );
+    server
+        .handle_command(
+            Command::UnitCommand(UnitCommand {
+                unload_index: None,
+                path: Path::with_steps(
+                    Point::new(0, 0),
+                    vec![
+                        PathStep::Dir(Direction4::D0),
+                        PathStep::Dir(Direction4::D0),
+                        PathStep::Dir(Direction4::D0),
+                        PathStep::Dir(Direction4::D0),
+                        PathStep::Dir(Direction4::D0),
+                    ],
+                ),
+                action: UnitAction::Wait,
+            }),
+            Urc::new(|| 0.),
+        )
+        .unwrap();
     assert_eq!(server.get_tokens(Point::new(2, 0)), &[]);
     // factory bubble
-    server.handle_command(Command::TokenAction(Point::new(1, 0), vec![
-        CustomActionInput::ShopItem(UnitType::SMALL_TANK.0.into()),
-    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
+    server
+        .handle_command(
+            Command::TokenAction(
+                Point::new(1, 0),
+                vec![CustomActionInput::ShopItem(UnitType::SMALL_TANK.0.into())]
+                    .try_into()
+                    .unwrap(),
+            ),
+            Urc::new(|| 0.),
+        )
+        .unwrap();
     assert_eq!(server.get_tokens(Point::new(1, 0)), &[]);
-    assert_eq!(*server.get_unit(Point::new(1, 0)).unwrap(), UnitType::SMALL_TANK.instance(&server.environment()).set_owner_id(0).set_hp(100).build());
+    assert_eq!(
+        *server.get_unit(Point::new(1, 0)).unwrap(),
+        UnitType::SMALL_TANK
+            .instance(&server.environment())
+            .set_owner_id(0)
+            .set_hp(100)
+            .build()
+    );
     // airport bubble
-    server.handle_command(Command::TokenAction(Point::new(3, 0), vec![
-        CustomActionInput::ShopItem(1.into()),
-    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
+    server
+        .handle_command(
+            Command::TokenAction(
+                Point::new(3, 0),
+                vec![CustomActionInput::ShopItem(1.into())]
+                    .try_into()
+                    .unwrap(),
+            ),
+            Urc::new(|| 0.),
+        )
+        .unwrap();
     assert_eq!(server.get_tokens(Point::new(3, 0)), &[]);
-    assert_eq!(*server.get_unit(Point::new(3, 0)).unwrap(), UnitType::ATTACK_HELI.instance(&server.environment()).set_owner_id(0).set_hp(100).build());
+    assert_eq!(
+        *server.get_unit(Point::new(3, 0)).unwrap(),
+        UnitType::ATTACK_HELI
+            .instance(&server.environment())
+            .set_owner_id(0)
+            .set_hp(100)
+            .build()
+    );
     // port bubble
-    server.handle_command(Command::TokenAction(Point::new(4, 0), vec![
-        CustomActionInput::ShopItem(7.into()),
-    ].try_into().unwrap()), Urc::new(|| 0.)).unwrap();
+    server
+        .handle_command(
+            Command::TokenAction(
+                Point::new(4, 0),
+                vec![CustomActionInput::ShopItem(7.into())]
+                    .try_into()
+                    .unwrap(),
+            ),
+            Urc::new(|| 0.),
+        )
+        .unwrap();
     assert_eq!(server.get_tokens(Point::new(4, 0)), &[]);
-    assert_eq!(*server.get_unit(Point::new(4, 0)).unwrap(), UnitType::DESTROYER.instance(&server.environment()).set_owner_id(0).set_hp(100).build());
+    assert_eq!(
+        *server.get_unit(Point::new(4, 0)).unwrap(),
+        UnitType::DESTROYER
+            .instance(&server.environment())
+            .set_owner_id(0)
+            .set_hp(100)
+            .build()
+    );
 }

@@ -1,8 +1,8 @@
-use std::collections::HashSet;
-use std::error::Error;
 use executor::Executor;
 use rhai::{Dynamic, Map};
 use rustc_hash::FxHashMap as HashMap;
+use std::collections::HashSet;
+use std::error::Error;
 
 use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
@@ -13,14 +13,14 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::script::*;
 use crate::tags::FlagKey;
-use crate::units::hero::HeroMap;
 use crate::units::UnitData;
+use crate::units::hero::HeroMap;
 
+use super::ConfigParseError;
 use super::file_loader::{FileLoader, TableLine};
 use super::terrain_powered::TerrainFilter;
 use super::token_filter::TokenFilter;
 use super::unit_filter::UnitFilter;
-use super::ConfigParseError;
 
 #[derive(Debug)]
 pub struct GlobalEventConfig {
@@ -31,18 +31,23 @@ pub struct GlobalEventConfig {
 
 impl TableLine for GlobalEventConfig {
     type Header = GlobalEventConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use GlobalEventConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use GlobalEventConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let typ = match get(H::Type)?.trim().to_lowercase().as_str() {
-            "global" => GlobalEventType::Global(parse_vec_def(data, H::Filter, Vec::new(), loader)?),
+            "global" => {
+                GlobalEventType::Global(parse_vec_def(data, H::Filter, Vec::new(), loader)?)
+            }
             "unit" => GlobalEventType::Unit(parse_vec_def(data, H::Filter, Vec::new(), loader)?),
             "token" => GlobalEventType::Token(parse_vec_def(data, H::Filter, Vec::new(), loader)?),
-            "terrain" => GlobalEventType::Terrain(parse_vec_def(data, H::Filter, Vec::new(), loader)?),
-            e => return Err(E::UnknownEnumMember(format!("GlobalEventType::{e}")).into())
+            "terrain" => {
+                GlobalEventType::Terrain(parse_vec_def(data, H::Filter, Vec::new(), loader)?)
+            }
+            e => return Err(E::UnknownEnumMember(format!("GlobalEventType::{e}")).into()),
         };
         Ok(Self {
             typ,
@@ -85,19 +90,27 @@ impl GlobalEventType {
         match self {
             Self::Global(filter) => {
                 let mut scope = Map::new();
-                scope.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(game.current_player().get_owner_id() as i32));
+                scope.insert(
+                    CONST_NAME_OWNER_ID.into(),
+                    Dynamic::from(game.current_player().get_owner_id() as i32),
+                );
                 let board = Board::from(game);
                 let executor = board.executor(scope.clone());
                 if filter.iter().all(|filter| filter.check(game, &executor)) {
                     return Some(scope);
                 }
             }
-            _ => ()
+            _ => (),
         }
         None
     }
 
-    pub fn test_local<D: Direction>(&self, handler: &mut EventHandler<D>, pos: Point, heroes: &HeroMap<D>) -> Vec<Map> {
+    pub fn test_local<D: Direction>(
+        &self,
+        handler: &mut EventHandler<D>,
+        pos: Point,
+        heroes: &HeroMap<D>,
+    ) -> Vec<Map> {
         let current_owner_id = handler.get_game().current_owner() as i32;
         let mut result = Vec::new();
         match self {
@@ -110,7 +123,9 @@ impl GlobalEventType {
                 scope.insert(CONST_NAME_TERRAIN.into(), Dynamic::from(terrain.clone()));
                 scope.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(current_owner_id));
                 let executor = handler.get_board().executor(scope.clone());
-                if filter.iter().all(|filter| filter.check(handler.get_board(), pos, &terrain, heroes, &executor)) {
+                if filter.iter().all(|filter| {
+                    filter.check(handler.get_board(), pos, &terrain, heroes, &executor)
+                }) {
                     result.push(scope)
                 }
             }
@@ -121,25 +136,39 @@ impl GlobalEventType {
                     scope.insert(CONST_NAME_TOKEN.into(), Dynamic::from(token.clone()));
                     scope.insert(CONST_NAME_OWNER_ID.into(), Dynamic::from(current_owner_id));
                     let executor = handler.get_board().executor(scope.clone());
-                    if filter.iter().all(|filter| filter.check(handler.get_board(), pos, &token, &executor)) {
+                    if filter
+                        .iter()
+                        .all(|filter| filter.check(handler.get_board(), pos, &token, &executor))
+                    {
                         result.push(scope)
                     }
                 }
             }
             Self::Unit(filter) => {
                 let Some(unit) = handler.get_game().get_unit(pos).cloned() else {
-                    return result
+                    return result;
                 };
-                if filter.iter().all(|filter| filter.check(handler.get_board(), UnitData {
-                    unit: &unit,
-                    pos,
-                    unload_index: None,
-                    ballast: &[],
-                    original_transporter: None,
-                }, None, heroes, false)) {
+                if filter.iter().all(|filter| {
+                    filter.check(
+                        handler.get_board(),
+                        UnitData {
+                            unit: &unit,
+                            pos,
+                            unload_index: None,
+                            ballast: &[],
+                            original_transporter: None,
+                        },
+                        None,
+                        heroes,
+                        false,
+                    )
+                }) {
                     let mut scope = Map::new();
                     scope.insert(CONST_NAME_UNIT.into(), Dynamic::from(unit.clone()));
-                    scope.insert(CONST_NAME_UNIT_ID.into(), Dynamic::from(handler.observe_unit(pos, None)));
+                    scope.insert(
+                        CONST_NAME_UNIT_ID.into(),
+                        Dynamic::from(handler.observe_unit(pos, None)),
+                    );
                     scope.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
                     //scope.insert(CONST_NAME_TRANSPORT_INDEX.into(), ());
                     //scope.insert(CONST_NAME_TRANSPORTER.into(), ());
@@ -147,16 +176,27 @@ impl GlobalEventType {
                     result.push(scope)
                 }
                 for (i, u) in unit.get_transported().iter().enumerate() {
-                    if filter.iter().all(|filter| filter.check(handler.get_board(), UnitData {
-                        unit: u,
-                        pos,
-                        unload_index: Some(i),
-                        ballast: &[],
-                        original_transporter: Some((&unit, pos)),
-                    }, None, heroes, false)) {
+                    if filter.iter().all(|filter| {
+                        filter.check(
+                            handler.get_board(),
+                            UnitData {
+                                unit: u,
+                                pos,
+                                unload_index: Some(i),
+                                ballast: &[],
+                                original_transporter: Some((&unit, pos)),
+                            },
+                            None,
+                            heroes,
+                            false,
+                        )
+                    }) {
                         let mut scope = Map::new();
                         scope.insert(CONST_NAME_UNIT.into(), Dynamic::from(u.clone()));
-                        scope.insert(CONST_NAME_UNIT_ID.into(), Dynamic::from(handler.observe_unit(pos, Some(i))));
+                        scope.insert(
+                            CONST_NAME_UNIT_ID.into(),
+                            Dynamic::from(handler.observe_unit(pos, Some(i))),
+                        );
                         scope.insert(CONST_NAME_POSITION.into(), Dynamic::from(pos));
                         scope.insert(CONST_NAME_TRANSPORT_INDEX.into(), Dynamic::from(i as i32));
                         scope.insert(CONST_NAME_TRANSPORTER.into(), Dynamic::from(unit.clone()));
@@ -170,7 +210,6 @@ impl GlobalEventType {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub(crate) enum GlobalFilter {
     Rhai(usize),
@@ -182,51 +221,57 @@ pub(crate) enum GlobalFilter {
 }
 
 impl FromConfig for GlobalFilter {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
-        Ok((match base {
-            "Rhai" | "Script" => {
-                let (name, r) = parse_tuple1::<String>(remainder, loader)?;
-                remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
-            }
-            "Commander" | "Co" => {
-                if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
+        Ok((
+            match base {
+                "Rhai" | "Script" => {
+                    let (name, r) = parse_tuple1::<String>(remainder, loader)?;
                     remainder = r;
-                    Self::Commander(commander, Some(power))
-                } else {
-                    let (commander, r) = parse_tuple1(remainder, loader)?;
-                    remainder = r;
-                    Self::Commander(commander, None)
+                    Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
                 }
-            }
-            "Alive" => Self::Alive,
-            "Round" => {
-                let (list, r) = parse_inner_vec::<u32>(remainder, true, loader)?;
-                remainder = r;
-                Self::Round(list.into_iter().collect())
-            }
-            "Flag" | "F" => {
-                let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
-                remainder = r;
-                Self::Flag(list.into_iter().collect())
-            }
-            "Not" => {
-                let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
-                remainder = r;
-                Self::Not(list)
-            }
-            _ => return Err(ConfigParseError::UnknownEnumMember(format!("GlobalFilter::{s}")))
-        }, remainder))
+                "Commander" | "Co" => {
+                    if let Ok((commander, power, r)) = parse_tuple2(remainder, loader) {
+                        remainder = r;
+                        Self::Commander(commander, Some(power))
+                    } else {
+                        let (commander, r) = parse_tuple1(remainder, loader)?;
+                        remainder = r;
+                        Self::Commander(commander, None)
+                    }
+                }
+                "Alive" => Self::Alive,
+                "Round" => {
+                    let (list, r) = parse_inner_vec::<u32>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Round(list.into_iter().collect())
+                }
+                "Flag" | "F" => {
+                    let (list, r) = parse_inner_vec::<FlagKey>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Flag(list.into_iter().collect())
+                }
+                "Not" => {
+                    let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Not(list)
+                }
+                _ => {
+                    return Err(ConfigParseError::UnknownEnumMember(format!(
+                        "GlobalFilter::{s}"
+                    )));
+                }
+            },
+            remainder,
+        ))
     }
 }
 
 impl GlobalFilter {
-    pub fn check<D: Direction>(
-        &self,
-        game: &Game<D>,
-        executor: &Executor,
-    ) -> bool {
+    pub fn check<D: Direction>(&self, game: &Game<D>, executor: &Executor) -> bool {
         match self {
             Self::Rhai(function_index) => {
                 match executor.run::<D, bool>(*function_index, ()) {
@@ -240,10 +285,13 @@ impl GlobalFilter {
             Self::Commander(commander_type, power) => {
                 let commander = &game.current_player().commander;
                 commander.typ() == *commander_type
-                && (power.is_none() || power.clone().unwrap() as usize == commander.get_active_power())
+                    && (power.is_none()
+                        || power.clone().unwrap() as usize == commander.get_active_power())
             }
             Self::Alive => !game.current_player().dead,
-            Self::Round(rounds) => rounds.contains(&(game.current_turn() as u32 / game.players.len() as u32)),
+            Self::Round(rounds) => {
+                rounds.contains(&(game.current_turn() as u32 / game.players.len() as u32))
+            }
             Self::Flag(flags) => {
                 let player = game.current_player();
                 flags.iter().any(|flag| player.has_flag(flag.0))
@@ -251,8 +299,7 @@ impl GlobalFilter {
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
-                negated.iter()
-                .any(|negated| !negated.check(game, executor))
+                negated.iter().any(|negated| !negated.check(game, executor))
             }
         }
     }

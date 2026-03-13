@@ -1,17 +1,17 @@
+use num_rational::Rational32;
 use rhai::ImmutableString;
 use rustc_hash::FxHashMap as HashMap;
 use std::error::Error;
-use num_rational::Rational32;
 
 use crate::combat::*;
 use crate::config::OwnershipPredicate;
 use crate::game::fog::VisionMode;
-use crate::units::movement::MovementType;
 use crate::units::UnitVisibility;
+use crate::units::movement::MovementType;
 
+use super::ConfigParseError;
 use super::file_loader::FileLoader;
 use super::file_loader::TableLine;
-use super::ConfigParseError;
 use super::movement_type_config::MovementPattern;
 use super::parse::*;
 
@@ -41,12 +41,13 @@ pub struct UnitTypeConfig {
 
 impl TableLine for UnitTypeConfig {
     type Header = UnitTypeConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use UnitTypeConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use UnitTypeConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let mut custom_columns = HashMap::default();
         for (header, s) in data {
             if let H::Custom(name) = header {
@@ -60,9 +61,19 @@ impl TableLine for UnitTypeConfig {
                 Some(s) => UnitVisibility::from_conf(s, loader)?.0,
                 None => UnitVisibility::Normal,
             },
-            movement_pattern: parse_def(data, H::MovementPattern, MovementPattern::Standard, loader)?,
+            movement_pattern: parse_def(
+                data,
+                H::MovementPattern,
+                MovementPattern::Standard,
+                loader,
+            )?,
             movement_type: parse(data, H::MovementType, loader)?,
-            movement_points: parse_def(data, H::MovementPoints, Rational32::from_integer(0), loader)?,
+            movement_points: parse_def(
+                data,
+                H::MovementPoints,
+                Rational32::from_integer(0),
+                loader,
+            )?,
             vision_mode: parse_def(data, H::VisionMode, VisionMode::Normal, loader)?,
             vision: parse_def(data, H::Vision, 0 as u8, loader)? as usize,
             true_vision: parse_def(data, H::TrueVision, 0 as u8, loader)? as usize,
@@ -75,7 +86,12 @@ impl TableLine for UnitTypeConfig {
                 Some(s) if s.len() > 0 => AttackPattern::from_conf(s, loader)?.0,
                 _ => AttackPattern::None,
             },
-            attack_direction: parse_def(data, H::AttackDirection, AllowedAttackInputDirectionSource::AllDirections, loader)?,
+            attack_direction: parse_def(
+                data,
+                H::AttackDirection,
+                AllowedAttackInputDirectionSource::AllDirections,
+                loader,
+            )?,
             attack_targets: parse_def(data, H::AttackTargets, ValidAttackTargets::Enemy, loader)?,
             attack_type: match data.get(&H::AttackType) {
                 Some(s) if s.len() > 0 => AttackType::from_conf(s, loader)?.0,

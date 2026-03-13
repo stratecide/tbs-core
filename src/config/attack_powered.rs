@@ -1,9 +1,9 @@
 use std::error::Error;
 
 use num_rational::Rational32;
+use rhai::*;
 use rustc_hash::FxHashMap as HashMap;
 use rustc_hash::FxHashSet;
-use rhai::*;
 
 use crate::combat::*;
 use crate::config::parse::*;
@@ -11,15 +11,15 @@ use crate::dyn_opt;
 use crate::map::board::Board;
 use crate::map::direction::Direction;
 use crate::script::*;
-use crate::units::hero::HeroMap;
 use crate::units::UnitData;
+use crate::units::hero::HeroMap;
 
+use super::ConfigParseError;
 use super::file_loader::FileLoader;
 use super::file_loader::TableLine;
 use super::number_modification::NumberMod;
-use super::unit_filter::unit_filter_input;
-use super::ConfigParseError;
 use super::unit_filter::UnitFilter;
+use super::unit_filter::unit_filter_input;
 
 #[derive(Debug)]
 pub(super) struct AttackPoweredConfig {
@@ -40,7 +40,10 @@ pub(super) struct AttackPoweredConfig {
 
 impl TableLine for AttackPoweredConfig {
     type Header = AttackPoweredConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use AttackPoweredConfigHeader as H;
         let mut custom_columns = HashMap::default();
         let mut scripts = HashMap::default();
@@ -56,12 +59,17 @@ impl TableLine for AttackPoweredConfig {
                                 let (priority, name, _) = parse_tuple2(s, loader)?;
                                 (Some(priority), name)
                             }
-                            _ => return Err(ConfigParseError::UnknownEnumMember(format!("{name}::{base}")).into())
+                            _ => {
+                                return Err(ConfigParseError::UnknownEnumMember(format!(
+                                    "{name}::{base}"
+                                ))
+                                .into());
+                            }
                         };
                         let f = loader.rhai_function(&f, 1..=10)?;
                         scripts.insert(name.clone(), (f.index, f.parameters.len(), priority));
                     } else {
-                        let nm =NumberMod::from_conf(s, loader)?.0;
+                        let nm = NumberMod::from_conf(s, loader)?.0;
                         custom_columns.insert(name.clone(), nm);
                     }
                 }
@@ -76,7 +84,10 @@ impl TableLine for AttackPoweredConfig {
                 _ => None,
             },
             allows_counter_attack: match data.get(&H::AllowsCounterAttack) {
-                Some(s) if s.len() > 0 => Some(s.parse().map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?),
+                Some(s) if s.len() > 0 => Some(
+                    s.parse()
+                        .map_err(|_| ConfigParseError::InvalidBool(s.to_string()))?,
+                ),
                 _ => None,
             },
             splash_priority: parse_def(data, H::SplashPriority, NumberMod::Keep, loader)?,
@@ -96,15 +107,21 @@ impl TableLine for AttackPoweredConfig {
 
 impl AttackPoweredConfig {
     pub(super) fn get_fraction(&self, column_name: &String) -> NumberMod<Rational32> {
-        self.custom_columns.get(column_name)
-        .cloned()
-        .unwrap_or(NumberMod::Keep)
+        self.custom_columns
+            .get(column_name)
+            .cloned()
+            .unwrap_or(NumberMod::Keep)
     }
 
-    pub(super) fn get_script(&self, column_name: &String, parameter_count: usize) -> Option<(usize, Option<Rational32>)> {
-        self.scripts.get(column_name)
-        .filter(|(_, p, _)| *p == 1 + parameter_count)
-        .map(|(f, _, priority)| (*f, *priority))
+    pub(super) fn get_script(
+        &self,
+        column_name: &String,
+        parameter_count: usize,
+    ) -> Option<(usize, Option<Rational32>)> {
+        self.scripts
+            .get(column_name)
+            .filter(|(_, p, _)| *p == 1 + parameter_count)
+            .map(|(f, _, priority)| (*f, *priority))
     }
 }
 
@@ -129,7 +146,7 @@ crate::enum_with_custom! {
 #[derive(Debug, Clone)]
 pub(crate) enum AttackFilter {
     Attack(FxHashSet<AttackType>),
-    AttackPriority(i8, i8), // min, max
+    AttackPriority(i8, i8),   // min, max
     SplashDistance(i32, i32), // min, max
     UnitFilter(UnitFilter),
     // override UnitFilter variants of the same name
@@ -138,56 +155,62 @@ pub(crate) enum AttackFilter {
 }
 
 impl FromConfig for AttackFilter {
-    fn from_conf<'a>(s: &'a str, loader: &mut FileLoader) -> Result<(Self, &'a str), ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut FileLoader,
+    ) -> Result<(Self, &'a str), ConfigParseError> {
         let (base, mut remainder) = string_base(s);
-        Ok((match base {
-            "AttackType" | "AT" => {
-                let (list, r) = parse_inner_vec(remainder, true, loader)?;
-                remainder = r;
-                Self::Attack(list.into_iter().collect())
-            }
-            "AttackPriority" => {
-                if let Ok((min, max, r)) = parse_tuple2(remainder, loader) {
+        Ok((
+            match base {
+                "AttackType" | "AT" => {
+                    let (list, r) = parse_inner_vec(remainder, true, loader)?;
                     remainder = r;
-                    Self::AttackPriority(min, max)
-                } else {
-                    let (value, r) = parse_tuple1(remainder, loader)?;
-                    remainder = r;
-                    Self::AttackPriority(value, value)
+                    Self::Attack(list.into_iter().collect())
                 }
-            }
-            "SplashDistance" => {
-                if let Ok((min, max, r)) = parse_tuple2(remainder, loader) {
-                    remainder = r;
-                    Self::SplashDistance(min, max)
-                } else {
-                    let (value, r) = parse_tuple1(remainder, loader)?;
-                    remainder = r;
-                    Self::SplashDistance(value, value)
-                }
-            }
-            // override UnitFilter variants of the same name
-            "Rhai" | "Script" => {
-                let (name, r) = parse_tuple1::<String>(remainder, loader)?;
-                remainder = r;
-                Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
-            }
-            "Not" => {
-                let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
-                remainder = r;
-                Self::Not(list)
-            }
-            _ => {
-                match UnitFilter::from_conf(s, loader) {
-                    Ok((value, r)) => {
+                "AttackPriority" => {
+                    if let Ok((min, max, r)) = parse_tuple2(remainder, loader) {
                         remainder = r;
-                        Self::UnitFilter(value)
+                        Self::AttackPriority(min, max)
+                    } else {
+                        let (value, r) = parse_tuple1(remainder, loader)?;
+                        remainder = r;
+                        Self::AttackPriority(value, value)
                     }
-                    // could remap UnknownEnumMember error
-                    Err(e) => return Err(e)
                 }
-            }
-        }, remainder))
+                "SplashDistance" => {
+                    if let Ok((min, max, r)) = parse_tuple2(remainder, loader) {
+                        remainder = r;
+                        Self::SplashDistance(min, max)
+                    } else {
+                        let (value, r) = parse_tuple1(remainder, loader)?;
+                        remainder = r;
+                        Self::SplashDistance(value, value)
+                    }
+                }
+                // override UnitFilter variants of the same name
+                "Rhai" | "Script" => {
+                    let (name, r) = parse_tuple1::<String>(remainder, loader)?;
+                    remainder = r;
+                    Self::Rhai(loader.rhai_function(&name, 1..=1)?.index)
+                }
+                "Not" => {
+                    let (list, r) = parse_inner_vec::<Self>(remainder, true, loader)?;
+                    remainder = r;
+                    Self::Not(list)
+                }
+                _ => {
+                    match UnitFilter::from_conf(s, loader) {
+                        Ok((value, r)) => {
+                            remainder = r;
+                            Self::UnitFilter(value)
+                        }
+                        // could remap UnknownEnumMember error
+                        Err(e) => return Err(e),
+                    }
+                }
+            },
+            remainder,
+        ))
     }
 }
 
@@ -211,13 +234,23 @@ impl AttackFilter {
                 let Some(splash) = splash else {
                     return false;
                 };
-                let r = count_from_both_ends(*min, attack.splash_range as usize + 1) <= splash.splash_distance as i32
-                && splash.splash_distance as i32 <= count_from_both_ends(*max, attack.splash_range as usize + 1);
+                let r = count_from_both_ends(*min, attack.splash_range as usize + 1)
+                    <= splash.splash_distance as i32
+                    && splash.splash_distance as i32
+                        <= count_from_both_ends(*max, attack.splash_range as usize + 1);
                 r
             }
             Self::UnitFilter(uf) => uf.check(game, unit_data, other_unit_data, heroes, is_counter),
             Self::Rhai(function_index) => {
-                let scope = attack_filter_input(game, attack, splash, unit_data, other_unit_data, heroes, is_counter);
+                let scope = attack_filter_input(
+                    game,
+                    attack,
+                    splash,
+                    unit_data,
+                    other_unit_data,
+                    heroes,
+                    is_counter,
+                );
                 let executor = game.executor(scope);
                 match executor.run::<D, bool>(*function_index, ()) {
                     Ok(result) => result,
@@ -230,8 +263,17 @@ impl AttackFilter {
             Self::Not(negated) => {
                 // returns true if at least one check returns false
                 // if you need all checks to return false, put them into separate Self::Not wrappers instead
-                negated.iter()
-                .any(|negated| !negated.check(game, attack, splash, unit_data, other_unit_data, heroes, is_counter))
+                negated.iter().any(|negated| {
+                    !negated.check(
+                        game,
+                        attack,
+                        splash,
+                        unit_data,
+                        other_unit_data,
+                        heroes,
+                        is_counter,
+                    )
+                })
             }
         }
     }
@@ -256,6 +298,9 @@ pub(crate) fn attack_filter_input<D: Direction>(
     is_counter: bool,
 ) -> Map {
     let mut result = unit_filter_input(game, unit_data, other_unit_data, heroes, is_counter);
-    result.insert(CONST_NAME_SPLASH_DISTANCE.into(), dyn_opt(splash.map(|s| s.splash_distance as i32)));
+    result.insert(
+        CONST_NAME_SPLASH_DISTANCE.into(),
+        dyn_opt(splash.map(|s| s.splash_distance as i32)),
+    );
     result
 }

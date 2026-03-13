@@ -1,21 +1,21 @@
 use interfaces::ClientPerspective;
 use rhai::{FuncRegistration, Module};
-use zipper::*;
 use zipper::zipper_derive::*;
+use zipper::*;
 
 use crate::config::effect_config::{EffectConfig, EffectDataType};
+use crate::config::environment::Environment;
 use crate::config::parse::FromConfig;
 use crate::map::board::*;
+use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::player::Owner;
-use crate::units::unit::Unit;
-use crate::units::movement::{Path, MAX_PATH_LENGTH};
 use crate::terrain::terrain::*;
 use crate::tokens::token::Token;
-use crate::map::direction::Direction;
-use crate::units::movement::PathStep;
-use crate::config::environment::Environment;
 use crate::units::UnitVisibility;
+use crate::units::movement::PathStep;
+use crate::units::movement::{MAX_PATH_LENGTH, Path};
+use crate::units::unit::Unit;
 
 use super::fog::FogIntensity;
 
@@ -29,11 +29,16 @@ impl EffectType {
 }
 
 impl FromConfig for EffectType {
-    fn from_conf<'a>(s: &'a str, loader: &mut crate::config::file_loader::FileLoader) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
+    fn from_conf<'a>(
+        s: &'a str,
+        loader: &mut crate::config::file_loader::FileLoader,
+    ) -> Result<(Self, &'a str), crate::config::ConfigParseError> {
         let (base, s) = crate::config::parse::string_base(s);
         match loader.effects.iter().position(|name| name.as_str() == base) {
             Some(i) => Ok((Self(i), s)),
-            None => Err(crate::config::ConfigParseError::MissingUnit(base.to_string()))
+            None => Err(crate::config::ConfigParseError::MissingUnit(
+                base.to_string(),
+            )),
         }
     }
 }
@@ -47,7 +52,10 @@ impl SupportedZippable<&Environment> for EffectType {
         let bits = bits_needed_for_max_value(environment.config.effect_count() as u32 - 1);
         let index = unzipper.read_u32(bits)? as usize;
         if index >= environment.config.effect_count() {
-            return Err(ZipperError::EnumOutOfBounds(format!("EffectType index {}", index)))
+            return Err(ZipperError::EnumOutOfBounds(format!(
+                "EffectType index {}",
+                index
+            )));
         }
         Ok(Self(index))
     }
@@ -88,13 +96,21 @@ pub enum EffectData<D: Direction> {
 }
 
 impl<D: Direction> EffectData<D> {
-    pub fn fog_replacement(&self, game: &Board<D>, p: Point, fog_intensity: FogIntensity, team: ClientPerspective) -> Option<Self> {
+    pub fn fog_replacement(
+        &self,
+        game: &Board<D>,
+        p: Point,
+        fog_intensity: FogIntensity,
+        team: ClientPerspective,
+    ) -> Option<Self> {
         match self {
             Self::Terrain(inner) => Some(Self::Terrain(inner.fog_replacement(fog_intensity))),
             Self::Token(inner) => Some(Self::Token(inner.fog_replacement(fog_intensity)?)),
             Self::Unit(inner) => Some(Self::Unit(inner.fog_replacement(game, p, fog_intensity)?)),
             Self::Visibility(inner) => inner.visible_in_fog(fog_intensity).then_some(self.clone()),
-            Self::Team(inner) => (inner.0 < 0 || team.to_i16() == inner.0 as i16).then_some(self.clone()),
+            Self::Team(inner) => {
+                (inner.0 < 0 || team.to_i16() == inner.0 as i16).then_some(self.clone())
+            }
             _ => None,
         }
     }
@@ -103,8 +119,12 @@ impl<D: Direction> EffectData<D> {
         match self {
             Self::None => (),
             Self::Int(value) => {
-                let Some(EffectDataType::Int { min, max }) = environment.config.effect_data(typ) else {
-                    panic!("EffectData::Int has wrong data type for {}", environment.config.effect_name(typ))
+                let Some(EffectDataType::Int { min, max }) = environment.config.effect_data(typ)
+                else {
+                    panic!(
+                        "EffectData::Int has wrong data type for {}",
+                        environment.config.effect_name(typ)
+                    )
                 };
                 let bits = bits_needed_for_max_value((max - min) as u32);
                 zipper.write_u32((*value - min) as u32, bits);
@@ -118,9 +138,13 @@ impl<D: Direction> EffectData<D> {
         }
     }
 
-    fn import(unzipper: &mut Unzipper, environment: &Environment, typ: EffectType) -> Result<Self, ZipperError> {
+    fn import(
+        unzipper: &mut Unzipper,
+        environment: &Environment,
+        typ: EffectType,
+    ) -> Result<Self, ZipperError> {
         let Some(data_type) = environment.config.effect_data(typ) else {
-            return Ok(Self::None)
+            return Ok(Self::None);
         };
         Ok(match data_type {
             EffectDataType::Int { min, max } => {
@@ -160,10 +184,7 @@ impl<D: Direction> SupportedZippable<&Environment> for EffectWithoutPosition<D> 
     fn import(unzipper: &mut Unzipper, environment: &Environment) -> Result<Self, ZipperError> {
         let typ = EffectType::import(unzipper, environment)?;
         let data = EffectData::import(unzipper, environment, typ)?;
-        Ok(Self {
-            typ,
-            data,
-        })
+        Ok(Self { typ, data })
     }
 }
 
@@ -171,11 +192,16 @@ impl<D: Direction> SupportedZippable<&Environment> for EffectWithoutPosition<D> 
 pub struct EffectPath<D: Direction> {
     pub typ: EffectType,
     pub initial_data: Option<EffectData<D>>,
-    pub steps: LVec<EffectStep<D>, {MAX_PATH_LENGTH}>,
+    pub steps: LVec<EffectStep<D>, { MAX_PATH_LENGTH }>,
 }
 
 impl<D: Direction> EffectPath<D> {
-    pub fn new(board: &impl BoardView<D>, typ: EffectType, data: EffectData<D>, path: Path<D>) -> Self {
+    pub fn new(
+        board: &impl BoardView<D>,
+        typ: EffectType,
+        data: EffectData<D>,
+        path: Path<D>,
+    ) -> Self {
         let mut p = path.start;
         let mut steps = Vec::with_capacity(path.steps.len());
         for step in path.steps {
@@ -204,7 +230,10 @@ impl<D: Direction> SupportedZippable<&Environment> for EffectPath<D> {
             }
         };
         export_data(zipper, &self.initial_data);
-        zipper.write_u32(self.steps.len() as u32, bits_needed_for_max_value(MAX_PATH_LENGTH));
+        zipper.write_u32(
+            self.steps.len() as u32,
+            bits_needed_for_max_value(MAX_PATH_LENGTH),
+        );
         for step in &self.steps {
             if has_data {
                 zipper.write_bool(matches!(step, EffectStep::Replace(_, _, _)));
@@ -274,10 +303,13 @@ impl<D: Direction> Effect<D> {
     }
 
     pub fn new_fog_surprise(p: Point) -> Self {
-        Self::Point(EffectWithoutPosition {
-            typ: EffectType::FOG_SURPRISE,
-            data: EffectData::None,
-        }, p)
+        Self::Point(
+            EffectWithoutPosition {
+                typ: EffectType::FOG_SURPRISE,
+                data: EffectData::None,
+            },
+            p,
+        )
     }
 
     pub fn new_unit_path(unit: Unit<D>, steps: Vec<EffectStep<D>>) -> Self {
@@ -298,12 +330,10 @@ impl<D: Direction> Effect<D> {
         match self {
             Self::Global(eff) => {
                 let eff = visibility.fog_replacement(&eff, None, None, game, team)?;
-                Some(Self::Global(
-                    EffectWithoutPosition {
-                        typ: eff.typ,
-                        data: eff.data,
-                    },
-                ))
+                Some(Self::Global(EffectWithoutPosition {
+                    typ: eff.typ,
+                    data: eff.data,
+                }))
             }
             Self::Point(eff, p) => {
                 let eff = visibility.fog_replacement(&eff, Some(*p), Some(*p), game, team)?;
@@ -315,7 +345,11 @@ impl<D: Direction> Effect<D> {
                     *p,
                 ))
             }
-            Self::Path(EffectPath { typ, initial_data, steps }) => {
+            Self::Path(EffectPath {
+                typ,
+                initial_data,
+                steps,
+            }) => {
                 let start = steps.first()?.get_start();
                 let end = steps.last()?;
                 let end = end.get_step().progress(game, end.get_start()).ok()?.0;
@@ -327,23 +361,42 @@ impl<D: Direction> Effect<D> {
                 let mut data = initial_data.clone();
                 let mut transformed = Vec::with_capacity(steps.len() + 1);
                 for (i, p) in points.into_iter().enumerate() {
-                    transformed.push(data.clone().map(|data| visibility.fog_replacement(&EffectWithoutPosition {
-                        typ: *typ,
-                        data: data,
-                    }, Some(start), Some(p), game, team)).flatten());
+                    transformed.push(
+                        data.clone()
+                            .map(|data| {
+                                visibility.fog_replacement(
+                                    &EffectWithoutPosition {
+                                        typ: *typ,
+                                        data: data,
+                                    },
+                                    Some(start),
+                                    Some(p),
+                                    game,
+                                    team,
+                                )
+                            })
+                            .flatten(),
+                    );
                     if let Some(EffectStep::Replace(_, _, d)) = steps.get(i) {
                         data = d.clone();
                     }
                 }
-                let steps: Vec<EffectStep<D>> = steps.iter().enumerate()
-                .filter(|(i, _)| transformed[*i].is_some() || transformed[*i + 1].is_some())
-                .map(|(i, step)| {
-                    if transformed[i] == transformed[i + 1] {
-                        EffectStep::Simple(step.get_start(), step.get_step())
-                    } else {
-                        EffectStep::Replace(step.get_start(), step.get_step(), transformed[i + 1].clone().map(|eff| eff.data))
-                    }
-                }).collect();
+                let steps: Vec<EffectStep<D>> = steps
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| transformed[*i].is_some() || transformed[*i + 1].is_some())
+                    .map(|(i, step)| {
+                        if transformed[i] == transformed[i + 1] {
+                            EffectStep::Simple(step.get_start(), step.get_step())
+                        } else {
+                            EffectStep::Replace(
+                                step.get_start(),
+                                step.get_step(),
+                                transformed[i + 1].clone().map(|eff| eff.data),
+                            )
+                        }
+                    })
+                    .collect();
                 if steps.len() == 0 {
                     return None;
                 }
@@ -357,11 +410,12 @@ impl<D: Direction> Effect<D> {
     }
 }
 
-pub(crate) fn effect_constructor_module<D: Direction>(definitions: &[EffectConfig]) -> rhai::Shared<Module> {
+pub(crate) fn effect_constructor_module<D: Direction>(
+    definitions: &[EffectConfig],
+) -> rhai::Shared<Module> {
     let mut module = Module::new();
     for (i, conf) in definitions.iter().enumerate() {
-        let f = FuncRegistration::new(format!("FX_{}", conf.name))
-        .in_global_namespace();
+        let f = FuncRegistration::new(format!("FX_{}", conf.name)).in_global_namespace();
         match conf.data_type {
             None => f.set_into_module(&mut module, move || {
                 EffectWithoutPosition::new(i, EffectData::<D>::None)
@@ -369,34 +423,52 @@ pub(crate) fn effect_constructor_module<D: Direction>(definitions: &[EffectConfi
             Some(EffectDataType::Direction) => f.set_into_module(&mut module, move |value: D| {
                 EffectWithoutPosition::new(i, EffectData::Direction(value))
             }),
-            Some(EffectDataType::Int { min, max }) => f.set_into_module(&mut module, move |value: i32| {
-                EffectWithoutPosition::new(i, EffectData::<D>::Int(value.max(min).min(max)))
-            }),
-            Some(EffectDataType::Terrain) => f.set_into_module(&mut module, move |value: Terrain<D>| {
-                EffectWithoutPosition::new(i, EffectData::Terrain(value))
-            }),
-            Some(EffectDataType::Token) => f.set_into_module(&mut module, move |value: Token<D>| {
-                EffectWithoutPosition::new(i, EffectData::Token(value))
-            }),
+            Some(EffectDataType::Int { min, max }) => {
+                f.set_into_module(&mut module, move |value: i32| {
+                    EffectWithoutPosition::new(i, EffectData::<D>::Int(value.max(min).min(max)))
+                })
+            }
+            Some(EffectDataType::Terrain) => f
+                .set_into_module(&mut module, move |value: Terrain<D>| {
+                    EffectWithoutPosition::new(i, EffectData::Terrain(value))
+                }),
+            Some(EffectDataType::Token) => f
+                .set_into_module(&mut module, move |value: Token<D>| {
+                    EffectWithoutPosition::new(i, EffectData::Token(value))
+                }),
             Some(EffectDataType::Unit) => f.set_into_module(&mut module, move |value: Unit<D>| {
                 EffectWithoutPosition::new(i, EffectData::Unit(value))
             }),
-            Some(EffectDataType::Visibility) => f.set_into_module(&mut module, move |value: UnitVisibility| {
-                EffectWithoutPosition::new(i, EffectData::<D>::Visibility(value))
-            }),
-            Some(EffectDataType::Team) => f.set_into_module(&mut module, move |environment: &mut Environment, mut value: i32| {
-                if value < 0 || value >= environment.config.max_player_count() as i32 {
-                    value = -1;
-                }
-                EffectWithoutPosition::new(i, EffectData::<D>::Team(Owner(value as i8)))
-            }),
+            Some(EffectDataType::Visibility) => {
+                f.set_into_module(&mut module, move |value: UnitVisibility| {
+                    EffectWithoutPosition::new(i, EffectData::<D>::Visibility(value))
+                })
+            }
+            Some(EffectDataType::Team) => f.set_into_module(
+                &mut module,
+                move |environment: &mut Environment, mut value: i32| {
+                    if value < 0 || value >= environment.config.max_player_count() as i32 {
+                        value = -1;
+                    }
+                    EffectWithoutPosition::new(i, EffectData::<D>::Team(Owner(value as i8)))
+                },
+            ),
         };
     }
-    FuncRegistration::new("at").set_into_module(&mut module, move |effect: EffectWithoutPosition<D>, p: Point| {
-        Effect::Point(effect, p)
-    });
-    FuncRegistration::new("path").set_into_module(&mut module, move |board: BoardPointer<D>, effect: EffectWithoutPosition<D>, path: Path<D>| {
-        Effect::Path(EffectPath::new(board.as_ref(), effect.typ, effect.data, path))
-    });
+    FuncRegistration::new("at").set_into_module(
+        &mut module,
+        move |effect: EffectWithoutPosition<D>, p: Point| Effect::Point(effect, p),
+    );
+    FuncRegistration::new("path").set_into_module(
+        &mut module,
+        move |board: BoardPointer<D>, effect: EffectWithoutPosition<D>, path: Path<D>| {
+            Effect::Path(EffectPath::new(
+                board.as_ref(),
+                effect.typ,
+                effect.data,
+                path,
+            ))
+        },
+    );
     module.into()
 }

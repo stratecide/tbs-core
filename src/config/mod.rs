@@ -1,32 +1,32 @@
-mod unit_type_config;
-pub mod movement_type_config;
-mod terrain_type_config;
-mod hero_type_config;
-mod commander_type_config;
-mod commander_power_config;
-mod commander_unit_config;
-pub(crate) mod unit_filter;
-pub mod number_modification;
-pub mod config;
-pub mod parse;
-pub mod environment;
-mod custom_action_config;
-mod hero_power_config;
-mod terrain_powered;
-pub mod file_loader;
-pub mod table_config;
-pub mod tag_config;
-pub mod token_typ_config;
-pub mod global_events;
-pub mod token_filter;
-pub mod editor_tag_config;
-pub mod effect_config;
 pub mod attack_config;
 pub mod attack_powered;
+mod commander_power_config;
+mod commander_type_config;
+mod commander_unit_config;
+pub mod config;
+mod custom_action_config;
+pub mod editor_tag_config;
+pub mod effect_config;
+pub mod environment;
+pub mod file_loader;
+pub mod global_events;
+mod hero_power_config;
+mod hero_type_config;
+pub mod movement_type_config;
+pub mod number_modification;
+pub mod parse;
+pub mod table_config;
+pub mod tag_config;
+mod terrain_powered;
+mod terrain_type_config;
+pub mod token_filter;
+pub mod token_typ_config;
+pub(crate) mod unit_filter;
+mod unit_type_config;
 
+use std::error::Error;
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::error::Error;
 use std::path::PathBuf;
 
 use crate::commander::commander_type::CommanderType;
@@ -99,7 +99,7 @@ crate::listable_enum! {
 
 #[derive(Debug)]
 pub struct Pronouns {
-    pub they: String, // "{} took a walk"
-    pub their: String,// "{} hand was waving"
-    pub them: String, // "I gave {} a present"
+    pub they: String,  // "{} took a walk"
+    pub their: String, // "{} hand was waving"
+    pub them: String,  // "I gave {} a present"
 }

@@ -1,8 +1,11 @@
+use crate::config::environment::Environment;
 use zipper::*;
 use zipper_derive::Zippable;
-use crate::config::environment::Environment;
 
-use super::{direction::{Direction, Translation}, wrapping_map::Distortion};
+use super::{
+    direction::{Direction, Translation},
+    wrapping_map::Distortion,
+};
 
 pub trait Position<T> {
     fn new(x: T, y: T) -> Self;
@@ -29,7 +32,7 @@ impl Point {
 
 impl Position<u8> for Point {
     fn new(x: u8, y: u8) -> Self {
-        Point {x, y}
+        Point { x, y }
     }
     fn x(&self) -> u8 {
         self.x
@@ -46,15 +49,12 @@ pub struct GlobalPoint {
 }
 
 impl GlobalPoint {
-    pub const ZERO: Self = GlobalPoint {
-        x: 0,
-        y: 0,
-    };
+    pub const ZERO: Self = GlobalPoint { x: 0, y: 0 };
 }
 
 impl Position<i16> for GlobalPoint {
     fn new(x: i16, y: i16) -> Self {
-        GlobalPoint {x, y}
+        GlobalPoint { x, y }
     }
     fn x(&self) -> i16 {
         self.x
@@ -72,10 +72,7 @@ pub struct PointWithDistortion<D: Direction> {
 
 impl<D: Direction> PointWithDistortion<D> {
     pub fn new(point: Point, distortion: Distortion<D>) -> Self {
-        Self {
-            point,
-            distortion,
-        }
+        Self { point, distortion }
     }
     pub fn as_tuple(&self) -> (Point, Distortion<D>) {
         (self.point, self.distortion)

@@ -21,12 +21,13 @@ pub struct TokenTypeConfig {
 
 impl TableLine for TokenTypeConfig {
     type Header = TokenTypeConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
-        use TokenTypeConfigHeader as H;
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        use TokenTypeConfigHeader as H;
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let result = Self {
             name: get(H::Id)?.to_string(),
             owned: parse_def(data, H::Owned, OwnershipPredicate::Either, loader)?,

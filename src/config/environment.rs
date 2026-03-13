@@ -14,13 +14,13 @@ use crate::map::direction::Direction;
 use crate::map::point::Point;
 use crate::map::point_map::MapSize;
 use crate::tags::*;
-use crate::terrain::terrain::*;
 use crate::terrain::TerrainType;
+use crate::terrain::terrain::*;
+use crate::units::UnitVisibility;
+use crate::units::hero::*;
 use crate::units::movement::MovementType;
 use crate::units::unit::Unit;
 use crate::units::unit_types::UnitType;
-use crate::units::UnitVisibility;
-use crate::units::hero::*;
 
 use super::config::Config;
 use super::table_config::*;
@@ -54,13 +54,16 @@ impl Environment {
     }
 
     fn setup_unique_ids(config: &Config) -> Urc<Umutex<HashMap<String, FxHashSet<usize>>>> {
-        Urc::new(Umutex::new(config.tags.iter()
-        .filter_map(|tag_config| {
-            match &tag_config.tag_type {
-                TagType::Unique { pool } => Some((pool.clone(), FxHashSet::default())),
-                _ => None
-            }
-        }).collect()))
+        Urc::new(Umutex::new(
+            config
+                .tags
+                .iter()
+                .filter_map(|tag_config| match &tag_config.tag_type {
+                    TagType::Unique { pool } => Some((pool.clone(), FxHashSet::default())),
+                    _ => None,
+                })
+                .collect(),
+        ))
     }
 
     pub(crate) fn start_game(&mut self, settings: &Urc<GameSettings>) {
@@ -98,10 +101,17 @@ impl Environment {
         Some(id)
     }
 
-    pub(crate) fn log_rhai_error(&self, location: &str, function_name: impl AsRef<str>, error: &EvalAltResult) {
+    pub(crate) fn log_rhai_error(
+        &self,
+        location: &str,
+        function_name: impl AsRef<str>,
+        error: &EvalAltResult,
+    ) {
         let config_name = &self.config.name;
         let function_name = function_name.as_ref();
-        crate::warn!("RHAI error in {location}, config '{config_name}', function '{function_name}':\n{error:?}");
+        crate::warn!(
+            "RHAI error in {location}, config '{config_name}', function '{function_name}':\n{error:?}"
+        );
     }
 
     pub fn get_rhai_function_name(&self, index: usize) -> &String {
@@ -123,35 +133,62 @@ impl Environment {
 
     pub fn table_entry(&self, name: &str, x: TableAxisKey, y: TableAxisKey) -> Option<TableValue> {
         //tracing::debug!("table_entry at {x:?}, {y:?}");
-        self.config.custom_tables.iter()
-        .find(|(key, _)| key.as_str() == name)
-        .map(|(_, table)| {
-            let value = table.values.get(&(x, y))
-            .unwrap_or(&table.default_value)
-            .clone();
-            //tracing::debug!("value = {value:?}");
-            value
-        })
+        self.config
+            .custom_tables
+            .iter()
+            .find(|(key, _)| key.as_str() == name)
+            .map(|(_, table)| {
+                let value = table
+                    .values
+                    .get(&(x, y))
+                    .unwrap_or(&table.default_value)
+                    .clone();
+                //tracing::debug!("value = {value:?}");
+                value
+            })
     }
 
     pub fn table_row(&self, name: &str, y: TableAxisKey, value: TableValue) -> Vec<TableAxisKey> {
         let mut result = Vec::new();
-        if let Some((_, table)) = self.config.custom_tables.iter()
-        .find(|(key, _)| key.as_str() == name) {
+        if let Some((_, table)) = self
+            .config
+            .custom_tables
+            .iter()
+            .find(|(key, _)| key.as_str() == name)
+        {
             for header in &table.column_keys {
-                if value == *table.values.get(&(header.clone(), y.clone())).unwrap_or(&table.default_value) {
+                if value
+                    == *table
+                        .values
+                        .get(&(header.clone(), y.clone()))
+                        .unwrap_or(&table.default_value)
+                {
                     result.push(header.clone());
                 }
             }
         }
         result
     }
-    pub fn table_column(&self, name: &str, x: TableAxisKey, value: TableValue) -> Vec<TableAxisKey> {
+    pub fn table_column(
+        &self,
+        name: &str,
+        x: TableAxisKey,
+        value: TableValue,
+    ) -> Vec<TableAxisKey> {
         let mut result = Vec::new();
-        if let Some((_, table)) = self.config.custom_tables.iter()
-        .find(|(key, _)| key.as_str() == name) {
+        if let Some((_, table)) = self
+            .config
+            .custom_tables
+            .iter()
+            .find(|(key, _)| key.as_str() == name)
+        {
             for row_key in &table.row_keys {
-                if value == *table.values.get(&(x.clone(), row_key.clone())).unwrap_or(&table.default_value) {
+                if value
+                    == *table
+                        .values
+                        .get(&(x.clone(), row_key.clone()))
+                        .unwrap_or(&table.default_value)
+                {
                     result.push(row_key.clone());
                 }
             }
@@ -159,12 +196,16 @@ impl Environment {
         result
     }
 
-    pub fn transform_sub_movement_type(&self, base: MovementType, sub: MovementType, terrain: TerrainType) -> MovementType {
+    pub fn transform_sub_movement_type(
+        &self,
+        base: MovementType,
+        sub: MovementType,
+        terrain: TerrainType,
+    ) -> MovementType {
         let Some(transformer) = self.config.movement_type_transformer.get(&base) else {
             return sub;
         };
-        transformer.get(&(terrain, sub)).cloned()
-        .unwrap_or(sub)
+        transformer.get(&(terrain, sub)).cloned().unwrap_or(sub)
     }
 
     fn get_player_setting(&self, owner_id: i8) -> Option<&PlayerSettings> {
@@ -195,24 +236,50 @@ impl Environment {
             .map(|player| player.get_hero())
     }
 
-    pub fn unit_custom_attribute(&self, typ: UnitType, column_name: ImmutableString) -> Option<ImmutableString> {
-        self.config.unit_config(typ).custom_columns
+    pub fn unit_custom_attribute(
+        &self,
+        typ: UnitType,
+        column_name: ImmutableString,
+    ) -> Option<ImmutableString> {
+        self.config
+            .unit_config(typ)
+            .custom_columns
             .get(&column_name)
             .cloned()
     }
 
-    pub fn unit_transport_capacity(&self, typ: UnitType, owner: i8, hero: Option<HeroType>) -> usize {
+    pub fn unit_transport_capacity(
+        &self,
+        typ: UnitType,
+        owner: i8,
+        hero: Option<HeroType>,
+    ) -> usize {
         self.config.unit_config(typ).transport_capacity
-        + self.config.commander_config(self.get_commander(owner)).transport_capacity as usize
-        + hero.map(|hero| hero.transport_capacity(self)).unwrap_or(0)
+            + self
+                .config
+                .commander_config(self.get_commander(owner))
+                .transport_capacity as usize
+            + hero.map(|hero| hero.transport_capacity(self)).unwrap_or(0)
     }
 
-    pub fn unit_transport_visibility<D: Direction>(&self, _game: &Board<D>, _unit: &Unit<D>, _p: Point, _heroes: &[HeroInfluence<D>]) -> UnitVisibility {
+    pub fn unit_transport_visibility<D: Direction>(
+        &self,
+        _game: &Board<D>,
+        _unit: &Unit<D>,
+        _p: Point,
+        _heroes: &[HeroInfluence<D>],
+    ) -> UnitVisibility {
         // TODO
         UnitVisibility::Normal
     }
 
-    pub fn hero_visibility<D: Direction>(&self, _game: &Board<D>, _unit: &Unit<D>, _p: Point, _hero: HeroType) -> UnitVisibility {
+    pub fn hero_visibility<D: Direction>(
+        &self,
+        _game: &Board<D>,
+        _unit: &Unit<D>,
+        _p: Point,
+        _hero: HeroType,
+    ) -> UnitVisibility {
         // TODO
         UnitVisibility::Normal
     }
@@ -220,29 +287,27 @@ impl Environment {
     // terrain
 
     pub fn default_terrain<D: Direction>(&self) -> Terrain<D> {
-        TerrainBuilder::new(self, self.config.default_terrain)
-        .build()
+        TerrainBuilder::new(self, self.config.default_terrain).build()
     }
-
 }
 
 impl PartialEq for Environment {
     fn eq(&self, other: &Self) -> bool {
         Urc::ptr_eq(&self.config, &other.config)
-        && match (&self.settings, &other.settings) {
-            (Some(a), Some(b)) => **a == **b,
-            (None, None) => true,
-            _ => false
-        }
+            && match (&self.settings, &other.settings) {
+                (Some(a), Some(b)) => **a == **b,
+                (None, None) => true,
+                _ => false,
+            }
     }
 }
 impl Eq for Environment {}
 impl Debug for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Environment")
-        .field("ruleset", &self.config.name)
-        .field("map size", &self.map_size)
-        .field("settings", &self.settings)
-        .finish()
+            .field("ruleset", &self.config.name)
+            .field("map size", &self.map_size)
+            .field("settings", &self.settings)
+            .finish()
     }
 }

@@ -6,8 +6,8 @@ use crate::commander::commander_type::CommanderType;
 use crate::config::parse::*;
 use crate::script::custom_action::CustomAction;
 
-use super::file_loader::{FileLoader, TableLine};
 use super::ConfigParseError;
+use super::file_loader::{FileLoader, TableLine};
 
 #[derive(Debug)]
 pub struct CommanderPowerConfig {
@@ -22,12 +22,13 @@ pub struct CommanderPowerConfig {
 
 impl TableLine for CommanderPowerConfig {
     type Header = CommanderPowerConfigHeader;
-    fn parse(data: &HashMap<Self::Header, &str>, loader: &mut FileLoader) -> Result<Self, Box<dyn Error>> {
+    fn parse(
+        data: &HashMap<Self::Header, &str>,
+        loader: &mut FileLoader,
+    ) -> Result<Self, Box<dyn Error>> {
         use CommanderPowerConfigHeader as H;
         use ConfigParseError as E;
-        let get = |key| {
-            data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")))
-        };
+        let get = |key| data.get(&key).ok_or(E::MissingColumn(format!("{key:?}")));
         let script = match data.get(&H::Script) {
             Some(s) if s.len() > 0 => {
                 let exe = loader.rhai_function(s, 1..=2)?;
@@ -62,7 +63,9 @@ impl TableLine for CommanderPowerConfig {
 
 impl CommanderPowerConfig {
     pub fn is_power_usable_from(&self, previous_power: usize) -> bool {
-        self.usable_from_power.iter().any(|i| *i as usize == previous_power)
+        self.usable_from_power
+            .iter()
+            .any(|i| *i as usize == previous_power)
     }
 
     pub fn required_charge(&self) -> u32 {

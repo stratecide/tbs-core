@@ -6,10 +6,10 @@ use rustc_hash::FxHashSet;
 use uniform_smart_pointer::Urc;
 use zipper::*;
 
-use crate::commander::commander_type::CommanderType;
 use crate::commander::Commander;
-use crate::config::environment::Environment;
+use crate::commander::commander_type::CommanderType;
 use crate::config::OwnershipPredicate;
+use crate::config::environment::Environment;
 use crate::game::fog::{FogIntensity, FogSetting};
 use crate::game::settings::GameSettings;
 use crate::map::board::{Board, BoardView};
@@ -21,8 +21,8 @@ use crate::player::{Owner, Player};
 use crate::tags::*;
 use crate::units::UnitVisibility;
 
-use super::token_types::TokenType;
 use super::MAX_STACK_SIZE;
+use super::token_types::TokenType;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Token<D: Direction> {
@@ -45,13 +45,13 @@ impl<D: Direction> Token<D> {
     pub fn new(environment: Environment, typ: TokenType) -> Self {
         let owner = match environment.config.token_ownership(typ) {
             OwnershipPredicate::Always => environment.config.max_player_count() - 1,
-            _ => -1
+            _ => -1,
         };
         Self {
             environment,
             typ,
             owner: Owner(owner),
-            tags: TagBag::new()
+            tags: TagBag::new(),
         }
     }
 
@@ -59,12 +59,12 @@ impl<D: Direction> Token<D> {
     // starting from the back, so add_token can be used by the editor to overwrite previous data
     pub fn correct_stack(stack: Vec<Self>) -> Vec<Self> {
         let mut existing = FxHashSet::default();
-        let stack: Vec<Self> = stack.into_iter()
-        .rev()
-        .filter(|token| {
-            existing.insert((token.typ, token.owner.0))
-        }).take(MAX_STACK_SIZE as usize)
-        .collect();
+        let stack: Vec<Self> = stack
+            .into_iter()
+            .rev()
+            .filter(|token| existing.insert((token.typ, token.owner.0)))
+            .take(MAX_STACK_SIZE as usize)
+            .collect();
         stack.into_iter().rev().collect()
     }
 
@@ -107,8 +107,8 @@ impl<D: Direction> Token<D> {
 
     pub fn get_commander(&self, game: &impl BoardView<D>) -> Commander {
         self.get_player(game)
-        .and_then(|player| Some(player.commander.clone()))
-        .unwrap_or(Commander::new(&self.environment, CommanderType(0)))
+            .and_then(|player| Some(player.commander.clone()))
+            .unwrap_or(Commander::new(&self.environment, CommanderType(0)))
     }
 
     pub(super) fn copy_from(&mut self, other: &TagBag<D>) {
@@ -168,11 +168,11 @@ impl<D: Direction> Token<D> {
         }
         match game.get_fog_setting() {
             FogSetting::None => (),
-            FogSetting::Light(bonus) |
-            FogSetting::Sharp(bonus) |
-            FogSetting::Fade1(bonus) |
-            FogSetting::Fade2(bonus) |
-            FogSetting::ExtraDark(bonus) => range += bonus as usize,
+            FogSetting::Light(bonus)
+            | FogSetting::Sharp(bonus)
+            | FogSetting::Fade1(bonus)
+            | FogSetting::Fade2(bonus)
+            | FogSetting::ExtraDark(bonus) => range += bonus as usize,
         }
         Some(range)
     }
@@ -181,7 +181,7 @@ impl<D: Direction> Token<D> {
         &self,
         game: &Board<D>,
         pos: Point,
-        team: ClientPerspective
+        team: ClientPerspective,
     ) -> HashMap<Point, FogIntensity> {
         if self.get_team() != team && self.get_team() != ClientPerspective::Neutral {
             return HashMap::new();
@@ -197,7 +197,7 @@ impl<D: Direction> Token<D> {
             FogSetting::ExtraDark(_) => 0,
             FogSetting::Fade1(_) => 1.max(vision_range) - 1,
             FogSetting::Fade2(_) => 2.max(vision_range) - 2,
-            _ => vision_range
+            _ => vision_range,
         };
         let layers = get_neighbors_layers(game, pos, vision_range);
         for (i, layer) in layers.into_iter().enumerate() {
@@ -207,7 +207,10 @@ impl<D: Direction> Token<D> {
                 } else {
                     FogIntensity::Light
                 };
-                result.insert(p, vision.min(result.get(&p).cloned().unwrap_or(FogIntensity::Dark)));
+                result.insert(
+                    p,
+                    vision.min(result.get(&p).cloned().unwrap_or(FogIntensity::Dark)),
+                );
             }
         }
         result
@@ -221,21 +224,19 @@ impl<D: Direction> Token<D> {
             FogIntensity::TrueSight => return Some(self.clone()),
             FogIntensity::NormalVision => {
                 if visibility == UnitVisibility::Stealth {
-                    return None
+                    return None;
                 } else {
                     return Some(self.clone());
                 }
             }
-            FogIntensity::Light => {
-                match visibility {
-                    UnitVisibility::Stealth => return None,
-                    UnitVisibility::Normal => UnitVisibility::AlwaysVisible,
-                    UnitVisibility::AlwaysVisible => UnitVisibility::Normal,
-                }
-            }
+            FogIntensity::Light => match visibility {
+                UnitVisibility::Stealth => return None,
+                UnitVisibility::Normal => UnitVisibility::AlwaysVisible,
+                UnitVisibility::AlwaysVisible => UnitVisibility::Normal,
+            },
             FogIntensity::Dark => {
                 if visibility != UnitVisibility::AlwaysVisible {
-                    return None
+                    return None;
                 } else {
                     UnitVisibility::Normal
                 }
@@ -243,13 +244,14 @@ impl<D: Direction> Token<D> {
         };
         // token is visible, hide some attributes maybe
         let mut result = self.typ.instance(&self.environment);
-        result.tags = self.tags.fog_replacement(&self.environment, minimum_visibility);
+        result.tags = self
+            .tags
+            .fog_replacement(&self.environment, minimum_visibility);
         if self.environment.config.token_owner_visibility(self.typ) >= minimum_visibility {
             result.owner = self.owner;
         }
         Some(result)
     }
-
 }
 
 impl<D: Direction> SupportedZippable<&Environment> for Token<D> {

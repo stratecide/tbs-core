@@ -7,7 +7,6 @@ use crate::map::point::Point;
 use super::direction::*;
 use super::wrapping_map::Distortion;
 
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Zippable)]
 pub struct PipeState<D: Direction> {
     directions: [D; 2],
@@ -35,7 +34,11 @@ impl<D: Direction> PipeState<D> {
         let entry = entry.opposite_direction();
         for (i, dir) in self.directions.iter().enumerate() {
             if *dir == entry {
-                return Some(Distortion::new(false, self.directions[1 - i].rotate_by(entry.opposite_direction().mirror_vertically())));
+                return Some(Distortion::new(
+                    false,
+                    self.directions[1 - i]
+                        .rotate_by(entry.opposite_direction().mirror_vertically()),
+                ));
             }
         }
         None
@@ -56,11 +59,20 @@ impl<D: Direction> Default for PipeState<D> {
     }
 }
 
-pub fn next_pipe_tile<D: Direction>(board: &impl BoardView<D>, point: Point, direction: D) -> Option<(Point, Distortion<D>)> {
-    if let Some(disto) = board.get_pipes(point)
-    .iter().find_map(|pipe_state| pipe_state.distortion(direction)) {
-        board.wrapping_logic().get_neighbor(point, disto.update_direction(direction))
-        .and_then(|(p, d)| Some((p, disto + d)))
+pub fn next_pipe_tile<D: Direction>(
+    board: &impl BoardView<D>,
+    point: Point,
+    direction: D,
+) -> Option<(Point, Distortion<D>)> {
+    if let Some(disto) = board
+        .get_pipes(point)
+        .iter()
+        .find_map(|pipe_state| pipe_state.distortion(direction))
+    {
+        board
+            .wrapping_logic()
+            .get_neighbor(point, disto.update_direction(direction))
+            .and_then(|(p, d)| Some((p, disto + d)))
     } else {
         None
     }
@@ -79,29 +91,59 @@ mod tests {
 
     use super::PipeState;
 
-
     #[test]
     fn pipe_state() {
         let pipe = PipeState::new(Direction4::D180, Direction4::D90).unwrap();
-        assert_eq!(pipe.distortion(Direction4::D0), Some(Distortion::new(false, Direction4::D90)));
-        assert_eq!(pipe.distortion(Direction4::D0).unwrap().update_direction(Direction4::D0), Direction4::D90);
-        assert_eq!(pipe.distortion(Direction4::D270).unwrap().update_direction(Direction4::D270), Direction4::D180);
+        assert_eq!(
+            pipe.distortion(Direction4::D0),
+            Some(Distortion::new(false, Direction4::D90))
+        );
+        assert_eq!(
+            pipe.distortion(Direction4::D0)
+                .unwrap()
+                .update_direction(Direction4::D0),
+            Direction4::D90
+        );
+        assert_eq!(
+            pipe.distortion(Direction4::D270)
+                .unwrap()
+                .update_direction(Direction4::D270),
+            Direction4::D180
+        );
     }
 
     #[test]
     fn straight_line() {
         let config = Urc::new(Config::default());
         let map = PointMap::new(8, 5, false);
-        let map = WMBuilder::<Direction4>::with_transformations(map, vec![Transformation::new(Distortion::new(false, Direction4::D90), Direction4::D0.translation(6))]).unwrap();
+        let map = WMBuilder::<Direction4>::with_transformations(
+            map,
+            vec![Transformation::new(
+                Distortion::new(false, Direction4::D90),
+                Direction4::D0.translation(6),
+            )],
+        )
+        .unwrap();
         let mut map = Map::new(map.build(), &config);
-        map.set_pipes(Point::new(7, 3), vec![PipeState::new(Direction4::D0, Direction4::D90).unwrap()]);
-        map.set_pipes(Point::new(2, 4), vec![PipeState::new(Direction4::D180, Direction4::D90).unwrap()]);
+        map.set_pipes(
+            Point::new(7, 3),
+            vec![PipeState::new(Direction4::D0, Direction4::D90).unwrap()],
+        );
+        map.set_pipes(
+            Point::new(2, 4),
+            vec![PipeState::new(Direction4::D180, Direction4::D90).unwrap()],
+        );
         assert_eq!(
             map.get_neighbor(Point::new(3, 0), Direction4::D90),
             Some((Point::new(7, 2), Distortion::new(false, Direction4::D0)))
         );
         assert_eq!(
-            map.get_line(Point::new(3, 1), Direction4::D90, 4, NeighborMode::FollowPipes),
+            map.get_line(
+                Point::new(3, 1),
+                Direction4::D90,
+                4,
+                NeighborMode::FollowPipes
+            ),
             vec![
                 OrientedPoint::new(Point::new(3, 1), false, Direction4::D90),
                 OrientedPoint::new(Point::new(3, 0), false, Direction4::D90),
@@ -114,7 +156,12 @@ mod tests {
             Some((Point::new(2, 3), Distortion::new(false, Direction4::D90)))
         );
         assert_eq!(
-            map.get_line(Point::new(2, 2), Direction4::D270, 4, NeighborMode::FollowPipes),
+            map.get_line(
+                Point::new(2, 2),
+                Direction4::D270,
+                4,
+                NeighborMode::FollowPipes
+            ),
             vec![
                 OrientedPoint::new(Point::new(2, 2), false, Direction4::D270),
                 OrientedPoint::new(Point::new(2, 3), false, Direction4::D270),

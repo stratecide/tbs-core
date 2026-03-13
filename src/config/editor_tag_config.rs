@@ -6,10 +6,9 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::tags::{FlagKey, TagKey};
 
+use super::ConfigParseError;
 use super::file_loader::FileLoader;
 use super::parse::FromConfig;
-use super::ConfigParseError;
-
 
 crate::listable_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -26,7 +25,8 @@ crate::listable_enum! {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Either<T, U> where
+enum Either<T, U>
+where
     T: Debug + Clone + PartialEq,
     U: Debug + Clone + PartialEq,
 {
@@ -34,16 +34,22 @@ enum Either<T, U> where
     Right(U),
 }
 
-pub(super) fn parse<T: FromConfig + Clone + Hash + Eq>(filename: &str, loader: &mut FileLoader) -> Result<[HashMap<(usize, T), TagEditorVisibility>; 2], Box<dyn Error>> {
+pub(super) fn parse<T: FromConfig + Clone + Hash + Eq>(
+    filename: &str,
+    loader: &mut FileLoader,
+) -> Result<[HashMap<(usize, T), TagEditorVisibility>; 2], Box<dyn Error>> {
     let data = loader.load_config(filename)?;
-    let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(data.as_bytes());
+    let mut reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .from_reader(data.as_bytes());
     // TODO: ensure uniqueness of column and row IDs
     let mut headers: Vec<Either<FlagKey, TagKey>> = Vec::new();
     for h in reader.headers()?.into_iter().skip(1) {
-        let header = FlagKey::from_conf(h, loader).map(|k| Either::Left(k.0))
-        .or(TagKey::from_conf(h, loader).map(|k| Either::Right(k.0)))?;
+        let header = FlagKey::from_conf(h, loader)
+            .map(|k| Either::Left(k.0))
+            .or(TagKey::from_conf(h, loader).map(|k| Either::Right(k.0)))?;
         if headers.contains(&header) {
-            return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())))
+            return Err(Box::new(ConfigParseError::DuplicateHeader(h.to_string())));
         }
         headers.push(header);
     }
